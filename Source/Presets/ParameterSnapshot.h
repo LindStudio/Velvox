@@ -15,6 +15,13 @@ namespace velvox
         juce::String description;
         std::map<juce::String, float> values;
 
+        // Module order / send-insert modes (dsp::Routing string). Empty = not
+        // specified (format-1 presets) -> default routing when applied.
+        juce::String routing;
+
+        // File format: 1 = v0.1 (values only), 2 = v0.2 (+ routing)
+        static constexpr int formatVersion = 2;
+
         static ParameterSnapshot capture (juce::AudioProcessorValueTreeState& apvts, const juce::String& name = {});
 
         // Applies values with begin/endChangeGesture so hosts record automation

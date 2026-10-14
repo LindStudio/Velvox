@@ -6,6 +6,7 @@
 #include "SaturationModule.h"
 #include "DelayModule.h"
 #include "ReverbModule.h"
+#include "Routing.h"
 
 namespace velvox::dsp
 {
@@ -24,6 +25,9 @@ namespace velvox::dsp
         bool delayOn = false;   float delayMix = 0.2f;  DelaySettings delay;
         bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
         bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
+        float delayIntoReverb = 0.0f; // 0..1, only when both are sends
+
+        Routing routing = Routing::defaults();
 
         double hostBpm = 0.0;   // <= 0 when unknown
     };
@@ -36,7 +40,9 @@ namespace velvox::dsp
         std::atomic<float> effectiveDelayMs { 375.0f };
     };
 
-    //  Input -> EQ -> Compressor -> De-esser -> Saturation -> (+ Delay return, + Reverb return) -> Output
+    //  Input -> serial modules in Routing order (delay/reverb only when "insert")
+    //        -> + parallel sends (delay/reverb when "send", wet only) -> Output
+    // Default routing reproduces the v0.1 chain exactly.
     class VocalChain
     {
     public:
@@ -60,6 +66,10 @@ namespace velvox::dsp
     private:
         void applySettings (const ChainSettings& s) noexcept;
         void processChunk (float* const* io, int numChannels, int numSamples, const ChainSettings& s) noexcept;
+        void processSerialModule (ModuleId id, float* const* io, int numChannels, int n) noexcept;
+        void processSends (float* const* io, int numChannels, int n, const ChainSettings& s) noexcept;
+        bool wakeIfNeeded (juce::SmoothedValue<float>& ret, bool& active, ModuleId id) noexcept;
+        void applyRoutingFade (float* const* io, int numChannels, int n) noexcept;
 
         double fs = 44100.0;
         bool prepared = false;
@@ -76,8 +86,14 @@ namespace velvox::dsp
         bool delayActive = false, reverbActive = false;
 
         juce::SmoothedValue<float> inputGain { 1.0f }, outputGain { 1.0f }, wetAmount { 1.0f };
+        juce::SmoothedValue<float> delayIntoReverb { 0.0f };
         IntegerDelay bypassDelay;
 
-        juce::AudioBuffer<float> work, dryForBypass, delayWet, reverbWet;
+        // Routing changes are applied at a short dip to silence (no clicks)
+        Routing activeRouting = Routing::defaults(), pendingRouting = Routing::defaults();
+        juce::SmoothedValue<float> routeGain { 1.0f };
+        bool adoptRoutingImmediately = true;
+
+        juce::AudioBuffer<float> work, dryForBypass, delayWet, reverbWet, reverbIn;
     };
 }

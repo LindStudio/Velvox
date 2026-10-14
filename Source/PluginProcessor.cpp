@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ProductInfo.h"
+#include "StateKeys.h"
 
 using namespace velvox;
 
@@ -19,6 +20,14 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
       presetManager (apvts)
 {
     cacheParameterPointers();
+    apvts.state.setProperty (statekeys::routing, dsp::Routing::defaults().toString(), nullptr);
+    apvts.state.addListener (this);
+    syncRoutingFromState();
+}
+
+VelvoxAudioProcessor::~VelvoxAudioProcessor()
+{
+    apvts.state.removeListener (this);
 }
 
 const juce::String VelvoxAudioProcessor::getName() const
@@ -67,6 +76,7 @@ void VelvoxAudioProcessor::cacheParameterPointers()
     bind (raw.reverbPreDelay, pid::reverbPreDelay); bind (raw.reverbSize, pid::reverbSize);
     bind (raw.reverbDamping, pid::reverbDamping); bind (raw.reverbLowCut, pid::reverbLowCut);
     bind (raw.reverbWidth, pid::reverbWidth);
+    bind (raw.delayToReverb, pid::delayToReverb);
 }
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
@@ -131,7 +141,40 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     s.reverb.lowCutHz = raw.reverbLowCut.get();
     s.reverb.width = raw.reverbWidth.get() * 0.01f;
 
+    s.delayIntoReverb = raw.delayToReverb.get() * 0.01f;
+    s.routing = dsp::Routing::unpack (routingPacked.load (std::memory_order_acquire));
+
     return s;
+}
+
+//==============================================================================
+dsp::Routing VelvoxAudioProcessor::getRouting() const noexcept
+{
+    return dsp::Routing::unpack (routingPacked.load (std::memory_order_acquire));
+}
+
+void VelvoxAudioProcessor::setRouting (const dsp::Routing& routing)
+{
+    // The state property is the source of truth; the listener updates the atomic
+    apvts.state.setProperty (statekeys::routing, routing.toString(), nullptr);
+}
+
+void VelvoxAudioProcessor::syncRoutingFromState()
+{
+    const auto text = apvts.state.getProperty (statekeys::routing).toString();
+    const auto routing = text.isEmpty() ? dsp::Routing::defaults() : dsp::Routing::fromString (text);
+    routingPacked.store (routing.pack(), std::memory_order_release);
+}
+
+void VelvoxAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& property)
+{
+    if (tree == apvts.state && property == statekeys::routing)
+        syncRoutingFromState();
+}
+
+void VelvoxAudioProcessor::valueTreeRedirected (juce::ValueTree&)
+{
+    syncRoutingFromState();
 }
 
 //==============================================================================
@@ -206,6 +249,8 @@ void VelvoxAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         state.removeChild (existing, nullptr);
     state.appendChild (ab, nullptr);
 
+    state.setProperty (statekeys::stateVersion, statekeys::currentStateVersion, nullptr);
+
     if (const auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -237,7 +282,27 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
         tree.removeChild (ab, nullptr);
     }
 
+    // --- Migration (any older state version) ---
+    // JUCE keeps the CURRENT value for parameters that are missing from a saved
+    // state. Collect what the state contains so missing (newer) parameters can
+    // be reset to their defaults - an old project then sounds exactly as before.
+    juce::StringArray savedIds;
+    for (const auto& child : tree)
+        if (child.hasProperty ("id"))
+            savedIds.add (child.getProperty ("id").toString());
+
+    if (! tree.hasProperty (statekeys::routing))
+        tree.setProperty (statekeys::routing, dsp::Routing::defaults().toString(), nullptr);
+
+    tree.setProperty (statekeys::stateVersion, statekeys::currentStateVersion, nullptr);
     apvts.replaceState (tree);
+
+    for (auto* p : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+            if (! savedIds.contains (rp->getParameterID()))
+                rp->setValueNotifyingHost (rp->getDefaultValue());
+
+    syncRoutingFromState();
 }
 
 //==============================================================================

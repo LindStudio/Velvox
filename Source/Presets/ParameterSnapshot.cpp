@@ -1,5 +1,7 @@
 #include "ParameterSnapshot.h"
 #include "../Parameters/ParameterLayout.h"
+#include "../DSP/Routing.h"
+#include "../StateKeys.h"
 
 namespace velvox
 {
@@ -29,6 +31,7 @@ namespace velvox
                 if (! isExcludedFromSnapshots (rp->getParameterID()))
                     s.values[rp->getParameterID()] = rp->convertFrom0to1 (rp->getValue());
 
+        s.routing = apvts.state.getProperty (statekeys::routing).toString();
         return s;
     }
 
@@ -57,6 +60,11 @@ namespace velvox
             rp->setValueNotifyingHost (normalised);
             rp->endChangeGesture();
         }
+
+        if (routing.isNotEmpty())
+            apvts.state.setProperty (statekeys::routing, dsp::Routing::fromString (routing).toString(), nullptr);
+        else if (resetMissingToDefault)
+            apvts.state.setProperty (statekeys::routing, dsp::Routing::defaults().toString(), nullptr);
     }
 
     juce::StringArray ParameterSnapshot::validate() const
@@ -85,7 +93,9 @@ namespace velvox
         tree.setProperty (nameAttr, name, nullptr);
         tree.setProperty (categoryAttr, category, nullptr);
         tree.setProperty (descriptionAttr, description, nullptr);
-        tree.setProperty (versionAttr, parameterVersion, nullptr);
+        tree.setProperty (versionAttr, formatVersion, nullptr);
+        if (routing.isNotEmpty())
+            tree.setProperty (statekeys::routing, routing, nullptr);
 
         for (const auto& [id, v] : values)
         {
@@ -107,6 +117,7 @@ namespace velvox
         s.name = tree.getProperty (nameAttr).toString();
         s.category = tree.getProperty (categoryAttr).toString();
         s.description = tree.getProperty (descriptionAttr).toString();
+        s.routing = tree.getProperty (statekeys::routing).toString(); // absent in format 1
 
         for (const auto& child : tree)
         {

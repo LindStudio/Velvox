@@ -72,6 +72,9 @@ namespace velvox
             { pid::reverbDamping,  "Reverb Tone",      "Reverb", T::Float, 1000.0f, 20000.0f, 7000.0f, 6000.0f, "Hz", {}, "High-frequency damping inside the tail." },
             { pid::reverbLowCut,   "Reverb Low Cut",   "Reverb", T::Float, 20.0f, 1000.0f, 200.0f, 200.0f, "Hz", {}, "High-pass on the reverb input." },
             { pid::reverbWidth,    "Reverb Width",     "Reverb", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "Stereo width of the reverb return." },
+
+            // ---------------- Routing (0.2) ----------------
+            { pid::delayToReverb,  "Delay to Reverb",  "Routing", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {}, "Sends the delay echoes into the reverb (when both run as sends)." },
         };
 
         return specs;

@@ -69,4 +69,9 @@ namespace velvox::pid
     inline constexpr const char* reverbDamping  = "reverbDamping";
     inline constexpr const char* reverbLowCut   = "reverbLowCut";
     inline constexpr const char* reverbWidth    = "reverbWidth";
+
+    // ---- added in 0.2 (all default to neutral so 0.1 projects sound identical) ----
+
+    // Routing
+    inline constexpr const char* delayToReverb  = "delayToReverb";
 }

@@ -6,11 +6,12 @@
 #include "Parameters/ParameterLayout.h"
 #include "Presets/PresetManager.h"
 
-class VelvoxAudioProcessor final : public juce::AudioProcessor
+class VelvoxAudioProcessor final : public juce::AudioProcessor,
+                                   private juce::ValueTree::Listener
 {
 public:
     VelvoxAudioProcessor();
-    ~VelvoxAudioProcessor() override = default;
+    ~VelvoxAudioProcessor() override;
 
     //==========================================================================
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -50,7 +51,15 @@ public:
     void selectSlot (int slot);
     void copyActiveSlotToOther();
 
+    // Module order / send-insert modes. setRouting is message-thread only;
+    // the audio thread reads a packed atomic copy.
+    velvox::dsp::Routing getRouting() const noexcept;
+    void setRouting (const velvox::dsp::Routing& routing);
+
 private:
+    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
+    void valueTreeRedirected (juce::ValueTree&) override;
+    void syncRoutingFromState();
     void cacheParameterPointers();
     velvox::dsp::ChainSettings readSettings() const noexcept;
 
@@ -75,7 +84,10 @@ private:
         Raw satOn, satDrive, satOutput, satMix;
         Raw delayOn, delayTime, delaySync, delayDivision, delayFeedback, delayMix, delayLowCut, delayHighCut, delayPingPong;
         Raw reverbOn, reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbSize, reverbDamping, reverbLowCut, reverbWidth;
+        Raw delayToReverb;
     } raw;
+
+    std::atomic<std::uint64_t> routingPacked { velvox::dsp::Routing::defaults().pack() };
 
     // A/B slots hold full parameter snapshots
     std::array<velvox::ParameterSnapshot, 2> slots;

@@ -42,6 +42,7 @@ namespace velvox::dsp
         dryForBypass.setSize (maxChannels, bs, false, true, false);
         delayWet.setSize (maxChannels, bs, false, true, false);
         reverbWet.setSize (maxChannels, bs, false, true, false);
+        reverbIn.setSize (maxChannels, bs, false, true, false);
 
         eq.prepare (sampleRate, bs);
         compressor.prepare (sampleRate, bs);
@@ -57,10 +58,15 @@ namespace velvox::dsp
         bypassDelay.prepare (std::max (1, saturation.getLatencySamples()));
         bypassDelay.setDelay (saturation.getLatencySamples());
 
-        for (auto* s : { &delayReturn, &reverbReturn, &wetAmount })
+        for (auto* s : { &delayReturn, &reverbReturn, &wetAmount, &delayIntoReverb })
             s->reset (sampleRate, 0.03);
         inputGain.reset (sampleRate, 0.03);
         outputGain.reset (sampleRate, 0.03);
+
+        // No fade on (re)start: take the latest routing directly
+        routeGain.reset (sampleRate, 0.008);
+        routeGain.setCurrentAndTargetValue (1.0f);
+        adoptRoutingImmediately = true;
 
         prepared = true;
         reset();
@@ -116,6 +122,16 @@ namespace velvox::dsp
 
         reverb.setSettings (s.reverb);
         reverbReturn.setTargetValue (s.reverbOn ? juce::jlimit (0.0f, 1.0f, s.reverbMix) : 0.0f);
+        delayIntoReverb.setTargetValue (juce::jlimit (0.0f, 1.0f, s.delayIntoReverb));
+
+        if (s.routing.isValidPermutation())
+            pendingRouting = s.routing;
+
+        if (adoptRoutingImmediately)
+        {
+            activeRouting = pendingRouting;
+            adoptRoutingImmediately = false;
+        }
     }
 
     void VocalChain::process (juce::AudioBuffer<float>& buffer, int numChannels, const ChainSettings& s) noexcept
@@ -184,52 +200,19 @@ namespace velvox::dsp
             meters.input[(size_t) ch].push (std::max (range.getEnd(), -range.getStart()));
         }
 
-        // 3) Serial insert modules
-        runGated (eqGate, eq, io, numChannels, n);
-        runGated (compGate, compressor, io, numChannels, n);
-        runGated (deessGate, deesser, io, numChannels, n);
-        saturation.process (io, numChannels, n); // handles its own on/off + mix, constant latency
+        // A pending routing change starts with a short fade-out of the old routing
+        if (pendingRouting != activeRouting)
+            routeGain.setTargetValue (0.0f);
 
-        // 4) Parallel returns: both effects are fed from the same point and
-        //    return wet only, so the dry signal is present exactly once.
-        const bool delayNeeded = delayReturn.getTargetValue() > 0.0f || delayReturn.isSmoothing();
-        const bool reverbNeeded = reverbReturn.getTargetValue() > 0.0f || reverbReturn.isSmoothing();
+        // 3) Serial modules in routing order
+        for (auto id : activeRouting.order)
+            processSerialModule (id, io, numChannels, n);
 
-        if (delayNeeded && ! delayActive)
-            delay.reset();
-        if (reverbNeeded && ! reverbActive)
-            reverb.reset();
-        delayActive = delayNeeded;
-        reverbActive = reverbNeeded;
+        // 4) Parallel sends, fed from the end of the serial chain. They return
+        //    wet only, so the dry signal is present exactly once.
+        processSends (io, numChannels, n, s);
 
-        if (delayNeeded)
-            delay.process (io, delayWet.getArrayOfWritePointers(), numChannels, n);
-        if (reverbNeeded)
-            reverb.process (io, reverbWet.getArrayOfWritePointers(), numChannels, n);
-
-        if (delayNeeded || reverbNeeded)
-        {
-            for (int i = 0; i < n; ++i)
-            {
-                const float dg = delayReturn.getNextValue();
-                const float rg = reverbReturn.getNextValue();
-
-                for (int ch = 0; ch < numChannels; ++ch)
-                {
-                    float add = 0.0f;
-                    if (delayNeeded)
-                        add += dg * delayWet.getSample (ch, i);
-                    if (reverbNeeded)
-                        add += rg * reverbWet.getSample (ch, i);
-                    io[ch][i] += add;
-                }
-            }
-        }
-        else
-        {
-            delayReturn.skip (n);
-            reverbReturn.skip (n);
-        }
+        applyRoutingFade (io, numChannels, n);
 
         // 5) Output gain, clip detection, safety clipper
         bool clipped = false;
@@ -261,6 +244,148 @@ namespace velvox::dsp
                     io[ch][i] = d + (io[ch][i] - d) * w;
                 }
             }
+        }
+    }
+
+    //==========================================================================
+    bool VocalChain::wakeIfNeeded (juce::SmoothedValue<float>& ret, bool& active, ModuleId id) noexcept
+    {
+        const bool needed = ret.getTargetValue() > 0.0f || ret.isSmoothing();
+        if (needed && ! active)
+        {
+            if (id == ModuleId::delay)
+                delay.reset();
+            else
+                reverb.reset();
+        }
+        active = needed;
+        return needed;
+    }
+
+    void VocalChain::processSerialModule (ModuleId id, float* const* io, int numChannels, int n) noexcept
+    {
+        switch (id)
+        {
+            case ModuleId::eq:      runGated (eqGate, eq, io, numChannels, n); break;
+            case ModuleId::comp:    runGated (compGate, compressor, io, numChannels, n); break;
+            case ModuleId::deess:   runGated (deessGate, deesser, io, numChannels, n); break;
+            case ModuleId::sat:     saturation.process (io, numChannels, n); break; // own on/off + mix, constant latency
+
+            case ModuleId::doubler: // not implemented yet
+            case ModuleId::pitch:   // not implemented yet
+                break;
+
+            case ModuleId::delay:
+            case ModuleId::reverb:
+            {
+                if (! activeRouting.isInsert (id))
+                    break;
+
+                const bool isDelay = id == ModuleId::delay;
+                auto& ret = isDelay ? delayReturn : reverbReturn;
+                auto& wet = isDelay ? delayWet : reverbWet;
+
+                if (! wakeIfNeeded (ret, isDelay ? delayActive : reverbActive, id))
+                {
+                    ret.skip (n);
+                    break;
+                }
+
+                if (isDelay)
+                    delay.process (io, wet.getArrayOfWritePointers(), numChannels, n);
+                else
+                    reverb.process (io, wet.getArrayOfWritePointers(), numChannels, n);
+
+                // Insert: out = in + wet * mix (same law as the send)
+                for (int i = 0; i < n; ++i)
+                {
+                    const float g = ret.getNextValue();
+                    for (int ch = 0; ch < numChannels; ++ch)
+                        io[ch][i] += g * wet.getSample (ch, i);
+                }
+                break;
+            }
+        }
+    }
+
+    void VocalChain::processSends (float* const* io, int numChannels, int n, const ChainSettings&) noexcept
+    {
+        const bool delaySend = activeRouting.isSend (ModuleId::delay);
+        const bool reverbSend = activeRouting.isSend (ModuleId::reverb);
+
+        const bool delayNeeded = delaySend && wakeIfNeeded (delayReturn, delayActive, ModuleId::delay);
+        const bool reverbNeeded = reverbSend && wakeIfNeeded (reverbReturn, reverbActive, ModuleId::reverb);
+
+        if (delayNeeded)
+            delay.process (io, delayWet.getArrayOfWritePointers(), numChannels, n);
+
+        if (reverbNeeded)
+        {
+            const float* const* reverbSource = io;
+
+            // Delay -> reverb: the delay return (at its mix level) also feeds the reverb
+            const bool coupled = delayNeeded && (delayIntoReverb.getTargetValue() > 0.0f || delayIntoReverb.isSmoothing());
+            if (coupled)
+            {
+                const float delayLevel = delayReturn.getCurrentValue();
+                for (int i = 0; i < n; ++i)
+                {
+                    const float c = delayIntoReverb.getNextValue() * delayLevel;
+                    for (int ch = 0; ch < numChannels; ++ch)
+                        reverbIn.setSample (ch, i, io[ch][i] + c * delayWet.getSample (ch, i));
+                }
+                reverbSource = reverbIn.getArrayOfReadPointers();
+            }
+            else
+            {
+                delayIntoReverb.skip (n);
+            }
+
+            reverb.process (reverbSource, reverbWet.getArrayOfWritePointers(), numChannels, n);
+        }
+
+        if (delayNeeded || reverbNeeded)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                const float dg = delayNeeded ? delayReturn.getNextValue() : 0.0f;
+                const float rg = reverbNeeded ? reverbReturn.getNextValue() : 0.0f;
+
+                for (int ch = 0; ch < numChannels; ++ch)
+                {
+                    float add = 0.0f;
+                    if (delayNeeded)
+                        add += dg * delayWet.getSample (ch, i);
+                    if (reverbNeeded)
+                        add += rg * reverbWet.getSample (ch, i);
+                    io[ch][i] += add;
+                }
+            }
+        }
+
+        if (delaySend && ! delayNeeded)
+            delayReturn.skip (n);
+        if (reverbSend && ! reverbNeeded)
+            reverbReturn.skip (n);
+    }
+
+    void VocalChain::applyRoutingFade (float* const* io, int numChannels, int n) noexcept
+    {
+        if (! routeGain.isSmoothing() && routeGain.getCurrentValue() >= 1.0f)
+            return;
+
+        for (int i = 0; i < n; ++i)
+        {
+            const float g = routeGain.getNextValue();
+            for (int ch = 0; ch < numChannels; ++ch)
+                io[ch][i] *= g;
+        }
+
+        // Faded out completely: switch routing, then fade back in
+        if (! routeGain.isSmoothing() && routeGain.getTargetValue() <= 0.0f)
+        {
+            activeRouting = pendingRouting;
+            routeGain.setTargetValue (1.0f);
         }
     }
 }
