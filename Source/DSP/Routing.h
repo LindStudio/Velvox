@@ -39,6 +39,9 @@ namespace velvox::dsp
 
         // Moves module `id` to serial position `newIndex` (0 .. numModules-1)
         void move (ModuleId id, int newIndex) noexcept;
+        // Moves `id` directly in front of `before` / to the very end
+        void placeBefore (ModuleId id, ModuleId before) noexcept;
+        void placeAtEnd (ModuleId id) noexcept { move (id, numModules - 1); }
 
         // Lock-free hand-over to the audio thread
         std::uint64_t pack() const noexcept;

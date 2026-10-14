@@ -10,12 +10,16 @@ struct StdoutLogger final : juce::Logger
 };
 
 // Renders the real editor to a PNG (for visual review without a DAW):
-//   VelvoxTests --snapshot out.png [presetName] [width]
-static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width)
+//   VelvoxTests --snapshot out.png [presetName] [width] [beginner|pro] [moduleId|-1]
+static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
+                           const juce::String& mode, int selection)
 {
     VelvoxAudioProcessor proc;
     proc.setRateAndBufferSizeDetails (48000.0, 512);
     proc.prepareToPlay (48000.0, 512);
+
+    proc.getState().state.setProperty ("uiMode", mode.isEmpty() ? juce::String ("beginner") : mode, nullptr);
+    proc.getState().state.setProperty ("uiSelection", selection, nullptr);
 
     auto& pm = proc.getPresetManager();
     for (int i = 0; i < pm.getEntries().size(); ++i)
@@ -36,7 +40,7 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
 
     std::unique_ptr<juce::AudioProcessorEditor> editor (proc.createEditor());
     if (width > 0)
-        editor->setSize (width, width * 780 / 1240);
+        editor->setSize (width, width * 800 / 1280);
 
     // Let the editor timer run a few frames
     for (int i = 0; i < 8; ++i)
@@ -61,7 +65,9 @@ int main (int argc, char* argv[])
     if (argc >= 3 && juce::String (argv[1]) == "--snapshot")
         return renderSnapshot (juce::File (juce::String (argv[2])),
                                argc >= 4 ? juce::String (argv[3]) : juce::String(),
-                               argc >= 5 ? juce::String (argv[4]).getIntValue() : 0);
+                               argc >= 5 ? juce::String (argv[4]).getIntValue() : 0,
+                               argc >= 6 ? juce::String (argv[5]) : juce::String(),
+                               argc >= 7 ? juce::String (argv[6]).getIntValue() : 0);
 
     StdoutLogger logger;
     juce::Logger::setCurrentLogger (&logger);

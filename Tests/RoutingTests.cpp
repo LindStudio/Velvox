@@ -56,6 +56,16 @@ public:
             expect (Routing::fromString (r.toString()) == r);
             expect (Routing::unpack (r.pack()) == r);
 
+            // placeBefore in both directions (used by drag & drop)
+            auto p = def;
+            p.placeBefore (ModuleId::sat, ModuleId::comp);       // move left
+            expect (p.positionOf (ModuleId::sat) + 1 == p.positionOf (ModuleId::comp));
+            p.placeBefore (ModuleId::eq, ModuleId::doubler);     // move right
+            expect (p.positionOf (ModuleId::eq) + 1 == p.positionOf (ModuleId::doubler));
+            p.placeAtEnd (ModuleId::comp);
+            expectEquals (p.positionOf (ModuleId::comp), dsp::numModules - 1);
+            expect (p.isValidPermutation());
+
             // Unknown keys, duplicates and missing modules
             const auto parsed = Routing::fromString ("reverb:insert, banana, sat, sat, eq");
             expect (parsed.isValidPermutation());

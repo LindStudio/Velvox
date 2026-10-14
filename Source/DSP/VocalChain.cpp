@@ -68,6 +68,7 @@ namespace velvox::dsp
         stereo.prepare (sampleRate, bs);
         matcher.prepare (sampleRate);
         correlation.prepare (sampleRate);
+        outputLoudness.prepare (sampleRate);
         for (auto* s : { &autoGain, &bypassGain })
         {
             s->reset (sampleRate, 0.05);
@@ -104,6 +105,7 @@ namespace velvox::dsp
         stereo.reset();
         matcher.reset();
         correlation.reset();
+        outputLoudness.reset();
     }
 
     void VocalChain::applySettings (const ChainSettings& s) noexcept
@@ -331,6 +333,8 @@ namespace velvox::dsp
         // 9) Correlation of what leaves the plugin, then the mono listening aid
         correlation.process (io[0], io[numChannels > 1 ? 1 : 0], n);
         meters.correlation.store (correlation.getCorrelation(), std::memory_order_relaxed);
+        outputLoudness.process (io, loudnessChannels, n);
+        meters.outputLufs.store (outputLoudness.getLufs(), std::memory_order_relaxed);
 
         if (s.monoMonitor && numChannels > 1)
         {

@@ -33,7 +33,7 @@ namespace velvox::ui
         std::function<void (const juce::String&)> callback;
     };
 
-    // Product name, preset browser, A/B comparison and global bypass
+    // Product name, preset browser (by category), A/B, Beginner/Pro and bypass
     class TopBar final : public juce::Component
     {
     public:
@@ -43,50 +43,23 @@ namespace velvox::ui
         void resized() override;
         void refresh();
 
+        std::function<void (bool pro)> onModeChange;
+        void setProMode (bool pro);
+
     private:
-        void rebuildPresetList();
+        void showPresetMenu();
         void requestSave();
         void requestDelete();
 
         VelvoxAudioProcessor& proc;
         DialogOverlay& dialog;
 
-        juce::TextButton prev { "<" }, next { ">" }, save { "Save" }, remove { "Delete" };
-        juce::ComboBox presetBox;
+        juce::TextButton presetButton, prev { "<" }, next { ">" }, save { "Save" }, remove { "Delete" };
         juce::TextButton slotA { "A" }, slotB { "B" }, copy { "Copy A to B" };
+        juce::TextButton beginner { "Beginner" }, pro { "Pro" };
         Toggle bypass;
 
-        juce::StringArray shownNames;
-        juce::String shownCurrent;
+        juce::String shownPreset;
         int shownSlot = -1;
-    };
-
-    // Overview of the signal path. Click a module to switch it on or off.
-    class ChainStrip final : public juce::Component, public juce::SettableTooltipClient
-    {
-    public:
-        explicit ChainStrip (APVTS& state);
-        void paint (juce::Graphics&) override;
-        void mouseDown (const juce::MouseEvent&) override;
-        void mouseMove (const juce::MouseEvent&) override;
-        void mouseExit (const juce::MouseEvent&) override;
-        void refresh();
-
-    private:
-        struct Node
-        {
-            juce::String label;
-            const char* paramId;
-            juce::Colour colour;
-            juce::Rectangle<float> bounds;
-        };
-
-        void layoutNodes();
-        int nodeAt (juce::Point<float>) const;
-
-        APVTS& apvts;
-        std::vector<Node> nodes;
-        std::vector<bool> lastState;
-        int hovered = -1;
     };
 }

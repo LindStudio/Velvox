@@ -120,22 +120,17 @@ namespace velvox::ui
             close();
     }
 
+
     //==========================================================================
     TopBar::TopBar (VelvoxAudioProcessor& p, DialogOverlay& d)
         : proc (p), dialog (d), bypass (p.getState(), pid::bypass, "Bypass", colours::warning)
     {
-        for (auto* c : std::initializer_list<juce::Component*> { &prev, &next, &save, &remove, &presetBox, &slotA, &slotB, &copy, &bypass })
+        for (auto* c : std::initializer_list<juce::Component*> { &presetButton, &prev, &next, &save, &remove, &slotA, &slotB,
+                                                                  &copy, &beginner, &pro, &bypass })
             addAndMakeVisible (c);
 
-        presetBox.setTextWhenNothingSelected ("No preset loaded");
-        presetBox.setTooltip ("Factory and user presets");
-        presetBox.onChange = [this]
-        {
-            const int id = presetBox.getSelectedId();
-            if (id > 0 && proc.getPresetManager().getCurrentIndex() != id - 1)
-                proc.getPresetManager().loadPreset (id - 1);
-        };
-
+        presetButton.setTooltip ("Choose a preset");
+        presetButton.onClick = [this] { showPresetMenu(); };
         prev.setTooltip ("Previous preset");
         next.setTooltip ("Next preset");
         save.setTooltip ("Save the current settings as a user preset");
@@ -145,8 +140,6 @@ namespace velvox::ui
         save.onClick = [this] { requestSave(); };
         remove.onClick = [this] { requestDelete(); };
 
-        slotA.setClickingTogglesState (false);
-        slotB.setClickingTogglesState (false);
         slotA.setTooltip ("Settings A - switch to compare two versions");
         slotB.setTooltip ("Settings B - switch to compare two versions");
         copy.setTooltip ("Copy the active settings to the other slot");
@@ -154,52 +147,61 @@ namespace velvox::ui
         slotB.onClick = [this] { proc.selectSlot (1); };
         copy.onClick = [this] { proc.copyActiveSlotToOther(); };
 
-        bypass.setTooltip ("Hear the unprocessed signal (latency compensated, not level matched)");
+        beginner.setTooltip ("Six simple controls and live tips");
+        pro.setTooltip ("Every parameter of every module");
+        beginner.onClick = [this] { setProMode (false); if (onModeChange) onModeChange (false); };
+        pro.onClick = [this] { setProMode (true); if (onModeChange) onModeChange (true); };
 
+        bypass.setTooltip ("Hear the unprocessed vocal (latency compensated). For a fair comparison set Level match to Bypass match.");
         refresh();
     }
 
-    void TopBar::rebuildPresetList()
+    void TopBar::setProMode (bool isPro)
+    {
+        pro.setToggleState (isPro, juce::dontSendNotification);
+        beginner.setToggleState (! isPro, juce::dontSendNotification);
+    }
+
+    void TopBar::showPresetMenu()
     {
         auto& pm = proc.getPresetManager();
-        presetBox.clear (juce::dontSendNotification);
-
-        bool userHeading = false;
-        presetBox.addSectionHeading ("Factory");
         const auto& entries = pm.getEntries();
-        for (int i = 0; i < entries.size(); ++i)
+        const int current = pm.getCurrentIndex();
+
+        // Keep categories in the order they first appear (factory first, user last)
+        juce::StringArray categories;
+        for (auto& e : entries)
+            categories.addIfNotAlreadyThere (e.category.isEmpty() ? juce::String ("Other") : e.category);
+
+        juce::PopupMenu menu;
+        for (auto& cat : categories)
         {
-            if (! entries[i].isFactory && ! userHeading)
+            menu.addSectionHeader (cat);
+            for (int i = 0; i < entries.size(); ++i)
             {
-                presetBox.addSeparator();
-                presetBox.addSectionHeading ("User");
-                userHeading = true;
+                const auto entryCat = entries[i].category.isEmpty() ? juce::String ("Other") : entries[i].category;
+                if (entryCat == cat)
+                    menu.addItem (i + 1, entries[i].name, true, i == current);
             }
-            presetBox.addItem (entries[i].name, i + 1);
         }
+
+        juce::Component::SafePointer<TopBar> safe (this);
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&presetButton).withMinimumWidth (presetButton.getWidth()),
+                            [safe] (int result)
+                            {
+                                if (safe != nullptr && result > 0)
+                                    safe->proc.getPresetManager().loadPreset (result - 1);
+                            });
     }
 
     void TopBar::refresh()
     {
         auto& pm = proc.getPresetManager();
-
-        juce::StringArray names;
-        for (auto& e : pm.getEntries())
-            names.add (e.name + (e.isFactory ? "" : "*"));
-
-        if (names != shownNames)
+        const auto name = pm.getCurrentPresetName();
+        if (name != shownPreset || presetButton.getButtonText().isEmpty())
         {
-            shownNames = names;
-            rebuildPresetList();
-            shownCurrent = "\x01"; // force selection update
-        }
-
-        const auto current = pm.getCurrentPresetName();
-        if (current != shownCurrent)
-        {
-            shownCurrent = current;
-            const int idx = pm.getCurrentIndex();
-            presetBox.setSelectedId (idx >= 0 ? idx + 1 : 0, juce::dontSendNotification);
+            shownPreset = name;
+            presetButton.setButtonText (name.isEmpty() ? juce::String ("No preset loaded") : name);
         }
 
         const int idx = pm.getCurrentIndex();
@@ -223,11 +225,11 @@ namespace velvox::ui
         juce::Component::SafePointer<TopBar> safe (this);
         dialog.show ("Save preset", "Saved to " + pm.getUserPresetDirectory().getFullPathName(),
                      true, suggestion, "Save",
-                     [safe] (const juce::String& name)
+                     [safe] (const juce::String& presetName)
                      {
                          if (safe == nullptr)
                              return;
-                         if (! safe->proc.getPresetManager().saveUserPreset (name))
+                         if (! safe->proc.getPresetManager().saveUserPreset (presetName))
                              safe->dialog.show ("Preset not saved",
                                                 "Enter a name, and check that the presets folder is writable.",
                                                 false, {}, "OK", nullptr);
@@ -259,186 +261,46 @@ namespace velvox::ui
         auto r = getLocalBounds();
         g.setColour (colours::panel);
         g.fillRect (r);
-        g.setColour (colours::line);
-        g.drawHorizontalLine (r.getBottom() - 1, 0.0f, (float) r.getWidth());
+        juce::ColourGradient line (colours::cyan, 0.0f, (float) r.getBottom(), colours::magenta, (float) r.getRight(), (float) r.getBottom(), false);
+        line.addColour (0.5, colours::violet);
+        g.setGradientFill (line);
+        g.fillRect (r.removeFromBottom (2));
 
-        auto brand = r.reduced (20, 0).removeFromLeft (220);
+        auto brand = getLocalBounds().reduced (20, 0).removeFromLeft (230);
         g.setColour (colours::text);
-        g.setFont (font (24.0f, true));
-        g.drawText (product::name, brand.removeFromLeft (100), juce::Justification::centredLeft, false);
+        g.setFont (display (28.0f, true));
+        g.drawText (product::name, brand.removeFromLeft (110), juce::Justification::centredLeft, false);
         g.setColour (colours::textDim);
-        g.setFont (font (13.0f));
-        g.drawText ("Vocal chain " + juce::String (product::versionString), brand, juce::Justification::centredLeft, false);
+        g.setFont (font (12.0f));
+        g.drawText ("Vocal suite " + juce::String (product::versionString), brand, juce::Justification::centredLeft, false);
     }
 
     void TopBar::resized()
     {
-        auto r = getLocalBounds().reduced (20, 14);
+        auto r = getLocalBounds().reduced (20, 13).withTrimmedBottom (2);
         r.removeFromLeft (240);
 
-        auto right = r.removeFromRight (360);
-        bypass.setBounds (right.removeFromRight (100));
+        auto right = r.removeFromRight (470);
+        bypass.setBounds (right.removeFromRight (96));
         right.removeFromRight (16);
-        copy.setBounds (right.removeFromRight (120));
-        right.removeFromRight (8);
-        slotB.setBounds (right.removeFromRight (36));
+        pro.setBounds (right.removeFromRight (60));
+        beginner.setBounds (right.removeFromRight (84));
+        right.removeFromRight (16);
+        copy.setBounds (right.removeFromRight (112));
+        right.removeFromRight (6);
+        slotB.setBounds (right.removeFromRight (34));
         right.removeFromRight (4);
-        slotA.setBounds (right.removeFromRight (36));
+        slotA.setBounds (right.removeFromRight (34));
 
-        auto mid = r.withSizeKeepingCentre (std::min (r.getWidth(), 470), r.getHeight());
-        prev.setBounds (mid.removeFromLeft (32));
+        auto mid = r.withSizeKeepingCentre (std::min (r.getWidth() - 10, 440), r.getHeight());
+        prev.setBounds (mid.removeFromLeft (30));
         mid.removeFromLeft (6);
-        remove.setBounds (mid.removeFromRight (72));
+        remove.setBounds (mid.removeFromRight (68));
         mid.removeFromRight (6);
-        save.setBounds (mid.removeFromRight (64));
+        save.setBounds (mid.removeFromRight (58));
         mid.removeFromRight (6);
-        next.setBounds (mid.removeFromRight (32));
+        next.setBounds (mid.removeFromRight (30));
         mid.removeFromRight (6);
-        presetBox.setBounds (mid);
-    }
-
-    //==========================================================================
-    ChainStrip::ChainStrip (APVTS& state) : apvts (state)
-    {
-        nodes = {
-            { "Input", nullptr, colours::io, {} },
-            { "EQ", pid::eqOn, colours::eq, {} },
-            { "Compressor", pid::compOn, colours::comp, {} },
-            { "De-esser", pid::deessOn, colours::deess, {} },
-            { "Saturation", pid::satOn, colours::sat, {} },
-            { "Delay", pid::delayOn, colours::delay, {} },
-            { "Reverb", pid::reverbOn, colours::reverb, {} },
-            { "Output", nullptr, colours::io, {} },
-        };
-        lastState.assign (nodes.size(), false);
-    }
-
-    void ChainStrip::layoutNodes()
-    {
-        const auto r = getLocalBounds().toFloat().reduced (8.0f, 2.0f);
-        const float h = 17.0f;
-        // 7 columns: Input, EQ, Comp, De-ess, Sat, (Delay | Reverb), Output
-        const float colW = r.getWidth() / 7.0f;
-        const float w = std::min (colW - 44.0f, 104.0f);
-        const float cy = r.getCentreY();
-
-        for (size_t i = 0; i < nodes.size(); ++i)
-        {
-            int col = (int) i;
-            float y = cy;
-            if (i == 5) { col = 5; y = cy - 11.5f; }
-            if (i == 6) { col = 5; y = cy + 11.5f; }
-            if (i == 7) col = 6;
-            nodes[i].bounds = juce::Rectangle<float> (w, h).withCentre ({ r.getX() + colW * ((float) col + 0.5f), y });
-        }
-    }
-
-    void ChainStrip::refresh()
-    {
-        bool changed = false;
-        for (size_t i = 0; i < nodes.size(); ++i)
-        {
-            const bool on = nodes[i].paramId == nullptr || apvts.getRawParameterValue (nodes[i].paramId)->load() > 0.5f;
-            if (on != lastState[i])
-            {
-                lastState[i] = on;
-                changed = true;
-            }
-        }
-        if (changed)
-            repaint();
-    }
-
-    void ChainStrip::paint (juce::Graphics& g)
-    {
-        layoutNodes();
-        const auto& in = nodes[0].bounds;
-        const auto& sat = nodes[4].bounds;
-        const auto& dly = nodes[5].bounds;
-        const auto& rev = nodes[6].bounds;
-        const auto& out = nodes[7].bounds;
-        const float cy = in.getCentreY();
-
-        // Spine: colour runs along the chain
-        juce::ColourGradient grad (colours::eq, in.getRight(), cy, colours::reverb, out.getX(), cy, false);
-        grad.addColour (0.33, colours::comp);
-        grad.addColour (0.5, colours::deess);
-        grad.addColour (0.66, colours::sat);
-        grad.addColour (0.82, colours::delay);
-        g.setGradientFill (grad);
-        g.fillRect (juce::Rectangle<float> (in.getRight(), cy - 1.0f, out.getX() - in.getRight(), 2.0f));
-
-        // Parallel branches for delay and reverb (the dry line continues straight through)
-        const float splitX = sat.getRight() + (dly.getX() - sat.getRight()) * 0.5f;
-        const float joinX = dly.getRight() + (out.getX() - dly.getRight()) * 0.5f;
-        juce::Path branches;
-        for (const auto* b : { &dly, &rev })
-        {
-            branches.startNewSubPath (splitX, cy);
-            branches.lineTo (splitX, b->getCentreY());
-            branches.lineTo (b->getX(), b->getCentreY());
-            branches.startNewSubPath (b->getRight(), b->getCentreY());
-            branches.lineTo (joinX, b->getCentreY());
-            branches.lineTo (joinX, cy);
-        }
-        g.setColour (colours::line.brighter (0.3f));
-        g.strokePath (branches, juce::PathStrokeType (1.0f));
-
-        for (size_t i = 0; i < nodes.size(); ++i)
-        {
-            const auto& n = nodes[i];
-            const bool on = lastState[i];
-            const bool hover = (int) i == hovered && n.paramId != nullptr;
-
-            g.setColour (on ? n.colour.withAlpha (0.2f).overlaidWith (colours::panel.withAlpha (0.5f)) : colours::panel);
-            g.fillRoundedRectangle (n.bounds, n.bounds.getHeight() * 0.5f);
-            g.setColour (on ? n.colour : (hover ? colours::textDim : colours::line.brighter (0.15f)));
-            g.drawRoundedRectangle (n.bounds, n.bounds.getHeight() * 0.5f, 1.0f);
-            g.setColour (on ? colours::text : colours::textDim);
-            g.setFont (font (12.0f));
-            g.drawText (n.label, n.bounds, juce::Justification::centred, false);
-        }
-    }
-
-    int ChainStrip::nodeAt (juce::Point<float> p) const
-    {
-        for (size_t i = 0; i < nodes.size(); ++i)
-            if (nodes[i].paramId != nullptr && nodes[i].bounds.expanded (2.0f).contains (p))
-                return (int) i;
-        return -1;
-    }
-
-    void ChainStrip::mouseDown (const juce::MouseEvent& e)
-    {
-        layoutNodes();
-        const int i = nodeAt (e.position);
-        if (i < 0)
-            return;
-
-        if (auto* p = apvts.getParameter (nodes[(size_t) i].paramId))
-        {
-            p->beginChangeGesture();
-            p->setValueNotifyingHost (p->getValue() > 0.5f ? 0.0f : 1.0f);
-            p->endChangeGesture();
-        }
-    }
-
-    void ChainStrip::mouseMove (const juce::MouseEvent& e)
-    {
-        layoutNodes();
-        const int i = nodeAt (e.position);
-        if (i != hovered)
-        {
-            hovered = i;
-            setMouseCursor (i >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
-            setTooltip (i >= 0 ? "Click to switch " + nodes[(size_t) i].label + " on or off" : juce::String());
-            repaint();
-        }
-    }
-
-    void ChainStrip::mouseExit (const juce::MouseEvent&)
-    {
-        hovered = -1;
-        repaint();
+        presetButton.setBounds (mid);
     }
 }

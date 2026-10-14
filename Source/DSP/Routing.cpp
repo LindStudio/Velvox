@@ -61,6 +61,17 @@ namespace velvox::dsp
         order[(size_t) newIndex] = id;
     }
 
+    void Routing::placeBefore (ModuleId id, ModuleId before) noexcept
+    {
+        if (id == before)
+            return;
+        const int from = positionOf (id), target = positionOf (before);
+        if (from < 0 || target < 0)
+            return;
+        // Removing `id` first shifts everything after it one place to the left
+        move (id, from < target ? target - 1 : target);
+    }
+
     std::uint64_t Routing::pack() const noexcept
     {
         std::uint64_t v = 0;

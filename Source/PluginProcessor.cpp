@@ -244,6 +244,27 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     return s;
 }
 
+std::optional<float> VelvoxAudioProcessor::effectiveValueOf (const juce::String& id) const
+{
+    const auto e = readEffectiveSettings();
+    if (id == pid::highGain)         return e.eq.highGain;
+    if (id == pid::lowGain)          return e.eq.lowGain;
+    if (id == pid::deessRange)       return e.deess.rangeDb;
+    if (id == pid::satDrive)         return e.sat.driveDb;
+    if (id == pid::satMix)           return e.sat.enabled ? e.sat.mix * 100.0f : 0.0f;
+    if (id == pid::compThreshold)    return e.comp.thresholdDb;
+    if (id == pid::compRatio)        return e.comp.ratio;
+    if (id == pid::compAttack)       return e.comp.attackMs;
+    if (id == pid::compMakeup)       return e.comp.makeupDb;
+    if (id == pid::doublerMix)       return e.doubler.enabled ? e.doubler.mix * 100.0f : 0.0f;
+    if (id == pid::stereoWidth)      return e.stereo.width * 100.0f;
+    if (id == pid::reverbMix)        return e.reverbOn ? e.reverbMix * 100.0f : 0.0f;
+    if (id == pid::delayMix)         return e.delayOn ? e.delayMix * 100.0f : 0.0f;
+    if (id == pid::reverbDuckAmount) return e.reverbDuck.amountDb;
+    if (id == pid::delayDuckAmount)  return e.delayDuck.amountDb;
+    return std::nullopt;
+}
+
 dsp::MacroValues VelvoxAudioProcessor::readMacros() const noexcept
 {
     dsp::MacroValues m;

@@ -67,13 +67,20 @@ namespace velvox::ui
         juce::Path value;
         value.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f,
                              std::min (fromAngle, valueAngle), std::max (fromAngle, valueAngle), true);
-        g.setColour (enabled ? accent : accent.withSaturation (0.1f).withAlpha (0.5f));
+        const auto arcColour = enabled ? accent : accent.withSaturation (0.1f).withAlpha (0.5f);
+        if (enabled)
+        {
+            // Neon glow: a wide, faint stroke under the value arc
+            g.setColour (arcColour.withAlpha (0.18f));
+            g.strokePath (value, juce::PathStrokeType (trackWidth * 2.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        g.setColour (arcColour);
         g.strokePath (value, juce::PathStrokeType (trackWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
         // Cap
-        const float capRadius = arcRadius - trackWidth * 1.6f;
-        g.setGradientFill (juce::ColourGradient (colours::raised.brighter (0.15f), centre.x, centre.y - capRadius,
-                                                 colours::raised.darker (0.35f), centre.x, centre.y + capRadius, false));
+        const float capRadius = arcRadius - trackWidth * 1.8f;
+        g.setGradientFill (juce::ColourGradient (colours::raised.brighter (0.12f), centre.x, centre.y - capRadius,
+                                                 colours::background, centre.x, centre.y + capRadius, false));
         g.fillEllipse (juce::Rectangle<float> (capRadius * 2.0f, capRadius * 2.0f).withCentre (centre));
         g.setColour (colours::line.brighter (0.1f));
         g.drawEllipse (juce::Rectangle<float> (capRadius * 2.0f, capRadius * 2.0f).withCentre (centre), 1.0f);
@@ -88,7 +95,7 @@ namespace velvox::ui
     juce::Label* VelvoxLookAndFeel::createSliderTextBox (juce::Slider& slider)
     {
         auto* l = LookAndFeel_V4::createSliderTextBox (slider);
-        l->setFont (font (12.0f));
+        l->setFont (display (13.0f));
         l->setColour (juce::Label::textColourId, colours::textDim);
         l->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
         l->setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);

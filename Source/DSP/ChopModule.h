@@ -39,8 +39,9 @@ namespace velvox::dsp
 
         void process (float* const* channels, int numChannels, int numSamples) noexcept;
 
-        // For tests / UI: current step (0..15)
+        // Current step (0..15); audio thread only - the UI uses getDisplayStep()
         int getCurrentStep() const noexcept { return currentStep; }
+        int getDisplayStep() const noexcept { return displayStep.load (std::memory_order_relaxed); }
 
     private:
         char stepType (int step) const noexcept;
@@ -57,6 +58,7 @@ namespace velvox::dsp
         bool wasPlaying = false;
 
         int currentStep = 0;
+        std::atomic<int> displayStep { -1 };
         int repeatCount = 0;      // consecutive 'r' steps so far
         float gate = 1.0f;        // smoothed gain
         float smoothCoeff = 0.0f;

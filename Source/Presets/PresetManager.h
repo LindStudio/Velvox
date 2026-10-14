@@ -12,6 +12,7 @@ namespace velvox
         struct Entry
         {
             juce::String name;
+            juce::String category;
             bool isFactory = true;
             juce::File file; // user presets only
         };

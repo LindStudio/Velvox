@@ -82,6 +82,10 @@ public:
     velvox::dsp::ChainSettings readSettings() const noexcept;
     velvox::dsp::MacroValues readMacros() const noexcept;
     velvox::dsp::ChainSettings readEffectiveSettings() const noexcept { return velvox::dsp::applyMacros (readSettings(), readMacros()); }
+
+    // Processed value of a parameter (in parameter units) when macros move it;
+    // nullopt for parameters that macros never touch. Used for the UI markers.
+    std::optional<float> effectiveValueOf (const juce::String& paramId) const;
 private:
 
     juce::AudioProcessorValueTreeState apvts;

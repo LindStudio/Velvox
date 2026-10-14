@@ -178,6 +178,8 @@ namespace velvox::dsp
             ppq += ppqPerSample;
         }
 
+        displayStep.store (currentStep, std::memory_order_relaxed);
+
         // Keep advancing across the chain's internal chunks; setTransport()
         // re-synchronises to the host once per host block.
         if (hostPlaying)

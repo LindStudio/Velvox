@@ -64,6 +64,7 @@ namespace velvox::dsp
 
         std::atomic<float> inputLufs { LoudnessMeter::silenceLufs };
         std::atomic<float> processedLufs { LoudnessMeter::silenceLufs };
+        std::atomic<float> outputLufs { LoudnessMeter::silenceLufs };   // what leaves the plugin
         std::atomic<float> levelMatchDb { 0.0f };  // correction the matcher currently suggests
         std::atomic<float> correlation { 1.0f };
         std::atomic<bool> sidechainInUse { false }; // ducking currently follows the external sidechain
@@ -94,6 +95,7 @@ namespace velvox::dsp
         DeEsserModule& getDeEsser() noexcept { return deesser; }
         Ducker& getDelayDucker() noexcept { return delayDucker; }
         Ducker& getReverbDucker() noexcept { return reverbDucker; }
+        int getChopStep() const noexcept { return chop.getDisplayStep(); }
         ChainMeters meters;
 
         // Exposed for tests: soft clip transfer curve
@@ -134,6 +136,7 @@ namespace velvox::dsp
         StereoStage stereo;
         LevelMatcher matcher;
         CorrelationMeter correlation;
+        LoudnessMeter outputLoudness;
         juce::SmoothedValue<float> autoGain { 1.0f }, bypassGain { 1.0f };
         bool monoInput = false;
 

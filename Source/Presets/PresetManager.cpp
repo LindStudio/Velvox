@@ -23,14 +23,14 @@ namespace velvox
         entries.clear();
 
         for (const auto& p : getFactoryPresets())
-            entries.add ({ p.name, true, {} });
+            entries.add ({ p.name, p.category, true, {} });
 
         if (userDirectory.isDirectory())
         {
             auto files = userDirectory.findChildFiles (juce::File::findFiles, false, "*" + fileExtension);
             files.sort();
             for (const auto& f : files)
-                entries.add ({ f.getFileNameWithoutExtension(), false, f });
+                entries.add ({ f.getFileNameWithoutExtension(), "User", false, f });
         }
     }
 
