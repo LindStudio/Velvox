@@ -61,6 +61,7 @@ namespace velvox::dsp
         deessGate.prepare (sampleRate, bs);
 
         pitch.prepare (sampleRate, bs);
+        chop.prepare (sampleRate, bs);
         bypassDelay.prepare (std::max (1, getLatencyFor (true)));
         bypassDelay.setDelay (getLatencySamples());
 
@@ -96,6 +97,7 @@ namespace velvox::dsp
         delay.reset();
         reverb.reset();
         doubler.reset();
+        chop.reset();
         delayDucker.reset();
         reverbDucker.reset();
         bypassDelay.reset();
@@ -123,6 +125,8 @@ namespace velvox::dsp
         saturation.setSettings (s.sat);
         doubler.setSettings (s.doubler);
         pitch.setSettings (s.pitch);
+        chop.setSettings (s.chop);
+        chop.setTransport (s.hostBpm, s.hostPpq, s.hostPlaying);
         pendingPitchOn = s.pitch.enabled;
         delayDucker.setSettings (s.delayDuck);
         reverbDucker.setSettings (s.reverbDuck);
@@ -368,6 +372,8 @@ namespace velvox::dsp
                 if (activePitchOn)
                     pitch.process (io, numChannels, n);
                 break;
+
+            case ModuleId::chop:    chop.process (io, numChannels, n); break; // own on/off, zero latency
 
             case ModuleId::delay:
             case ModuleId::reverb:

@@ -4,8 +4,8 @@ namespace velvox::dsp
 {
     namespace
     {
-        constexpr const char* keys[numModules]  { "eq", "comp", "deess", "sat", "doubler", "pitch", "delay", "reverb" };
-        constexpr const char* names[numModules] { "EQ", "Compressor", "De-esser", "Saturation", "Doubler", "Pitch", "Delay", "Reverb" };
+        constexpr const char* keys[numModules]  { "eq", "comp", "deess", "sat", "doubler", "pitch", "delay", "reverb", "chop" };
+        constexpr const char* names[numModules] { "EQ", "Compressor", "De-esser", "Saturation", "Doubler", "Pitch", "Delay", "Reverb", "Chop" };
 
         constexpr int idx (ModuleId id) noexcept { return (int) id; }
     }
@@ -66,8 +66,8 @@ namespace velvox::dsp
         std::uint64_t v = 0;
         for (int i = 0; i < numModules; ++i)
             v |= (std::uint64_t) (idx (order[(size_t) i]) & 0xf) << (4 * i);
-        v |= (std::uint64_t) (delayInsert ? 1 : 0) << 32;
-        v |= (std::uint64_t) (reverbInsert ? 1 : 0) << 33;
+        v |= (std::uint64_t) (delayInsert ? 1 : 0) << 48;
+        v |= (std::uint64_t) (reverbInsert ? 1 : 0) << 49;
         return v;
     }
 
@@ -76,8 +76,8 @@ namespace velvox::dsp
         Routing r;
         for (int i = 0; i < numModules; ++i)
             r.order[(size_t) i] = (ModuleId) ((v >> (4 * i)) & 0xf);
-        r.delayInsert = ((v >> 32) & 1) != 0;
-        r.reverbInsert = ((v >> 33) & 1) != 0;
+        r.delayInsert = ((v >> 48) & 1) != 0;
+        r.reverbInsert = ((v >> 49) & 1) != 0;
         return r.isValidPermutation() ? r : defaults();
     }
 

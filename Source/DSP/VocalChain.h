@@ -12,6 +12,7 @@
 #include "DoublerModule.h"
 #include "Ducker.h"
 #include "PitchModule.h"
+#include "ChopModule.h"
 
 namespace velvox::dsp
 {
@@ -29,6 +30,7 @@ namespace velvox::dsp
         SatSettings sat;
         DoublerSettings doubler;
         PitchSettings pitch;
+        ChopSettings chop;
         bool delayOn = false;   float delayMix = 0.2f;  DelaySettings delay;
         bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
         bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
@@ -49,6 +51,8 @@ namespace velvox::dsp
         bool monoMonitor = false;   // listening aid, not a saved parameter
 
         double hostBpm = 0.0;   // <= 0 when unknown
+        double hostPpq = -1.0;  // song position in quarter notes, < 0 when unknown
+        bool hostPlaying = false;
     };
 
     struct ChainMeters
@@ -117,6 +121,7 @@ namespace velvox::dsp
         ReverbModule reverb;
         DoublerModule doubler;
         PitchModule pitch;
+        ChopModule chop;
 
         ModuleGate eqGate, compGate, deessGate;
         juce::SmoothedValue<float> delayReturn { 0.0f }, reverbReturn { 0.0f };

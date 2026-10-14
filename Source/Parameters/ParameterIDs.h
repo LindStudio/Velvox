@@ -111,4 +111,11 @@ namespace velvox::pid
     inline constexpr const char* pitchPreserveFormants = "pitchPreserveFormants";
     inline constexpr const char* pitchFormant          = "pitchFormant";
     inline constexpr const char* pitchMix              = "pitchMix";
+
+    // Vocal chop
+    inline constexpr const char* chopOn      = "chopOn";
+    inline constexpr const char* chopPattern = "chopPattern";
+    inline constexpr const char* chopRate    = "chopRate";
+    inline constexpr const char* chopDepth   = "chopDepth";
+    inline constexpr const char* chopSmooth  = "chopSmooth";
 }

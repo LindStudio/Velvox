@@ -1,4 +1,5 @@
 #include "ParameterLayout.h"
+#include "../DSP/ChopModule.h"
 
 namespace velvox
 {
@@ -121,6 +122,14 @@ namespace velvox
               "On: the voice keeps its natural character when shifted. Off: formants move with the pitch (chipmunk / monster)." },
             { pid::pitchFormant,   "Pitch Formant",  "Pitch", T::Float, -12.0f, 12.0f, 0.0f, 0.0f, "st", {}, "Moves the vocal character (formants) up or down independently of the pitch.", 0.1f },
             { pid::pitchMix,       "Pitch Mix",      "Pitch", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "Blend of shifted and original voice." },
+
+            // ---------------- Vocal chop (0.2) ----------------
+            { pid::chopOn,      "Chop On",      "Chop", T::Bool, 0, 1, 0, 0, "", {}, "Enables the tempo-synced vocal chopper." },
+            { pid::chopPattern, "Chop Pattern", "Chop", T::Choice, 0, (float) (dsp::ChopModule::patterns().size() - 1), 2, 0, "",
+              dsp::ChopModule::patternNames(), "16-step rhythm: plays, mutes or repeats (stutters) the vocal." },
+            { pid::chopRate,    "Chop Rate",    "Chop", T::Choice, 0, 3, 1, 0, "", dsp::ChopModule::rateNames(), "Length of one step, synced to the host tempo." },
+            { pid::chopDepth,   "Chop Depth",   "Chop", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "How strongly the pattern is applied." },
+            { pid::chopSmooth,  "Chop Smooth",  "Chop", T::Float, 0.5f, 30.0f, 3.0f, 5.0f, "ms", {}, "Softens the edges of each step (higher = smoother, less clicky)." },
         };
 
         return specs;

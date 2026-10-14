@@ -11,10 +11,10 @@ namespace velvox::dsp
     // values are persisted (packed routing) - append only, never renumber.
     enum class ModuleId : std::uint8_t
     {
-        eq = 0, comp, deess, sat, doubler, pitch, delay, reverb
+        eq = 0, comp, deess, sat, doubler, pitch, delay, reverb, chop
     };
 
-    inline constexpr int numModules = 8;
+    inline constexpr int numModules = 9;
 
     const char* moduleKey (ModuleId id) noexcept;          // stable key used in state/presets
     const char* moduleDisplayName (ModuleId id) noexcept;  // UI name

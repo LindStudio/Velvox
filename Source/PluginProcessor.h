@@ -105,6 +105,7 @@ private:
         Raw duckSource, delayDuckAmount, delayDuckThreshold, delayDuckAttack, delayDuckRelease;
         Raw reverbDuckAmount, reverbDuckThreshold, reverbDuckAttack, reverbDuckRelease;
         Raw pitchOn, pitchSemitones, pitchCents, pitchPreserveFormants, pitchFormant, pitchMix;
+        Raw chopOn, chopPattern, chopRate, chopDepth, chopSmooth;
     } raw;
 
     std::atomic<bool> monoMonitor { false };

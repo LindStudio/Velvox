@@ -43,7 +43,7 @@ public:
         {
             const auto def = Routing::defaults();
             expect (def.isValidPermutation());
-            expectEquals (def.toString(), juce::String ("eq,comp,deess,sat,doubler,pitch,delay:send,reverb:send"));
+            expectEquals (def.toString(), juce::String ("eq,comp,deess,sat,doubler,pitch,delay:send,reverb:send,chop"));
             expect (Routing::fromString (def.toString()) == def);
             expect (Routing::unpack (def.pack()) == def);
 

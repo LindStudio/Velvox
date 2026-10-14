@@ -116,6 +116,9 @@ void VelvoxAudioProcessor::cacheParameterPointers()
     bind (raw.pitchOn, pid::pitchOn);                       bind (raw.pitchSemitones, pid::pitchSemitones);
     bind (raw.pitchCents, pid::pitchCents);                 bind (raw.pitchPreserveFormants, pid::pitchPreserveFormants);
     bind (raw.pitchFormant, pid::pitchFormant);             bind (raw.pitchMix, pid::pitchMix);
+    bind (raw.chopOn, pid::chopOn);                         bind (raw.chopPattern, pid::chopPattern);
+    bind (raw.chopRate, pid::chopRate);                     bind (raw.chopDepth, pid::chopDepth);
+    bind (raw.chopSmooth, pid::chopSmooth);
 }
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
@@ -211,6 +214,12 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     s.pitch.formantShift = raw.pitchFormant.get();
     s.pitch.mix = raw.pitchMix.get() * 0.01f;
 
+    s.chop.enabled = raw.chopOn.on();
+    s.chop.pattern = raw.chopPattern.index();
+    s.chop.rate = raw.chopRate.index();
+    s.chop.depth = raw.chopDepth.get() * 0.01f;
+    s.chop.smoothMs = raw.chopSmooth.get();
+
     return s;
 }
 
@@ -286,8 +295,13 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     if (auto* hostPlayHead = getPlayHead())
         if (const auto position = hostPlayHead->getPosition())
+        {
             if (const auto bpm = position->getBpm())
                 settings.hostBpm = *bpm;
+            if (const auto ppq = position->getPpqPosition())
+                settings.hostPpq = *ppq;
+            settings.hostPlaying = position->getIsPlaying();
+        }
 
     // Defensive: a host that hands over fewer channels than the negotiated
     // layout must not crash us - process what is there, without sidechain.
