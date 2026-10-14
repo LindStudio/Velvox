@@ -10,6 +10,7 @@ namespace velvox::dsp
         float thresholdDb = -30.0f;
         float rangeDb = 6.0f;
         bool listen = false;
+        int mode = 0;   // 0 = split band (only the S band is reduced), 1 = wideband
     };
 
     // Split-band de-esser implemented as a dynamic high shelf:

@@ -4,25 +4,46 @@ namespace velvox::dsp
 {
     namespace
     {
-        constexpr double shelfQ = 0.7071;
-        // Butterworth Q values: 2nd order, and the two sections of a 4th order
-        constexpr double bw2Q = 0.70710678;
-        constexpr double bw4Q1 = 0.54119610;
-        constexpr double bw4Q2 = 1.30656296;
+        // Butterworth section Q values for 2nd, 4th and 8th order
+        constexpr double bwQ[3][4] {
+            { 0.70710678, 0, 0, 0 },
+            { 0.54119610, 1.30656296, 0, 0 },
+            { 0.50979558, 0.60134489, 0.89997622, 2.56291545 },
+        };
+        constexpr int sectionsForSlope[3] { 1, 2, 4 };
+
+        template <typename Fn>
+        void designCut (EqualizerModule::Sections& out, int first, int slope, Fn&& design)
+        {
+            slope = juce::jlimit (0, 2, slope);
+            for (int k = 0; k < EqualizerModule::maxCutSections; ++k)
+                out[(size_t) (first + k)] = k < sectionsForSlope[slope] ? design (bwQ[slope][k]) : BiquadCoeffs {};
+        }
+
+        template <typename SV>
+        bool anySmoothing (std::initializer_list<SV*> values)
+        {
+            for (auto* v : values)
+                if (v->isSmoothing())
+                    return true;
+            return false;
+        }
     }
 
     void EqualizerModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
 
-        for (auto* s : { &hpfFreq, &lowFreq, &midFreq, &highFreq, &midQ })
+        for (auto* s : { &hpfFreq, &lowFreq, &midFreq, &highFreq, &lpfFreq, &midQ, &lowQ, &highQ })
             s->reset (sampleRate, 0.05);
         for (auto* s : { &lowGain, &midGain, &highGain })
             s->reset (sampleRate, 0.05);
         hpfAmount.reset (sampleRate, 0.03);
+        lpfAmount.reset (sampleRate, 0.03);
 
         setSettings (target);
         hpfAmount.setCurrentAndTargetValue (target.hpfOn ? 1.0f : 0.0f);
+        lpfAmount.setCurrentAndTargetValue (target.lpfOn ? 1.0f : 0.0f);
         updateCoefficients (true);
         reset();
     }
@@ -40,31 +61,29 @@ namespace velvox::dsp
         lowFreq.setTargetValue (s.lowFreq);
         midFreq.setTargetValue (s.midFreq);
         highFreq.setTargetValue (s.highFreq);
+        lpfFreq.setTargetValue (s.lpfFreq);
         midQ.setTargetValue (s.midQ);
+        lowQ.setTargetValue (s.lowQ);
+        highQ.setTargetValue (s.highQ);
         lowGain.setTargetValue (s.lowGain);
         midGain.setTargetValue (s.midGain);
         highGain.setTargetValue (s.highGain);
         hpfAmount.setTargetValue (s.hpfOn ? 1.0f : 0.0f);
+        lpfAmount.setTargetValue (s.lpfOn ? 1.0f : 0.0f);
     }
 
-    EqualizerModule::Sections EqualizerModule::designSections (const EqSettings& s, double sampleRate)
+    EqualizerModule::Sections EqualizerModule::designSections (const EqSettings& s, double sr)
     {
         Sections out;
 
-        if (s.hpfSlope == 0)
-        {
-            out[hp1] = design::highPass (sampleRate, s.hpfFreq, bw2Q);
-            out[hp2] = BiquadCoeffs {}; // identity
-        }
-        else
-        {
-            out[hp1] = design::highPass (sampleRate, s.hpfFreq, bw4Q1);
-            out[hp2] = design::highPass (sampleRate, s.hpfFreq, bw4Q2);
-        }
+        designCut (out, hp1, s.hpfSlope, [&] (double q) { return design::highPass (sr, s.hpfFreq, q); });
+        designCut (out, lp1, s.lpfSlope, [&] (double q) { return design::lowPass (sr, s.lpfFreq, q); });
 
-        out[lowShelf]  = design::lowShelf (sampleRate, s.lowFreq, shelfQ, s.lowGain);
-        out[midBell]   = design::peak (sampleRate, s.midFreq, s.midQ, s.midGain);
-        out[highShelf] = design::highShelf (sampleRate, s.highFreq, shelfQ, s.highGain);
+        out[lowBand]  = s.lowType == 1 ? design::peak (sr, s.lowFreq, s.lowQ, s.lowGain)
+                                       : design::lowShelf (sr, s.lowFreq, s.lowQ, s.lowGain);
+        out[midBell]  = design::peak (sr, s.midFreq, s.midQ, s.midGain);
+        out[highBand] = s.highType == 1 ? design::peak (sr, s.highFreq, s.highQ, s.highGain)
+                                        : design::highShelf (sr, s.highFreq, s.highQ, s.highGain);
         return out;
     }
 
@@ -75,7 +94,9 @@ namespace velvox::dsp
 
         for (int i = 0; i < numSections; ++i)
         {
-            if ((i == hp1 || i == hp2) && ! s.hpfOn)
+            if (i >= hp1 && i <= hp4 && ! s.hpfOn)
+                continue;
+            if (i >= lp1 && i <= lp4 && ! s.lpfOn)
                 continue;
             mag *= design::magnitude (sections[(size_t) i], freq, sampleRate);
         }
@@ -87,7 +108,7 @@ namespace velvox::dsp
     {
         if (snap)
         {
-            for (auto* s : { &hpfFreq, &lowFreq, &midFreq, &highFreq, &midQ })
+            for (auto* s : { &hpfFreq, &lowFreq, &midFreq, &highFreq, &lpfFreq, &midQ, &lowQ, &highQ })
                 s->setCurrentAndTargetValue (s->getTargetValue());
             for (auto* s : { &lowGain, &midGain, &highGain })
                 s->setCurrentAndTargetValue (s->getTargetValue());
@@ -98,17 +119,26 @@ namespace velvox::dsp
         cur.lowFreq  = lowFreq.getCurrentValue();
         cur.midFreq  = midFreq.getCurrentValue();
         cur.highFreq = highFreq.getCurrentValue();
+        cur.lpfFreq  = lpfFreq.getCurrentValue();
         cur.midQ     = midQ.getCurrentValue();
+        cur.lowQ     = lowQ.getCurrentValue();
+        cur.highQ    = highQ.getCurrentValue();
         cur.lowGain  = lowGain.getCurrentValue();
         cur.midGain  = midGain.getCurrentValue();
         cur.highGain = highGain.getCurrentValue();
 
-        if (cur.hpfSlope != currentSlope)
+        // Changing the filter topology: clear the affected state to avoid bursts
+        if (cur.hpfSlope != currentHpSlope)
         {
-            // Changing the filter topology: clear the HP state to avoid bursts
-            filters[hp1].reset();
-            filters[hp2].reset();
-            currentSlope = cur.hpfSlope;
+            for (int i = hp1; i <= hp4; ++i)
+                filters[(size_t) i].reset();
+            currentHpSlope = cur.hpfSlope;
+        }
+        if (cur.lpfSlope != currentLpSlope)
+        {
+            for (int i = lp1; i <= lp4; ++i)
+                filters[(size_t) i].reset();
+            currentLpSlope = cur.lpfSlope;
         }
 
         const auto sections = designSections (cur, fs);
@@ -118,54 +148,68 @@ namespace velvox::dsp
 
     void EqualizerModule::process (float* const* channels, int numChannels, int numSamples) noexcept
     {
-        int start = 0;
+        const int hpSections = sectionsForSlope[juce::jlimit (0, 2, target.hpfSlope)];
+        const int lpSections = sectionsForSlope[juce::jlimit (0, 2, target.lpfSlope)];
 
-        while (start < numSamples)
+        for (int start = 0; start < numSamples; start += updateInterval)
         {
             const int n = std::min (updateInterval, numSamples - start);
 
-            const bool smoothing = hpfFreq.isSmoothing() || lowFreq.isSmoothing() || midFreq.isSmoothing()
-                                || highFreq.isSmoothing() || midQ.isSmoothing() || lowGain.isSmoothing()
-                                || midGain.isSmoothing() || highGain.isSmoothing() || target.hpfSlope != currentSlope;
+            const bool smoothing = anySmoothing<Mult> ({ &hpfFreq, &lowFreq, &midFreq, &highFreq, &lpfFreq, &midQ, &lowQ, &highQ })
+                                || anySmoothing<juce::SmoothedValue<float>> ({ &lowGain, &midGain, &highGain })
+                                || target.hpfSlope != currentHpSlope || target.lpfSlope != currentLpSlope;
 
             if (smoothing)
             {
-                for (auto* s : { &hpfFreq, &lowFreq, &midFreq, &highFreq, &midQ })
+                for (auto* s : { &hpfFreq, &lowFreq, &midFreq, &highFreq, &lpfFreq, &midQ, &lowQ, &highQ })
                     s->skip (n);
                 for (auto* s : { &lowGain, &midGain, &highGain })
                     s->skip (n);
                 updateCoefficients (false);
             }
 
-            const bool hpfRamping = hpfAmount.isSmoothing();
-            const float hpfStatic = hpfAmount.getCurrentValue();
+            const bool hpRamping = hpfAmount.isSmoothing(), lpRamping = lpfAmount.isSmoothing();
+            const float hpStatic = hpfAmount.getCurrentValue(), lpStatic = lpfAmount.getCurrentValue();
 
             for (int i = start; i < start + n; ++i)
             {
-                const float amt = hpfRamping ? hpfAmount.getNextValue() : hpfStatic;
+                const float hpAmt = hpRamping ? hpfAmount.getNextValue() : hpStatic;
+                const float lpAmt = lpRamping ? lpfAmount.getNextValue() : lpStatic;
 
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
                     float x = channels[ch][i];
 
-                    if (amt > 0.0f)
+                    if (hpAmt > 0.0f)
                     {
-                        const float hp = filters[hp2].process (filters[hp1].process (x, ch), ch);
-                        x += (hp - x) * amt;
+                        float y = x;
+                        for (int k = 0; k < hpSections; ++k)
+                            y = filters[(size_t) (hp1 + k)].process (y, ch);
+                        x += (y - x) * hpAmt;
                     }
 
-                    x = filters[lowShelf].process (x, ch);
+                    x = filters[lowBand].process (x, ch);
                     x = filters[midBell].process (x, ch);
-                    x = filters[highShelf].process (x, ch);
+                    x = filters[highBand].process (x, ch);
+
+                    if (lpAmt > 0.0f)
+                    {
+                        float y = x;
+                        for (int k = 0; k < lpSections; ++k)
+                            y = filters[(size_t) (lp1 + k)].process (y, ch);
+                        x += (y - x) * lpAmt;
+                    }
+
                     channels[ch][i] = x;
                 }
             }
-
-            start += n;
         }
 
         for (auto& f : filters)
             if (! f.isStateFinite())
-                f.reset();
+            {
+                reset();
+                break;
+            }
     }
 }

@@ -118,4 +118,17 @@ namespace velvox::pid
     inline constexpr const char* chopRate    = "chopRate";
     inline constexpr const char* chopDepth   = "chopDepth";
     inline constexpr const char* chopSmooth  = "chopSmooth";
+
+    // Pro extensions of existing modules
+    inline constexpr const char* lowType      = "lowType";
+    inline constexpr const char* lowQ         = "lowQ";
+    inline constexpr const char* highType     = "highType";
+    inline constexpr const char* highQ        = "highQ";
+    inline constexpr const char* lpfOn        = "lpfOn";
+    inline constexpr const char* lpfFreq      = "lpfFreq";
+    inline constexpr const char* lpfSlope     = "lpfSlope";
+    inline constexpr const char* satCharacter = "satCharacter";
+    inline constexpr const char* deessMode    = "deessMode";
+    inline constexpr const char* compDetector = "compDetector";
+    inline constexpr const char* compScHpf    = "compScHpf";
 }

@@ -14,6 +14,8 @@ namespace velvox::dsp
     void CompressorModule::reset()
     {
         envDb = 0.0f;
+        rmsState = 0.0f;
+        sidechainHpf.reset();
     }
 
     void CompressorModule::setSettings (const CompSettings& s) noexcept
@@ -23,6 +25,14 @@ namespace velvox::dsp
         attackCoeff = timeConstantCoeff (std::max (0.05f, s.attackMs), fs);
         releaseCoeff = timeConstantCoeff (std::max (1.0f, s.releaseMs), fs);
         makeup.setTargetValue (dbToGain (s.makeupDb));
+        rmsCoeff = timeConstantCoeff (10.0f, fs);
+
+        const bool wantHpf = s.sidechainHpfHz > 20.5f;
+        if (wantHpf)
+            sidechainHpf.setCoeffs (design::highPass (fs, juce::jlimit (20.0f, 1000.0f, s.sidechainHpfHz), 0.70710678));
+        if (wantHpf && ! hpfActive)
+            sidechainHpf.reset();
+        hpfActive = wantHpf;
     }
 
     float CompressorModule::computeGainDb (float x, float t, float ratio, float knee) noexcept
@@ -48,11 +58,23 @@ namespace velvox::dsp
 
         for (int i = 0; i < numSamples; ++i)
         {
-            float peak = 0.0f;
+            float peak = 0.0f, power = 0.0f;
             for (int ch = 0; ch < numChannels; ++ch)
-                peak = std::max (peak, std::abs (channels[ch][i]));
+            {
+                const float d = hpfActive ? sidechainHpf.process (channels[ch][i], ch) : channels[ch][i];
+                peak = std::max (peak, std::abs (d));
+                power = std::max (power, d * d);
+            }
 
-            const float inDb = gainToDb (peak);
+            float level = peak;
+            if (settings.detector == 1)
+            {
+                // RMS: mean square (10 ms), scaled so a sine reads its peak level
+                rmsState = power + rmsCoeff * (rmsState - power);
+                level = std::sqrt (2.0f * rmsState);
+            }
+
+            const float inDb = gainToDb (level);
             const float outDb = computeGainDb (inDb, settings.thresholdDb, settings.ratio, settings.kneeDb);
             const float targetReduction = std::max (0.0f, inDb - outDb);
 
@@ -68,8 +90,8 @@ namespace velvox::dsp
             maxReduction = std::max (maxReduction, envDb);
         }
 
-        if (! std::isfinite (envDb))
-            envDb = 0.0f;
+        if (! std::isfinite (envDb) || ! std::isfinite (rmsState) || ! sidechainHpf.isStateFinite())
+            reset();
 
         gainReductionDb.push (maxReduction);
     }

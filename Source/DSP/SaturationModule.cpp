@@ -8,15 +8,38 @@ namespace velvox::dsp
         constexpr int updateInterval = 16;
     }
 
-    float SaturationModule::shape (float x, float drive) noexcept
+    float SaturationModule::shape (float x, float drive, int character) noexcept
     {
-        static const float tanhBias = std::tanh (bias);
-        return std::tanh (drive * x + bias) - tanhBias;
+        const float u = drive * x;
+        switch (character)
+        {
+            case 1: // Tape: symmetric and gentle (odd harmonics, soft knee)
+                return 0.63661977f * std::atan (1.5707963f * u);
+
+            case 2: // Tube: stronger asymmetry (more even harmonics)
+            {
+                constexpr float tubeBias = 0.5f;
+                static const float tanhTubeBias = std::tanh (tubeBias);
+                return std::tanh (u + tubeBias) - tanhTubeBias;
+            }
+
+            case 3: // Hard: cubic soft clipper with a firm ceiling
+            {
+                const float c = juce::jlimit (-1.0f, 1.0f, u);
+                return 1.5f * (c - c * c * c / 3.0f);
+            }
+
+            default: // Warm: mildly asymmetric tanh (v0.1 curve)
+            {
+                static const float tanhBias = std::tanh (bias);
+                return std::tanh (u + bias) - tanhBias;
+            }
+        }
     }
 
     // Keeps perceived level roughly constant: matches the RMS of a -12 dBFS sine
     // before and after the curve.
-    float SaturationModule::compensationFor (float drive) noexcept
+    float SaturationModule::compensationFor (float drive, int character) noexcept
     {
         constexpr int points = 48;
         constexpr float amp = 0.25f;
@@ -26,7 +49,7 @@ namespace velvox::dsp
         for (int i = 0; i < points; ++i)
         {
             const float x = amp * std::sin (6.2831853f * (float) i / (float) points);
-            out[i] = shape (x, drive);
+            out[i] = shape (x, drive, character);
             outMean += out[i];
             inSum += (double) x * x;
         }
@@ -55,7 +78,8 @@ namespace velvox::dsp
         amount.setCurrentAndTargetValue (amountTarget);
 
         driveLin = dbToGain (driveDb.getTargetValue());
-        compensation = compensationFor (driveLin);
+        compensation = compensationFor (driveLin, character);
+        compensationCharacter = character;
         dcR = (float) (1.0 - 2.0 * 3.14159265 * 10.0 / sampleRate);
         reset();
     }
@@ -72,6 +96,7 @@ namespace velvox::dsp
 
     void SaturationModule::setSettings (const SatSettings& s) noexcept
     {
+        character = juce::jlimit (0, numCharacters - 1, s.character);
         driveDb.setTargetValue (s.driveDb);
         outGain.setTargetValue (dbToGain (s.outputDb));
         amountTarget = s.enabled ? juce::jlimit (0.0f, 1.0f, s.mix) : 0.0f;
@@ -111,11 +136,12 @@ namespace velvox::dsp
         {
             const int n = std::min (updateInterval, numSamples - start);
 
-            if (driveDb.isSmoothing())
+            if (driveDb.isSmoothing() || character != compensationCharacter)
             {
                 driveDb.skip (n);
                 driveLin = dbToGain (driveDb.getCurrentValue());
-                compensation = compensationFor (driveLin);
+                compensation = compensationFor (driveLin, character);
+                compensationCharacter = character;
             }
 
             const float d = driveLin;
@@ -125,7 +151,7 @@ namespace velvox::dsp
             {
                 auto* s = up.getChannelPointer (ch);
                 for (int i = start * factor; i < (start + n) * factor; ++i)
-                    s[i] = shape (s[i], d) * c;
+                    s[i] = shape (s[i], d, character) * c;
             }
         }
 

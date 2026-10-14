@@ -12,6 +12,8 @@ namespace velvox::dsp
         float releaseMs = 120.0f;
         float kneeDb = 6.0f;
         float makeupDb = 0.0f;
+        int detector = 0;           // 0 = peak, 1 = RMS (smoother, more "musical")
+        float sidechainHpfHz = 20.0f; // <= 20 Hz = off; ignores low end when detecting
     };
 
     // Feed-forward, stereo-linked peak compressor with soft knee. Gain
@@ -34,6 +36,9 @@ namespace velvox::dsp
         CompSettings settings;
         float attackCoeff = 0.0f, releaseCoeff = 0.0f;
         float envDb = 0.0f; // current gain reduction in dB (>= 0)
+        float rmsState = 0.0f, rmsCoeff = 0.0f;
+        Biquad sidechainHpf;
+        bool hpfActive = false;
         juce::SmoothedValue<float> makeup { 1.0f };
     };
 }

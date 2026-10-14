@@ -130,6 +130,23 @@ namespace velvox
             { pid::chopRate,    "Chop Rate",    "Chop", T::Choice, 0, 3, 1, 0, "", dsp::ChopModule::rateNames(), "Length of one step, synced to the host tempo." },
             { pid::chopDepth,   "Chop Depth",   "Chop", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "How strongly the pattern is applied." },
             { pid::chopSmooth,  "Chop Smooth",  "Chop", T::Float, 0.5f, 30.0f, 3.0f, 5.0f, "ms", {}, "Softens the edges of each step (higher = smoother, less clicky)." },
+
+            // ---------------- Pro extensions (0.2) ----------------
+            { pid::lowType,  "Low Band Type",  "EQ", T::Choice, 0, 1, 0, 0, "", { "Shelf", "Bell" }, "Low band as shelf (whole low end) or bell (around the frequency)." },
+            { pid::lowQ,     "Low Q",          "EQ", T::Float, 0.3f, 6.0f, 0.7071f, 1.2f, "", {}, "Bandwidth of the low band (shelf: slope shape)." },
+            { pid::highType, "High Band Type", "EQ", T::Choice, 0, 1, 0, 0, "", { "Shelf", "Bell" }, "High band as shelf (air) or bell (presence)." },
+            { pid::highQ,    "High Q",         "EQ", T::Float, 0.3f, 6.0f, 0.7071f, 1.2f, "", {}, "Bandwidth of the high band (shelf: slope shape)." },
+            { pid::lpfOn,    "High Cut On",    "EQ", T::Bool, 0, 1, 0, 0, "", {}, "Enables the low-pass (high cut) filter." },
+            { pid::lpfFreq,  "High Cut",       "EQ", T::Float, 1000.0f, 20000.0f, 18000.0f, 6000.0f, "Hz", {}, "Low-pass cutoff frequency (e.g. telephone or lo-fi effects)." },
+            { pid::lpfSlope, "High Cut Slope", "EQ", T::Choice, 0, 1, 1, 0, "", { "12 dB/oct", "24 dB/oct" }, "High-cut steepness." },
+            { pid::satCharacter, "Sat Character", "Saturation", T::Choice, 0, 3, 0, 0, "", { "Warm", "Tape", "Tube", "Hard" },
+              "Warm: smooth, slightly asymmetric. Tape: gentle, symmetric. Tube: rich even harmonics. Hard: firm clipping." },
+            { pid::deessMode,    "De-Ess Mode",   "De-Esser", T::Choice, 0, 1, 0, 0, "", { "Split band", "Wideband" },
+              "Split band reduces only the S frequencies; wideband dips the whole voice on each S." },
+            { pid::compDetector, "Comp Detector", "Compressor", T::Choice, 0, 1, 0, 0, "", { "Peak", "RMS" },
+              "Peak reacts to every transient; RMS follows the average level (smoother)." },
+            { pid::compScHpf,    "Comp SC Filter", "Compressor", T::Float, 20.0f, 500.0f, 20.0f, 100.0f, "Hz", {},
+              "Ignores low frequencies when detecting, so plosives and bass do not trigger compression (20 Hz = off)." },
         };
 
         return specs;
@@ -166,7 +183,7 @@ namespace velvox
     {
         const juce::String unit (spec.unit);
 
-        if (juce::String (spec.id) == pid::monoBelow && value <= 20.5f)
+        if ((juce::String (spec.id) == pid::monoBelow || juce::String (spec.id) == pid::compScHpf) && value <= 20.5f)
             return "Off";
 
         if (unit == "Hz")

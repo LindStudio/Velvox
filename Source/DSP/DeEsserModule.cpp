@@ -57,6 +57,7 @@ namespace velvox::dsp
             }
 
             // 1) Detector over this sub-block
+            float wideGains[updateInterval];
             for (int i = start; i < start + n; ++i)
             {
                 float peak = 0.0f;
@@ -74,12 +75,22 @@ namespace velvox::dsp
 
                 const float coeff = targetReduction > envDb ? attackCoeff : releaseCoeff;
                 envDb = targetReduction + coeff * (envDb - targetReduction);
+                wideGains[i - start] = dbToGain (-envDb);
             }
 
             maxReduction = std::max (maxReduction, envDb);
 
             if (settings.listen)
                 continue;
+
+            if (settings.mode == 1)
+            {
+                // Wideband: the whole voice dips briefly on each S
+                for (int ch = 0; ch < numChannels; ++ch)
+                    for (int i = start; i < start + n; ++i)
+                        channels[ch][i] *= wideGains[i - start];
+                continue;
+            }
 
             // 2) Dynamic shelf follows the envelope
             if (freqChanged || std::abs (envDb - shelfDb) > 0.01f)

@@ -119,6 +119,12 @@ void VelvoxAudioProcessor::cacheParameterPointers()
     bind (raw.chopOn, pid::chopOn);                         bind (raw.chopPattern, pid::chopPattern);
     bind (raw.chopRate, pid::chopRate);                     bind (raw.chopDepth, pid::chopDepth);
     bind (raw.chopSmooth, pid::chopSmooth);
+    bind (raw.lowType, pid::lowType);           bind (raw.lowQ, pid::lowQ);
+    bind (raw.highType, pid::highType);         bind (raw.highQ, pid::highQ);
+    bind (raw.lpfOn, pid::lpfOn);               bind (raw.lpfFreq, pid::lpfFreq);
+    bind (raw.lpfSlope, pid::lpfSlope);         bind (raw.satCharacter, pid::satCharacter);
+    bind (raw.deessMode, pid::deessMode);       bind (raw.compDetector, pid::compDetector);
+    bind (raw.compScHpf, pid::compScHpf);
 }
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
@@ -219,6 +225,18 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     s.chop.rate = raw.chopRate.index();
     s.chop.depth = raw.chopDepth.get() * 0.01f;
     s.chop.smoothMs = raw.chopSmooth.get();
+
+    s.eq.lowType = raw.lowType.index();
+    s.eq.lowQ = raw.lowQ.get();
+    s.eq.highType = raw.highType.index();
+    s.eq.highQ = raw.highQ.get();
+    s.eq.lpfOn = raw.lpfOn.on();
+    s.eq.lpfFreq = raw.lpfFreq.get();
+    s.eq.lpfSlope = raw.lpfSlope.index();
+    s.sat.character = raw.satCharacter.index();
+    s.deess.mode = raw.deessMode.index();
+    s.comp.detector = raw.compDetector.index();
+    s.comp.sidechainHpfHz = raw.compScHpf.get();
 
     return s;
 }
