@@ -77,6 +77,9 @@ void VelvoxAudioProcessor::cacheParameterPointers()
     bind (raw.reverbDamping, pid::reverbDamping); bind (raw.reverbLowCut, pid::reverbLowCut);
     bind (raw.reverbWidth, pid::reverbWidth);
     bind (raw.delayToReverb, pid::delayToReverb);
+    bind (raw.stereoWidth, pid::stereoWidth);     bind (raw.monoBelow, pid::monoBelow);
+    bind (raw.levelMatchMode, pid::levelMatchMode); bind (raw.levelMatchWindow, pid::levelMatchWindow);
+    bind (raw.levelMatchRange, pid::levelMatchRange);
 }
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
@@ -143,6 +146,15 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
 
     s.delayIntoReverb = raw.delayToReverb.get() * 0.01f;
     s.routing = dsp::Routing::unpack (routingPacked.load (std::memory_order_acquire));
+
+    s.stereo.width = raw.stereoWidth.get() * 0.01f;
+    s.stereo.monoBelowHz = raw.monoBelow.get();
+
+    s.levelMatch = (dsp::ChainSettings::LevelMatch) juce::jlimit (0, 2, raw.levelMatchMode.index());
+    static constexpr float windows[] { 0.4f, 3.0f, 10.0f };
+    s.levelMatchWindowSeconds = windows[juce::jlimit (0, 2, raw.levelMatchWindow.index())];
+    s.levelMatchRangeDb = raw.levelMatchRange.get();
+    s.monoMonitor = monoMonitor.load (std::memory_order_relaxed);
 
     return s;
 }

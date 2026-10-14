@@ -58,6 +58,15 @@ namespace velvox::dsp
         bypassDelay.prepare (std::max (1, saturation.getLatencySamples()));
         bypassDelay.setDelay (saturation.getLatencySamples());
 
+        stereo.prepare (sampleRate, bs);
+        matcher.prepare (sampleRate);
+        correlation.prepare (sampleRate);
+        for (auto* s : { &autoGain, &bypassGain })
+        {
+            s->reset (sampleRate, 0.05);
+            s->setCurrentAndTargetValue (1.0f);
+        }
+
         for (auto* s : { &delayReturn, &reverbReturn, &wetAmount, &delayIntoReverb })
             s->reset (sampleRate, 0.03);
         inputGain.reset (sampleRate, 0.03);
@@ -81,6 +90,9 @@ namespace velvox::dsp
         delay.reset();
         reverb.reset();
         bypassDelay.reset();
+        stereo.reset();
+        matcher.reset();
+        correlation.reset();
     }
 
     void VocalChain::applySettings (const ChainSettings& s) noexcept
@@ -124,6 +136,10 @@ namespace velvox::dsp
         reverbReturn.setTargetValue (s.reverbOn ? juce::jlimit (0.0f, 1.0f, s.reverbMix) : 0.0f);
         delayIntoReverb.setTargetValue (juce::jlimit (0.0f, 1.0f, s.delayIntoReverb));
 
+        stereo.setSettings (s.stereo);
+        matcher.setWindowSeconds (s.levelMatchWindowSeconds);
+        matcher.setRangeDb (s.levelMatchRangeDb);
+
         if (s.routing.isValidPermutation())
             pendingRouting = s.routing;
 
@@ -144,6 +160,7 @@ namespace velvox::dsp
         const int numSamples = buffer.getNumSamples();
         if (ioChannels == 0 || numSamples == 0)
             return;
+        monoInput = ioChannels == 1;
 
         sanitize (buffer.getArrayOfWritePointers(), ioChannels, numSamples);
         applySettings (s);
@@ -182,7 +199,12 @@ namespace velvox::dsp
 
     void VocalChain::processChunk (float* const* io, int numChannels, int n, const ChainSettings& s) noexcept
     {
-        // 1) Untouched input, delayed by the chain latency, for the global bypass
+        // A mono track is duplicated internally; measure loudness on one channel
+        // so LUFS values match what a meter on the mono track would show.
+        const int loudnessChannels = monoInput ? 1 : numChannels;
+
+        // 1) Untouched input: loudness reference, and latency-delayed copy for the bypass
+        matcher.measureInput (io, loudnessChannels, n);
         for (int ch = 0; ch < numChannels; ++ch)
             dryForBypass.copyFrom (ch, 0, io[ch], n);
         bypassDelay.process (dryForBypass.getArrayOfWritePointers(), numChannels, n);
@@ -214,11 +236,33 @@ namespace velvox::dsp
 
         applyRoutingFade (io, numChannels, n);
 
-        // 5) Output gain, clip detection, safety clipper
+        // 5) Stereo width (side only - the mono sum is never changed)
+        stereo.process (io, numChannels, n);
+
+        // 6) Level matching: compare processed loudness with the input
+        matcher.measureProcessed (io, loudnessChannels, n);
+        matcher.update (n);
+        const float correctionDb = matcher.getCorrectionDb();
+        meters.inputLufs.store (matcher.getInputLufs(), std::memory_order_relaxed);
+        meters.processedLufs.store (matcher.getProcessedLufs(), std::memory_order_relaxed);
+        meters.levelMatchDb.store (correctionDb, std::memory_order_relaxed);
+
+        using LM = ChainSettings::LevelMatch;
+        autoGain.setTargetValue (s.levelMatch == LM::autoGain ? dbToGain (correctionDb) : 1.0f);
+
+        // Bypass is matched to what you hear when processing is on
+        float bypassDb = 0.0f;
+        if (s.levelMatch == LM::bypassMatch)
+            bypassDb = s.outputGainDb - correctionDb;
+        else if (s.levelMatch == LM::autoGain)
+            bypassDb = s.outputGainDb;
+        bypassGain.setTargetValue (dbToGain (juce::jlimit (-24.0f, 24.0f, bypassDb)));
+
+        // 7) Auto gain, output gain, clip detection, safety clipper
         bool clipped = false;
         for (int i = 0; i < n; ++i)
         {
-            const float g = outputGain.getNextValue();
+            const float g = outputGain.getNextValue() * autoGain.getNextValue();
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 float y = io[ch][i] * g;
@@ -232,17 +276,39 @@ namespace velvox::dsp
         if (clipped)
             meters.clipped.store (true, std::memory_order_relaxed);
 
-        // 6) Global bypass crossfade against the latency-aligned input
+        // 8) Global bypass crossfade against the latency-aligned (and optionally
+        //    loudness-matched) input
         if (wetAmount.isSmoothing() || wetAmount.getCurrentValue() < 1.0f)
         {
             for (int i = 0; i < n; ++i)
             {
                 const float w = wetAmount.getNextValue();
+                const float bg = bypassGain.getNextValue();
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
-                    const float d = dryForBypass.getSample (ch, i);
+                    float d = dryForBypass.getSample (ch, i) * bg;
+                    if (bg > 1.0f && s.safetyClip)
+                        d = safetyClip (d);
                     io[ch][i] = d + (io[ch][i] - d) * w;
                 }
+            }
+        }
+        else
+        {
+            bypassGain.skip (n);
+        }
+
+        // 9) Correlation of what leaves the plugin, then the mono listening aid
+        correlation.process (io[0], io[numChannels > 1 ? 1 : 0], n);
+        meters.correlation.store (correlation.getCorrelation(), std::memory_order_relaxed);
+
+        if (s.monoMonitor && numChannels > 1)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                const float m = 0.5f * (io[0][i] + io[1][i]);
+                io[0][i] = m;
+                io[1][i] = m;
             }
         }
     }

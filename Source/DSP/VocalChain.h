@@ -7,6 +7,8 @@
 #include "DelayModule.h"
 #include "ReverbModule.h"
 #include "Routing.h"
+#include "Loudness.h"
+#include "StereoStage.h"
 
 namespace velvox::dsp
 {
@@ -29,6 +31,15 @@ namespace velvox::dsp
 
         Routing routing = Routing::defaults();
 
+        StereoSettings stereo;
+
+        enum class LevelMatch { off = 0, bypassMatch = 1, autoGain = 2 };
+        LevelMatch levelMatch = LevelMatch::off;
+        float levelMatchWindowSeconds = 3.0f;
+        float levelMatchRangeDb = 12.0f;
+
+        bool monoMonitor = false;   // listening aid, not a saved parameter
+
         double hostBpm = 0.0;   // <= 0 when unknown
     };
 
@@ -38,6 +49,11 @@ namespace velvox::dsp
         std::atomic<bool> clipped { false };       // output exceeded 0 dBFS before the safety clipper
         std::atomic<bool> tempoSynced { false };   // delay currently follows host tempo
         std::atomic<float> effectiveDelayMs { 375.0f };
+
+        std::atomic<float> inputLufs { LoudnessMeter::silenceLufs };
+        std::atomic<float> processedLufs { LoudnessMeter::silenceLufs };
+        std::atomic<float> levelMatchDb { 0.0f };  // correction the matcher currently suggests
+        std::atomic<float> correlation { 1.0f };
     };
 
     //  Input -> serial modules in Routing order (delay/reverb only when "insert")
@@ -88,6 +104,12 @@ namespace velvox::dsp
         juce::SmoothedValue<float> inputGain { 1.0f }, outputGain { 1.0f }, wetAmount { 1.0f };
         juce::SmoothedValue<float> delayIntoReverb { 0.0f };
         IntegerDelay bypassDelay;
+
+        StereoStage stereo;
+        LevelMatcher matcher;
+        CorrelationMeter correlation;
+        juce::SmoothedValue<float> autoGain { 1.0f }, bypassGain { 1.0f };
+        bool monoInput = false;
 
         // Routing changes are applied at a short dip to silence (no clicks)
         Routing activeRouting = Routing::defaults(), pendingRouting = Routing::defaults();

@@ -56,6 +56,11 @@ public:
     velvox::dsp::Routing getRouting() const noexcept;
     void setRouting (const velvox::dsp::Routing& routing);
 
+    // Listening aid: sums the output to mono. Deliberately not a parameter and
+    // not saved, so a project can never be left in mono by accident.
+    bool isMonoMonitor() const noexcept { return monoMonitor.load(); }
+    void setMonoMonitor (bool shouldBeMono) noexcept { monoMonitor.store (shouldBeMono); }
+
 private:
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeRedirected (juce::ValueTree&) override;
@@ -85,7 +90,10 @@ private:
         Raw delayOn, delayTime, delaySync, delayDivision, delayFeedback, delayMix, delayLowCut, delayHighCut, delayPingPong;
         Raw reverbOn, reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbSize, reverbDamping, reverbLowCut, reverbWidth;
         Raw delayToReverb;
+        Raw stereoWidth, monoBelow, levelMatchMode, levelMatchWindow, levelMatchRange;
     } raw;
+
+    std::atomic<bool> monoMonitor { false };
 
     std::atomic<std::uint64_t> routingPacked { velvox::dsp::Routing::defaults().pack() };
 

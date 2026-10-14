@@ -75,6 +75,20 @@ namespace velvox
 
             // ---------------- Routing (0.2) ----------------
             { pid::delayToReverb,  "Delay to Reverb",  "Routing", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {}, "Sends the delay echoes into the reverb (when both run as sends)." },
+
+            // ---------------- Stereo (0.2) ----------------
+            { pid::stereoWidth, "Stereo Width", "Stereo", T::Float, 0.0f, 200.0f, 100.0f, 100.0f, "%", {},
+              "Width of the whole output. Only the side signal changes, so the centre vocal and the mono sum stay intact." },
+            { pid::monoBelow,   "Mono Below",   "Stereo", T::Float, 20.0f, 500.0f, 20.0f, 120.0f, "Hz", {},
+              "Keeps everything below this frequency in mono (20 Hz = off)." },
+
+            // ---------------- Level matching (0.2) ----------------
+            { pid::levelMatchMode,   "Level Match",        "Output", T::Choice, 0, 2, 0, 0, "", { "Off", "Bypass match", "Auto gain" },
+              "Bypass match: the bypass plays as loud as the processed sound (fair A/B). Auto gain: the processed sound is kept as loud as the input." },
+            { pid::levelMatchWindow, "Level Match Window", "Output", T::Choice, 0, 2, 1, 0, "", { "Fast (0.4 s)", "Medium (3 s)", "Slow (10 s)" },
+              "How long the loudness is averaged before matching." },
+            { pid::levelMatchRange,  "Level Match Range",  "Output", T::Float, 0.0f, 24.0f, 12.0f, 0.0f, "dB", {},
+              "Maximum correction the level matcher may apply." },
         };
 
         return specs;
@@ -110,6 +124,9 @@ namespace velvox
     juce::String formatValue (const ParameterSpec& spec, float value)
     {
         const juce::String unit (spec.unit);
+
+        if (juce::String (spec.id) == pid::monoBelow && value <= 20.5f)
+            return "Off";
 
         if (unit == "Hz")
             return value >= 1000.0f ? juce::String (value / 1000.0f, value >= 10000.0f ? 1 : 2) + " kHz"

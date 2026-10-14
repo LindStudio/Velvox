@@ -74,4 +74,13 @@ namespace velvox::pid
 
     // Routing
     inline constexpr const char* delayToReverb  = "delayToReverb";
+
+    // Stereo
+    inline constexpr const char* stereoWidth    = "stereoWidth";
+    inline constexpr const char* monoBelow      = "monoBelow";
+
+    // Level matching
+    inline constexpr const char* levelMatchMode   = "levelMatchMode";
+    inline constexpr const char* levelMatchWindow = "levelMatchWindow";
+    inline constexpr const char* levelMatchRange  = "levelMatchRange";
 }
