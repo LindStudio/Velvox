@@ -8,10 +8,11 @@
 #>
 param(
     [string]$Config   = "Release",
-    [string]$BuildDir = "$env:USERPROFILE\dev\velvox-build"
+    [string]$BuildDir = ""
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $BuildDir) { $BuildDir = Join-Path (Split-Path -Parent $PSScriptRoot) "build" }
 $sourceBundle = Join-Path $BuildDir "Velvox_artefacts\$Config\VST3\Velvox.vst3"
 $targetDir    = Join-Path $env:CommonProgramFiles "VST3"
 $targetBundle = Join-Path $targetDir "Velvox.vst3"

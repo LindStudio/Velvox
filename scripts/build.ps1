@@ -12,12 +12,13 @@
 param(
     [string]$Config   = "Release",
     [string]$JuceDir  = "$env:USERPROFILE\dev\JUCE-8.0.9",
-    [string]$BuildDir = "$env:USERPROFILE\dev\velvox-build",
+    [string]$BuildDir = "",
     [switch]$SkipTests
 )
 
 $ErrorActionPreference = "Stop"
 $source = Split-Path -Parent $PSScriptRoot
+if (-not $BuildDir) { $BuildDir = Join-Path $source "build" }  # git-ignored
 
 # Locate CMake: PATH first, then the copy shipped with Visual Studio
 $cmake = (Get-Command cmake -ErrorAction SilentlyContinue).Source
