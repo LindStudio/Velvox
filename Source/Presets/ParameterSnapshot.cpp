@@ -15,9 +15,13 @@ namespace velvox
         const juce::Identifier descriptionAttr { "description" };
         const juce::Identifier versionAttr { "version" };
 
+        // Not part of a "sound": global bypass, the recording's input level and
+        // the user's monitoring preference (level matching). Presets and A/B
+        // never touch these.
         bool isExcludedFromSnapshots (const juce::String& id)
         {
-            return id == pid::bypass;
+            return id == pid::bypass || id == pid::inputGain
+                || id == pid::levelMatchMode || id == pid::levelMatchWindow || id == pid::levelMatchRange;
         }
     }
 

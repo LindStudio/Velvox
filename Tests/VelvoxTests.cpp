@@ -404,7 +404,7 @@ public:
             expect (idx >= 0);
             expect (pm.loadPreset (idx));
             expectWithinAbsoluteError (h.get (pid::satDrive), 12.0f, 0.01f);
-            expectWithinAbsoluteError (h.get (pid::hpfFreq), 150.0f, 0.01f);
+            expectWithinAbsoluteError (h.get (pid::hpfFreq), 160.0f, 0.01f);
             expectEquals ((int) h.get (pid::delayPingPong), 1);
             expectEquals (pm.getCurrentPresetName(), juce::String ("Hypertechno Lead"));
 

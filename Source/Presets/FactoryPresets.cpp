@@ -6,9 +6,12 @@ namespace velvox
     namespace
     {
         // Delay division indices (see delaydiv::names())
-        constexpr float div1_8 = 6.0f, div1_8D = 7.0f, div1_4 = 9.0f;
+        constexpr float div1_16 = 3.0f, div1_8 = 6.0f, div1_8D = 7.0f, div1_4 = 9.0f;
         constexpr float slope24 = 1.0f;
         constexpr float room = 0.0f, plate = 1.0f;
+        constexpr float warm = 0.0f, tape = 1.0f, tube = 2.0f, hard = 3.0f;   // saturation characters
+        constexpr float rms = 1.0f;                                         // compressor detector
+        constexpr float chopHyperDrive = 3.0f, chop1_16 = 1.0f;             // chop pattern / rate indices
 
         struct Value
         {
@@ -37,7 +40,189 @@ namespace velvox
         {
             make ("Init", "Utility", "Neutral default settings.", {}),
 
-            make ("Clean Vocal", "Vocal",
+            // =================== v0.2 presets ===================
+            make ("Clean Lead", "Lead",
+                  "Natural, controlled lead: low cut, de-boxing, light compression, a short ducked plate.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
+                      { lowFreq, 180 }, { lowGain, -1.0f },
+                      { midFreq, 380 }, { midGain, -2.0f }, { midQ, 1.2f },
+                      { highFreq, 10000 }, { highGain, 2.5f },
+                      { compOn, 1 }, { compThreshold, -20 }, { compRatio, 2.5f }, { compAttack, 8 }, { compRelease, 120 },
+                      { compKnee, 6 }, { compMakeup, 3 }, { compDetector, rms },
+                      { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 5 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 12 }, { reverbDecay, 1.2f }, { reverbPreDelay, 25 },
+                      { reverbSize, 45 }, { reverbDamping, 7000 }, { reverbLowCut, 300 }, { reverbWidth, 85 },
+                      { reverbDuckAmount, 3 }, { reverbDuckThreshold, -32 },
+                  }),
+
+            make ("Hypertechno Lead", "EDM",
+                  "Bright, dense lead that cuts through hard kicks: tube drive, doubled edges, ping-pong eighths and a big ducked plate.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 160 }, { hpfSlope, slope24 },
+                      { lowFreq, 300 }, { lowGain, -3.0f },
+                      { midFreq, 2500 }, { midGain, 3.0f }, { midQ, 1.0f },
+                      { highFreq, 9000 }, { highGain, 5.0f },
+                      { compOn, 1 }, { compThreshold, -28 }, { compRatio, 6 }, { compAttack, 2 }, { compRelease, 60 },
+                      { compKnee, 3 }, { compMakeup, 7 }, { compScHpf, 120 },
+                      { deessOn, 1 }, { deessFreq, 6000 }, { deessThreshold, -36 }, { deessRange, 9 },
+                      { satOn, 1 }, { satCharacter, tube }, { satDrive, 12 }, { satOutput, -1 }, { satMix, 65 },
+                      { doublerOn, 1 }, { doublerMix, 35 }, { doublerWidth, 90 }, { doublerDelay, 12 }, { doublerDetune, 7 },
+                      { doublerMonoSafe, 60 }, { doublerTone, 9000 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8 }, { delayFeedback, 35 }, { delayMix, 18 },
+                      { delayLowCut, 500 }, { delayHighCut, 7000 }, { delayPingPong, 1 },
+                      { delayDuckAmount, 6 }, { delayDuckThreshold, -30 }, { delayDuckRelease, 250 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 24 }, { reverbDecay, 2.4f }, { reverbPreDelay, 35 },
+                      { reverbSize, 70 }, { reverbDamping, 9000 }, { reverbLowCut, 400 }, { reverbWidth, 100 },
+                      { reverbDuckAmount, 8 }, { reverbDuckThreshold, -30 }, { reverbDuckRelease, 400 },
+                      { delayToReverb, 30 }, { stereoWidth, 115 }, { monoBelow, 150 }, { outputGain, -1.0f },
+                  }),
+
+            make ("Aggressive Party Vocal", "EDM",
+                  "In-your-face hype vocal: upper-mid bite, fast heavy compression, hard drive, short slap and tight room.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 130 }, { hpfSlope, slope24 },
+                      { lowFreq, 250 }, { lowGain, -2.0f },
+                      { midFreq, 1800 }, { midGain, 4.0f }, { midQ, 1.2f },
+                      { highFreq, 8000 }, { highGain, 3.0f },
+                      { compOn, 1 }, { compThreshold, -32 }, { compRatio, 8 }, { compAttack, 1 }, { compRelease, 45 },
+                      { compKnee, 2 }, { compMakeup, 9 }, { compMix, 85 }, { compScHpf, 150 },
+                      { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -34 }, { deessRange, 8 },
+                      { satOn, 1 }, { satCharacter, hard }, { satDrive, 14 }, { satOutput, -2 }, { satMix, 70 },
+                      { doublerOn, 1 }, { doublerMix, 20 }, { doublerWidth, 70 }, { doublerMonoSafe, 70 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_16 }, { delayFeedback, 20 }, { delayMix, 10 },
+                      { delayDuckAmount, 9 }, { delayDuckThreshold, -32 },
+                      { reverbOn, 1 }, { reverbType, room }, { reverbMix, 10 }, { reverbDecay, 0.9f }, { reverbPreDelay, 10 },
+                      { reverbSize, 35 }, { reverbDamping, 7000 }, { reverbLowCut, 350 }, { reverbWidth, 80 },
+                      { reverbDuckAmount, 6 }, { reverbDuckThreshold, -32 },
+                      { stereoWidth, 110 }, { outputGain, -2.0f },
+                  }),
+
+            make ("Wide Festival Vocal", "EDM",
+                  "Huge, open festival lead: doubled takes, dotted ping-pong, long plate fed by the delay, wide but mono-safe low end.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 100 }, { hpfSlope, slope24 },
+                      { lowFreq, 200 }, { lowGain, -1.0f },
+                      { midFreq, 3200 }, { midGain, 2.0f }, { midQ, 0.8f },
+                      { highFreq, 12000 }, { highGain, 4.0f },
+                      { compOn, 1 }, { compThreshold, -22 }, { compRatio, 3.5f }, { compAttack, 8 }, { compRelease, 130 },
+                      { compKnee, 6 }, { compMakeup, 4 }, { compDetector, rms },
+                      { deessOn, 1 }, { deessFreq, 7000 }, { deessThreshold, -32 }, { deessRange, 6 },
+                      { satOn, 1 }, { satCharacter, warm }, { satDrive, 5 }, { satMix, 30 },
+                      { doublerOn, 1 }, { doublerMix, 55 }, { doublerWidth, 100 }, { doublerDelay, 16 }, { doublerDetune, 9 },
+                      { doublerMonoSafe, 50 }, { doublerTone, 8000 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 35 }, { delayMix, 20 },
+                      { delayLowCut, 400 }, { delayHighCut, 6000 }, { delayPingPong, 1 },
+                      { delayDuckAmount, 6 }, { delayDuckThreshold, -30 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 28 }, { reverbDecay, 3.0f }, { reverbPreDelay, 40 },
+                      { reverbSize, 85 }, { reverbDamping, 8000 }, { reverbLowCut, 300 }, { reverbWidth, 100 },
+                      { reverbDuckAmount, 7 }, { reverbDuckThreshold, -30 }, { reverbDuckRelease, 600 },
+                      { delayToReverb, 40 }, { stereoWidth, 130 }, { monoBelow, 180 },
+                  }),
+
+            make ("Bright Pop Vocal", "Pop",
+                  "Polished radio-pop vocal: presence and air, firm smooth compression, tape colour, synced quarter delay, ducked plate.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 100 }, { hpfSlope, slope24 },
+                      { lowFreq, 220 }, { lowGain, -2.0f },
+                      { midFreq, 3000 }, { midGain, 2.0f }, { midQ, 0.9f },
+                      { highFreq, 11000 }, { highGain, 4.5f }, { highQ, 0.8f },
+                      { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 5 }, { compRelease, 90 },
+                      { compKnee, 6 }, { compMakeup, 5 },
+                      { deessOn, 1 }, { deessFreq, 7000 }, { deessThreshold, -34 }, { deessRange, 7 },
+                      { satOn, 1 }, { satCharacter, tape }, { satDrive, 4 }, { satMix, 40 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_4 }, { delayFeedback, 22 }, { delayMix, 12 },
+                      { delayLowCut, 400 }, { delayHighCut, 5000 }, { delayDuckAmount, 4 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 15 }, { reverbDecay, 1.6f }, { reverbPreDelay, 30 },
+                      { reverbSize, 55 }, { reverbDamping, 8000 }, { reverbLowCut, 300 }, { reverbDuckAmount, 4 },
+                      { stereoWidth, 105 },
+                  }),
+
+            make ("Telephone Vocal", "Creative",
+                  "Lo-fi phone / radio effect: narrow band-pass, nasal mid push, hard clipping, small dry room, mono.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 400 }, { hpfSlope, slope24 },
+                      { lpfOn, 1 }, { lpfFreq, 3400 }, { lpfSlope, slope24 },
+                      { midFreq, 1500 }, { midGain, 6.0f }, { midQ, 1.5f },
+                      { compOn, 1 }, { compThreshold, -26 }, { compRatio, 6 }, { compAttack, 3 }, { compRelease, 80 },
+                      { compMakeup, 6 },
+                      { deessOn, 0 },
+                      { satOn, 1 }, { satCharacter, hard }, { satDrive, 10 }, { satMix, 60 },
+                      { reverbOn, 1 }, { reverbType, room }, { reverbMix, 8 }, { reverbDecay, 0.6f }, { reverbSize, 25 },
+                      { reverbLowCut, 500 }, { reverbWidth, 0 },
+                      { stereoWidth, 0 }, { outputGain, 2.0f },
+                  }),
+
+            make ("Vocal Chop", "Creative",
+                  "Rhythmic hypertechno chop: 16th gate with stutters, ping-pong sixteenths and a ducked plate.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 120 }, { hpfSlope, slope24 },
+                      { highFreq, 10000 }, { highGain, 3.0f },
+                      { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 3 }, { compRelease, 70 },
+                      { compMakeup, 4 },
+                      { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 6 },
+                      { chopOn, 1 }, { chopPattern, chopHyperDrive }, { chopRate, chop1_16 }, { chopDepth, 100 }, { chopSmooth, 3 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_16 }, { delayFeedback, 30 }, { delayMix, 15 },
+                      { delayPingPong, 1 }, { delayLowCut, 500 }, { delayHighCut, 7000 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 18 }, { reverbDecay, 1.8f }, { reverbSize, 60 },
+                      { reverbLowCut, 400 }, { reverbDuckAmount, 6 },
+                  }),
+
+            make ("Octave Down Layer", "Creative",
+                  "Dark hypertechno layer: an octave-down copy blended under the lead (adds about 120 ms latency).",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
+                      { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 5 }, { compRelease, 90 },
+                      { compMakeup, 4 },
+                      { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 6 },
+                      { pitchOn, 1 }, { pitchSemitones, -12 }, { pitchPreserveFormants, 1 }, { pitchMix, 35 },
+                      { satOn, 1 }, { satCharacter, tube }, { satDrive, 8 }, { satMix, 45 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 16 }, { reverbDecay, 2.0f }, { reverbDuckAmount, 5 },
+                  }),
+
+            make ("Chipmunk Hook", "Creative",
+                  "Pitched-up hook (+12, formants moving with the pitch) for drops and vocal chops (adds about 120 ms latency).",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 200 }, { hpfSlope, slope24 },
+                      { compOn, 1 }, { compThreshold, -22 }, { compRatio, 4 }, { compMakeup, 3 },
+                      { deessOn, 1 }, { deessFreq, 8000 }, { deessThreshold, -30 }, { deessRange, 8 },
+                      { pitchOn, 1 }, { pitchSemitones, 12 }, { pitchPreserveFormants, 0 }, { pitchMix, 100 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 30 }, { delayMix, 16 },
+                      { delayPingPong, 1 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 20 }, { reverbDecay, 1.8f }, { reverbDuckAmount, 6 },
+                  }),
+
+            make ("Wide Adlibs", "Backing & Adlibs",
+                  "Adlibs and backings that frame the lead: thinner lows, strong doubles, very wide, set back in level.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 200 }, { hpfSlope, slope24 },
+                      { lowFreq, 300 }, { lowGain, -3.0f },
+                      { highFreq, 10000 }, { highGain, 3.0f },
+                      { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 6 }, { compRelease, 100 },
+                      { compMakeup, 4 },
+                      { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 6 },
+                      { doublerOn, 1 }, { doublerMix, 70 }, { doublerWidth, 100 }, { doublerDelay, 22 }, { doublerDetune, 14 },
+                      { doublerMonoSafe, 80 }, { doublerTone, 7000 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 30 }, { delayMix, 20 },
+                      { delayPingPong, 1 }, { delayDuckAmount, 6 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 30 }, { reverbDecay, 2.4f }, { reverbSize, 75 },
+                      { reverbWidth, 100 }, { reverbDuckAmount, 6 },
+                      { stereoWidth, 150 }, { monoBelow, 200 }, { outputGain, -3.0f },
+                  }),
+
+            make ("Heavy Parallel Compression", "Dynamics",
+                  "Crushed compressor blended under the natural voice: thick and loud, transients stay alive.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
+                      { compOn, 1 }, { compThreshold, -40 }, { compRatio, 12 }, { compAttack, 3 }, { compRelease, 80 },
+                      { compKnee, 3 }, { compMakeup, 14 }, { compMix, 40 },
+                      { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 6 },
+                      { satOn, 1 }, { satCharacter, warm }, { satDrive, 6 }, { satMix, 30 },
+                      { reverbOn, 1 }, { reverbType, room }, { reverbMix, 8 }, { reverbDecay, 1.0f },
+                  }),
+
+            // =================== v0.1 presets (kept unchanged) ===================
+            make ("Clean Vocal", "Classic (v0.1)",
                   "Natural, controlled vocal: gentle low cut, de-boxing, light compression, short room.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
@@ -53,7 +238,7 @@ namespace velvox
                       { reverbSize, 40 }, { reverbDamping, 6500 }, { reverbLowCut, 250 }, { reverbWidth, 80 },
                   }),
 
-            make ("Modern Pop", "Vocal",
+            make ("Modern Pop", "Classic (v0.1)",
                   "Polished, forward pop vocal: presence and air, firm compression, synced quarter delay, plate.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 100 }, { hpfSlope, slope24 },
@@ -70,7 +255,7 @@ namespace velvox
                       { reverbSize, 55 }, { reverbDamping, 8000 }, { reverbLowCut, 300 }, { reverbWidth, 100 },
                   }),
 
-            make ("Hypertechno Lead", "EDM",
+            make ("Hypertechno Lead v0.1", "Classic (v0.1)",
                   "Bright, dense lead vocal that cuts through loud kicks: heavy low cut, hard compression, drive, ping-pong 1/8, big plate.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 150 }, { hpfSlope, slope24 },
@@ -88,7 +273,7 @@ namespace velvox
                       { outputGain, -1.0f },
                   }),
 
-            make ("Aggressive Vocal", "Vocal",
+            make ("Aggressive Vocal", "Classic (v0.1)",
                   "In-your-face vocal: upper-mid bite, fast heavy compression, strong saturation, tight room.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 120 }, { hpfSlope, slope24 },
@@ -105,7 +290,7 @@ namespace velvox
                       { outputGain, -2.0f },
                   }),
 
-            make ("Wide Vocal", "Vocal",
+            make ("Wide Vocal", "Classic (v0.1)",
                   "Open, wide vocal: airy top end, ping-pong dotted-eighth delay and a large, full-width plate.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },

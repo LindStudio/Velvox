@@ -27,7 +27,7 @@ namespace velvox
         // Applies values with begin/endChangeGesture so hosts record automation
         // correctly. Parameters missing from the snapshot are reset to their
         // default when resetMissingToDefault is true (makes presets deterministic).
-        // Global bypass is never touched by a snapshot.
+        // Bypass, input gain and level-match settings are never touched by a snapshot.
         void applyTo (juce::AudioProcessorValueTreeState& apvts, bool resetMissingToDefault = true) const;
 
         // Returns a list of problems (unknown IDs, out-of-range values)
