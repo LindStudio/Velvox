@@ -12,4 +12,5 @@ namespace velvox::statekeys
 
     inline const juce::Identifier stateVersion { "stateVersion" };
     inline const juce::Identifier routing      { "routing" };
+    inline const juce::Identifier uiMode       { "uiMode" };   // "beginner" / "pro" - view only, never affects audio
 }

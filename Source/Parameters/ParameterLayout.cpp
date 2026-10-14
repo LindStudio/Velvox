@@ -147,6 +147,20 @@ namespace velvox
               "Peak reacts to every transient; RMS follows the average level (smoother)." },
             { pid::compScHpf,    "Comp SC Filter", "Compressor", T::Float, 20.0f, 500.0f, 20.0f, 100.0f, "Hz", {},
               "Ignores low frequencies when detecting, so plosives and bass do not trigger compression (20 Hz = off)." },
+
+            // ---------------- Macros (0.2) ----------------
+            { pid::macroPresence,   "Presence",   "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+              "Brings the vocal forward: brighter top end, sibilance kept in check." },
+            { pid::macroWarmth,     "Warmth",     "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+              "Fuller, rounder sound: more body, softer highs, gentle saturation." },
+            { pid::macroAggression, "Aggression", "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+              "Harder, more intense: faster heavier compression and more drive." },
+            { pid::macroWidth,      "Width",      "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+              "Wider vocal: doubled voices left and right, wider stereo image. The centre stays intact." },
+            { pid::macroSpace,      "Space",      "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+              "More room: reverb and delay that step back while you sing." },
+            { pid::macroDensity,    "Density",    "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+              "Thicker and steadier: more compression and a touch of saturation." },
         };
 
         return specs;

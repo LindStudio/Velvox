@@ -125,6 +125,9 @@ void VelvoxAudioProcessor::cacheParameterPointers()
     bind (raw.lpfSlope, pid::lpfSlope);         bind (raw.satCharacter, pid::satCharacter);
     bind (raw.deessMode, pid::deessMode);       bind (raw.compDetector, pid::compDetector);
     bind (raw.compScHpf, pid::compScHpf);
+    bind (raw.macroPresence, pid::macroPresence);   bind (raw.macroWarmth, pid::macroWarmth);
+    bind (raw.macroAggression, pid::macroAggression); bind (raw.macroWidth, pid::macroWidth);
+    bind (raw.macroSpace, pid::macroSpace);         bind (raw.macroDensity, pid::macroDensity);
 }
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
@@ -241,6 +244,18 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     return s;
 }
 
+dsp::MacroValues VelvoxAudioProcessor::readMacros() const noexcept
+{
+    dsp::MacroValues m;
+    m.presence = raw.macroPresence.get() * 0.01f;
+    m.warmth = raw.macroWarmth.get() * 0.01f;
+    m.aggression = raw.macroAggression.get() * 0.01f;
+    m.width = raw.macroWidth.get() * 0.01f;
+    m.space = raw.macroSpace.get() * 0.01f;
+    m.density = raw.macroDensity.get() * 0.01f;
+    return m;
+}
+
 //==============================================================================
 dsp::Routing VelvoxAudioProcessor::getRouting() const noexcept
 {
@@ -309,7 +324,7 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 {
     juce::ScopedNoDenormals noDenormals;
 
-    auto settings = readSettings();
+    auto settings = readEffectiveSettings();
 
     if (auto* hostPlayHead = getPlayHead())
         if (const auto position = hostPlayHead->getPosition())

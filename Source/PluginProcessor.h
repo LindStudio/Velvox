@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "DSP/VocalChain.h"
+#include "DSP/Macros.h"
 #include "Parameters/ParameterLayout.h"
 #include "Presets/PresetManager.h"
 
@@ -76,7 +77,12 @@ public:
     void updateHostLatency();
 private:
     void cacheParameterPointers();
+public:
+    // Thread-safe reads (atomics): base = Pro parameters, effective = with macros
     velvox::dsp::ChainSettings readSettings() const noexcept;
+    velvox::dsp::MacroValues readMacros() const noexcept;
+    velvox::dsp::ChainSettings readEffectiveSettings() const noexcept { return velvox::dsp::applyMacros (readSettings(), readMacros()); }
+private:
 
     juce::AudioProcessorValueTreeState apvts;
     velvox::PresetManager presetManager;
@@ -107,6 +113,7 @@ private:
         Raw pitchOn, pitchSemitones, pitchCents, pitchPreserveFormants, pitchFormant, pitchMix;
         Raw chopOn, chopPattern, chopRate, chopDepth, chopSmooth;
         Raw lowType, lowQ, highType, highQ, lpfOn, lpfFreq, lpfSlope, satCharacter, deessMode, compDetector, compScHpf;
+        Raw macroPresence, macroWarmth, macroAggression, macroWidth, macroSpace, macroDensity;
     } raw;
 
     std::atomic<bool> monoMonitor { false };

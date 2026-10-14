@@ -131,4 +131,12 @@ namespace velvox::pid
     inline constexpr const char* deessMode    = "deessMode";
     inline constexpr const char* compDetector = "compDetector";
     inline constexpr const char* compScHpf    = "compScHpf";
+
+    // Beginner macros
+    inline constexpr const char* macroPresence   = "macroPresence";
+    inline constexpr const char* macroWarmth     = "macroWarmth";
+    inline constexpr const char* macroAggression = "macroAggression";
+    inline constexpr const char* macroWidth      = "macroWidth";
+    inline constexpr const char* macroSpace      = "macroSpace";
+    inline constexpr const char* macroDensity    = "macroDensity";
 }
