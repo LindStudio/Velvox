@@ -608,7 +608,7 @@ namespace velvox::ui
         {
         public:
             explicit OutputPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Output", "Stereo image, mono safety and fair loudness comparison", colours::io, nullptr)
+                : DetailPanel (p, "Output", "Stereo image, mono safety and fair loudness comparison", colours::cyan, nullptr)
             {
                 width = &knob (pid::stereoWidth, "Width");
                 monoBelow = &knob (pid::monoBelow, "Mono below");

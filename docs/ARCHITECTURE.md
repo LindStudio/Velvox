@@ -35,7 +35,9 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 
 - Jedes Modul meldet seine Latenz. Die Gesamtlatenz wird dem Host gemeldet (PDC), so wie es professionelle Plugins machen.
 - Der Bypass-Pfad ist um die Gesamtlatenz verzögert.
-- Ein späterer Pitch-Shifter hat eine eigene Latenz. Die Detailentscheidung folgt beim Pitch-Schritt.
+- **Pitch (umgesetzt):** etwa 120 ms Latenz, aber nur solange das Modul an ist; sonst bleibt es bei 3 Samples.
+  - Beim Ein- und Ausschalten wird die neue Latenz auf dem Message-Thread gemeldet (`setLatencySamples`). Der Wechsel in der Kette erfolgt unter derselben Ausblendung wie Routing-Änderungen, und der Bypass-Pfad wird mitgezogen.
+  - Kürzere Analysefenster wurden gemessen (`Tests/PitchDiagnostics.cpp`) und wegen bis zu 70 Cent Verstimmung verworfen.
 
 ## Sidechain (Ducking)
 
@@ -56,3 +58,21 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 - Alle neuen Parameter sind standardmäßig neutral bzw. aus. Ein v0.1-Projekt klingt dadurch identisch; das ist per Test abgesichert.
 - Parameter-IDs bleiben stabil, Plugin-Codes `Lnda`/`Vlvx` ändern sich nie.
 - Preset-Dateien: Version 2 mit optionalem Routing. Version-1-Dateien laden mit Standard-Routing.
+
+## Neue Module (v0.2)
+
+| Modul | Typ | Latenz | Kernprinzip |
+|---|---|---|---|
+| Doubler | seriell, addiert Stimmen | 0 | zwei modulierte Delay-Stimmen, Mid-Anteil per „Mono safe“ reduzierbar |
+| Pitch | seriell | ~120 ms (nur wenn an) | Signalsmith Stretch, latenzrichtiger Dry-Mix |
+| Chop | seriell | 0 | 16-Step-Pattern, synchron zur Host-PPQ-Position, Repeat = verzögerter Slice |
+| Ducker | auf Delay-/Reverb-Return | 0 | Gain-Kurve aus Vocal oder Sidechain |
+| StereoStage | Ausgang | 0 | Mid/Side; nur das Seitensignal wird skaliert bzw. gefiltert |
+| LevelMatcher | Ausgang | 0 | Lautheitsdifferenz Eingang ↔ bearbeitet, mit Slew-Begrenzung, Gate und Range |
+
+## UI-Struktur
+
+- `ChainView`: Kacheln in Routing-Reihenfolge und parallele Send-Spur. Drag & Drop ruft nur `Routing::placeBefore`/`placeAtEnd` auf, die Logik liegt also testbar im Modell.
+- `BeginnerView`: Makros und Hinweise; die Hinweise berechnet der Editor aus den Metern.
+- `DetailPanel`: eine Klasse pro Modul plus Output, erzeugt über `createDetailPanel`.
+- Der Ansichtszustand (`uiMode`, `uiSelection`, `uiWidth`) liegt als State-Property im Projekt und beeinflusst nie das Audio.

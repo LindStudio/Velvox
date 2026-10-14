@@ -43,7 +43,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
       beginnerView (p),
       inputGain (p.getState(), pid::inputGain, "Gain", colours::io),
       outputGain (p.getState(), pid::outputGain, "Gain", colours::io),
-      safetyClip (p.getState(), pid::safetyClip, "Clip guard", colours::io)
+      safetyClip (p.getState(), pid::safetyClip, "Clip guard", colours::cyan)
 {
     setLookAndFeel (&lookAndFeel);
 
@@ -97,12 +97,12 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
 
     // ---- Window: resizable, fixed aspect ratio, remembered per project
     setResizable (true, true);
-    setResizeLimits (baseWidth * 7 / 10, baseHeight * 7 / 10, baseWidth * 8 / 5, baseHeight * 8 / 5);
+    setResizeLimits (baseWidth * 3 / 4, baseHeight * 3 / 4, baseWidth * 8 / 5, baseHeight * 8 / 5);
     if (auto* c = getConstrainer())
         c->setFixedAspectRatio ((double) baseWidth / (double) baseHeight);
 
     const int savedWidth = (int) proc.getState().state.getProperty (uiWidthProperty, baseWidth);
-    const int w = juce::jlimit (baseWidth * 7 / 10, baseWidth * 8 / 5, savedWidth);
+    const int w = juce::jlimit (baseWidth * 3 / 4, baseWidth * 8 / 5, savedWidth);
     setSize (w, juce::roundToInt (w * (double) baseHeight / baseWidth));
 
     startTimerHz (30);

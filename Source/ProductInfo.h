@@ -6,5 +6,5 @@ namespace velvox::product
 {
     inline constexpr const char* name = "Velvox";
     inline constexpr const char* companyName = "Lind Audio";
-    inline constexpr const char* versionString = "0.1.0";
+    inline constexpr const char* versionString = "0.2.0";
 }
