@@ -1,0 +1,2 @@
+Vendored from https://github.com/Signalsmith-Audio/linear tag 0.6.4 (de55e6a), MIT License.
+The version pinned by signalsmith-stretch 1.4.0. Headers, platform/, README and LICENSE only.

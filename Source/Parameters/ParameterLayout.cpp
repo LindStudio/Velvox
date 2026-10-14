@@ -110,7 +110,17 @@ namespace velvox
             { pid::reverbDuckAmount,    "Reverb Duck Amount",    "Ducking", T::Float, 0.0f, 24.0f, 0.0f, 0.0f, "dB", {}, "How much the reverb drops while the vocal is active (0 = off)." },
             { pid::reverbDuckThreshold, "Reverb Duck Threshold", "Ducking", T::Float, -60.0f, 0.0f, -30.0f, 0.0f, "dB", {}, "Vocal level where reverb ducking starts." },
             { pid::reverbDuckAttack,    "Reverb Duck Attack",    "Ducking", T::Float, 1.0f, 200.0f, 20.0f, 20.0f, "ms", {}, "How fast the reverb is pushed down." },
-            { pid::reverbDuckRelease,   "Reverb Duck Release",   "Ducking", T::Float, 20.0f, 2000.0f, 500.0f, 300.0f, "ms", {}, "How fast the reverb comes back in the gaps." },
+            { pid::reverbDuckRelease,   "Reverb Duck Release",   "Ducking", T::Float, 20.0f, 2000.0f, 500.0f, 300.0f, "ms", {},               "How fast the reverb comes back in the gaps." },
+
+            // ---------------- Pitch (0.2) ----------------
+            { pid::pitchOn,        "Pitch On",       "Pitch", T::Bool, 0, 1, 0, 0, "", {},
+              "Enables the creative pitch shifter. Adds about 120 ms latency while on (compensated by the DAW)." },
+            { pid::pitchSemitones, "Pitch",          "Pitch", T::Float, -24.0f, 24.0f, 0.0f, 0.0f, "st", {}, "Transposition in semitones.", 1.0f },
+            { pid::pitchCents,     "Pitch Fine",     "Pitch", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "ct", {}, "Fine tuning in cents." },
+            { pid::pitchPreserveFormants, "Pitch Keep Formants", "Pitch", T::Bool, 0, 1, 1, 0, "", {},
+              "On: the voice keeps its natural character when shifted. Off: formants move with the pitch (chipmunk / monster)." },
+            { pid::pitchFormant,   "Pitch Formant",  "Pitch", T::Float, -12.0f, 12.0f, 0.0f, 0.0f, "st", {}, "Moves the vocal character (formants) up or down independently of the pitch.", 0.1f },
+            { pid::pitchMix,       "Pitch Mix",      "Pitch", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "Blend of shifted and original voice." },
         };
 
         return specs;
@@ -166,6 +176,8 @@ namespace velvox
             return juce::String (value, 2) + " s";
         if (unit == "ct")
             return juce::String (value, 1) + " ct";
+        if (unit == "st")
+            return (value > 0.05f ? "+" : "") + juce::String (value, std::abs (value - std::round (value)) < 0.05f ? 0 : 1) + " st";
         if (unit == ":1")
             return juce::String (value, value < 10.0f ? 1 : 0) + ":1";
 
@@ -175,6 +187,8 @@ namespace velvox
     static juce::NormalisableRange<float> makeRange (const ParameterSpec& s)
     {
         juce::NormalisableRange<float> r (s.minValue, s.maxValue);
+        if (s.interval > 0.0f)
+            r.interval = s.interval;
         if (s.skewCentre > s.minValue && s.skewCentre < s.maxValue)
             r.setSkewForCentre (s.skewCentre);
         return r;

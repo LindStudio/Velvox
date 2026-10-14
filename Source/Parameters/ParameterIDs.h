@@ -103,4 +103,12 @@ namespace velvox::pid
     inline constexpr const char* reverbDuckThreshold = "reverbDuckThreshold";
     inline constexpr const char* reverbDuckAttack    = "reverbDuckAttack";
     inline constexpr const char* reverbDuckRelease   = "reverbDuckRelease";
+
+    // Pitch
+    inline constexpr const char* pitchOn               = "pitchOn";
+    inline constexpr const char* pitchSemitones        = "pitchSemitones";
+    inline constexpr const char* pitchCents            = "pitchCents";
+    inline constexpr const char* pitchPreserveFormants = "pitchPreserveFormants";
+    inline constexpr const char* pitchFormant          = "pitchFormant";
+    inline constexpr const char* pitchMix              = "pitchMix";
 }

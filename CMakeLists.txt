@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+﻿cmake_minimum_required(VERSION 3.22)
 
 project(Velvox VERSION 0.1.0 LANGUAGES C CXX)
 
@@ -46,6 +46,7 @@ set(VELVOX_SOURCES
     Source/DSP/StereoStage.cpp
     Source/DSP/DoublerModule.cpp
     Source/DSP/Ducker.cpp
+    Source/DSP/PitchModule.cpp
     Source/Presets/ParameterSnapshot.cpp
     Source/Presets/FactoryPresets.cpp
     Source/Presets/PresetManager.cpp
@@ -60,6 +61,12 @@ set(VELVOX_COMMON_DEFINITIONS
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
+)
+
+# Third-party, header-only (MIT): Signalsmith Stretch 1.4.0 + Signalsmith Linear 0.6.4
+set(VELVOX_THIRD_PARTY_INCLUDES
+    third_party/signalsmith-stretch
+    third_party/signalsmith-linear/include
 )
 
 set(VELVOX_COMMON_LIBS
@@ -88,7 +95,10 @@ juce_add_plugin(Velvox
     COPY_PLUGIN_AFTER_BUILD     FALSE)
 
 target_sources(Velvox PRIVATE ${VELVOX_SOURCES})
-target_include_directories(Velvox PRIVATE Source)
+target_include_directories(Velvox PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
+if(MSVC)
+    target_compile_options(Velvox PRIVATE /bigobj)
+endif()
 target_compile_definitions(Velvox PUBLIC ${VELVOX_COMMON_DEFINITIONS})
 target_link_libraries(Velvox
     PRIVATE
@@ -103,8 +113,11 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp)
-    target_include_directories(VelvoxTests PRIVATE Source)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp)
+    target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
+    if(MSVC)
+        target_compile_options(VelvoxTests PRIVATE /bigobj)
+    endif()
     # Modal loops only for the test runner (used to pump the message loop for UI snapshots)
     target_compile_definitions(VelvoxTests PRIVATE ${VELVOX_COMMON_DEFINITIONS} JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(VelvoxTests

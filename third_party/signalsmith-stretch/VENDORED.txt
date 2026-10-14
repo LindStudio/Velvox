@@ -1,0 +1,2 @@
+Vendored from https://github.com/Signalsmith-Audio/signalsmith-stretch tag 1.4.0 (a670068), MIT License.
+Only headers, README and LICENSE copied (no tests/web/cmd).

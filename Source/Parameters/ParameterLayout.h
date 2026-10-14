@@ -23,6 +23,7 @@ namespace velvox
         const char* unit = "";    // "dB", "Hz", "ms", "%", "s", ":1"
         juce::StringArray choices {};
         const char* description = "";
+        float interval = 0.0f;    // > 0: values snap to this step (e.g. 1 semitone)
     };
 
     const std::vector<ParameterSpec>& getParameterSpecs();

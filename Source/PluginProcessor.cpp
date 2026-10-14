@@ -24,11 +24,34 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
     apvts.state.setProperty (statekeys::routing, dsp::Routing::defaults().toString(), nullptr);
     apvts.state.addListener (this);
     syncRoutingFromState();
+
+    apvts.addParameterListener (pid::pitchOn, this);
 }
 
 VelvoxAudioProcessor::~VelvoxAudioProcessor()
 {
+    cancelPendingUpdate();
+    apvts.removeParameterListener (pid::pitchOn, this);
     apvts.state.removeListener (this);
+}
+
+//==============================================================================
+void VelvoxAudioProcessor::parameterChanged (const juce::String&, float)
+{
+    // May arrive on the audio thread (automation): report on the message thread
+    triggerAsyncUpdate();
+}
+
+void VelvoxAudioProcessor::handleAsyncUpdate()
+{
+    updateHostLatency();
+}
+
+void VelvoxAudioProcessor::updateHostLatency()
+{
+    const int latency = chain.getLatencyFor (raw.pitchOn.on());
+    if (latency != getLatencySamples())
+        setLatencySamples (latency);
 }
 
 const juce::String VelvoxAudioProcessor::getName() const
@@ -90,6 +113,9 @@ void VelvoxAudioProcessor::cacheParameterPointers()
     bind (raw.delayDuckAttack, pid::delayDuckAttack);       bind (raw.delayDuckRelease, pid::delayDuckRelease);
     bind (raw.reverbDuckAmount, pid::reverbDuckAmount);     bind (raw.reverbDuckThreshold, pid::reverbDuckThreshold);
     bind (raw.reverbDuckAttack, pid::reverbDuckAttack);     bind (raw.reverbDuckRelease, pid::reverbDuckRelease);
+    bind (raw.pitchOn, pid::pitchOn);                       bind (raw.pitchSemitones, pid::pitchSemitones);
+    bind (raw.pitchCents, pid::pitchCents);                 bind (raw.pitchPreserveFormants, pid::pitchPreserveFormants);
+    bind (raw.pitchFormant, pid::pitchFormant);             bind (raw.pitchMix, pid::pitchMix);
 }
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
@@ -178,6 +204,13 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     s.delayDuck = { raw.delayDuckAmount.get(), raw.delayDuckThreshold.get(), raw.delayDuckAttack.get(), raw.delayDuckRelease.get() };
     s.reverbDuck = { raw.reverbDuckAmount.get(), raw.reverbDuckThreshold.get(), raw.reverbDuckAttack.get(), raw.reverbDuckRelease.get() };
 
+    s.pitch.enabled = raw.pitchOn.on();
+    s.pitch.semitones = raw.pitchSemitones.get();
+    s.pitch.cents = raw.pitchCents.get();
+    s.pitch.preserveFormants = raw.pitchPreserveFormants.on();
+    s.pitch.formantShift = raw.pitchFormant.get();
+    s.pitch.mix = raw.pitchMix.get() * 0.01f;
+
     return s;
 }
 
@@ -215,7 +248,7 @@ void VelvoxAudioProcessor::valueTreeRedirected (juce::ValueTree&)
 void VelvoxAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     chain.prepare (sampleRate, samplesPerBlock);
-    setLatencySamples (chain.getLatencySamples());
+    setLatencySamples (chain.getLatencyFor (raw.pitchOn.on()));
 }
 
 void VelvoxAudioProcessor::releaseResources()

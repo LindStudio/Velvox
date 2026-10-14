@@ -7,7 +7,9 @@
 #include "Presets/PresetManager.h"
 
 class VelvoxAudioProcessor final : public juce::AudioProcessor,
-                                   private juce::ValueTree::Listener
+                                   private juce::ValueTree::Listener,
+                                   private juce::AudioProcessorValueTreeState::Listener,
+                                   private juce::AsyncUpdater
 {
 public:
     VelvoxAudioProcessor();
@@ -65,6 +67,14 @@ private:
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeRedirected (juce::ValueTree&) override;
     void syncRoutingFromState();
+
+    // Latency follows the pitch module (on/off, quality); reported on the message thread
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void handleAsyncUpdate() override;
+public:
+    // Recomputes the latency for the current parameters and reports it to the host
+    void updateHostLatency();
+private:
     void cacheParameterPointers();
     velvox::dsp::ChainSettings readSettings() const noexcept;
 
@@ -94,6 +104,7 @@ private:
         Raw doublerOn, doublerMix, doublerWidth, doublerDelay, doublerDetune, doublerMonoSafe, doublerTone;
         Raw duckSource, delayDuckAmount, delayDuckThreshold, delayDuckAttack, delayDuckRelease;
         Raw reverbDuckAmount, reverbDuckThreshold, reverbDuckAttack, reverbDuckRelease;
+        Raw pitchOn, pitchSemitones, pitchCents, pitchPreserveFormants, pitchFormant, pitchMix;
     } raw;
 
     std::atomic<bool> monoMonitor { false };

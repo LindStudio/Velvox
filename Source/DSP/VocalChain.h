@@ -11,6 +11,7 @@
 #include "StereoStage.h"
 #include "DoublerModule.h"
 #include "Ducker.h"
+#include "PitchModule.h"
 
 namespace velvox::dsp
 {
@@ -27,6 +28,7 @@ namespace velvox::dsp
         bool deessOn = true;    DeEssSettings deess;
         SatSettings sat;
         DoublerSettings doubler;
+        PitchSettings pitch;
         bool delayOn = false;   float delayMix = 0.2f;  DelaySettings delay;
         bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
         bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
@@ -79,7 +81,10 @@ namespace velvox::dsp
         void process (juce::AudioBuffer<float>& buffer, int numChannels, const ChainSettings& settings,
                       const juce::AudioBuffer<float>* sidechain = nullptr) noexcept;
 
-        int getLatencySamples() const noexcept { return saturation.getLatencySamples(); }
+        // Latency of the currently active configuration
+        int getLatencySamples() const noexcept { return getLatencyFor (activePitchOn); }
+        // Latency the chain will have with the pitch module on / off (for host reporting)
+        int getLatencyFor (bool pitchOn) const noexcept;
 
         CompressorModule& getCompressor() noexcept { return compressor; }
         DeEsserModule& getDeEsser() noexcept { return deesser; }
@@ -111,6 +116,7 @@ namespace velvox::dsp
         DelayModule delay;
         ReverbModule reverb;
         DoublerModule doubler;
+        PitchModule pitch;
 
         ModuleGate eqGate, compGate, deessGate;
         juce::SmoothedValue<float> delayReturn { 0.0f }, reverbReturn { 0.0f };
@@ -130,6 +136,11 @@ namespace velvox::dsp
         Routing activeRouting = Routing::defaults(), pendingRouting = Routing::defaults();
         juce::SmoothedValue<float> routeGain { 1.0f };
         bool adoptRoutingImmediately = true;
+
+        // Pitch on/off changes the latency: switched under the same fade
+        bool activePitchOn = false, pendingPitchOn = false;
+        bool structureChangePending() const noexcept;
+        void applyPendingStructure() noexcept;
 
         juce::AudioBuffer<float> work, dryForBypass, delayWet, reverbWet, reverbIn;
 

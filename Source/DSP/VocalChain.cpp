@@ -60,8 +60,9 @@ namespace velvox::dsp
         compGate.prepare (sampleRate, bs);
         deessGate.prepare (sampleRate, bs);
 
-        bypassDelay.prepare (std::max (1, saturation.getLatencySamples()));
-        bypassDelay.setDelay (saturation.getLatencySamples());
+        pitch.prepare (sampleRate, bs);
+        bypassDelay.prepare (std::max (1, getLatencyFor (true)));
+        bypassDelay.setDelay (getLatencySamples());
 
         stereo.prepare (sampleRate, bs);
         matcher.prepare (sampleRate);
@@ -121,6 +122,8 @@ namespace velvox::dsp
 
         saturation.setSettings (s.sat);
         doubler.setSettings (s.doubler);
+        pitch.setSettings (s.pitch);
+        pendingPitchOn = s.pitch.enabled;
         delayDucker.setSettings (s.delayDuck);
         reverbDucker.setSettings (s.reverbDuck);
 
@@ -156,7 +159,7 @@ namespace velvox::dsp
 
         if (adoptRoutingImmediately)
         {
-            activeRouting = pendingRouting;
+            applyPendingStructure();
             adoptRoutingImmediately = false;
         }
     }
@@ -246,7 +249,7 @@ namespace velvox::dsp
         }
 
         // A pending routing change starts with a short fade-out of the old routing
-        if (pendingRouting != activeRouting)
+        if (structureChangePending())
             routeGain.setTargetValue (0.0f);
 
         // 3) Serial modules in routing order
@@ -361,7 +364,9 @@ namespace velvox::dsp
             case ModuleId::sat:     saturation.process (io, numChannels, n); break; // own on/off + mix, constant latency
 
             case ModuleId::doubler: doubler.process (io, numChannels, n); break; // own on/off, adds voices only
-            case ModuleId::pitch:   // not implemented yet
+            case ModuleId::pitch:
+                if (activePitchOn)
+                    pitch.process (io, numChannels, n);
                 break;
 
             case ModuleId::delay:
@@ -494,8 +499,32 @@ namespace velvox::dsp
         // Faded out completely: switch routing, then fade back in
         if (! routeGain.isSmoothing() && routeGain.getTargetValue() <= 0.0f)
         {
-            activeRouting = pendingRouting;
+            applyPendingStructure();
             routeGain.setTargetValue (1.0f);
         }
+    }
+
+    bool VocalChain::structureChangePending() const noexcept
+    {
+        return pendingRouting != activeRouting || pendingPitchOn != activePitchOn;
+    }
+
+    void VocalChain::applyPendingStructure() noexcept
+    {
+        activeRouting = pendingRouting;
+
+        const bool pitchChanged = pendingPitchOn != activePitchOn;
+        activePitchOn = pendingPitchOn;
+        if (pitchChanged)
+        {
+            if (activePitchOn)
+                pitch.activate();
+            bypassDelay.setDelay (getLatencySamples());
+        }
+    }
+
+    int VocalChain::getLatencyFor (bool pitchOn) const noexcept
+    {
+        return saturation.getLatencySamples() + (pitchOn ? pitch.getLatencySamples() : 0);
     }
 }

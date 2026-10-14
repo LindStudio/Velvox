@@ -6,6 +6,8 @@ Stand: 14.10.2026. Keine rechtliche Beratung – vor einer Veröffentlichung die
 |---|---|---|---|---|
 | JUCE Framework | 8.0.9 | Ja (statisch gelinkt) | Dual: AGPLv3 **oder** kommerzielle JUCE-Lizenz | Für ein closed-source verkauftes Plugin ist eine JUCE-Lizenz nötig (siehe unten) |
 | Steinberg VST3 SDK (in JUCE enthalten) | wie in JUCE 8.0.9 gebündelt | Ja (Teile im Binary) | BSD-artige Steinberg-Lizenz (`JUCE/modules/juce_audio_processors/format_types/VST3_SDK/LICENSE.txt`) | Copyright-Hinweis in der Dokumentation des Produkts mitliefern; VST-Logo/Marke nur gemäß `VST3_Usage_Guidelines.pdf` |
+| Signalsmith Stretch (Pitch-Shifter) | 1.4.0 (`a670068`), in `third_party/` | Ja (header-only, kompiliert ins Binary) | MIT | Copyright- und Lizenztext (`third_party/signalsmith-stretch/LICENSE.txt`) in der Produktdokumentation mitliefern |
+| Signalsmith Linear (FFT, Abhängigkeit von Stretch) | 0.6.4 (`de55e6a`), in `third_party/` | Ja (header-only) | MIT | Copyright- und Lizenztext (`third_party/signalsmith-linear/LICENSE.txt`) mitliefern; optionale Beschleuniger (IPP, PFFFT, xsimd) sind **nicht** aktiviert |
 | Microsoft Visual C++ Runtime | MSVC 14.44 | Statisch gelinkt (JUCE-Standard) | Microsoft-Lizenz, Weitergabe erlaubt | keine |
 | pluginval (Tracktion) | 1.0.4 | **Nein** – nur Testwerkzeug | GPLv3 | keine (wird nicht verteilt) |
 | Schrift „Segoe UI“ | Windows-Systemschrift | **Nein** – wird vom System geladen, nicht eingebettet | Microsoft | keine; für macOS/eingebettete Schrift später eine OFL-Schrift wählen |
