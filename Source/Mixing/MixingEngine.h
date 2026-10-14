@@ -1,9 +1,9 @@
 #pragma once
 
 // ============================================================================
-//  FUTURE EXTENSION POINT - NOT IMPLEMENTED IN VERSION 1
+//  FUTURE EXTENSION POINT - NO AI IN VERSION 0.x
 //
-//  Version 1 contains no AI, no speech input and no audio analysis. This file
+//  Velvox contains no AI, no speech input and no audio analysis. This file
 //  only defines the contract a later "smart mixing" feature will plug into:
 //
 //    user text ("make it more aggressive")  ---\
@@ -11,13 +11,17 @@
 //    current ParameterSnapshot             ---/          |
 //                                                        v
 //                                     ParameterSnapshot (proposal)
+//                                     = parameter values + module routing
 //                                                        |
-//                       user reviews / accepts -> snapshot.applyTo (apvts)
+//            ProposalSession: compare with the original -> accept / reject
 //
-//  The provider sees the parameter space through createParameterSchema()
-//  (ids, ranges, units, descriptions) and answers with a ParameterSnapshot,
-//  the same type used by presets and A/B slots - so applying a suggestion
-//  is identical to loading a preset (undoable via A/B, automatable).
+//  What already exists and is tested:
+//   - createParameterSchema(): every parameter with id, module, range, unit
+//     and a plain-language description (the "vocabulary" of a provider)
+//   - ParameterSnapshot incl. routing: one format for presets, A/B, proposals
+//   - applyMacros(): high-level intents (presence, warmth, ...) mapped onto the
+//     real DSP parameters - a provider can also answer with macro values
+//   - ProposalSession: apply, A/B against the original, accept or reject
 //  Long-running work (network, inference) must never run on the audio thread.
 // ============================================================================
 
