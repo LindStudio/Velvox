@@ -83,4 +83,13 @@ namespace velvox::pid
     inline constexpr const char* levelMatchMode   = "levelMatchMode";
     inline constexpr const char* levelMatchWindow = "levelMatchWindow";
     inline constexpr const char* levelMatchRange  = "levelMatchRange";
+
+    // Doubler
+    inline constexpr const char* doublerOn       = "doublerOn";
+    inline constexpr const char* doublerMix      = "doublerMix";
+    inline constexpr const char* doublerWidth    = "doublerWidth";
+    inline constexpr const char* doublerDelay    = "doublerDelay";
+    inline constexpr const char* doublerDetune   = "doublerDetune";
+    inline constexpr const char* doublerMonoSafe = "doublerMonoSafe";
+    inline constexpr const char* doublerTone     = "doublerTone";
 }

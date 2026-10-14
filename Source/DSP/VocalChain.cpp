@@ -50,6 +50,7 @@ namespace velvox::dsp
         saturation.prepare (sampleRate, bs);
         delay.prepare (sampleRate, bs);
         reverb.prepare (sampleRate, bs);
+        doubler.prepare (sampleRate, bs);
 
         eqGate.prepare (sampleRate, bs);
         compGate.prepare (sampleRate, bs);
@@ -89,6 +90,7 @@ namespace velvox::dsp
         saturation.reset();
         delay.reset();
         reverb.reset();
+        doubler.reset();
         bypassDelay.reset();
         stereo.reset();
         matcher.reset();
@@ -112,6 +114,7 @@ namespace velvox::dsp
         deessGate.setTargets (s.deessOn, 1.0f);
 
         saturation.setSettings (s.sat);
+        doubler.setSettings (s.doubler);
 
         auto delaySettings = s.delay;
         delaySettings.timeMs = s.delayTimeMs;
@@ -337,7 +340,7 @@ namespace velvox::dsp
             case ModuleId::deess:   runGated (deessGate, deesser, io, numChannels, n); break;
             case ModuleId::sat:     saturation.process (io, numChannels, n); break; // own on/off + mix, constant latency
 
-            case ModuleId::doubler: // not implemented yet
+            case ModuleId::doubler: doubler.process (io, numChannels, n); break; // own on/off, adds voices only
             case ModuleId::pitch:   // not implemented yet
                 break;
 

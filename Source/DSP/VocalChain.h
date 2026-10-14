@@ -9,6 +9,7 @@
 #include "Routing.h"
 #include "Loudness.h"
 #include "StereoStage.h"
+#include "DoublerModule.h"
 
 namespace velvox::dsp
 {
@@ -24,6 +25,7 @@ namespace velvox::dsp
         bool compOn = true;     float compMix = 1.0f;   CompSettings comp;
         bool deessOn = true;    DeEssSettings deess;
         SatSettings sat;
+        DoublerSettings doubler;
         bool delayOn = false;   float delayMix = 0.2f;  DelaySettings delay;
         bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
         bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
@@ -96,6 +98,7 @@ namespace velvox::dsp
         SaturationModule saturation;
         DelayModule delay;
         ReverbModule reverb;
+        DoublerModule doubler;
 
         ModuleGate eqGate, compGate, deessGate;
         juce::SmoothedValue<float> delayReturn { 0.0f }, reverbReturn { 0.0f };

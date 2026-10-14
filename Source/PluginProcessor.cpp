@@ -80,6 +80,10 @@ void VelvoxAudioProcessor::cacheParameterPointers()
     bind (raw.stereoWidth, pid::stereoWidth);     bind (raw.monoBelow, pid::monoBelow);
     bind (raw.levelMatchMode, pid::levelMatchMode); bind (raw.levelMatchWindow, pid::levelMatchWindow);
     bind (raw.levelMatchRange, pid::levelMatchRange);
+    bind (raw.doublerOn, pid::doublerOn);         bind (raw.doublerMix, pid::doublerMix);
+    bind (raw.doublerWidth, pid::doublerWidth);   bind (raw.doublerDelay, pid::doublerDelay);
+    bind (raw.doublerDetune, pid::doublerDetune); bind (raw.doublerMonoSafe, pid::doublerMonoSafe);
+    bind (raw.doublerTone, pid::doublerTone);
 }
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
@@ -155,6 +159,14 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     s.levelMatchWindowSeconds = windows[juce::jlimit (0, 2, raw.levelMatchWindow.index())];
     s.levelMatchRangeDb = raw.levelMatchRange.get();
     s.monoMonitor = monoMonitor.load (std::memory_order_relaxed);
+
+    s.doubler.enabled = raw.doublerOn.on();
+    s.doubler.mix = raw.doublerMix.get() * 0.01f;
+    s.doubler.width = raw.doublerWidth.get() * 0.01f;
+    s.doubler.delayMs = raw.doublerDelay.get();
+    s.doubler.detuneCents = raw.doublerDetune.get();
+    s.doubler.monoSafe = raw.doublerMonoSafe.get() * 0.01f;
+    s.doubler.toneHz = raw.doublerTone.get();
 
     return s;
 }

@@ -91,6 +91,7 @@ private:
         Raw reverbOn, reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbSize, reverbDamping, reverbLowCut, reverbWidth;
         Raw delayToReverb;
         Raw stereoWidth, monoBelow, levelMatchMode, levelMatchWindow, levelMatchRange;
+        Raw doublerOn, doublerMix, doublerWidth, doublerDelay, doublerDetune, doublerMonoSafe, doublerTone;
     } raw;
 
     std::atomic<bool> monoMonitor { false };

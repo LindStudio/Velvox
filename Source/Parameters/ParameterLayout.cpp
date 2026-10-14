@@ -89,6 +89,16 @@ namespace velvox
               "How long the loudness is averaged before matching." },
             { pid::levelMatchRange,  "Level Match Range",  "Output", T::Float, 0.0f, 24.0f, 12.0f, 0.0f, "dB", {},
               "Maximum correction the level matcher may apply." },
+
+            // ---------------- Doubler (0.2) ----------------
+            { pid::doublerOn,       "Doubler On",        "Doubler", T::Bool, 0, 1, 0, 0, "", {}, "Enables the vocal doubler." },
+            { pid::doublerMix,      "Doubler Mix",       "Doubler", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {}, "Level of the doubled voices (the original stays at full level)." },
+            { pid::doublerWidth,    "Doubler Width",     "Doubler", T::Float, 0.0f, 100.0f, 80.0f, 0.0f, "%", {}, "How far left and right the doubled voices are placed." },
+            { pid::doublerDelay,    "Doubler Delay",     "Doubler", T::Float, 5.0f, 40.0f, 14.0f, 15.0f, "ms", {}, "Timing offset of the doubled voices - longer feels looser." },
+            { pid::doublerDetune,   "Doubler Detune",    "Doubler", T::Float, 0.0f, 25.0f, 8.0f, 0.0f, "ct", {}, "Pitch variation of the doubled voices in cents." },
+            { pid::doublerMonoSafe, "Doubler Mono Safe", "Doubler", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {},
+              "Keeps the doubled voices out of the mono sum. 100 % = mono playback sounds exactly like the original." },
+            { pid::doublerTone,     "Doubler Tone",      "Doubler", T::Float, 1000.0f, 20000.0f, 9000.0f, 6000.0f, "Hz", {}, "High cut on the doubled voices (darker = further back)." },
         };
 
         return specs;
@@ -142,6 +152,8 @@ namespace velvox
             return juce::String (juce::roundToInt (value)) + " %";
         if (unit == "s")
             return juce::String (value, 2) + " s";
+        if (unit == "ct")
+            return juce::String (value, 1) + " ct";
         if (unit == ":1")
             return juce::String (value, value < 10.0f ? 1 : 0) + ":1";
 
