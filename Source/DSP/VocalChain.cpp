@@ -51,6 +51,10 @@ namespace velvox::dsp
         delay.prepare (sampleRate, bs);
         reverb.prepare (sampleRate, bs);
         doubler.prepare (sampleRate, bs);
+        delayDucker.prepare (sampleRate);
+        reverbDucker.prepare (sampleRate);
+        delayDuckGains.assign ((size_t) bs, 1.0f);
+        reverbDuckGains.assign ((size_t) bs, 1.0f);
 
         eqGate.prepare (sampleRate, bs);
         compGate.prepare (sampleRate, bs);
@@ -91,6 +95,8 @@ namespace velvox::dsp
         delay.reset();
         reverb.reset();
         doubler.reset();
+        delayDucker.reset();
+        reverbDucker.reset();
         bypassDelay.reset();
         stereo.reset();
         matcher.reset();
@@ -115,6 +121,8 @@ namespace velvox::dsp
 
         saturation.setSettings (s.sat);
         doubler.setSettings (s.doubler);
+        delayDucker.setSettings (s.delayDuck);
+        reverbDucker.setSettings (s.reverbDuck);
 
         auto delaySettings = s.delay;
         delaySettings.timeMs = s.delayTimeMs;
@@ -153,7 +161,8 @@ namespace velvox::dsp
         }
     }
 
-    void VocalChain::process (juce::AudioBuffer<float>& buffer, int numChannels, const ChainSettings& s) noexcept
+    void VocalChain::process (juce::AudioBuffer<float>& buffer, int numChannels, const ChainSettings& s,
+                              const juce::AudioBuffer<float>* sidechain) noexcept
     {
         jassert (prepared);
         if (! prepared)
@@ -175,6 +184,17 @@ namespace velvox::dsp
             // The chain always runs in stereo; a mono input is duplicated
             for (int ch = 0; ch < maxChannels; ++ch)
                 work.copyFrom (ch, 0, buffer, std::min (ch, ioChannels - 1), start, n);
+
+            // External ducking source for this chunk (falls back to internal)
+            scChannels = 0;
+            if (s.duckExternal && sidechain != nullptr && sidechain->getNumChannels() > 0
+                && sidechain->getNumSamples() >= start + n)
+            {
+                scChannels = std::min (maxChannels, sidechain->getNumChannels());
+                for (int ch = 0; ch < scChannels; ++ch)
+                    scChunk[(size_t) ch] = sidechain->getReadPointer (ch, start);
+            }
+            meters.sidechainInUse.store (scChannels > 0, std::memory_order_relaxed);
 
             processChunk (work.getArrayOfWritePointers(), maxChannels, n, s);
 
@@ -360,6 +380,10 @@ namespace velvox::dsp
                     break;
                 }
 
+                // Ducking follows the module input (or the sidechain)
+                const float* duck = isDelay ? duckGains (delayDucker, delayDuckGains, io, numChannels, n)
+                                            : duckGains (reverbDucker, reverbDuckGains, io, numChannels, n);
+
                 if (isDelay)
                     delay.process (io, wet.getArrayOfWritePointers(), numChannels, n);
                 else
@@ -368,7 +392,7 @@ namespace velvox::dsp
                 // Insert: out = in + wet * mix (same law as the send)
                 for (int i = 0; i < n; ++i)
                 {
-                    const float g = ret.getNextValue();
+                    const float g = ret.getNextValue() * (duck != nullptr ? duck[i] : 1.0f);
                     for (int ch = 0; ch < numChannels; ++ch)
                         io[ch][i] += g * wet.getSample (ch, i);
                 }
@@ -384,6 +408,10 @@ namespace velvox::dsp
 
         const bool delayNeeded = delaySend && wakeIfNeeded (delayReturn, delayActive, ModuleId::delay);
         const bool reverbNeeded = reverbSend && wakeIfNeeded (reverbReturn, reverbActive, ModuleId::reverb);
+
+        // Duck gains are derived from the dry vocal at the send tap (or the sidechain)
+        const float* delayDuck = delayNeeded ? duckGains (delayDucker, delayDuckGains, io, numChannels, n) : nullptr;
+        const float* reverbDuck = reverbNeeded ? duckGains (reverbDucker, reverbDuckGains, io, numChannels, n) : nullptr;
 
         if (delayNeeded)
             delay.process (io, delayWet.getArrayOfWritePointers(), numChannels, n);
@@ -417,8 +445,8 @@ namespace velvox::dsp
         {
             for (int i = 0; i < n; ++i)
             {
-                const float dg = delayNeeded ? delayReturn.getNextValue() : 0.0f;
-                const float rg = reverbNeeded ? reverbReturn.getNextValue() : 0.0f;
+                const float dg = delayNeeded ? delayReturn.getNextValue() * (delayDuck != nullptr ? delayDuck[i] : 1.0f) : 0.0f;
+                const float rg = reverbNeeded ? reverbReturn.getNextValue() * (reverbDuck != nullptr ? reverbDuck[i] : 1.0f) : 0.0f;
 
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
@@ -436,6 +464,19 @@ namespace velvox::dsp
             delayReturn.skip (n);
         if (reverbSend && ! reverbNeeded)
             reverbReturn.skip (n);
+    }
+
+    const float* VocalChain::duckGains (Ducker& ducker, std::vector<float>& gains, const float* const* internal,
+                                        int numChannels, int n) noexcept
+    {
+        if (! ducker.isActive())
+            return nullptr;
+
+        if (scChannels > 0)
+            ducker.computeGains (scChunk.data(), scChannels, n, gains.data());
+        else
+            ducker.computeGains (internal, numChannels, n, gains.data());
+        return gains.data();
     }
 
     void VocalChain::applyRoutingFade (float* const* io, int numChannels, int n) noexcept

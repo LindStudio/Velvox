@@ -15,7 +15,8 @@ namespace
 VelvoxAudioProcessor::VelvoxAudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
-                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+                          .withInput ("Sidechain", juce::AudioChannelSet::stereo(), false)),
       apvts (*this, nullptr, "VelvoxState", createParameterLayout()),
       presetManager (apvts)
 {
@@ -84,6 +85,11 @@ void VelvoxAudioProcessor::cacheParameterPointers()
     bind (raw.doublerWidth, pid::doublerWidth);   bind (raw.doublerDelay, pid::doublerDelay);
     bind (raw.doublerDetune, pid::doublerDetune); bind (raw.doublerMonoSafe, pid::doublerMonoSafe);
     bind (raw.doublerTone, pid::doublerTone);
+    bind (raw.duckSource, pid::duckSource);
+    bind (raw.delayDuckAmount, pid::delayDuckAmount);       bind (raw.delayDuckThreshold, pid::delayDuckThreshold);
+    bind (raw.delayDuckAttack, pid::delayDuckAttack);       bind (raw.delayDuckRelease, pid::delayDuckRelease);
+    bind (raw.reverbDuckAmount, pid::reverbDuckAmount);     bind (raw.reverbDuckThreshold, pid::reverbDuckThreshold);
+    bind (raw.reverbDuckAttack, pid::reverbDuckAttack);     bind (raw.reverbDuckRelease, pid::reverbDuckRelease);
 }
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
@@ -168,6 +174,10 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     s.doubler.monoSafe = raw.doublerMonoSafe.get() * 0.01f;
     s.doubler.toneHz = raw.doublerTone.get();
 
+    s.duckExternal = raw.duckSource.index() == 1;
+    s.delayDuck = { raw.delayDuckAmount.get(), raw.delayDuckThreshold.get(), raw.delayDuckAttack.get(), raw.delayDuckRelease.get() };
+    s.reverbDuck = { raw.reverbDuckAmount.get(), raw.reverbDuckThreshold.get(), raw.reverbDuckAttack.get(), raw.reverbDuckRelease.get() };
+
     return s;
 }
 
@@ -217,8 +227,17 @@ bool VelvoxAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
     const auto& out = layouts.getMainOutputChannelSet();
     if (out != juce::AudioChannelSet::mono() && out != juce::AudioChannelSet::stereo())
         return false;
+    if (layouts.getMainInputChannelSet() != out)
+        return false;
 
-    return layouts.getMainInputChannelSet() == out;
+    // Optional sidechain: off, mono or stereo
+    if (layouts.inputBuses.size() > 1)
+    {
+        const auto& sc = layouts.getChannelSet (true, 1);
+        if (! sc.isDisabled() && sc != juce::AudioChannelSet::mono() && sc != juce::AudioChannelSet::stereo())
+            return false;
+    }
+    return true;
 }
 
 juce::AudioProcessorParameter* VelvoxAudioProcessor::getBypassParameter() const
@@ -230,11 +249,6 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 {
     juce::ScopedNoDenormals noDenormals;
 
-    const int numIn = getTotalNumInputChannels();
-    const int numOut = getTotalNumOutputChannels();
-    for (int ch = numIn; ch < numOut; ++ch)
-        buffer.clear (ch, 0, buffer.getNumSamples());
-
     auto settings = readSettings();
 
     if (auto* hostPlayHead = getPlayHead())
@@ -242,7 +256,28 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             if (const auto bpm = position->getBpm())
                 settings.hostBpm = *bpm;
 
-    chain.process (buffer, std::min (numIn, numOut), settings);
+    // Defensive: a host that hands over fewer channels than the negotiated
+    // layout must not crash us - process what is there, without sidechain.
+    const int expectedChannels = std::max (getTotalNumInputChannels(), getTotalNumOutputChannels());
+    if (buffer.getNumChannels() < expectedChannels)
+    {
+        chain.process (buffer, std::min (buffer.getNumChannels(), getMainBusNumOutputChannels()), settings, nullptr);
+        return;
+    }
+
+    // Main bus only for processing; the sidechain bus (if enabled) is read-only input
+    auto main = getBusBuffer (buffer, false, 0);
+    const int mainIn = getMainBusNumInputChannels();
+    for (int ch = mainIn; ch < main.getNumChannels(); ++ch)
+        main.clear (ch, 0, main.getNumSamples());
+
+    juce::AudioBuffer<float> sidechain;
+    const bool hasSidechain = getBusCount (true) > 1 && getBus (true, 1) != nullptr
+                              && getBus (true, 1)->isEnabled() && getBus (true, 1)->getNumberOfChannels() > 0;
+    if (hasSidechain)
+        sidechain = getBusBuffer (buffer, true, 1);
+
+    chain.process (main, std::min (mainIn, main.getNumChannels()), settings, hasSidechain ? &sidechain : nullptr);
 }
 
 //==============================================================================

@@ -92,6 +92,8 @@ private:
         Raw delayToReverb;
         Raw stereoWidth, monoBelow, levelMatchMode, levelMatchWindow, levelMatchRange;
         Raw doublerOn, doublerMix, doublerWidth, doublerDelay, doublerDetune, doublerMonoSafe, doublerTone;
+        Raw duckSource, delayDuckAmount, delayDuckThreshold, delayDuckAttack, delayDuckRelease;
+        Raw reverbDuckAmount, reverbDuckThreshold, reverbDuckAttack, reverbDuckRelease;
     } raw;
 
     std::atomic<bool> monoMonitor { false };

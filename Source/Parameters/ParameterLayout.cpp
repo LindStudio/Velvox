@@ -99,6 +99,18 @@ namespace velvox
             { pid::doublerMonoSafe, "Doubler Mono Safe", "Doubler", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {},
               "Keeps the doubled voices out of the mono sum. 100 % = mono playback sounds exactly like the original." },
             { pid::doublerTone,     "Doubler Tone",      "Doubler", T::Float, 1000.0f, 20000.0f, 9000.0f, 6000.0f, "Hz", {}, "High cut on the doubled voices (darker = further back)." },
+
+            // ---------------- Ducking (0.2) ----------------
+            { pid::duckSource, "Duck Source", "Ducking", T::Choice, 0, 1, 0, 0, "", { "Vocal (internal)", "Sidechain input" },
+              "What pushes reverb and delay down: the vocal itself, or the sidechain input of the plugin (e.g. a kick)." },
+            { pid::delayDuckAmount,    "Delay Duck Amount",    "Ducking", T::Float, 0.0f, 24.0f, 0.0f, 0.0f, "dB", {}, "How much the delay drops while the vocal is active (0 = off)." },
+            { pid::delayDuckThreshold, "Delay Duck Threshold", "Ducking", T::Float, -60.0f, 0.0f, -30.0f, 0.0f, "dB", {}, "Vocal level where delay ducking starts." },
+            { pid::delayDuckAttack,    "Delay Duck Attack",    "Ducking", T::Float, 1.0f, 200.0f, 10.0f, 20.0f, "ms", {}, "How fast the delay is pushed down." },
+            { pid::delayDuckRelease,   "Delay Duck Release",   "Ducking", T::Float, 20.0f, 2000.0f, 300.0f, 300.0f, "ms", {}, "How fast the delay comes back in the gaps." },
+            { pid::reverbDuckAmount,    "Reverb Duck Amount",    "Ducking", T::Float, 0.0f, 24.0f, 0.0f, 0.0f, "dB", {}, "How much the reverb drops while the vocal is active (0 = off)." },
+            { pid::reverbDuckThreshold, "Reverb Duck Threshold", "Ducking", T::Float, -60.0f, 0.0f, -30.0f, 0.0f, "dB", {}, "Vocal level where reverb ducking starts." },
+            { pid::reverbDuckAttack,    "Reverb Duck Attack",    "Ducking", T::Float, 1.0f, 200.0f, 20.0f, 20.0f, "ms", {}, "How fast the reverb is pushed down." },
+            { pid::reverbDuckRelease,   "Reverb Duck Release",   "Ducking", T::Float, 20.0f, 2000.0f, 500.0f, 300.0f, "ms", {}, "How fast the reverb comes back in the gaps." },
         };
 
         return specs;

@@ -23,6 +23,7 @@ namespace velvox::test
             {
                 juce::AudioProcessor::BusesLayout mono;
                 mono.inputBuses.add (juce::AudioChannelSet::mono());
+                mono.inputBuses.add (juce::AudioChannelSet::disabled()); // sidechain
                 mono.outputBuses.add (juce::AudioChannelSet::mono());
                 proc.setBusesLayout (mono);
             }

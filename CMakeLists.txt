@@ -45,6 +45,7 @@ set(VELVOX_SOURCES
     Source/DSP/Loudness.cpp
     Source/DSP/StereoStage.cpp
     Source/DSP/DoublerModule.cpp
+    Source/DSP/Ducker.cpp
     Source/Presets/ParameterSnapshot.cpp
     Source/Presets/FactoryPresets.cpp
     Source/Presets/PresetManager.cpp
@@ -102,7 +103,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source)
     # Modal loops only for the test runner (used to pump the message loop for UI snapshots)
     target_compile_definitions(VelvoxTests PRIVATE ${VELVOX_COMMON_DEFINITIONS} JUCE_MODAL_LOOPS_PERMITTED=1)

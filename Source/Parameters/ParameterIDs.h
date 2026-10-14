@@ -92,4 +92,15 @@ namespace velvox::pid
     inline constexpr const char* doublerDetune   = "doublerDetune";
     inline constexpr const char* doublerMonoSafe = "doublerMonoSafe";
     inline constexpr const char* doublerTone     = "doublerTone";
+
+    // Ducking (reverb / delay returns)
+    inline constexpr const char* duckSource         = "duckSource";
+    inline constexpr const char* delayDuckAmount    = "delayDuckAmount";
+    inline constexpr const char* delayDuckThreshold = "delayDuckThreshold";
+    inline constexpr const char* delayDuckAttack    = "delayDuckAttack";
+    inline constexpr const char* delayDuckRelease   = "delayDuckRelease";
+    inline constexpr const char* reverbDuckAmount    = "reverbDuckAmount";
+    inline constexpr const char* reverbDuckThreshold = "reverbDuckThreshold";
+    inline constexpr const char* reverbDuckAttack    = "reverbDuckAttack";
+    inline constexpr const char* reverbDuckRelease   = "reverbDuckRelease";
 }

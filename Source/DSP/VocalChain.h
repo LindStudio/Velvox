@@ -10,6 +10,7 @@
 #include "Loudness.h"
 #include "StereoStage.h"
 #include "DoublerModule.h"
+#include "Ducker.h"
 
 namespace velvox::dsp
 {
@@ -30,6 +31,9 @@ namespace velvox::dsp
         bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
         bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
         float delayIntoReverb = 0.0f; // 0..1, only when both are sends
+
+        DuckSettings delayDuck, reverbDuck;
+        bool duckExternal = false;    // use the sidechain input when available
 
         Routing routing = Routing::defaults();
 
@@ -56,6 +60,7 @@ namespace velvox::dsp
         std::atomic<float> processedLufs { LoudnessMeter::silenceLufs };
         std::atomic<float> levelMatchDb { 0.0f };  // correction the matcher currently suggests
         std::atomic<float> correlation { 1.0f };
+        std::atomic<bool> sidechainInUse { false }; // ducking currently follows the external sidechain
     };
 
     //  Input -> serial modules in Routing order (delay/reverb only when "insert")
@@ -70,12 +75,16 @@ namespace velvox::dsp
         void reset();
 
         // Processes any block size (internally split into chunks), mono or stereo.
-        void process (juce::AudioBuffer<float>& buffer, int numChannels, const ChainSettings& settings) noexcept;
+        // `sidechain` (optional) feeds the reverb/delay duckers when external ducking is selected.
+        void process (juce::AudioBuffer<float>& buffer, int numChannels, const ChainSettings& settings,
+                      const juce::AudioBuffer<float>* sidechain = nullptr) noexcept;
 
         int getLatencySamples() const noexcept { return saturation.getLatencySamples(); }
 
         CompressorModule& getCompressor() noexcept { return compressor; }
         DeEsserModule& getDeEsser() noexcept { return deesser; }
+        Ducker& getDelayDucker() noexcept { return delayDucker; }
+        Ducker& getReverbDucker() noexcept { return reverbDucker; }
         ChainMeters meters;
 
         // Exposed for tests: soft clip transfer curve
@@ -88,6 +97,9 @@ namespace velvox::dsp
         void processSends (float* const* io, int numChannels, int n, const ChainSettings& s) noexcept;
         bool wakeIfNeeded (juce::SmoothedValue<float>& ret, bool& active, ModuleId id) noexcept;
         void applyRoutingFade (float* const* io, int numChannels, int n) noexcept;
+        // Fills `gains` for one effect return; detector = sidechain or `internal`
+        const float* duckGains (Ducker& ducker, std::vector<float>& gains, const float* const* internal,
+                                int numChannels, int n) noexcept;
 
         double fs = 44100.0;
         bool prepared = false;
@@ -120,5 +132,11 @@ namespace velvox::dsp
         bool adoptRoutingImmediately = true;
 
         juce::AudioBuffer<float> work, dryForBypass, delayWet, reverbWet, reverbIn;
+
+        Ducker delayDucker, reverbDucker;
+        std::vector<float> delayDuckGains, reverbDuckGains;
+        // Sidechain pointers for the chunk being processed (nullptr = internal)
+        std::array<const float*, maxChannels> scChunk {};
+        int scChannels = 0;
     };
 }
