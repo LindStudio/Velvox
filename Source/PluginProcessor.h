@@ -1,0 +1,86 @@
+#pragma once
+
+#include <juce_audio_processors/juce_audio_processors.h>
+
+#include "DSP/VocalChain.h"
+#include "Parameters/ParameterLayout.h"
+#include "Presets/PresetManager.h"
+
+class VelvoxAudioProcessor final : public juce::AudioProcessor
+{
+public:
+    VelvoxAudioProcessor();
+    ~VelvoxAudioProcessor() override = default;
+
+    //==========================================================================
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    using AudioProcessor::processBlock;
+
+    juce::AudioProcessorParameter* getBypassParameter() const override;
+
+    //==========================================================================
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override { return true; }
+
+    const juce::String getName() const override;
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+    bool isMidiEffect() const override { return false; }
+    double getTailLengthSeconds() const override { return 12.0; }
+
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int) override {}
+    const juce::String getProgramName (int) override { return {}; }
+    void changeProgramName (int, const juce::String&) override {}
+
+    void getStateInformation (juce::MemoryBlock& destData) override;
+    void setStateInformation (const void* data, int sizeInBytes) override;
+
+    //==========================================================================
+    juce::AudioProcessorValueTreeState& getState() noexcept { return apvts; }
+    velvox::PresetManager& getPresetManager() noexcept { return presetManager; }
+    velvox::dsp::VocalChain& getChain() noexcept { return chain; }
+
+    // A/B comparison (message thread only)
+    int getActiveSlot() const noexcept { return activeSlot; }
+    void selectSlot (int slot);
+    void copyActiveSlotToOther();
+
+private:
+    void cacheParameterPointers();
+    velvox::dsp::ChainSettings readSettings() const noexcept;
+
+    juce::AudioProcessorValueTreeState apvts;
+    velvox::PresetManager presetManager;
+    velvox::dsp::VocalChain chain;
+
+    struct Raw
+    {
+        std::atomic<float>* p = nullptr;
+        float get() const noexcept { return p->load (std::memory_order_relaxed); }
+        bool on() const noexcept { return get() > 0.5f; }
+        int index() const noexcept { return (int) std::lround (get()); }
+    };
+
+    struct
+    {
+        Raw inputGain, outputGain, bypass, safetyClip;
+        Raw eqOn, eqMix, hpfOn, hpfFreq, hpfSlope, lowFreq, lowGain, midFreq, midGain, midQ, highFreq, highGain;
+        Raw compOn, compThreshold, compRatio, compAttack, compRelease, compKnee, compMakeup, compMix;
+        Raw deessOn, deessFreq, deessThreshold, deessRange, deessListen;
+        Raw satOn, satDrive, satOutput, satMix;
+        Raw delayOn, delayTime, delaySync, delayDivision, delayFeedback, delayMix, delayLowCut, delayHighCut, delayPingPong;
+        Raw reverbOn, reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbSize, reverbDamping, reverbLowCut, reverbWidth;
+    } raw;
+
+    // A/B slots hold full parameter snapshots
+    std::array<velvox::ParameterSnapshot, 2> slots;
+    std::array<bool, 2> slotValid { false, false };
+    int activeSlot = 0;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VelvoxAudioProcessor)
+};
