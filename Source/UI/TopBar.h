@@ -40,6 +40,7 @@ namespace velvox::ui
         TopBar (VelvoxAudioProcessor& processor, DialogOverlay& dialog);
 
         void paint (juce::Graphics&) override;
+        void paintOverChildren (juce::Graphics&) override;
         void resized() override;
         void refresh();
 
@@ -54,7 +55,8 @@ namespace velvox::ui
         VelvoxAudioProcessor& proc;
         DialogOverlay& dialog;
 
-        juce::TextButton presetButton, prev { "<" }, next { ">" }, save { "Save" }, remove { "Delete" };
+        juce::TextButton presetButton, prev { juce::String::fromUTF8 ("\xe2\x80\xb9") }, next { juce::String::fromUTF8 ("\xe2\x80\xba") },
+                         save { "Save" }, remove { "Delete" };
         juce::TextButton slotA { "A" }, slotB { "B" }, copy { "Copy A to B" };
         juce::TextButton beginner { "Beginner" }, pro { "Pro" };
         Toggle bypass;

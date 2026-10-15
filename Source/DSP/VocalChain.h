@@ -68,6 +68,9 @@ namespace velvox::dsp
         std::atomic<float> levelMatchDb { 0.0f };  // correction the matcher currently suggests
         std::atomic<float> correlation { 1.0f };
         std::atomic<bool> sidechainInUse { false }; // ducking currently follows the external sidechain
+
+        // Spectrum analyser feeds: after input gain, and what leaves the plugin
+        SampleTap inputTap, outputTap;
     };
 
     //  Input -> serial modules in Routing order (delay/reverb only when "insert")

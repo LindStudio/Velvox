@@ -253,6 +253,7 @@ namespace velvox::dsp
             const auto range = juce::FloatVectorOperations::findMinAndMax (io[ch], n);
             meters.input[(size_t) ch].push (std::max (range.getEnd(), -range.getStart()));
         }
+        meters.inputTap.push (io, numChannels, n);
 
         // A pending routing change starts with a short fade-out of the old routing
         if (structureChangePending())
@@ -335,6 +336,7 @@ namespace velvox::dsp
         meters.correlation.store (correlation.getCorrelation(), std::memory_order_relaxed);
         outputLoudness.process (io, loudnessChannels, n);
         meters.outputLufs.store (outputLoudness.getLufs(), std::memory_order_relaxed);
+        meters.outputTap.push (io, numChannels, n);
 
         if (s.monoMonitor && numChannels > 1)
         {

@@ -9,15 +9,18 @@ namespace velvox::ui
 
     namespace
     {
-        constexpr int headerHeight = 54;
-        constexpr int padding = 18;
-        constexpr int knobH = 110;
+        constexpr int headerHeight = 64;
+        constexpr int padding = 20;
+        constexpr int captionH = 26;
     }
 
     //==========================================================================
     DetailPanel::DetailPanel (VelvoxAudioProcessor& p, juce::String t, juce::String s, juce::Colour c, const char* onId)
         : proc (p), apvts (p.getState()), accent (c), title (std::move (t)), subtitle (std::move (s)), onParamId (onId)
     {
+        addAndMakeVisible (spectrumView);
+        spectrumView.setRange (-90.0f, 0.0f);
+
         if (onParamId != nullptr)
         {
             power = std::make_unique<PowerButton> (apvts, onParamId, accent);
@@ -85,33 +88,58 @@ namespace velvox::ui
         const bool on = onParamId == nullptr || apvts.getRawParameterValue (onParamId)->load() > 0.5f;
 
         g.setColour (colours::panel);
-        g.fillRoundedRectangle (r, 12.0f);
-        g.setGradientFill (juce::ColourGradient (accent.withAlpha (on ? 0.10f : 0.03f), r.getX(), r.getY(),
-                                                 juce::Colours::transparentBlack, r.getX(), r.getY() + 180.0f, false));
-        g.fillRoundedRectangle (r, 12.0f);
-        g.setColour (colours::line);
-        g.drawRoundedRectangle (r.reduced (0.5f), 12.0f, 1.0f);
-        g.setColour (on ? accent : accent.withAlpha (0.3f));
-        g.fillRoundedRectangle (r.getX() + 18.0f, r.getY(), r.getWidth() - 36.0f, 2.0f, 1.0f);
+        g.fillRoundedRectangle (r, 16.0f);
+        drawGlass (g, r, 16.0f, 0.012f);
+        if (on)
+            drawGlow (g, { r.getX() + 60.0f, r.getY() + 10.0f }, 220.0f, 0.035f);
 
+        // Header
         auto header = getLocalBounds().removeFromTop (headerHeight).reduced (padding, 0);
-        header.removeFromLeft (power != nullptr ? 36 : 0);
+        header.removeFromLeft (power != nullptr ? 42 : 0);
         g.setColour (on ? colours::text : colours::textDim);
-        g.setFont (display (22.0f));
-        const int titleW = juce::GlyphArrangement::getStringWidthInt (display (22.0f), title) + 14;
+        g.setFont (font (19.0f, true));
+        const int titleW = juce::GlyphArrangement::getStringWidthInt (font (19.0f, true), title) + 16;
         g.drawText (title, header.removeFromLeft (titleW), juce::Justification::centredLeft, false);
         g.setColour (colours::textDim);
-        g.setFont (font (13.0f));
+        g.setFont (font (12.5f));
         g.drawText (subtitle, header, juce::Justification::centredLeft, true);
 
+        // Visual strip
+        if (! visualArea.isEmpty())
+        {
+            const auto v = visualArea.toFloat();
+            g.setColour (colours::background.withAlpha (0.55f));
+            g.fillRoundedRectangle (v, 12.0f);
+            g.setColour (colours::lineSoft);
+            g.drawRoundedRectangle (v.reduced (0.5f), 12.0f, 1.0f);
+
+            // Legend
+            auto legend = v.reduced (14.0f, 10.0f).withHeight (14.0f);
+            const auto dot = [&] (const juce::String& text, float alpha)
+            {
+                const auto d = legend.removeFromLeft (6.0f).withSizeKeepingCentre (6.0f, 6.0f);
+                g.setColour (colours::accent.withAlpha (alpha));
+                g.fillEllipse (d);
+                legend.removeFromLeft (6.0f);
+                drawCaption (g, text, legend.removeFromLeft (60.0f), juce::Justification::centredLeft, colours::textDim, 8.5f);
+            };
+            dot ("Output", 0.9f);
+            dot ("Input", 0.25f);
+        }
+
+        // Sections: faint field with a caption and a hairline
         for (const auto& s : sections)
         {
             const auto a = s.area.toFloat();
-            g.setColour (colours::raised.withAlpha (0.55f));
-            g.fillRoundedRectangle (a, 8.0f);
-            g.setColour (colours::textDim);
-            g.setFont (font (12.0f, true));
-            g.drawText (s.caption, a.reduced (12.0f, 0.0f).withHeight (24.0f), juce::Justification::centredLeft, false);
+            g.setColour (colours::accent.withAlpha (0.014f));
+            g.fillRoundedRectangle (a, 12.0f);
+            auto cap = a.reduced (14.0f, 0.0f).withHeight ((float) captionH);
+            g.setFont (caps (9.0f));
+            const float w = (float) juce::GlyphArrangement::getStringWidthInt (caps (9.0f), s.caption.toUpperCase()) + 10.0f;
+            drawCaption (g, s.caption, cap, juce::Justification::centredLeft, colours::textDim, 9.0f);
+            g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.08f), cap.getX() + w, 0.0f,
+                                                     colours::accent.withAlpha (0.0f), cap.getRight(), 0.0f, false));
+            g.fillRect (juce::Rectangle<float> (cap.getX() + w, cap.getCentreY(), cap.getWidth() - w, 1.0f));
         }
     }
 
@@ -120,24 +148,35 @@ namespace velvox::ui
         auto r = getLocalBounds();
         auto header = r.removeFromTop (headerHeight).reduced (padding, 0);
         if (power != nullptr)
-            power->setBounds (header.removeFromLeft (26).withSizeKeepingCentre (26, 26));
+            power->setBounds (header.removeFromLeft (30).withSizeKeepingCentre (30, 30));
+
+        auto content = r.reduced (padding, 0).withTrimmedBottom (padding);
+        visualArea = {};
+        if (visualHeight > 0)
+        {
+            visualArea = content.removeFromTop (visualHeight);
+            content.removeFromTop (14);
+            spectrumView.setBounds (visualArea.reduced (1, 1).withTrimmedTop (8));
+        }
+        spectrumView.setVisible (visualHeight > 0);
 
         sections.clear();
-        layoutContent (r.reduced (padding, 0).withTrimmedBottom (padding));
+        layoutContent (content);
     }
 
     void DetailPanel::refresh()
     {
         for (auto* k : knobs)
             k->refreshEffective();
+        spectrumView.refresh();
 
         const int on = onParamId == nullptr || apvts.getRawParameterValue (onParamId)->load() > 0.5f ? 1 : 0;
         if (on != lastOn)
         {
             lastOn = on;
             for (auto* c : getChildren())
-                if (c != power.get())
-                    c->setAlpha (on ? 1.0f : 0.5f);
+                if (c != power.get() && c != &spectrumView)
+                    c->setAlpha (on ? 1.0f : 0.4f);
             repaint();
         }
     }
@@ -146,14 +185,23 @@ namespace velvox::ui
     namespace
     {
         // Inner area of a section (below its caption)
-        juce::Rectangle<int> inner (juce::Rectangle<int> section) { return section.withTrimmedTop (24).reduced (8, 6); }
+        juce::Rectangle<int> inner (juce::Rectangle<int> section) { return section.withTrimmedTop (captionH).reduced (8, 4); }
+
+        juce::Label& noteLabel (juce::Label& l)
+        {
+            l.setFont (font (12.0f));
+            l.setColour (juce::Label::textColourId, colours::textDim);
+            l.setJustificationType (juce::Justification::centredLeft);
+            return l;
+        }
 
         class EqPanel final : public DetailPanel
         {
         public:
             explicit EqPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Equalizer", "Remove rumble, shape body, presence and air", colours::eq, pid::eqOn)
+                : DetailPanel (p, "Equalizer", "Remove rumble, shape body, presence and air", colours::accent, pid::eqOn)
             {
+                visualHeight = 200;
                 addAndMakeVisible (curve);
                 auto* procPtr = &p;
                 curve.provider = [procPtr] (dsp::EqSettings& s, bool& on, float& mix)
@@ -192,17 +240,19 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                curve.setBounds (r.removeFromTop ((int) (r.getHeight() * 0.38f)));
+                // The response curve sits on top of the live spectrum
+                curve.setBounds (spectrumView.getBounds());
+                curve.toFront (false);
+
+                auto top = r.removeFromTop (r.getHeight() / 2 - 5);
                 r.removeFromTop (10);
-                auto top = r.removeFromTop (r.getHeight() / 2 - 4);
-                r.removeFromTop (8);
                 auto bottom = r;
 
                 const int w = top.getWidth();
                 auto lc = top.removeFromLeft (w * 2 / 9);
-                top.removeFromLeft (8);
+                top.removeFromLeft (10);
                 auto low = top.removeFromLeft (w * 4 / 9);
-                top.removeFromLeft (8);
+                top.removeFromLeft (10);
                 auto mid = top;
                 section ("Low cut", lc);
                 section ("Low band", low);
@@ -216,9 +266,9 @@ namespace velvox::ui
                 row ({ midFreq, midGain, midQ }, inner (mid));
 
                 auto high = bottom.removeFromLeft (w * 4 / 9);
-                bottom.removeFromLeft (8);
+                bottom.removeFromLeft (10);
                 auto hc = bottom.removeFromLeft (w * 2 / 9);
-                bottom.removeFromLeft (8);
+                bottom.removeFromLeft (10);
                 auto out = bottom;
                 section ("High band", high);
                 section ("High cut", hc);
@@ -244,7 +294,7 @@ namespace velvox::ui
         {
         public:
             explicit CompPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Compressor", "Evens out the level so every word sits in the mix", colours::comp, pid::compOn)
+                : DetailPanel (p, "Compressor", "Evens out the level so every word sits in the mix", colours::accent, pid::compOn)
             {
                 for (auto& [id, label, ptr] : std::initializer_list<std::tuple<const char*, const char*, Knob**>> {
                          { pid::compThreshold, "Threshold", &threshold }, { pid::compRatio, "Ratio", &ratio },
@@ -266,10 +316,10 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                gr.setBounds (r.removeFromRight (44).reduced (0, 6));
-                r.removeFromRight (14);
-                auto dyn = r.removeFromTop (r.getHeight() / 2 - 4);
-                r.removeFromTop (8);
+                gr.setBounds (r.removeFromRight (44));
+                r.removeFromRight (12);
+                auto dyn = r.removeFromTop (r.getHeight() / 2 - 5);
+                r.removeFromTop (10);
                 section ("Dynamics", dyn);
                 section ("Output and detector", r);
                 row ({ threshold, ratio, attack, release, knee }, inner (dyn));
@@ -278,14 +328,14 @@ namespace velvox::ui
 
             Knob *threshold, *ratio, *attack, *release, *knee, *makeup, *mix, *scHpf;
             Choice* detector;
-            GainReductionMeter gr { colours::comp, "GR" };
+            GainReductionMeter gr { colours::accent, "GR" };
         };
 
         class DeEssPanel final : public DetailPanel
         {
         public:
             explicit DeEssPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "De-esser", "Tames sharp S and T sounds without dulling the voice", colours::deess, pid::deessOn)
+                : DetailPanel (p, "De-esser", "Tames sharp S and T sounds without dulling the voice", colours::accent, pid::deessOn)
             {
                 freq = &knob (pid::deessFreq, "Frequency");
                 threshold = &knob (pid::deessThreshold, "Threshold");
@@ -304,10 +354,10 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                gr.setBounds (r.removeFromRight (44).reduced (0, 6));
-                r.removeFromRight (14);
-                auto a = r.removeFromTop (r.getHeight() / 2 - 4);
-                r.removeFromTop (8);
+                gr.setBounds (r.removeFromRight (44));
+                r.removeFromRight (12);
+                auto a = r.removeFromTop (r.getHeight() / 2 - 5);
+                r.removeFromTop (10);
                 section ("Detection", a);
                 section ("Behaviour", r);
                 row ({ freq, threshold, range }, inner (a));
@@ -319,15 +369,16 @@ namespace velvox::ui
             Knob *freq, *threshold, *range;
             Choice* mode;
             Toggle* listen;
-            GainReductionMeter gr { colours::deess, "GR" };
+            GainReductionMeter gr { colours::accent, "GR" };
         };
 
         class SatPanel final : public DetailPanel
         {
         public:
             explicit SatPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Saturation", "Adds harmonics for warmth, grit and density", colours::sat, pid::satOn)
+                : DetailPanel (p, "Saturation", "Adds harmonics for warmth, grit and density", colours::accent, pid::satOn)
             {
+                visualHeight = 0;
                 addAndMakeVisible (curve);
                 auto* procPtr = &p;
                 curve.provider = [procPtr] (float& d, float& m, int& c, bool& a)
@@ -340,6 +391,10 @@ namespace velvox::ui
                 drive = &knob (pid::satDrive, "Drive");
                 output = &knob (pid::satOutput, "Output");
                 mix = &knob (pid::satMix, "Mix");
+                drive->setMaxDialSize (104);
+                drive->setHero (true);
+                for (auto* k : { output, mix })
+                    k->setMaxDialSize (80);
             }
 
             void refresh() override
@@ -351,11 +406,13 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                curve.setBounds (r.removeFromLeft (std::min (r.getHeight(), r.getWidth() / 3)).reduced (0, 10));
-                r.removeFromLeft (16);
-                section ("Tone", r);
-                auto in = inner (r).withSizeKeepingCentre (inner (r).getWidth(), std::min (inner (r).getHeight(), 160));
-                row ({ character, drive, output, mix }, in);
+                // Square transfer curve on the left, the four controls centred beside it
+                const int side = std::min (r.getHeight(), r.getWidth() * 2 / 5);
+                curve.setBounds (r.removeFromLeft (side).withSizeKeepingCentre (side, side));
+                r.removeFromLeft (20);
+                auto tone = r.withSizeKeepingCentre (r.getWidth(), std::min (r.getHeight(), 250));
+                section ("Tone", tone);
+                row ({ character, drive, output, mix }, inner (tone));
             }
 
             SaturationCurve curve;
@@ -367,7 +424,7 @@ namespace velvox::ui
         {
         public:
             explicit DoublerPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Doubler", "Two extra takes left and right for a wide, thick vocal", colours::doubler, pid::doublerOn)
+                : DetailPanel (p, "Doubler", "Two extra takes left and right for a wide, thick vocal", colours::accent, pid::doublerOn)
             {
                 mix = &knob (pid::doublerMix, "Mix");
                 width = &knob (pid::doublerWidth, "Width");
@@ -377,18 +434,16 @@ namespace velvox::ui
                 tone = &knob (pid::doublerTone, "Tone");
                 note.setText ("Mono safe keeps the doubles out of the mono sum: at 100 % a mono speaker plays exactly the original vocal.",
                               juce::dontSendNotification);
-                note.setFont (font (12.5f));
-                note.setColour (juce::Label::textColourId, colours::textDim);
-                note.setJustificationType (juce::Justification::centredLeft);
-                addAndMakeVisible (note);
+                addAndMakeVisible (noteLabel (note));
             }
 
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                note.setBounds (r.removeFromBottom (36));
-                auto a = r.removeFromTop (r.getHeight() / 2 - 4);
-                r.removeFromTop (8);
+                note.setBounds (r.removeFromBottom (26).withTrimmedLeft (6));
+                r.removeFromBottom (4);
+                auto a = r.removeFromTop (r.getHeight() / 2 - 5);
+                r.removeFromTop (10);
                 section ("Voices", a);
                 section ("Stereo and tone", r);
                 row ({ mix, delay, detune }, inner (a));
@@ -403,16 +458,14 @@ namespace velvox::ui
         {
         public:
             explicit PitchPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Pitch", "Creative transposition (not pitch correction)", colours::pitch, pid::pitchOn)
+                : DetailPanel (p, "Pitch", "Creative transposition (not pitch correction)", colours::accent, pid::pitchOn)
             {
                 semis = &knob (pid::pitchSemitones, "Pitch");
                 fine = &knob (pid::pitchCents, "Fine");
                 formant = &knob (pid::pitchFormant, "Formant");
                 mix = &knob (pid::pitchMix, "Mix");
                 keep = &toggle (pid::pitchPreserveFormants, "Keep formants");
-                info.setFont (font (12.5f));
-                info.setColour (juce::Label::textColourId, colours::textDim);
-                addAndMakeVisible (info);
+                addAndMakeVisible (noteLabel (info));
             }
 
             void refresh() override
@@ -429,9 +482,10 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                info.setBounds (r.removeFromBottom (36));
-                auto a = r.removeFromTop (r.getHeight() / 2 - 4);
-                r.removeFromTop (8);
+                info.setBounds (r.removeFromBottom (26).withTrimmedLeft (6));
+                r.removeFromBottom (4);
+                auto a = r.removeFromTop (r.getHeight() / 2 - 5);
+                r.removeFromTop (10);
                 section ("Transpose", a);
                 section ("Character", r);
                 row ({ semis, fine, mix }, inner (a));
@@ -449,17 +503,16 @@ namespace velvox::ui
         {
         public:
             explicit ChopPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Vocal chop", "Tempo-synced gate and stutter patterns", colours::chop, pid::chopOn)
+                : DetailPanel (p, "Vocal chop", "Tempo-synced gate and stutter patterns", colours::accent, pid::chopOn)
             {
+                visualHeight = 0;
                 addAndMakeVisible (steps);
                 pattern = &choice (pid::chopPattern, "Pattern");
                 rate = &choice (pid::chopRate, "Step length");
                 depth = &knob (pid::chopDepth, "Depth");
                 smooth = &knob (pid::chopSmooth, "Smooth");
-                info.setFont (font (12.5f));
-                info.setColour (juce::Label::textColourId, colours::textDim);
                 info.setText ("Steps follow the song position while FL Studio plays. R = repeat the previous slice (stutter).", juce::dontSendNotification);
-                addAndMakeVisible (info);
+                addAndMakeVisible (noteLabel (info));
             }
 
             void refresh() override
@@ -468,17 +521,20 @@ namespace velvox::ui
                 const auto e = proc.readEffectiveSettings();
                 const auto& pats = dsp::ChopModule::patterns();
                 steps.set (pats[(size_t) juce::jlimit (0, (int) pats.size() - 1, e.chop.pattern)].steps,
-                           proc.getChain().getChopStep(), e.chop.enabled, accent);
+                           proc.getChain().getChopStep(), e.chop.enabled);
             }
 
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                info.setBounds (r.removeFromBottom (30));
-                steps.setBounds (r.removeFromTop (54).reduced (0, 6));
-                r.removeFromTop (12);
-                section ("Pattern", r);
-                row ({ pattern, rate, depth, smooth }, inner (r).withSizeKeepingCentre (inner (r).getWidth(), std::min (inner (r).getHeight(), 150)));
+                info.setBounds (r.removeFromBottom (26).withTrimmedLeft (6));
+                r.removeFromBottom (4);
+                auto stage = r.removeFromTop (std::min (r.getHeight() / 2, 200));
+                steps.setBounds (stage.withSizeKeepingCentre (stage.getWidth() - 8, 76));
+                r.removeFromTop (10);
+                auto controls = r.withSizeKeepingCentre (r.getWidth(), std::min (r.getHeight(), 210));
+                section ("Pattern", controls);
+                row ({ pattern, rate, depth, smooth }, inner (controls));
             }
 
             StepPatternView steps;
@@ -491,8 +547,9 @@ namespace velvox::ui
         {
         public:
             explicit DelayPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Delay", "Echoes beside the voice; ducking keeps the words clear", colours::delay, pid::delayOn)
+                : DetailPanel (p, "Delay", "Echoes beside the voice; ducking keeps the words clear", colours::accent, pid::delayOn)
             {
+                visualHeight = 120;
                 time = &knob (pid::delayTime, "Time");
                 division = &choice (pid::delayDivision, "Note");
                 sync = &toggle (pid::delaySync, "Sync");
@@ -508,9 +565,7 @@ namespace velvox::ui
                 duckRelease = &knob (pid::delayDuckRelease, "Release");
                 source = &choice (pid::duckSource, "Duck source");
                 addAndMakeVisible (gr);
-                info.setFont (font (12.0f));
-                info.setColour (juce::Label::textColourId, colours::textDim);
-                addAndMakeVisible (info);
+                addAndMakeVisible (noteLabel (info));
             }
 
             void refresh() override
@@ -534,19 +589,20 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                info.setBounds (r.removeFromBottom (24));
-                auto echo = r.removeFromTop (r.getHeight() / 2 - 4);
-                r.removeFromTop (8);
+                info.setBounds (r.removeFromBottom (22).withTrimmedLeft (6));
+                r.removeFromBottom (4);
+                auto echo = r.removeFromTop (r.getHeight() / 2 - 5);
+                r.removeFromTop (10);
                 section ("Echo", echo);
                 auto e = inner (echo);
-                auto toggles = e.removeFromLeft (110);
-                sync->setBounds (toggles.removeFromTop (toggles.getHeight() / 2).withSizeKeepingCentre (100, 28));
-                pingPong->setBounds (toggles.withSizeKeepingCentre (100, 28));
+                auto toggles = e.removeFromLeft (116);
+                sync->setBounds (toggles.removeFromTop (toggles.getHeight() / 2).withSizeKeepingCentre (104, 28));
+                pingPong->setBounds (toggles.withSizeKeepingCentre (104, 28));
                 row ({ time, feedback, mix, lowCut, highCut, toReverb }, e);
                 division->setBounds (time->getBounds());
 
-                gr.setBounds (r.removeFromRight (44).reduced (0, 6));
-                r.removeFromRight (10);
+                gr.setBounds (r.removeFromRight (44));
+                r.removeFromRight (12);
                 section ("Ducking", r);
                 row ({ source, duckAmount, duckThreshold, duckAttack, duckRelease }, inner (r));
             }
@@ -554,7 +610,7 @@ namespace velvox::ui
             Knob *time, *feedback, *mix, *lowCut, *highCut, *toReverb, *duckAmount, *duckThreshold, *duckAttack, *duckRelease;
             Choice *division, *source;
             Toggle *sync, *pingPong;
-            GainReductionMeter gr { colours::delay, "Duck" };
+            GainReductionMeter gr { colours::accent, "Duck" };
             juce::Label info;
         };
 
@@ -562,7 +618,7 @@ namespace velvox::ui
         {
         public:
             explicit ReverbPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Reverb", "Room and depth; ducking clears space while you sing", colours::reverb, pid::reverbOn)
+                : DetailPanel (p, "Reverb", "Room and depth; ducking clears space while you sing", colours::accent, pid::reverbOn)
             {
                 type = &choice (pid::reverbType, "Type");
                 mix = &knob (pid::reverbMix, "Mix");
@@ -589,26 +645,26 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                auto space = r.removeFromTop (r.getHeight() / 2 - 4);
-                r.removeFromTop (8);
+                auto space = r.removeFromTop (r.getHeight() / 2 - 5);
+                r.removeFromTop (10);
                 section ("Space", space);
                 row ({ type, mix, decay, preDelay, size, tone, lowCut, width }, inner (space));
-                gr.setBounds (r.removeFromRight (44).reduced (0, 6));
-                r.removeFromRight (10);
+                gr.setBounds (r.removeFromRight (44));
+                r.removeFromRight (12);
                 section ("Ducking", r);
                 row ({ source, duckAmount, duckThreshold, duckAttack, duckRelease }, inner (r));
             }
 
             Choice *type, *source;
             Knob *mix, *decay, *preDelay, *size, *tone, *lowCut, *width, *duckAmount, *duckThreshold, *duckAttack, *duckRelease;
-            GainReductionMeter gr { colours::reverb, "Duck" };
+            GainReductionMeter gr { colours::accent, "Duck" };
         };
 
         class OutputPanel final : public DetailPanel
         {
         public:
             explicit OutputPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Output", "Stereo image, mono safety and fair loudness comparison", colours::cyan, nullptr)
+                : DetailPanel (p, "Output", "Stereo image, mono safety and fair loudness comparison", colours::accent, nullptr)
             {
                 width = &knob (pid::stereoWidth, "Width");
                 monoBelow = &knob (pid::monoBelow, "Mono below");
@@ -618,10 +674,13 @@ namespace velvox::ui
                 clip = &toggle (pid::safetyClip, "Clip guard");
                 addAndMakeVisible (correlation);
                 correlation.setTooltip ("Phase correlation: +1 = mono-safe, below 0 = parts cancel in mono");
-                readout.setFont (display (15.0f));
-                readout.setColour (juce::Label::textColourId, colours::text);
-                readout.setJustificationType (juce::Justification::centredLeft);
-                addAndMakeVisible (readout);
+                for (auto* l : { &inValue, &procValue, &matchValue })
+                {
+                    l->setFont (display (24.0f));
+                    l->setColour (juce::Label::textColourId, colours::text);
+                    l->setJustificationType (juce::Justification::centred);
+                    addAndMakeVisible (*l);
+                }
             }
 
             void refresh() override
@@ -629,56 +688,82 @@ namespace velvox::ui
                 DetailPanel::refresh();
                 const auto& m = proc.getChain().meters;
                 correlation.push (m.correlation.load());
-                const auto fmt = [] (float lufs) { return lufs <= -99.0f ? juce::String ("--") : juce::String (lufs, 1); };
-                const juce::String text = "Input " + fmt (m.inputLufs.load()) + " LUFS    Processed " + fmt (m.processedLufs.load())
-                                          + " LUFS    Match " + juce::String (m.levelMatchDb.load(), 1) + " dB";
-                if (readout.getText() != text)
-                    readout.setText (text, juce::dontSendNotification);
+                const auto fmt = [] (float lufs) { return lufs <= -99.0f ? juce::String ("-") : juce::String (lufs, 1); };
+                const auto set = [] (juce::Label& l, const juce::String& t) { if (l.getText() != t) l.setText (t, juce::dontSendNotification); };
+                set (inValue, fmt (m.inputLufs.load()));
+                set (procValue, fmt (m.processedLufs.load()));
+                const float match = m.levelMatchDb.load();
+                set (matchValue, (match > 0.05f ? "+" : "") + juce::String (match, 1));
+            }
+
+            void paintOverChildren (juce::Graphics& g) override
+            {
+                const auto under = [&] (juce::Label& l, const juce::String& text)
+                {
+                    drawCaption (g, text, l.getBounds().toFloat().translated (0.0f, 24.0f).withHeight (14.0f),
+                                 juce::Justification::centred, colours::textFaint, 8.5f);
+                };
+                under (inValue, "Input LUFS");
+                under (procValue, "Processed LUFS");
+                under (matchValue, "Match dB");
+                drawCaption (g, "Correlation", correlation.getBounds().toFloat().translated (0.0f, -18.0f).withHeight (14.0f),
+                             juce::Justification::centredLeft, colours::textDim, 9.0f);
             }
 
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                auto stereo = r.removeFromTop (r.getHeight() / 2 - 4);
-                r.removeFromTop (8);
+                auto stereo = r.removeFromTop (r.getHeight() / 2 - 5);
+                r.removeFromTop (10);
                 section ("Stereo", stereo);
                 auto s = inner (stereo);
                 auto corr = s.removeFromRight (s.getWidth() / 3);
-                correlation.setBounds (corr.withSizeKeepingCentre (corr.getWidth() - 20, 34));
+                correlation.setBounds (corr.withSizeKeepingCentre (corr.getWidth() - 30, 24));
                 row ({ width, monoBelow }, s);
 
                 section ("Loudness", r);
                 auto l = inner (r);
-                readout.setBounds (l.removeFromBottom (26));
+                auto readouts = l.removeFromRight (l.getWidth() * 2 / 5);
+                const int w = readouts.getWidth() / 3;
+                for (auto* lab : { &inValue, &procValue, &matchValue })
+                    lab->setBounds (readouts.removeFromLeft (w).withSizeKeepingCentre (w, 30).translated (0, -8));
                 row ({ mode, window, range, clip }, l);
-                clip->setBounds (clip->getBounds().withSizeKeepingCentre (120, 28));
+                clip->setBounds (clip->getBounds().withSizeKeepingCentre (116, 28));
             }
 
             Knob *width, *monoBelow, *range;
             Choice *mode, *window;
             Toggle* clip;
             CorrelationView correlation;
-            juce::Label readout;
+            juce::Label inValue, procValue, matchValue;
         };
     }
 
-    std::unique_ptr<DetailPanel> createDetailPanel (VelvoxAudioProcessor& p, int id)
+    std::unique_ptr<DetailPanel> createDetailPanel (VelvoxAudioProcessor& p, int id, const SpectrumSource* spectrum)
     {
+        std::unique_ptr<DetailPanel> panel;
         if (id < 0)
-            return std::make_unique<OutputPanel> (p);
-
-        switch ((ModuleId) id)
         {
-            case ModuleId::eq:      return std::make_unique<EqPanel> (p);
-            case ModuleId::comp:    return std::make_unique<CompPanel> (p);
-            case ModuleId::deess:   return std::make_unique<DeEssPanel> (p);
-            case ModuleId::sat:     return std::make_unique<SatPanel> (p);
-            case ModuleId::doubler: return std::make_unique<DoublerPanel> (p);
-            case ModuleId::pitch:   return std::make_unique<PitchPanel> (p);
-            case ModuleId::chop:    return std::make_unique<ChopPanel> (p);
-            case ModuleId::delay:   return std::make_unique<DelayPanel> (p);
-            case ModuleId::reverb:  return std::make_unique<ReverbPanel> (p);
+            panel = std::make_unique<OutputPanel> (p);
         }
-        return std::make_unique<OutputPanel> (p);
+        else
+        {
+            switch ((ModuleId) id)
+            {
+                case ModuleId::eq:      panel = std::make_unique<EqPanel> (p); break;
+                case ModuleId::comp:    panel = std::make_unique<CompPanel> (p); break;
+                case ModuleId::deess:   panel = std::make_unique<DeEssPanel> (p); break;
+                case ModuleId::sat:     panel = std::make_unique<SatPanel> (p); break;
+                case ModuleId::doubler: panel = std::make_unique<DoublerPanel> (p); break;
+                case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
+                case ModuleId::chop:    panel = std::make_unique<ChopPanel> (p); break;
+                case ModuleId::delay:   panel = std::make_unique<DelayPanel> (p); break;
+                case ModuleId::reverb:  panel = std::make_unique<ReverbPanel> (p); break;
+            }
+            if (panel == nullptr)
+                panel = std::make_unique<OutputPanel> (p);
+        }
+        panel->setSpectrumSource (spectrum);
+        return panel;
     }
 }

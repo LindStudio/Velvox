@@ -9,6 +9,9 @@ namespace velvox::ui
     public:
         VelvoxLookAndFeel();
 
+        // Slider property: "hero" = large macro dial with a value-driven glow
+        static inline const juce::Identifier heroProperty { "hero" };
+
         void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height, float sliderPos,
                                float rotaryStartAngle, float rotaryEndAngle, juce::Slider&) override;
 
@@ -18,6 +21,7 @@ namespace velvox::ui
 
         void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& background,
                                    bool highlighted, bool down) override;
+        void drawButtonText (juce::Graphics&, juce::TextButton&, bool highlighted, bool down) override;
         juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
 
         void drawComboBox (juce::Graphics&, int width, int height, bool isButtonDown,
@@ -27,7 +31,19 @@ namespace velvox::ui
 
         juce::Font getPopupMenuFont() override;
         void drawPopupMenuBackground (juce::Graphics&, int width, int height) override;
+        void drawPopupMenuSectionHeader (juce::Graphics&, const juce::Rectangle<int>&, const juce::String&) override;
 
         juce::Font getLabelFont (juce::Label&) override;
+
+        void drawTooltip (juce::Graphics&, const juce::String& text, int width, int height) override;
+        juce::Rectangle<int> getTooltipBounds (const juce::String& tipText, juce::Point<int> screenPos,
+                                               juce::Rectangle<int> parentArea) override;
+
+        juce::Typeface::Ptr getTypefaceForFont (const juce::Font&) override;
+
+        void drawCornerResizer (juce::Graphics&, int w, int h, bool isMouseOver, bool isMouseDragging) override;
+
+    private:
+        juce::SharedResourcePointer<EmbeddedFonts> fonts;
     };
 }

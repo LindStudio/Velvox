@@ -2,6 +2,19 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [Unveröffentlicht] – Branch `ui-redesign`
+
+### Geändert
+- **Neues Design „Deep Dark“:** komplett überarbeitete Oberfläche, monochrom (Schwarz, Grau, Weiß) mit Glas-Flächen und weichem Licht statt Neonfarben. Rot erscheint nur noch bei echten Problemen (Clipping, Phasenauslöschung).
+  - Regler mit beleuchteter Kappe und leuchtendem Wertebogen; die Beginner-Makros leuchten stärker, je weiter sie aufgedreht sind
+  - schlanke Kopfzeile mit Segment-Schaltern (Preset, A/B, Beginner/Pro), Signalkette als feine Kacheln, Meter als schmale Seitenleisten
+- **Live-Spektrum:** Eingang (Kontur) und Ausgang (beleuchtet) als großes Hero-Element im Beginner-Modus und als Streifen über den Pro-Panels; im EQ liegt die Filterkurve direkt über dem Spektrum.
+- **Schrift Inter** (OFL) ist eingebettet und sieht deshalb auf jedem System gleich aus.
+
+### Technik
+- `SampleTap`: lock-freier Abgriff für das Spektrum am Eingang (nach Input-Gain) und am Ausgang. Das Signal wird nur gelesen; alle 1850 Prüfungen inklusive der bitgenauen Vergleiche bestehen unverändert.
+- Fenstergröße, Parameter, State und Presets sind unverändert.
+
 ## [0.2.0] – 2026-10-14 (Release Candidate, FL-Studio-Test ausstehend)
 
 ### Neu

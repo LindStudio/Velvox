@@ -3,68 +3,79 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "../DSP/Routing.h"
 
-// Visual tokens (v0.2 "club" identity).
-// The neon accent runs cyan -> violet -> magenta along the signal path, so a
-// module's colour tells you where it sits in the chain.
+// Visual tokens (v0.3 "deep dark" identity).
+// Monochrome: near-black canvas, glass surfaces made of faint white, and
+// white as the only accent - lit with soft glows instead of colour. Red is
+// reserved for real problems (clipping, phase cancellation).
 namespace velvox::ui
 {
     namespace colours
     {
-        inline const juce::Colour background { 0xff0b0d16 };
-        inline const juce::Colour panel      { 0xff121522 };
-        inline const juce::Colour raised     { 0xff1a1e2e };
-        inline const juce::Colour line       { 0xff262b40 };
-        inline const juce::Colour text       { 0xffe8ecf6 };
-        inline const juce::Colour textDim    { 0xff8a90a8 };
-        inline const juce::Colour warning    { 0xffff4d6a };
-        inline const juce::Colour ok         { 0xff3ef0b0 };
-
-        inline const juce::Colour cyan       { 0xff22e4ff };
-        inline const juce::Colour violet     { 0xff8b5cff };
-        inline const juce::Colour magenta    { 0xffff3ea5 };
-
-        // Module accents: positions on the cyan -> violet -> magenta path
-        inline const juce::Colour eq         { 0xff22e4ff };
-        inline const juce::Colour comp       { 0xff3fb8ff };
-        inline const juce::Colour deess      { 0xff5c8cff };
-        inline const juce::Colour sat        { 0xff7a6bff };
-        inline const juce::Colour doubler    { 0xff8b5cff };
-        inline const juce::Colour pitch      { 0xffb04dff };
-        inline const juce::Colour chop       { 0xffd445f0 };
-        inline const juce::Colour delay      { 0xfff040c8 };
-        inline const juce::Colour reverb     { 0xffff3ea5 };
-        inline const juce::Colour io         { 0xffc9d3ea };
+        inline const juce::Colour background { 0xff07080a };
+        inline const juce::Colour panel      { 0xff0e0f12 };   // glass panels (opaque equivalent)
+        inline const juce::Colour raised     { 0xff15161a };   // controls, tiles
+        inline const juce::Colour raisedHi   { 0xff1c1d22 };
+        inline const juce::Colour line       { 0xff24262c };   // hairlines
+        inline const juce::Colour lineSoft   { 0xff1a1b20 };
+        inline const juce::Colour text       { 0xfff2f3f5 };
+        inline const juce::Colour textDim    { 0xff8b8e97 };
+        inline const juce::Colour textFaint  { 0xff4d5058 };
+        inline const juce::Colour accent     { 0xffffffff };
+        inline const juce::Colour warning    { 0xffff5c63 };
+        inline const juce::Colour io         { 0xffc9ccd3 };
     }
 
-    inline juce::Colour moduleColour (dsp::ModuleId id)
+    // Every module shares the white accent; the chain position is shown by layout
+    inline juce::Colour moduleColour (dsp::ModuleId) { return colours::accent; }
+
+    //==========================================================================
+    // Embedded typefaces (Inter, SIL OFL 1.1). Held alive by a
+    // SharedResourcePointer in the editor so they are created once per session.
+    struct EmbeddedFonts
     {
-        using M = dsp::ModuleId;
-        switch (id)
-        {
-            case M::eq:      return colours::eq;
-            case M::comp:    return colours::comp;
-            case M::deess:   return colours::deess;
-            case M::sat:     return colours::sat;
-            case M::doubler: return colours::doubler;
-            case M::pitch:   return colours::pitch;
-            case M::chop:    return colours::chop;
-            case M::delay:   return colours::delay;
-            case M::reverb:  return colours::reverb;
-        }
-        return colours::io;
+        EmbeddedFonts();
+        juce::Typeface::Ptr regular, medium, semibold, light;
+    };
+
+    // Body text (Inter Regular / SemiBold)
+    juce::Font font (float height, bool bold = false);
+    // UI labels and buttons (Inter Medium)
+    juce::Font medium (float height);
+    // Large numbers and read-outs (Inter Display Light / SemiBold)
+    juce::Font display (float height, bool bold = false);
+    // Small upper-case captions with open tracking
+    juce::Font caps (float height);
+
+    //==========================================================================
+    // Soft radial light - the one decorative gesture of the design
+    inline void drawGlow (juce::Graphics& g, juce::Point<float> centre, float radius, float alpha,
+                          juce::Colour c = colours::accent)
+    {
+        juce::ColourGradient grad (c.withAlpha (alpha), centre.x, centre.y,
+                                   c.withAlpha (0.0f), centre.x + radius, centre.y, true);
+        grad.addColour (0.4, c.withAlpha (alpha * 0.45f));
+        g.setGradientFill (grad);
+        g.fillEllipse (juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (centre));
     }
 
-    // Body text
-    inline juce::Font font (float height, bool bold = false)
+    // Glass surface: faint fill, hairline border whose top edge catches the light
+    inline void drawGlass (juce::Graphics& g, juce::Rectangle<float> r, float corner, float fillAlpha = 0.026f)
     {
-        return juce::Font (juce::FontOptions ("Segoe UI", height, bold ? juce::Font::bold : juce::Font::plain));
+        g.setColour (colours::accent.withAlpha (fillAlpha));
+        g.fillRoundedRectangle (r, corner);
+        g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.11f), r.getX(), r.getY(),
+                                                 colours::accent.withAlpha (0.04f), r.getX(), r.getY() + std::min (r.getHeight(), 140.0f), false));
+        g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
     }
 
-    // Titles and numbers: Bahnschrift (DIN-style Windows system font); falls
-    // back to the default sans if it is not installed.
-    inline juce::Font display (float height, bool bold = false)
+    // Upper-case caption with letter spacing
+    inline void drawCaption (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> r,
+                             juce::Justification j = juce::Justification::centredLeft,
+                             juce::Colour c = colours::textDim, float height = 10.0f)
     {
-        return juce::Font (juce::FontOptions ("Bahnschrift", height, bold ? juce::Font::bold : juce::Font::plain));
+        g.setColour (c);
+        g.setFont (caps (height));
+        g.drawText (text.toUpperCase(), r, j, false);
     }
 
     // Base design size; the editor scales this canvas uniformly

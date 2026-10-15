@@ -171,7 +171,8 @@ Source/
     Ducker, Loudness (BS.1770 + LevelMatcher), StereoStage (+ Korrelation)
   Presets/                   ParameterSnapshot (Werte + Routing), Factory-Presets, PresetManager
   Mixing/                    Schnittstelle Smart-Mixing (ohne KI) + ProposalSession
-  UI/                        Theme, LookAndFeel, Widgets, ChainView, DetailPanels, BeginnerView, TopBar
+  UI/                        Theme (+ eingebettete Schrift), LookAndFeel, Widgets, Spectrum, ChainView, DetailPanels, BeginnerView, TopBar
+Resources/Fonts/             Inter 4.1 (SIL OFL 1.1), als Binärdaten ins Plugin eingebettet
 Tests/                       Offline-Tests (JUCE UnitTest), UI-Snapshots
 third_party/                 Signalsmith Stretch 1.4.0 + Linear 0.6.4 (MIT, header-only)
 docs/ARCHITECTURE.md         Architekturentscheidungen

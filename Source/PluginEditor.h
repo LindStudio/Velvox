@@ -6,6 +6,7 @@
 #include "UI/ChainView.h"
 #include "UI/DetailPanels.h"
 #include "UI/BeginnerView.h"
+#include "UI/Spectrum.h"
 
 // The whole UI is laid out on a fixed design canvas (ui::baseWidth x
 // ui::baseHeight) that is scaled uniformly to the window size, so every
@@ -13,7 +14,7 @@
 //
 //   top bar      presets, A/B, Beginner | Pro, bypass
 //   chain view   signal flow, drag & drop routing, parallel sends
-//   body         [input meter] [Beginner macros | Pro detail panel] [output meter, mono, correlation]
+//   body         [input rail] [Beginner hero + macros | Pro detail panel] [output rail]
 class VelvoxAudioProcessorEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
@@ -36,7 +37,9 @@ private:
     };
 
     VelvoxAudioProcessor& proc;
+    juce::SharedResourcePointer<velvox::ui::EmbeddedFonts> fonts; // before anything that draws text
     velvox::ui::VelvoxLookAndFeel lookAndFeel;
+    velvox::ui::SpectrumSource spectrum;
 
     Canvas canvas;
     velvox::ui::DialogOverlay dialog;
@@ -48,7 +51,7 @@ private:
     velvox::ui::LevelMeter inputMeter, outputMeter;
     velvox::ui::Knob inputGain, outputGain;
     velvox::ui::Toggle safetyClip;
-    juce::TextButton monoCheck { "Mono check" };
+    juce::TextButton monoCheck { "Mono" };
     velvox::ui::CorrelationView correlation;
 
     bool proMode = false;

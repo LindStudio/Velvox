@@ -1,4 +1,6 @@
 #include "Widgets.h"
+#include "VelvoxLookAndFeel.h"
+#include "Spectrum.h"
 #include "../Parameters/ParameterLayout.h"
 #include "../DSP/SaturationModule.h"
 
@@ -11,24 +13,27 @@ namespace velvox::ui
             return juce::jmap (juce::jlimit (minDb, maxDb, db), minDb, maxDb, r.getBottom(), r.getY());
         }
 
-        juce::Label& styleCaption (juce::Label& l, float size = 13.0f)
+        juce::Label& styleCaption (juce::Label& l, float size = 9.5f)
         {
-            l.setFont (font (size));
+            l.setFont (caps (size));
             l.setJustificationType (juce::Justification::centred);
-            l.setColour (juce::Label::textColourId, colours::text.withAlpha (0.82f));
+            l.setColour (juce::Label::textColourId, colours::textDim);
             l.setInterceptsMouseClicks (false, false);
             return l;
         }
+
+        constexpr int knobLabelH = 14, knobValueH = 16, knobGap = 4;
     }
 
     //==========================================================================
-    Knob::Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent)
+    Knob::Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour)
     {
         slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, 16);
+        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, knobValueH);
         slider.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
-        slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
         slider.setMouseDragSensitivity (220);
+        slider.setRepaintsOnMouseActivity (true);
+        slider.setVelocityModeParameters (0.9, 1, 0.08, true, juce::ModifierKeys::shiftModifier);
         addAndMakeVisible (slider);
 
         name.setText (label, juce::dontSendNotification);
@@ -43,17 +48,36 @@ namespace velvox::ui
         }
     }
 
+    void Knob::setHero (bool isHero)
+    {
+        hero = isHero;
+        slider.getProperties().set (VelvoxLookAndFeel::heroProperty, isHero);
+        styleCaption (name, isHero ? 10.5f : 9.5f);
+        name.setColour (juce::Label::textColourId, isHero ? colours::text.withAlpha (0.9f) : colours::textDim);
+        resized();
+        repaint();
+    }
+
     void Knob::resized()
     {
-        // Name, dial and value stay together as one block, centred in the cell
-        constexpr int labelH = 16, valueH = 16;
+        // Caption, dial and value stay together as one block, centred in the cell
         auto r = getLocalBounds();
-        const int dial = juce::jlimit (24, 84, std::min (r.getWidth() - 8, r.getHeight() - labelH - valueH - 4));
-        auto block = r.withSizeKeepingCentre (r.getWidth(), labelH + dial + valueH + 4);
+        const int labelH = hero ? knobLabelH + 4 : knobLabelH;
+        const int dial = juce::jlimit (24, maxDial, std::min (r.getWidth() - 8, r.getHeight() - labelH - knobValueH - 2 * knobGap));
+        auto block = r.withSizeKeepingCentre (r.getWidth(), labelH + knobGap + dial + knobValueH);
 
         name.setBounds (block.removeFromTop (labelH));
-        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, block.getWidth(), valueH);
+        block.removeFromTop (knobGap);
+        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, block.getWidth(), knobValueH);
         slider.setBounds (block);
+    }
+
+    juce::Rectangle<float> Knob::dialBounds() const
+    {
+        // Same area the look-and-feel draws the dial into
+        auto b = slider.getBounds().toFloat().withTrimmedBottom ((float) knobValueH);
+        const float size = std::min (b.getWidth(), b.getHeight());
+        return b.withSizeKeepingCentre (size, size).reduced (4.0f);
     }
 
     void Knob::refreshEffective()
@@ -79,25 +103,25 @@ namespace velvox::ui
         if (std::abs (eff - base) < 1.0e-3 * (range.getLength() + 1.0e-9))
             return;
 
-        // Dot on the dial edge where the macros move the processed value
+        // Glowing dot on the ring where the macros move the processed value
         const auto params = slider.getRotaryParameters();
         const float prop = (float) slider.valueToProportionOfLength (eff);
         const float angle = params.startAngleRadians + prop * (params.endAngleRadians - params.startAngleRadians);
-        const auto dialArea = slider.getBounds().toFloat().withTrimmedBottom (16.0f).reduced (3.0f);
-        const float radius = std::min (dialArea.getWidth(), dialArea.getHeight()) * 0.5f;
-        const auto p = dialArea.getCentre().getPointOnCircumference (radius + 1.0f, angle);
+        const auto d = dialBounds();
+        const float radius = d.getWidth() * 0.5f - std::max (2.0f, d.getWidth() * 0.5f * 0.075f) * 0.5f;
+        const auto p = d.getCentre().getPointOnCircumference (radius, angle);
 
-        g.setColour (colours::text);
-        g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre (p));
+        drawGlow (g, p, 7.0f, 0.4f);
         g.setColour (colours::background);
-        g.drawEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre (p), 1.0f);
+        g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre (p));
+        g.setColour (colours::accent);
+        g.drawEllipse (juce::Rectangle<float> (5.5f, 5.5f).withCentre (p), 1.4f);
     }
 
     //==========================================================================
-    Toggle::Toggle (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent)
+    Toggle::Toggle (APVTS& state, const char* paramId, const juce::String& label, juce::Colour)
     {
         setButtonText (label);
-        setColour (juce::ToggleButton::tickColourId, accent);
         attachment = std::make_unique<APVTS::ButtonAttachment> (state, paramId, *this);
         if (const auto* spec = findParameterSpec (paramId))
             setTooltip (spec->description);
@@ -111,6 +135,7 @@ namespace velvox::ui
         attachment = std::make_unique<APVTS::ComboBoxAttachment> (state, paramId, box);
         if (const auto* spec = findParameterSpec (paramId))
             box.setTooltip (spec->description);
+        box.setRepaintsOnMouseActivity (true);
         addAndMakeVisible (box);
 
         caption.setText (captionText, juce::dontSendNotification);
@@ -123,10 +148,10 @@ namespace velvox::ui
         auto r = getLocalBounds();
         if (caption.isVisible())
         {
-            auto block = r.withSizeKeepingCentre (r.getWidth(), 16 + 4 + 26);
-            caption.setBounds (block.removeFromTop (16));
-            block.removeFromTop (4);
-            box.setBounds (block.withSizeKeepingCentre (std::min (block.getWidth() - 4, 150), 26));
+            auto block = r.withSizeKeepingCentre (r.getWidth(), knobLabelH + 8 + 28);
+            caption.setBounds (block.removeFromTop (knobLabelH));
+            block.removeFromTop (8);
+            box.setBounds (block.withSizeKeepingCentre (std::min (block.getWidth() - 8, 150), 28));
         }
         else
         {
@@ -135,7 +160,7 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    PowerButton::PowerButton (APVTS& state, const char* paramId, juce::Colour c) : accent (c)
+    PowerButton::PowerButton (APVTS& state, const char* paramId, juce::Colour)
     {
         attachment = std::make_unique<APVTS::ButtonAttachment> (state, paramId, *this);
         setTooltip ("Switch this module on or off");
@@ -149,22 +174,19 @@ namespace velvox::ui
         r = r.withSizeKeepingCentre (size, size);
 
         if (on)
-        {
-            g.setColour (accent.withAlpha (0.25f));
-            g.fillEllipse (r.expanded (1.5f));
-        }
-        g.setColour (on ? accent.withAlpha (0.18f) : colours::raised);
+            drawGlow (g, r.getCentre(), size * 0.9f, 0.18f);
+        g.setColour (on ? colours::accent.withAlpha (0.10f) : colours::raised);
         g.fillEllipse (r);
-        g.setColour (on ? accent : (highlighted ? colours::textDim : colours::line.brighter (0.2f)));
-        g.drawEllipse (r, 1.0f);
+        g.setColour (on ? colours::accent.withAlpha (0.55f) : (highlighted ? colours::line.brighter (0.5f) : colours::line.brighter (0.15f)));
+        g.drawEllipse (r.reduced (0.5f), 1.0f);
 
         const auto c = r.getCentre();
-        const float rad = size * 0.24f;
+        const float rad = size * 0.22f;
         juce::Path p;
-        p.addCentredArc (c.x, c.y, rad, rad, 0.0f, 0.75f, juce::MathConstants<float>::twoPi - 0.75f, true);
-        p.startNewSubPath (c.x, c.y - rad * 1.25f);
-        p.lineTo (c.x, c.y - rad * 0.2f);
-        g.setColour (on ? accent : colours::textDim);
+        p.addCentredArc (c.x, c.y, rad, rad, 0.0f, 0.7f, juce::MathConstants<float>::twoPi - 0.7f, true);
+        p.startNewSubPath (c.x, c.y - rad * 1.3f);
+        p.lineTo (c.x, c.y - rad * 0.25f);
+        g.setColour (on ? colours::accent : colours::textDim);
         g.strokePath (p, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
@@ -203,54 +225,63 @@ namespace velvox::ui
         auto r = getLocalBounds().toFloat();
 
         // LUFS read-out
-        auto readout = r.removeFromBottom (32.0f);
+        auto readout = r.removeFromBottom (40.0f);
         g.setColour (colours::text);
-        g.setFont (display (16.0f));
-        g.drawText (loudness <= -99.0f ? juce::String ("--") : juce::String (loudness, 1),
-                    readout.removeFromTop (18.0f), juce::Justification::centred, false);
-        g.setColour (colours::textDim);
-        g.setFont (font (10.5f));
-        g.drawText ("LUFS", readout, juce::Justification::centredTop, false);
+        g.setFont (display (22.0f));
+        g.drawText (loudness <= -99.0f ? juce::String ("-") : juce::String (loudness, 1),
+                    readout.removeFromTop (24.0f), juce::Justification::centred, false);
+        drawCaption (g, "LUFS", readout, juce::Justification::centredTop, colours::textFaint, 9.0f);
 
-        auto lamp = r.removeFromTop (8.0f);
-        r.removeFromTop (4.0f);
-        g.setColour (clipLatched ? colours::warning : colours::raised);
-        g.fillRoundedRectangle (lamp.reduced (2.0f, 0.0f), 2.0f);
+        // Clip lamp
+        auto lampRow = r.removeFromTop (10.0f);
+        r.removeFromTop (8.0f);
+        const auto lamp = juce::Rectangle<float> (6.0f, 6.0f).withCentre (lampRow.getCentre());
+        if (clipLatched)
+            drawGlow (g, lamp.getCentre(), 9.0f, 0.5f, colours::warning);
+        g.setColour (clipLatched ? colours::warning : colours::accent.withAlpha (0.08f));
+        g.fillEllipse (lamp);
 
-        auto scale = r.removeFromLeft (22.0f);
-        g.setFont (display (10.5f));
+        auto scale = scaleLeft ? r.removeFromLeft (20.0f) : r.removeFromRight (20.0f);
+        auto bars = r.withSizeKeepingCentre (std::min (r.getWidth(), 18.0f), r.getHeight());
+        if (scaleLeft)
+            bars.setX (r.getX() + 4.0f);
+        else
+            bars.setX (r.getRight() - 4.0f - bars.getWidth());
+
+        g.setFont (medium (9.0f));
         for (float db : { 0.0f, -6.0f, -12.0f, -24.0f, -36.0f, -48.0f })
         {
-            const float y = dbToY (db, r, minDb, maxDb);
-            g.setColour (colours::textDim.withAlpha (0.8f));
-            g.drawText (juce::String ((int) db), scale.withY (y - 6.0f).withHeight (12.0f), juce::Justification::centredRight, false);
-            g.setColour (colours::line.withAlpha (0.6f));
-            g.drawHorizontalLine ((int) y, r.getX() + 3.0f, r.getRight());
+            const float y = dbToY (db, bars, minDb, maxDb);
+            g.setColour (colours::textFaint);
+            g.drawText (juce::String ((int) std::abs (db)), scale.withY (y - 6.0f).withHeight (12.0f),
+                        scaleLeft ? juce::Justification::centredRight : juce::Justification::centredLeft, false);
         }
-        r.removeFromLeft (4.0f);
 
-        const float barW = (r.getWidth() - 3.0f) * 0.5f;
+        const float barGap = 4.0f;
+        const float barW = (bars.getWidth() - barGap) * 0.5f;
         for (int ch = 0; ch < 2; ++ch)
         {
-            auto bar = juce::Rectangle<float> (r.getX() + (float) ch * (barW + 3.0f), r.getY(), barW, r.getHeight());
-            g.setColour (colours::raised);
-            g.fillRoundedRectangle (bar, 2.0f);
+            auto bar = juce::Rectangle<float> (bars.getX() + (float) ch * (barW + barGap), bars.getY(), barW, bars.getHeight());
+            g.setColour (colours::accent.withAlpha (0.05f));
+            g.fillRoundedRectangle (bar, barW * 0.5f);
 
             const float db = juce::Decibels::gainToDecibels (level[(size_t) ch], -100.0f);
             const auto fill = bar.withTop (dbToY (db, bar, minDb, maxDb));
-
-            juce::ColourGradient grad (colours::cyan, bar.getX(), bar.getBottom(), colours::warning, bar.getX(), bar.getY(), false);
-            grad.addColour (juce::jmap (-18.0, (double) minDb, (double) maxDb, 0.0, 1.0), colours::cyan);
-            grad.addColour (juce::jmap (-6.0, (double) minDb, (double) maxDb, 0.0, 1.0), colours::violet);
-            grad.addColour (juce::jmap (-1.0, (double) minDb, (double) maxDb, 0.0, 1.0), colours::magenta);
-            g.setGradientFill (grad);
-            g.fillRoundedRectangle (fill, 2.0f);
+            if (fill.getHeight() > 0.5f)
+            {
+                juce::ColourGradient grad (colours::accent.withAlpha (0.28f), 0.0f, bar.getBottom(),
+                                           colours::accent, 0.0f, bar.getY(), false);
+                grad.addColour (juce::jmap (-1.0, (double) minDb, (double) maxDb, 0.0, 1.0), colours::accent);
+                grad.addColour (juce::jmap (0.0, (double) minDb, (double) maxDb, 0.0, 1.0), colours::warning);
+                g.setGradientFill (grad);
+                g.fillRoundedRectangle (fill, barW * 0.5f);
+            }
 
             const float holdDb = juce::Decibels::gainToDecibels (hold[(size_t) ch], -100.0f);
             if (holdDb > minDb)
             {
-                g.setColour (holdDb > 0.0f ? colours::warning : colours::text);
-                g.fillRect (bar.getX(), dbToY (holdDb, bar, minDb, maxDb) - 1.0f, bar.getWidth(), 2.0f);
+                g.setColour (holdDb > 0.0f ? colours::warning : colours::accent.withAlpha (0.9f));
+                g.fillRoundedRectangle (bar.getX(), dbToY (holdDb, bar, minDb, maxDb) - 1.0f, bar.getWidth(), 2.0f, 1.0f);
             }
         }
     }
@@ -270,27 +301,26 @@ namespace velvox::ui
     {
         auto r = getLocalBounds().toFloat();
         if (caption.isNotEmpty())
-        {
-            g.setColour (colours::textDim);
-            g.setFont (font (10.5f));
-            g.drawText (caption, r.removeFromTop (14.0f), juce::Justification::centred, false);
-        }
-        auto label = r.removeFromBottom (16.0f);
+            drawCaption (g, caption, r.removeFromTop (16.0f), juce::Justification::centred, colours::textDim, 9.0f);
+        auto label = r.removeFromBottom (20.0f);
+        r.removeFromTop (4.0f);
 
-        g.setColour (colours::raised);
-        g.fillRoundedRectangle (r, 3.0f);
+        const auto bar = r.withSizeKeepingCentre (6.0f, r.getHeight());
+        g.setColour (colours::accent.withAlpha (0.05f));
+        g.fillRoundedRectangle (bar, 3.0f);
 
-        const float h = r.getHeight() * juce::jlimit (0.0f, 1.0f, shown / maxDb);
+        const float h = bar.getHeight() * juce::jlimit (0.0f, 1.0f, shown / maxDb);
         if (h > 0.5f)
         {
-            g.setColour (accent.withAlpha (0.25f));
-            g.fillRoundedRectangle (r.withHeight (h).expanded (1.5f, 0.0f), 3.0f);
-            g.setColour (accent);
-            g.fillRoundedRectangle (r.withHeight (h), 3.0f);
+            const auto fill = bar.withHeight (h);
+            drawGlow (g, { fill.getCentreX(), fill.getBottom() }, 12.0f, 0.25f);
+            g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.35f), 0.0f, fill.getY(),
+                                                     colours::accent, 0.0f, fill.getBottom(), false));
+            g.fillRoundedRectangle (fill, 3.0f);
         }
 
-        g.setColour (colours::textDim);
-        g.setFont (display (11.5f));
+        g.setColour (colours::text.withAlpha (0.8f));
+        g.setFont (medium (11.5f));
         g.drawText (shown < 0.05f ? "0.0" : "-" + juce::String (shown, 1), label, juce::Justification::centred, false);
     }
 
@@ -308,26 +338,27 @@ namespace velvox::ui
     void CorrelationView::paint (juce::Graphics& g)
     {
         auto r = getLocalBounds().toFloat();
-        auto labels = r.removeFromBottom (13.0f);
-        g.setFont (display (10.5f));
-        g.setColour (colours::textDim);
+        auto labels = r.removeFromBottom (12.0f);
+        g.setFont (medium (9.0f));
+        g.setColour (colours::textFaint);
         g.drawText ("-1", labels, juce::Justification::left, false);
         g.drawText ("0", labels, juce::Justification::centred, false);
         g.drawText ("+1", labels, juce::Justification::right, false);
 
-        const auto bar = r.reduced (0.0f, 2.0f);
-        g.setColour (colours::raised);
-        g.fillRoundedRectangle (bar, 3.0f);
-        g.setColour (colours::line);
-        g.drawVerticalLine ((int) bar.getCentreX(), bar.getY(), bar.getBottom());
+        const auto track = r.withSizeKeepingCentre (r.getWidth(), 3.0f);
+        g.setColour (colours::accent.withAlpha (0.07f));
+        g.fillRoundedRectangle (track, 1.5f);
+        g.setColour (colours::accent.withAlpha (0.18f));
+        g.fillRect (juce::Rectangle<float> (track.getCentreX() - 0.5f, track.getY() - 3.0f, 1.0f, track.getHeight() + 6.0f));
 
-        const float x = juce::jmap (juce::jlimit (-1.0f, 1.0f, value), -1.0f, 1.0f, bar.getX(), bar.getRight());
-        const auto colour = value < 0.0f ? colours::warning : (value < 0.3f ? colours::magenta : colours::ok);
-        g.setColour (colour.withAlpha (0.35f));
-        g.fillRoundedRectangle (juce::Rectangle<float> (std::min (x, bar.getCentreX()), bar.getY(),
-                                                        std::abs (x - bar.getCentreX()), bar.getHeight()), 3.0f);
+        const float x = juce::jmap (juce::jlimit (-1.0f, 1.0f, value), -1.0f, 1.0f, track.getX(), track.getRight());
+        const auto colour = value < 0.0f ? colours::warning : colours::accent;
+        g.setColour (colour.withAlpha (0.45f));
+        g.fillRoundedRectangle (juce::Rectangle<float> (std::min (x, track.getCentreX()), track.getY(),
+                                                        std::abs (x - track.getCentreX()), track.getHeight()), 1.5f);
+        drawGlow (g, { x, track.getCentreY() }, 10.0f, 0.35f, colour);
         g.setColour (colour);
-        g.fillRoundedRectangle (juce::Rectangle<float> (4.0f, bar.getHeight() + 4.0f).withCentre ({ x, bar.getCentreY() }), 2.0f);
+        g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ x, track.getCentreY() }));
     }
 
     //==========================================================================
@@ -350,15 +381,14 @@ namespace velvox::ui
         active = on;
 
         constexpr double displayRate = 48000.0;
-        constexpr float rangeDb = 18.0f;
-        const auto r = getLocalBounds().toFloat().reduced (1.0f, 4.0f);
+        const auto r = getLocalBounds().toFloat().reduced (0.0f, 6.0f);
 
         curve.clear();
         const int points = std::max (64, getWidth() / 2);
         for (int i = 0; i <= points; ++i)
         {
             const double t = (double) i / points;
-            const double f = 20.0 * std::pow (1000.0, t);
+            const double f = SpectrumSource::minHz * std::pow ((double) SpectrumSource::maxHz / SpectrumSource::minHz, t);
             const double eqLin = std::pow (10.0, dsp::EqualizerModule::responseDb (s, f, displayRate) / 20.0);
             const double lin = 1.0 + (eqLin - 1.0) * mix; // magnitude approximation of the dry/wet blend
             const float db = (float) (20.0 * std::log10 (std::max (lin, 1.0e-6)));
@@ -375,40 +405,34 @@ namespace velvox::ui
 
     void EqCurve::paint (juce::Graphics& g)
     {
-        const auto bounds = getLocalBounds().toFloat();
-        const auto r = bounds.reduced (1.0f, 4.0f);
+        const auto r = getLocalBounds().toFloat().reduced (0.0f, 6.0f);
+        const float zeroY = dbToY (0.0f, r, -rangeDb, rangeDb);
 
-        g.setColour (colours::background.withAlpha (0.7f));
-        g.fillRoundedRectangle (bounds, 6.0f);
-
-        g.setFont (display (10.5f));
-        for (double f : { 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0 })
+        // dB guides of the EQ scale
+        for (float db : { -12.0f, 12.0f })
         {
-            const float x = r.getX() + (float) (std::log (f / 20.0) / std::log (1000.0)) * r.getWidth();
-            g.setColour (colours::line.withAlpha (0.5f));
-            g.drawVerticalLine ((int) x, r.getY(), r.getBottom());
-            g.setColour (colours::textDim.withAlpha (0.7f));
-            g.drawText (f >= 1000.0 ? juce::String ((int) (f / 1000.0)) + "k" : juce::String ((int) f),
-                        juce::Rectangle<float> (x + 2.0f, r.getBottom() - 13.0f, 30.0f, 12.0f), juce::Justification::left, false);
+            g.setColour (colours::accent.withAlpha (0.03f));
+            g.fillRect (juce::Rectangle<float> (r.getX(), dbToY (db, r, -rangeDb, rangeDb), r.getWidth(), 1.0f));
         }
-        for (float db : { -12.0f, -6.0f, 0.0f, 6.0f, 12.0f })
-        {
-            const float y = dbToY (db, r, -18.0f, 18.0f);
-            g.setColour (db == 0.0f ? colours::line : colours::line.withAlpha (0.45f));
-            g.drawHorizontalLine ((int) y, r.getX(), r.getRight());
-        }
+        g.setColour (colours::accent.withAlpha (0.08f));
+        g.fillRect (juce::Rectangle<float> (r.getX(), zeroY, r.getWidth(), 1.0f));
+        g.setFont (medium (9.0f));
+        g.setColour (colours::textFaint);
+        for (float db : { -12.0f, 0.0f, 12.0f })
+            g.drawText ((db > 0 ? "+" : "") + juce::String ((int) db), juce::Rectangle<float> (r.getRight() - 30.0f, dbToY (db, r, -rangeDb, rangeDb) - 13.0f, 26.0f, 12.0f),
+                        juce::Justification::right, false);
 
-        const auto accent = active ? colours::eq : colours::textDim;
+        const float a = active ? 1.0f : 0.35f;
         juce::Path fill (curve);
-        fill.lineTo (r.getRight(), dbToY (0.0f, r, -18.0f, 18.0f));
-        fill.lineTo (r.getX(), dbToY (0.0f, r, -18.0f, 18.0f));
+        fill.lineTo (r.getRight(), zeroY);
+        fill.lineTo (r.getX(), zeroY);
         fill.closeSubPath();
-        g.setGradientFill (juce::ColourGradient (accent.withAlpha (0.22f), r.getX(), r.getY(), colours::violet.withAlpha (0.08f), r.getRight(), r.getBottom(), false));
+        g.setColour (colours::accent.withAlpha (0.035f * a));
         g.fillPath (fill);
 
-        g.setColour (accent.withAlpha (0.25f));
-        g.strokePath (curve, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour (accent);
+        g.setColour (colours::accent.withAlpha (0.10f * a));
+        g.strokePath (curve, juce::PathStrokeType (7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (colours::accent.withAlpha (0.95f * a));
         g.strokePath (curve, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
@@ -434,14 +458,16 @@ namespace velvox::ui
     void SaturationCurve::paint (juce::Graphics& g)
     {
         const auto bounds = getLocalBounds().toFloat();
-        g.setColour (colours::background.withAlpha (0.7f));
-        g.fillRoundedRectangle (bounds, 6.0f);
+        drawGlass (g, bounds, 12.0f, 0.018f);
 
-        const auto r = bounds.reduced (8.0f);
-        g.setColour (colours::line.withAlpha (0.6f));
-        g.drawHorizontalLine ((int) r.getCentreY(), r.getX(), r.getRight());
-        g.drawVerticalLine ((int) r.getCentreX(), r.getY(), r.getBottom());
-        g.setColour (colours::line);
+        const auto r = bounds.reduced (14.0f);
+        g.setColour (colours::accent.withAlpha (0.05f));
+        for (int i = 1; i < 4; ++i)
+        {
+            g.fillRect (juce::Rectangle<float> (r.getX() + r.getWidth() * (float) i / 4.0f, r.getY(), 1.0f, r.getHeight()));
+            g.fillRect (juce::Rectangle<float> (r.getX(), r.getY() + r.getHeight() * (float) i / 4.0f, r.getWidth(), 1.0f));
+        }
+        g.setColour (colours::accent.withAlpha (0.10f));
         g.drawLine (r.getX(), r.getBottom(), r.getRight(), r.getY(), 1.0f);
 
         const float driveLin = juce::Decibels::decibelsToGain (drive);
@@ -462,60 +488,70 @@ namespace velvox::ui
                 p.lineTo (px, py);
         }
 
-        const auto c = active ? colours::sat : colours::textDim;
-        g.setColour (c.withAlpha (0.25f));
-        g.strokePath (p, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour (c);
+        const float a = active ? 1.0f : 0.35f;
+        g.setColour (colours::accent.withAlpha (0.10f * a));
+        g.strokePath (p, juce::PathStrokeType (7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (colours::accent.withAlpha (0.95f * a));
         g.strokePath (p, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        drawCaption (g, "Transfer", bounds.reduced (14.0f, 10.0f).withHeight (14.0f), juce::Justification::centredLeft, colours::textFaint, 9.0f);
     }
 
     //==========================================================================
-    void StepPatternView::set (const char* steps, int currentStep, bool activeNow, juce::Colour accent)
+    void StepPatternView::set (const char* steps, int currentStep, bool activeNow, juce::Colour)
     {
         const juce::String s (steps);
-        if (s != pattern || currentStep != current || activeNow != isActive || accent != colour)
+        if (s != pattern || currentStep != current || activeNow != isActive)
         {
             pattern = s;
             current = currentStep;
             isActive = activeNow;
-            colour = accent;
             repaint();
         }
     }
 
     void StepPatternView::paint (juce::Graphics& g)
     {
-        const auto r = getLocalBounds().toFloat();
+        const auto r = getLocalBounds().toFloat().withTrimmedBottom (6.0f);
         const int n = juce::jmax (1, pattern.length());
-        const float gap = 4.0f;
-        const float w = (r.getWidth() - gap * (n - 1)) / n;
+        const float gap = 5.0f;
+        const float w = (r.getWidth() - gap * (float) (n - 1)) / (float) n;
+        const float a = isActive ? 1.0f : 0.45f;
 
         for (int i = 0; i < n; ++i)
         {
-            const auto cell = juce::Rectangle<float> (r.getX() + i * (w + gap), r.getY(), w, r.getHeight());
+            const auto cell = juce::Rectangle<float> (r.getX() + (float) i * (w + gap), r.getY(), w, r.getHeight());
             const auto type = pattern[i];
             const bool now = isActive && i == current;
 
-            juce::Colour fill = colours::raised;
-            if (type == 'x') fill = colour.withAlpha (isActive ? 0.55f : 0.25f);
-            if (type == 'r') fill = colours::magenta.withAlpha (isActive ? 0.45f : 0.2f);
             if (now)
+                drawGlow (g, cell.getCentre(), std::max (w, cell.getHeight()) * 0.9f, 0.22f);
+
+            if (type == 'x')
             {
-                g.setColour (colours::text.withAlpha (0.3f));
-                g.fillRoundedRectangle (cell.expanded (2.0f), 4.0f);
+                g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha ((now ? 1.0f : 0.55f) * a), 0.0f, cell.getY(),
+                                                         colours::accent.withAlpha ((now ? 0.8f : 0.30f) * a), 0.0f, cell.getBottom(), false));
+                g.fillRoundedRectangle (cell, 4.0f);
             }
-            g.setColour (fill);
-            g.fillRoundedRectangle (cell, 3.0f);
-            if (type == 'r')
+            else if (type == 'r')
             {
-                g.setColour (colours::text.withAlpha (0.8f));
-                g.setFont (display (11.0f));
+                g.setColour (colours::accent.withAlpha (0.08f * a));
+                g.fillRoundedRectangle (cell, 4.0f);
+                g.setColour (colours::accent.withAlpha ((now ? 1.0f : 0.55f) * a));
+                g.drawRoundedRectangle (cell.reduced (0.5f), 4.0f, 1.2f);
+                g.setFont (caps (10.0f));
                 g.drawText ("R", cell, juce::Justification::centred, false);
             }
+            else
+            {
+                g.setColour (colours::accent.withAlpha (now ? 0.16f : 0.045f));
+                g.fillRoundedRectangle (cell, 4.0f);
+            }
+
             if (i % 4 == 0)
             {
-                g.setColour (colours::line.brighter (0.3f));
-                g.fillRect (cell.getX(), r.getBottom() + 3.0f, w, 1.5f);
+                g.setColour (colours::accent.withAlpha (0.18f));
+                g.fillRoundedRectangle (cell.getX(), r.getBottom() + 4.0f, w, 1.5f, 0.75f);
             }
         }
     }

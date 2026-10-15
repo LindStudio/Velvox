@@ -8,13 +8,14 @@ namespace velvox::ui
     DialogOverlay::DialogOverlay()
     {
         setWantsKeyboardFocus (true);
-        input.setFont (font (15.0f));
-        input.setIndents (8, 6);
+        input.setFont (font (14.0f));
+        input.setIndents (10, 7);
         input.onReturnKey = [this] { confirm(); };
         input.onEscapeKey = [this] { close(); };
         addChildComponent (input);
         addAndMakeVisible (confirmButton);
         addAndMakeVisible (cancelButton);
+        confirmButton.setToggleState (true, juce::dontSendNotification); // primary action: lit
         confirmButton.onClick = [this] { confirm(); };
         cancelButton.onClick = [this] { close(); };
         setVisible (false);
@@ -65,38 +66,39 @@ namespace velvox::ui
 
     juce::Rectangle<int> DialogOverlay::cardBounds() const
     {
-        return getLocalBounds().withSizeKeepingCentre (420, hasInput ? 200 : 170);
+        return getLocalBounds().withSizeKeepingCentre (440, hasInput ? 214 : 176);
     }
 
     void DialogOverlay::paint (juce::Graphics& g)
     {
-        g.fillAll (colours::background.withAlpha (0.72f));
+        g.fillAll (colours::background.withAlpha (0.78f));
         const auto card = cardBounds().toFloat();
+        drawGlow (g, card.getCentre(), card.getWidth() * 0.8f, 0.05f);
         g.setColour (colours::panel);
-        g.fillRoundedRectangle (card, 10.0f);
-        g.setColour (colours::line);
-        g.drawRoundedRectangle (card.reduced (0.5f), 10.0f, 1.0f);
+        g.fillRoundedRectangle (card, 16.0f);
+        drawGlass (g, card, 16.0f, 0.03f);
 
-        auto r = cardBounds().reduced (22, 18);
+        auto r = cardBounds().reduced (26, 22);
         g.setColour (colours::text);
-        g.setFont (font (18.0f, true));
+        g.setFont (font (17.0f, true));
         g.drawText (title, r.removeFromTop (26), juce::Justification::centredLeft, true);
+        r.removeFromTop (4);
         g.setColour (colours::textDim);
-        g.setFont (font (14.0f));
-        g.drawFittedText (message, r.removeFromTop (40), juce::Justification::topLeft, 2);
+        g.setFont (font (12.5f));
+        g.drawFittedText (message, r.removeFromTop (36), juce::Justification::topLeft, 2);
     }
 
     void DialogOverlay::resized()
     {
-        auto r = cardBounds().reduced (22, 18);
-        r.removeFromTop (26 + 40);
+        auto r = cardBounds().reduced (26, 22);
+        r.removeFromTop (26 + 4 + 36);
         if (hasInput)
-            input.setBounds (r.removeFromTop (32));
+            input.setBounds (r.removeFromTop (34));
 
         auto buttons = r.removeFromBottom (32);
-        confirmButton.setBounds (buttons.removeFromRight (110));
-        buttons.removeFromRight (10);
-        cancelButton.setBounds (buttons.removeFromRight (100));
+        confirmButton.setBounds (buttons.removeFromRight (104));
+        buttons.removeFromRight (8);
+        cancelButton.setBounds (buttons.removeFromRight (92));
     }
 
     bool DialogOverlay::keyPressed (const juce::KeyPress& key)
@@ -123,11 +125,23 @@ namespace velvox::ui
 
     //==========================================================================
     TopBar::TopBar (VelvoxAudioProcessor& p, DialogOverlay& d)
-        : proc (p), dialog (d), bypass (p.getState(), pid::bypass, "Bypass", colours::warning)
+        : proc (p), dialog (d), bypass (p.getState(), pid::bypass, "Bypass")
     {
         for (auto* c : std::initializer_list<juce::Component*> { &presetButton, &prev, &next, &save, &remove, &slotA, &slotB,
                                                                   &copy, &beginner, &pro, &bypass })
             addAndMakeVisible (c);
+
+        // Segmented groups
+        prev.setConnectedEdges (juce::Button::ConnectedOnRight);
+        presetButton.setConnectedEdges (juce::Button::ConnectedOnLeft | juce::Button::ConnectedOnRight);
+        next.setConnectedEdges (juce::Button::ConnectedOnLeft);
+        slotA.setConnectedEdges (juce::Button::ConnectedOnRight);
+        slotB.setConnectedEdges (juce::Button::ConnectedOnLeft);
+        beginner.setConnectedEdges (juce::Button::ConnectedOnRight);
+        pro.setConnectedEdges (juce::Button::ConnectedOnLeft);
+
+        presetButton.setColour (juce::TextButton::textColourOffId, colours::text);
+        presetButton.setColour (juce::TextButton::buttonColourId, colours::accent.withAlpha (0.025f));
 
         presetButton.setTooltip ("Choose a preset");
         presetButton.onClick = [this] { showPresetMenu(); };
@@ -258,49 +272,66 @@ namespace velvox::ui
 
     void TopBar::paint (juce::Graphics& g)
     {
-        auto r = getLocalBounds();
-        g.setColour (colours::panel);
-        g.fillRect (r);
-        juce::ColourGradient line (colours::cyan, 0.0f, (float) r.getBottom(), colours::magenta, (float) r.getRight(), (float) r.getBottom(), false);
-        line.addColour (0.5, colours::violet);
-        g.setGradientFill (line);
-        g.fillRect (r.removeFromBottom (2));
+        const auto r = getLocalBounds().toFloat();
 
-        auto brand = getLocalBounds().reduced (20, 0).removeFromLeft (230);
+        // Hairline that fades out towards both edges
+        juce::ColourGradient line (colours::accent.withAlpha (0.0f), r.getX(), r.getBottom(), colours::accent.withAlpha (0.0f), r.getRight(), r.getBottom(), false);
+        line.addColour (0.5, colours::accent.withAlpha (0.10f));
+        g.setGradientFill (line);
+        g.fillRect (r.withTop (r.getBottom() - 1.0f));
+
+        // Brand: a lit orb and the word mark
+        auto brand = getLocalBounds().reduced (24, 0).removeFromLeft (220).toFloat();
+        const auto orb = juce::Point<float> (brand.getX() + 8.0f, brand.getCentreY());
+        drawGlow (g, orb, 18.0f, 0.35f);
+        g.setColour (colours::accent);
+        g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (orb));
+        brand.removeFromLeft (26.0f);
+
         g.setColour (colours::text);
-        g.setFont (display (28.0f, true));
-        g.drawText (product::name, brand.removeFromLeft (110), juce::Justification::centredLeft, false);
+        g.setFont (font (19.0f, true).withExtraKerningFactor (0.02f));
+        const auto nameText = juce::String (product::name).toLowerCase();
+        g.drawText (nameText, brand.withY (brand.getCentreY() - 19.0f).withHeight (24.0f), juce::Justification::centredLeft, false);
+        drawCaption (g, "Vocal suite  " + juce::String (product::versionString), brand.withY (brand.getCentreY() + 6.0f).withHeight (12.0f),
+                     juce::Justification::centredLeft, colours::textFaint, 8.5f);
+    }
+
+    void TopBar::paintOverChildren (juce::Graphics& g)
+    {
+        // Chevron on the preset field
+        const auto b = presetButton.getBounds().toFloat();
+        const float ax = b.getRight() - 14.0f, ay = b.getCentreY();
+        juce::Path arrow;
+        arrow.startNewSubPath (ax - 3.5f, ay - 1.75f);
+        arrow.lineTo (ax, ay + 1.75f);
+        arrow.lineTo (ax + 3.5f, ay - 1.75f);
         g.setColour (colours::textDim);
-        g.setFont (font (12.0f));
-        g.drawText ("Vocal suite " + juce::String (product::versionString), brand, juce::Justification::centredLeft, false);
+        g.strokePath (arrow, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
     void TopBar::resized()
     {
-        auto r = getLocalBounds().reduced (20, 13).withTrimmedBottom (2);
-        r.removeFromLeft (240);
+        auto r = getLocalBounds().reduced (24, 15);
+        r.removeFromLeft (220);
 
-        auto right = r.removeFromRight (470);
-        bypass.setBounds (right.removeFromRight (96));
-        right.removeFromRight (16);
-        pro.setBounds (right.removeFromRight (60));
+        auto right = r.removeFromRight (448);
+        bypass.setBounds (right.removeFromRight (100));
+        right.removeFromRight (14);
+        pro.setBounds (right.removeFromRight (52));
         beginner.setBounds (right.removeFromRight (84));
-        right.removeFromRight (16);
-        copy.setBounds (right.removeFromRight (112));
+        right.removeFromRight (14);
+        copy.setBounds (right.removeFromRight (100));
         right.removeFromRight (6);
         slotB.setBounds (right.removeFromRight (34));
-        right.removeFromRight (4);
         slotA.setBounds (right.removeFromRight (34));
 
-        auto mid = r.withSizeKeepingCentre (std::min (r.getWidth() - 10, 440), r.getHeight());
-        prev.setBounds (mid.removeFromLeft (30));
-        mid.removeFromLeft (6);
-        remove.setBounds (mid.removeFromRight (68));
+        auto mid = r.withSizeKeepingCentre (std::min (r.getWidth() - 20, 520), r.getHeight());
+        remove.setBounds (mid.removeFromRight (62));
         mid.removeFromRight (6);
-        save.setBounds (mid.removeFromRight (58));
-        mid.removeFromRight (6);
-        next.setBounds (mid.removeFromRight (30));
-        mid.removeFromRight (6);
+        save.setBounds (mid.removeFromRight (54));
+        mid.removeFromRight (10);
+        prev.setBounds (mid.removeFromLeft (34));
+        next.setBounds (mid.removeFromRight (34));
         presetButton.setBounds (mid);
     }
 }

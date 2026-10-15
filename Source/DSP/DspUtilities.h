@@ -163,4 +163,49 @@ namespace velvox::dsp
 
         float pull() noexcept { return peak.exchange (0.0f, std::memory_order_relaxed); }
     };
+
+    // Lock-free mono sample tap for the UI spectrum analyser. The audio thread
+    // writes the channel average (never allocates, never blocks; drops samples
+    // when the UI is not reading), the UI thread drains it. Display only - the
+    // audio passing through is never touched.
+    class SampleTap
+    {
+    public:
+        static constexpr int capacity = 16384;
+
+        void push (const float* const* io, int numChannels, int n) noexcept
+        {
+            int start1, size1, start2, size2;
+            fifo.prepareToWrite (n, start1, size1, start2, size2);
+            const float scale = numChannels > 1 ? 0.5f : 1.0f;
+            const auto write = [&] (int dest, int count, int offset)
+            {
+                for (int i = 0; i < count; ++i)
+                {
+                    float s = io[0][offset + i];
+                    if (numChannels > 1)
+                        s += io[1][offset + i];
+                    data[(size_t) (dest + i)] = s * scale;
+                }
+            };
+            write (start1, size1, 0);
+            write (start2, size2, size1);
+            fifo.finishedWrite (size1 + size2);
+        }
+
+        // Copies up to maxSamples into dest; returns the number copied
+        int pull (float* dest, int maxSamples) noexcept
+        {
+            int start1, size1, start2, size2;
+            fifo.prepareToRead (maxSamples, start1, size1, start2, size2);
+            std::copy_n (data.data() + start1, size1, dest);
+            std::copy_n (data.data() + start2, size2, dest + size1);
+            fifo.finishedRead (size1 + size2);
+            return size1 + size2;
+        }
+
+    private:
+        juce::AbstractFifo fifo { capacity };
+        std::array<float, capacity> data {};
+    };
 }

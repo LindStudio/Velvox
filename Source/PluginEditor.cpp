@@ -10,40 +10,49 @@ namespace
     const juce::Identifier uiSelectionProperty { "uiSelection" };
 
     // Canvas layout (design units)
-    constexpr int topBarH = 60;
+    constexpr int topBarH = 64;
     constexpr int margin = 16;
-    constexpr int chainTop = 70;
-    constexpr int chainH = 104;
-    constexpr int bodyTop = chainTop + chainH + 10;
-    constexpr int leftW = 92;
-    constexpr int rightW = 170;
+    constexpr int chainTop = 74;
+    constexpr int chainH = 90;
+    constexpr int bodyTop = chainTop + chainH + 6;
+    constexpr int leftW = 78;
+    constexpr int rightW = 164;
     constexpr int gap = 12;
+
+    juce::Rectangle<int> leftRail()  { return { margin, bodyTop, leftW, baseHeight - bodyTop - margin }; }
+    juce::Rectangle<int> rightRail() { return { baseWidth - margin - rightW, bodyTop, rightW, baseHeight - bodyTop - margin }; }
 }
 
 void VelvoxAudioProcessorEditor::Canvas::paint (juce::Graphics& g)
 {
     g.fillAll (colours::background);
 
-    // Faint neon haze behind the chain - the one decorative gesture
-    g.setGradientFill (juce::ColourGradient (colours::violet.withAlpha (0.10f), (float) baseWidth * 0.5f, (float) chainTop + chainH * 0.5f,
-                                             colours::background.withAlpha (0.0f), (float) baseWidth * 0.5f, (float) bodyTop + 120.0f, true));
-    g.fillRect (0, topBarH, baseWidth, bodyTop + 60 - topBarH);
+    // Light from above: a wide, very soft pool behind the header and chain
+    drawGlow (g, { baseWidth * 0.5f, -140.0f }, 760.0f, 0.06f);
+    drawGlow (g, { baseWidth * 0.5f, (float) baseHeight + 260.0f }, 620.0f, 0.03f);
 
-    g.setColour (colours::textDim);
-    g.setFont (font (12.5f, true));
-    g.drawText ("Input", juce::Rectangle<int> (margin, bodyTop, leftW, 20), juce::Justification::centred, false);
-    g.drawText ("Output", juce::Rectangle<int> (baseWidth - margin - rightW, bodyTop, rightW, 20), juce::Justification::centred, false);
+    for (auto rail : { leftRail(), rightRail() })
+    {
+        const auto r = rail.toFloat();
+        g.setColour (colours::panel);
+        g.fillRoundedRectangle (r, 16.0f);
+        drawGlass (g, r, 16.0f, 0.012f);
+    }
+
+    drawCaption (g, "Input", leftRail().toFloat().withHeight (34.0f), juce::Justification::centred, colours::textDim, 9.0f);
+    drawCaption (g, "Output", rightRail().toFloat().withHeight (34.0f), juce::Justification::centred, colours::textDim, 9.0f);
 }
 
 VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     : AudioProcessorEditor (&p),
       proc (p),
+      spectrum (p.getChain().meters.inputTap, p.getChain().meters.outputTap),
       topBar (p, dialog),
       chainView (p),
       beginnerView (p),
-      inputGain (p.getState(), pid::inputGain, "Gain", colours::io),
-      outputGain (p.getState(), pid::outputGain, "Gain", colours::io),
-      safetyClip (p.getState(), pid::safetyClip, "Clip guard", colours::cyan)
+      inputGain (p.getState(), pid::inputGain, "Gain"),
+      outputGain (p.getState(), pid::outputGain, "Gain"),
+      safetyClip (p.getState(), pid::safetyClip, "Clip guard")
 {
     setLookAndFeel (&lookAndFeel);
 
@@ -55,14 +64,19 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
         canvas.addAndMakeVisible (c);
     canvas.addChildComponent (dialog);
 
+    beginnerView.setSpectrumSource (&spectrum);
+
     inputMeter.setTooltip ("Level entering the chain (after input gain), loudness in LUFS");
     outputMeter.setTooltip ("Level leaving the plugin. The red lamp shows overs above 0 dBFS - click it to reset.");
+    outputMeter.setScaleOnLeft (false);
     safetyClip.setTooltip ("Soft clipper from -1 dBFS that keeps the output below 0 dBFS");
     correlation.setTooltip ("Phase correlation: +1 = mono-safe, below 0 = parts cancel in mono");
     monoCheck.setClickingTogglesState (true);
     monoCheck.setTooltip ("Listen in mono (not saved with the project)");
     monoCheck.onClick = [this] { proc.setMonoMonitor (monoCheck.getToggleState()); };
     monoCheck.setToggleState (proc.isMonoMonitor(), juce::dontSendNotification);
+    inputGain.setMaxDialSize (46);
+    outputGain.setMaxDialSize (46);
 
     topBar.onModeChange = [this] (bool pro) { setProMode (pro); };
     chainView.onSelect = [this] (int id) { select (id); };
@@ -71,21 +85,22 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     topBar.setBounds (0, 0, baseWidth, topBarH);
     chainView.setBounds (margin, chainTop, baseWidth - 2 * margin, chainH);
 
-    auto left = juce::Rectangle<int> (margin, bodyTop + 22, leftW, baseHeight - bodyTop - 22 - margin);
-    inputGain.setBounds (left.removeFromBottom (96));
-    left.removeFromBottom (8);
-    inputMeter.setBounds (left.reduced (10, 0));
+    auto left = leftRail().reduced (8, 0).withTrimmedTop (34).withTrimmedBottom (10);
+    inputGain.setBounds (left.removeFromBottom (90));
+    left.removeFromBottom (10);
+    inputMeter.setBounds (left);
 
-    auto right = juce::Rectangle<int> (baseWidth - margin - rightW, bodyTop + 22, rightW, baseHeight - bodyTop - 22 - margin);
-    outputGain.setBounds (right.removeFromBottom (96));
-    right.removeFromBottom (6);
-    safetyClip.setBounds (right.removeFromBottom (28).reduced (18, 0));
-    right.removeFromBottom (8);
-    monoCheck.setBounds (right.removeFromBottom (28).reduced (18, 0));
-    right.removeFromBottom (8);
-    correlation.setBounds (right.removeFromBottom (34).reduced (14, 0));
+    auto right = rightRail().reduced (10, 0).withTrimmedTop (34).withTrimmedBottom (10);
+    outputGain.setBounds (right.removeFromBottom (90));
     right.removeFromBottom (10);
-    outputMeter.setBounds (right.withSizeKeepingCentre (84, right.getHeight()));
+    auto buttons = right.removeFromBottom (30);
+    monoCheck.setBounds (buttons.removeFromLeft (50));
+    buttons.removeFromLeft (6);
+    safetyClip.setBounds (buttons);
+    right.removeFromBottom (18);
+    correlation.setBounds (right.removeFromBottom (26).reduced (6, 0));
+    right.removeFromBottom (18);
+    outputMeter.setBounds (right.withSizeKeepingCentre (96, right.getHeight()));
 
     dialog.setBounds (0, 0, baseWidth, baseHeight);
 
@@ -139,7 +154,7 @@ void VelvoxAudioProcessorEditor::select (int id)
 
     if (proMode)
     {
-        detail = createDetailPanel (proc, id);
+        detail = createDetailPanel (proc, id, &spectrum);
         canvas.addAndMakeVisible (*detail);
         detail->setBounds (body);
         detail->refresh();
@@ -199,6 +214,8 @@ void VelvoxAudioProcessorEditor::timerCallback()
     auto& chain = proc.getChain();
     auto& m = chain.meters;
 
+    spectrum.update (proc.getSampleRate());
+
     inputMeter.push (m.input[0].pull(), m.input[1].pull(), false);
     inputMeter.setLoudness (m.inputLufs.load());
     outputMeter.push (m.output[0].pull(), m.output[1].pull(), m.clipped.exchange (false));
@@ -211,7 +228,10 @@ void VelvoxAudioProcessorEditor::timerCallback()
     if (detail != nullptr)
         detail->refresh();
     if (beginnerView.isVisible())
+    {
+        beginnerView.refreshSpectrum();
         beginnerView.setHints (computeHints());
+    }
 
     if (monoCheck.getToggleState() != proc.isMonoMonitor())
         monoCheck.setToggleState (proc.isMonoMonitor(), juce::dontSendNotification);

@@ -10,7 +10,7 @@ Stand: 14.10.2026. Keine rechtliche Beratung – vor einer Veröffentlichung die
 | Signalsmith Linear (FFT, Abhängigkeit von Stretch) | 0.6.4 (`de55e6a`), in `third_party/` | Ja (header-only) | MIT | Copyright- und Lizenztext (`third_party/signalsmith-linear/LICENSE.txt`) mitliefern; optionale Beschleuniger (IPP, PFFFT, xsimd) sind **nicht** aktiviert |
 | Microsoft Visual C++ Runtime | MSVC 14.44 | Statisch gelinkt (JUCE-Standard) | Microsoft-Lizenz, Weitergabe erlaubt | keine |
 | pluginval (Tracktion) | 1.0.4 | **Nein** – nur Testwerkzeug | GPLv3 | keine (wird nicht verteilt) |
-| Schrift „Segoe UI“ | Windows-Systemschrift | **Nein** – wird vom System geladen, nicht eingebettet | Microsoft | keine; für macOS/eingebettete Schrift später eine OFL-Schrift wählen |
+| Schrift „Inter“ (Regular, Medium, SemiBold, Display Light) | 4.1, in `Resources/Fonts/` | Ja (als Binärdaten eingebettet) | SIL Open Font License 1.1 | Lizenztext (`Resources/Fonts/Inter-LICENSE.txt`) mitliefern; die Schrift darf nicht einzeln verkauft werden (Einbetten in Software ist erlaubt) |
 
 ## Eigene Algorithmen
 

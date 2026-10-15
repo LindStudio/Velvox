@@ -7,10 +7,12 @@ namespace velvox::ui
 
     namespace
     {
-        constexpr float tileH = 46.0f;
-        constexpr float laneTileH = 34.0f;
+        constexpr float tileH = 40.0f;
+        constexpr float laneTileH = 30.0f;
+        constexpr float laneOffset = 12.0f;
         constexpr float endW = 54.0f;
         constexpr float gap = 10.0f;
+        constexpr float corner = 10.0f;
 
         bool canBeSend (ModuleId id) { return id == ModuleId::delay || id == ModuleId::reverb; }
     }
@@ -51,7 +53,7 @@ namespace velvox::ui
     juce::Rectangle<float> ChainView::laneArea() const
     {
         const auto row = rowArea();
-        return row.withY (row.getBottom() + 14.0f).withHeight (laneTileH);
+        return row.withY (row.getBottom() + laneOffset).withHeight (laneTileH);
     }
 
     void ChainView::layoutTiles()
@@ -98,7 +100,7 @@ namespace velvox::ui
 
     juce::Rectangle<float> ChainView::modeBounds (const Tile& t) const
     {
-        return t.bounds.withTrimmedLeft (t.bounds.getWidth() - 46.0f).reduced (4.0f, t.inLane ? 7.0f : 13.0f);
+        return t.bounds.withTrimmedLeft (t.bounds.getWidth() - 46.0f).reduced (4.0f, t.inLane ? 7.0f : 11.0f);
     }
 
     int ChainView::tileAt (juce::Point<float> p) const
@@ -175,50 +177,48 @@ namespace velvox::ui
     {
         const auto idx = (size_t) t.id;
         const bool on = onState[idx] || macroEngaged[idx];
-        const auto accent = moduleColour (t.id);
         const bool isSelected = (int) t.id == selected;
-        const float corner = 8.0f;
 
-        // Glow follows module activity (gain reduction) and selection
-        if (on)
-        {
-            const float glow = 0.10f + 0.35f * activity[idx] + (isSelected ? 0.12f : 0.0f);
-            g.setColour (accent.withAlpha (glow));
-            g.fillRoundedRectangle (r.expanded (3.0f), corner + 3.0f);
-        }
+        // Light pools under the selected tile and under working modules
+        if (isSelected && ! ghost)
+            drawGlow (g, r.getCentre(), r.getWidth() * 0.62f, 0.045f);
 
-        g.setColour (ghost ? colours::raised.withAlpha (0.8f) : colours::raised);
+        // Opaque base so the spine does not run through the label
+        g.setColour (ghost ? colours::raisedHi : colours::background);
         g.fillRoundedRectangle (r, corner);
-        if (on)
-        {
-            g.setGradientFill (juce::ColourGradient (accent.withAlpha (0.20f), r.getX(), r.getY(), accent.withAlpha (0.04f), r.getRight(), r.getBottom(), false));
-            g.fillRoundedRectangle (r, corner);
-        }
-        g.setColour (isSelected ? colours::text : (on ? accent.withAlpha (0.9f) : colours::line.brighter (0.2f)));
-        g.drawRoundedRectangle (r.reduced (0.5f), corner, isSelected ? 1.6f : 1.0f);
+        g.setColour (colours::accent.withAlpha (isSelected ? 0.085f : (on ? 0.045f : 0.018f)));
+        g.fillRoundedRectangle (r, corner);
+        g.setColour (isSelected ? colours::accent.withAlpha (0.55f) : (on ? colours::accent.withAlpha (0.14f) : colours::line));
+        g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
 
-        // Power dot
+        // Power dot: lit when the module processes, hollow when off
         Tile shifted = t;
         shifted.bounds = r;
-        const auto dot = dotBounds (shifted);
-        g.setColour (on ? accent : colours::textDim.withAlpha (0.5f));
-        g.fillEllipse (dot.reduced (3.0f));
-        g.setColour (on ? accent.brighter (0.4f) : colours::line.brighter (0.3f));
-        g.drawEllipse (dot, 1.0f);
+        const auto dot = dotBounds (shifted).reduced (4.5f);
+        if (on)
+        {
+            drawGlow (g, dot.getCentre(), 9.0f + 7.0f * activity[idx], 0.30f + 0.4f * activity[idx]);
+            g.setColour (colours::accent);
+            g.fillEllipse (dot);
+        }
+        else
+        {
+            g.setColour (colours::textFaint);
+            g.drawEllipse (dot.reduced (0.5f), 1.2f);
+        }
 
         // Name
         auto textArea = r.withTrimmedLeft (28.0f);
         if (canBeSend (t.id))
             textArea = textArea.withTrimmedRight (44.0f);
         g.setColour (on ? colours::text : colours::textDim);
-        g.setFont (display (t.inLane ? 14.0f : 15.0f));
+        g.setFont (medium (t.inLane ? 12.5f : 13.0f));
         g.drawFittedText (dsp::moduleDisplayName (t.id), textArea.toNearestInt(), juce::Justification::centredLeft, 1, 0.8f);
 
         if (macroEngaged[idx] && ! onState[idx])
         {
-            g.setColour (colours::magenta);
-            g.setFont (display (10.5f, true));
-            g.drawText ("M", r.withTrimmedLeft (r.getWidth() - 16.0f).withHeight (14.0f).translated (-4.0f, 3.0f), juce::Justification::centred, false);
+            drawCaption (g, "M", r.withTrimmedLeft (r.getWidth() - 16.0f).withHeight (14.0f).translated (-4.0f, 3.0f),
+                         juce::Justification::centred, colours::textDim, 8.5f);
         }
 
         // Send / insert switch for delay and reverb
@@ -226,11 +226,11 @@ namespace velvox::ui
         {
             const auto m = modeBounds (shifted);
             const bool send = routing.isSend (t.id);
-            g.setColour (send ? colours::magenta.withAlpha (0.18f) : colours::cyan.withAlpha (0.14f));
+            g.setColour (colours::accent.withAlpha (send ? 0.10f : 0.03f));
             g.fillRoundedRectangle (m, m.getHeight() * 0.5f);
-            g.setColour (send ? colours::magenta : colours::cyan);
-            g.setFont (font (10.5f));
-            g.drawText (send ? "Send" : "Insert", m, juce::Justification::centred, false);
+            g.setColour (colours::accent.withAlpha (send ? 0.30f : 0.14f));
+            g.drawRoundedRectangle (m.reduced (0.5f), m.getHeight() * 0.5f, 1.0f);
+            drawCaption (g, send ? "Send" : "Ins", m, juce::Justification::centred, send ? colours::text : colours::textDim, 8.0f);
         }
     }
 
@@ -241,17 +241,15 @@ namespace velvox::ui
         const auto lane = laneArea();
         const float cy = row.getCentreY();
 
-        // Spine: in -> serial chain -> out, coloured along the path
-        juce::ColourGradient grad (colours::cyan, inBox.getRight(), cy, colours::magenta, outBox.getX(), cy, false);
-        grad.addColour (0.5, colours::violet);
-        g.setGradientFill (grad);
-        g.fillRect (juce::Rectangle<float> (inBox.getRight(), cy - 1.0f, outBox.getX() - inBox.getRight(), 2.0f));
+        // Spine: in -> serial chain -> out
+        g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.05f), inBox.getRight(), cy,
+                                                 colours::accent.withAlpha (0.14f), outBox.getX(), cy, false));
+        g.fillRect (juce::Rectangle<float> (inBox.getRight(), cy - 0.5f, outBox.getX() - inBox.getRight(), 1.0f));
 
         // Parallel lane: splits after the serial chain, joins at the output
         bool anySend = false;
         for (auto& t : tiles)
             anySend = anySend || t.inLane;
-        const float splitX = row.getRight() + gap * 0.5f;
         if (anySend)
         {
             float firstSendX = 1.0e9f;
@@ -259,34 +257,40 @@ namespace velvox::ui
                 if (t.inLane)
                     firstSendX = std::min (firstSendX, t.bounds.getX());
             juce::Path branch;
-            branch.startNewSubPath (row.getRight() - 4.0f, cy);
+            branch.startNewSubPath (row.getRight() - 4.0f, row.getBottom());
             branch.quadraticTo (row.getRight() - 4.0f, lane.getCentreY(), firstSendX - 30.0f, lane.getCentreY());
             branch.lineTo (firstSendX, lane.getCentreY());
-            g.setColour (colours::magenta.withAlpha (0.6f));
-            g.strokePath (branch, juce::PathStrokeType (1.5f));
             juce::Path join;
             join.startNewSubPath (lane.getRight(), lane.getCentreY());
             join.quadraticTo (outBox.getCentreX(), lane.getCentreY(), outBox.getCentreX(), outBox.getBottom());
-            g.strokePath (join, juce::PathStrokeType (1.5f));
-            g.setColour (colours::textDim);
-            g.setFont (font (11.0f));
-            g.drawText ("parallel sends", juce::Rectangle<float> (firstSendX - 150.0f, lane.getY() - 14.0f, 140.0f, 14.0f),
-                        juce::Justification::centredRight, false);
+
+            g.setColour (colours::accent.withAlpha (0.16f));
+            const float dashes[] { 3.0f, 3.0f };
+            juce::Path dashedBranch, dashedJoin;
+            juce::PathStrokeType stroke (1.0f);
+            stroke.createDashedStroke (dashedBranch, branch, dashes, 2);
+            stroke.createDashedStroke (dashedJoin, join, dashes, 2);
+            g.fillPath (dashedBranch);
+            g.fillPath (dashedJoin);
+
+            drawCaption (g, "Parallel sends", juce::Rectangle<float> (firstSendX - 160.0f, lane.getY(), 150.0f, lane.getHeight()),
+                         juce::Justification::centredRight, colours::textFaint, 8.5f);
         }
-        juce::ignoreUnused (splitX);
 
         // End points
         for (auto* box : { &inBox, &outBox })
         {
             const bool isOut = box == &outBox;
             const bool sel = isOut && selected == outputTile;
-            g.setColour (colours::panel);
-            g.fillRoundedRectangle (*box, 8.0f);
-            g.setColour (sel ? colours::text : colours::line.brighter (0.3f));
-            g.drawRoundedRectangle (box->reduced (0.5f), 8.0f, sel ? 1.6f : 1.0f);
-            g.setColour (colours::io);
-            g.setFont (display (13.0f));
-            g.drawText (isOut ? "Out" : "In", *box, juce::Justification::centred, false);
+            if (sel)
+                drawGlow (g, box->getCentre(), box->getWidth() * 0.9f, 0.045f);
+            g.setColour (colours::background);
+            g.fillRoundedRectangle (*box, corner);
+            g.setColour (colours::accent.withAlpha (sel ? 0.085f : 0.02f));
+            g.fillRoundedRectangle (*box, corner);
+            g.setColour (sel ? colours::accent.withAlpha (0.55f) : colours::line);
+            g.drawRoundedRectangle (box->reduced (0.5f), corner, 1.0f);
+            drawCaption (g, isOut ? "Out" : "In", *box, juce::Justification::centred, sel ? colours::text : colours::textDim, 9.5f);
         }
 
         for (int i = 0; i < (int) tiles.size(); ++i)
@@ -311,13 +315,14 @@ namespace velvox::ui
                     if (count++ < idx)
                         markerX = other.bounds.getRight() + gap * 0.5f;
                 }
-                g.setColour (colours::text);
-                g.fillRoundedRectangle (markerX - 1.5f, row.getY() - 2.0f, 3.0f, row.getHeight() + 4.0f, 1.5f);
+                drawGlow (g, { markerX, row.getCentreY() }, 18.0f, 0.3f);
+                g.setColour (colours::accent);
+                g.fillRoundedRectangle (markerX - 1.0f, row.getY() - 2.0f, 2.0f, row.getHeight() + 4.0f, 1.0f);
             }
             else if (! canBeSend (t.id))
             {
-                g.setColour (colours::warning.withAlpha (0.15f));
-                g.fillRoundedRectangle (laneArea(), 8.0f);
+                g.setColour (colours::warning.withAlpha (0.10f));
+                g.fillRoundedRectangle (laneArea(), corner);
             }
             drawTile (g, t, r, true);
         }
@@ -325,7 +330,7 @@ namespace velvox::ui
         if (hint.isNotEmpty())
         {
             g.setColour (colours::warning);
-            g.setFont (font (12.0f));
+            g.setFont (medium (11.5f));
             g.drawText (hint, juce::Rectangle<float> (row.getX(), lane.getY(), lane.getWidth() * 0.6f, lane.getHeight()),
                         juce::Justification::centredLeft, true);
         }

@@ -53,8 +53,10 @@ set(VELVOX_SOURCES
     Source/Presets/FactoryPresets.cpp
     Source/Presets/PresetManager.cpp
     Source/Mixing/ProposalSession.cpp
+    Source/UI/Theme.cpp
     Source/UI/VelvoxLookAndFeel.cpp
     Source/UI/Widgets.cpp
+    Source/UI/Spectrum.cpp
     Source/UI/ChainView.cpp
     Source/UI/DetailPanels.cpp
     Source/UI/BeginnerView.cpp
@@ -74,7 +76,18 @@ set(VELVOX_THIRD_PARTY_INCLUDES
     third_party/signalsmith-linear/include
 )
 
+# Embedded UI typefaces: Inter 4.1 (SIL OFL 1.1, see Resources/Fonts/Inter-LICENSE.txt)
+juce_add_binary_data(VelvoxAssets
+    HEADER_NAME VelvoxBinaryData.h
+    NAMESPACE VelvoxBinaryData
+    SOURCES
+        Resources/Fonts/Inter-Regular.ttf
+        Resources/Fonts/Inter-Medium.ttf
+        Resources/Fonts/Inter-SemiBold.ttf
+        Resources/Fonts/InterDisplay-Light.ttf)
+
 set(VELVOX_COMMON_LIBS
+    VelvoxAssets
     juce::juce_audio_utils
     juce::juce_dsp
 )

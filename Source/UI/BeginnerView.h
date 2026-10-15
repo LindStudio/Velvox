@@ -1,13 +1,15 @@
 #pragma once
 
 #include "Widgets.h"
+#include "Spectrum.h"
 
 class VelvoxAudioProcessor;
 
 namespace velvox::ui
 {
-    // Beginner mode: six macros with plain-language descriptions plus live
-    // hints about level, clipping, mono compatibility and fair comparison.
+    // Beginner mode: a large live spectrum, six macros with plain-language
+    // descriptions, and live hints about level, clipping, mono compatibility
+    // and fair comparison.
     class BeginnerView final : public juce::Component
     {
     public:
@@ -16,6 +18,9 @@ namespace velvox::ui
         void paint (juce::Graphics&) override;
         void resized() override;
         void setHints (const std::vector<Hint>& hints);
+
+        void setSpectrumSource (const SpectrumSource* source) { spectrum.setSource (source); }
+        void refreshSpectrum() { spectrum.refresh(); }
 
     private:
         struct Macro
@@ -27,7 +32,8 @@ namespace velvox::ui
 
         std::array<Macro, 6> macros;
         std::unique_ptr<Choice> levelMatch;
+        SpectrumView spectrum;
         std::vector<Hint> currentHints;
-        juce::Rectangle<int> hintArea, compareArea;
+        juce::Rectangle<int> heroArea, macroArea, hintArea;
     };
 }

@@ -8,15 +8,19 @@ namespace velvox::ui
 {
     using APVTS = juce::AudioProcessorValueTreeState;
 
-    // Rotary control with name, value read-out (with unit), tooltip and
+    // Rotary control with caption, value read-out (with unit), tooltip and
     // double-click-to-default. Optionally shows a marker where macros move the
     // value to (the effective value that is actually processed).
     class Knob : public juce::Component
     {
     public:
-        Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent);
+        Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent = colours::accent);
         void resized() override;
         void paintOverChildren (juce::Graphics&) override;
+
+        // Large dial with value-driven glow (Beginner macros)
+        void setHero (bool isHero);
+        void setMaxDialSize (int px) { maxDial = px; resized(); }
 
         // Returns the processed value in parameter units; empty = no marker
         std::function<float()> effectiveValue;
@@ -28,15 +32,19 @@ namespace velvox::ui
         juce::Label name;
 
     private:
+        juce::Rectangle<float> dialBounds() const;
+
         std::unique_ptr<APVTS::SliderAttachment> attachment;
         float lastEffective = std::numeric_limits<float>::quiet_NaN();
+        int maxDial = 72;
+        bool hero = false;
     };
 
     // Pill toggle bound to a bool parameter
     class Toggle final : public juce::ToggleButton
     {
     public:
-        Toggle (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent);
+        Toggle (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent = colours::accent);
 
     private:
         std::unique_ptr<APVTS::ButtonAttachment> attachment;
@@ -60,11 +68,10 @@ namespace velvox::ui
     class PowerButton final : public juce::ToggleButton
     {
     public:
-        PowerButton (APVTS& state, const char* paramId, juce::Colour accent);
+        PowerButton (APVTS& state, const char* paramId, juce::Colour accent = colours::accent);
         void paintButton (juce::Graphics&, bool highlighted, bool down) override;
 
     private:
-        juce::Colour accent;
         std::unique_ptr<APVTS::ButtonAttachment> attachment;
     };
 
@@ -79,10 +86,13 @@ namespace velvox::ui
         bool isClipLatched() const noexcept { return clipLatched; }
         float getPeakDb() const noexcept;
 
+        void setScaleOnLeft (bool left) { scaleLeft = left; repaint(); }
+
     private:
         std::array<float, 2> level {}, hold {};
         std::array<int, 2> holdFrames {};
         bool clipLatched = false;
+        bool scaleLeft = true;
         float loudness = -120.0f;
     };
 
@@ -90,13 +100,12 @@ namespace velvox::ui
     class GainReductionMeter final : public juce::Component, public juce::SettableTooltipClient
     {
     public:
-        explicit GainReductionMeter (juce::Colour c, juce::String captionText = {}) : accent (c), caption (std::move (captionText)) {}
+        explicit GainReductionMeter (juce::Colour = colours::accent, juce::String captionText = {}) : caption (std::move (captionText)) {}
         void push (float reductionDb);
         void paint (juce::Graphics&) override;
         float getShown() const noexcept { return shown; }
 
     private:
-        juce::Colour accent;
         juce::String caption;
         float shown = 0.0f;
         static constexpr float maxDb = 24.0f;
@@ -113,15 +122,20 @@ namespace velvox::ui
         float value = 1.0f;
     };
 
-    // Frequency response, computed with the same filter design as the DSP
+    // Frequency response, computed with the same filter design as the DSP.
+    // Transparent: drawn over a SpectrumView with the same frequency axis.
     class EqCurve final : public juce::Component
     {
     public:
+        EqCurve() { setInterceptsMouseClicks (false, false); }
+
         // Provides the effective EQ settings, whether the EQ is on, and its mix
         std::function<void (dsp::EqSettings&, bool&, float&)> provider;
         void refresh();
         void paint (juce::Graphics&) override;
         void resized() override { lastKey.clear(); refresh(); }
+
+        static constexpr float rangeDb = 18.0f;
 
     private:
         juce::Array<float> lastKey;
@@ -148,14 +162,13 @@ namespace velvox::ui
     class StepPatternView final : public juce::Component
     {
     public:
-        void set (const char* steps, int currentStep, bool active, juce::Colour accent);
+        void set (const char* steps, int currentStep, bool active, juce::Colour accent = colours::accent);
         void paint (juce::Graphics&) override;
 
     private:
         juce::String pattern;
         int current = -1;
         bool isActive = false;
-        juce::Colour colour;
     };
 
     // Short text hint line ("Input is clipping" ...), coloured by severity
