@@ -30,7 +30,7 @@ namespace velvox::ui
         {
             // Host stopped calling process: let the display fall away gently
             for (auto& v : c.smoothed)
-                v = std::max (floorDb, v - 2.5f);
+                v = std::max (floorDb, v - 1.25f);
             return;
         }
 
@@ -74,7 +74,7 @@ namespace velvox::ui
             db = std::max (floorDb, db);
 
             auto& s = c.smoothed[(size_t) p];
-            s += (db - s) * (db > s ? 0.55f : 0.16f);
+            s += (db - s) * (db > s ? 0.4f : 0.09f);
         }
     }
 
@@ -135,13 +135,18 @@ namespace velvox::ui
         fill.lineTo (r.getRight(), r.getBottom());
         fill.lineTo (r.getX(), r.getBottom());
         fill.closeSubPath();
-        g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.13f * intensity), 0.0f, r.getY(),
-                                                 colours::accent.withAlpha (0.0f), 0.0f, r.getBottom(), false));
+        // Aurora light (teal lows -> blue highs), fading into the dark towards the floor
+        g.setGradientFill (auroraGradient (r.getTopLeft(), r.getTopRight(), 0.30f * intensity));
+        g.fillPath (fill);
+        g.setGradientFill (juce::ColourGradient (colours::background.withAlpha (0.0f), 0.0f, r.getY() + r.getHeight() * 0.15f,
+                                                 colours::background.withAlpha (0.92f), 0.0f, r.getBottom(), false));
         g.fillPath (fill);
 
-        g.setColour (colours::accent.withAlpha (0.06f * intensity));
-        g.strokePath (outPath, juce::PathStrokeType (6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour (colours::accent.withAlpha (0.85f * intensity));
-        g.strokePath (outPath, juce::PathStrokeType (1.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setGradientFill (auroraGradient (r.getTopLeft(), r.getTopRight(), 0.14f * intensity));
+        g.strokePath (outPath, juce::PathStrokeType (7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        auto core = auroraGradient (r.getTopLeft(), r.getTopRight(), 0.95f * intensity);
+        core.addColour (0.45, colours::teal.interpolatedWith (juce::Colours::white, 0.35f).withAlpha (0.95f * intensity));
+        g.setGradientFill (core);
+        g.strokePath (outPath, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 }

@@ -148,8 +148,16 @@ namespace velvox::ui
         auto& chain = proc.getChain();
         const auto engaged = dsp::modulesEngagedByMacros (proc.readSettings(), proc.readMacros());
         std::array<float, dsp::numModules> act {};
-        act[(size_t) ModuleId::comp] = juce::jlimit (0.0f, 1.0f, chain.getCompressor().gainReductionDb.peak.load() / 12.0f);
-        act[(size_t) ModuleId::deess] = juce::jlimit (0.0f, 1.0f, chain.getDeEsser().gainReductionDb.peak.load() / 8.0f);
+        // Gain reduction drives the glow of the power dots (the editor pulls the meters once per frame)
+        const float compGr = live != nullptr ? live->compGr.ago (0) : chain.getCompressor().gainReductionDb.peak.load();
+        const float deessGr = live != nullptr ? live->deessGr.ago (0) : chain.getDeEsser().gainReductionDb.peak.load();
+        act[(size_t) ModuleId::comp] = juce::jlimit (0.0f, 1.0f, compGr / 12.0f);
+        act[(size_t) ModuleId::deess] = juce::jlimit (0.0f, 1.0f, deessGr / 8.0f);
+        if (live != nullptr)
+        {
+            act[(size_t) ModuleId::delay] = juce::jlimit (0.0f, 1.0f, live->delayDuck.ago (0) / 12.0f);
+            act[(size_t) ModuleId::reverb] = juce::jlimit (0.0f, 1.0f, live->reverbDuck.ago (0) / 12.0f);
+        }
 
         for (int i = 0; i < dsp::numModules; ++i)
         {
@@ -173,32 +181,66 @@ namespace velvox::ui
             repaint();
     }
 
+    juce::Rectangle<float> ChainView::selectionTarget()
+    {
+        layoutTiles();
+        if (selected == outputTile)
+            return outBox;
+        for (auto& t : tiles)
+            if ((int) t.id == selected)
+                return t.bounds;
+        return {};
+    }
+
+    void ChainView::tick()
+    {
+        bool moved = false;
+        const auto target = selectionTarget();
+        if (! target.isEmpty())
+        {
+            const float values[] { target.getX(), target.getY(), target.getWidth(), target.getHeight() };
+            for (size_t i = 0; i < 4; ++i)
+            {
+                sel[i].target = values[i];
+                moved = sel[i].tick (0.22f) || moved;
+            }
+        }
+
+        const int hoveredId = hovered >= 0 && hovered < (int) tiles.size() ? (int) tiles[(size_t) hovered].id : -1;
+        for (int i = 0; i < dsp::numModules; ++i)
+        {
+            hoverGlow[(size_t) i].target = i == hoveredId ? 1.0f : 0.0f;
+            moved = hoverGlow[(size_t) i].tick (0.18f) || moved;
+        }
+
+        if (moved)
+            repaint();
+    }
+
     void ChainView::drawTile (juce::Graphics& g, const Tile& t, juce::Rectangle<float> r, bool ghost) const
     {
         const auto idx = (size_t) t.id;
         const bool on = onState[idx] || macroEngaged[idx];
         const bool isSelected = (int) t.id == selected;
-
-        // Light pools under the selected tile and under working modules
-        if (isSelected && ! ghost)
-            drawGlow (g, r.getCentre(), r.getWidth() * 0.62f, 0.045f);
+        const float hov = ghost ? 0.0f : hoverGlow[idx].current;
 
         // Opaque base so the spine does not run through the label
         g.setColour (ghost ? colours::raisedHi : colours::background);
         g.fillRoundedRectangle (r, corner);
-        g.setColour (colours::accent.withAlpha (isSelected ? 0.085f : (on ? 0.045f : 0.018f)));
+        g.setColour (colours::accent.withAlpha ((isSelected ? 0.06f : (on ? 0.04f : 0.016f)) + 0.035f * hov));
         g.fillRoundedRectangle (r, corner);
-        g.setColour (isSelected ? colours::accent.withAlpha (0.55f) : (on ? colours::accent.withAlpha (0.14f) : colours::line));
+        g.setColour (on ? colours::accent.withAlpha (0.12f + 0.1f * hov) : colours::line.brighter (0.4f * hov));
         g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
 
-        // Power dot: lit when the module processes, hollow when off
+        // Power dot: lit when the module processes (pulses with its activity), hollow when off
         Tile shifted = t;
         shifted.bounds = r;
         const auto dot = dotBounds (shifted).reduced (4.5f);
         if (on)
         {
-            drawGlow (g, dot.getCentre(), 9.0f + 7.0f * activity[idx], 0.30f + 0.4f * activity[idx]);
-            g.setColour (colours::accent);
+            const auto c = aurora (juce::jlimit (0.0f, 1.0f, r.getCentreX() / std::max (1.0f, (float) getWidth())));
+            drawGlow (g, dot.getCentre(), 10.0f + 9.0f * activity[idx], 0.45f + 0.45f * activity[idx], c);
+            g.setColour (c.interpolatedWith (juce::Colours::white, 0.45f));
             g.fillEllipse (dot);
         }
         else
@@ -281,21 +323,40 @@ namespace velvox::ui
         for (auto* box : { &inBox, &outBox })
         {
             const bool isOut = box == &outBox;
-            const bool sel = isOut && selected == outputTile;
-            if (sel)
-                drawGlow (g, box->getCentre(), box->getWidth() * 0.9f, 0.045f);
+            const bool boxSelected = isOut && selected == outputTile;
             g.setColour (colours::background);
             g.fillRoundedRectangle (*box, corner);
-            g.setColour (colours::accent.withAlpha (sel ? 0.085f : 0.02f));
+            g.setColour (colours::accent.withAlpha (boxSelected ? 0.06f : 0.02f));
             g.fillRoundedRectangle (*box, corner);
-            g.setColour (sel ? colours::accent.withAlpha (0.55f) : colours::line);
+            g.setColour (colours::line);
             g.drawRoundedRectangle (box->reduced (0.5f), corner, 1.0f);
-            drawCaption (g, isOut ? "Out" : "In", *box, juce::Justification::centred, sel ? colours::text : colours::textDim, 9.5f);
+            drawCaption (g, isOut ? "Out" : "In", *box, juce::Justification::centred, boxSelected ? colours::text : colours::textDim, 9.5f);
+        }
+
+        // Selection light (animated): glow pool underneath ...
+        if (! selInitialised || ! isShowing())
+        {
+            const auto t = selectionTarget();
+            sel[0].snap (t.getX()); sel[1].snap (t.getY()); sel[2].snap (t.getWidth()); sel[3].snap (t.getHeight());
+            selInitialised = ! t.isEmpty();
+        }
+        const auto selRect = juce::Rectangle<float> (sel[0].current, sel[1].current, sel[2].current, sel[3].current);
+        if (! selRect.isEmpty())
+        {
+            drawGlow (g, selRect.getCentre(), selRect.getWidth() * 0.7f, 0.10f,
+                      aurora (juce::jlimit (0.0f, 1.0f, selRect.getCentreX() / std::max (1.0f, (float) getWidth()))));
         }
 
         for (int i = 0; i < (int) tiles.size(); ++i)
             if (! (dragging && i == dragTile))
                 drawTile (g, tiles[(size_t) i], tiles[(size_t) i].bounds, false);
+
+        // ... and an aurora outline on top
+        if (! selRect.isEmpty() && ! dragging)
+        {
+            g.setGradientFill (auroraGradient (selRect.getTopLeft(), selRect.getBottomRight(), 0.9f));
+            g.drawRoundedRectangle (selRect.reduced (0.5f), corner, 1.3f);
+        }
 
         // Dragged tile and insertion marker
         if (dragging && dragTile >= 0)

@@ -283,9 +283,12 @@ namespace velvox::ui
         // Brand: a lit orb and the word mark
         auto brand = getLocalBounds().reduced (24, 0).removeFromLeft (220).toFloat();
         const auto orb = juce::Point<float> (brand.getX() + 8.0f, brand.getCentreY());
-        drawGlow (g, orb, 18.0f, 0.35f);
-        g.setColour (colours::accent);
-        g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (orb));
+        drawGlow (g, orb.translated (-3.0f, 0.0f), 20.0f, 0.45f, colours::teal);
+        drawGlow (g, orb.translated (3.0f, 0.0f), 20.0f, 0.40f, colours::blue);
+        g.setGradientFill (auroraGradient (orb.translated (-5.0f, -5.0f), orb.translated (5.0f, 5.0f)));
+        g.fillEllipse (juce::Rectangle<float> (10.0f, 10.0f).withCentre (orb));
+        g.setColour (juce::Colours::white.withAlpha (0.8f));
+        g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre (orb.translated (-1.0f, -1.0f)));
         brand.removeFromLeft (26.0f);
 
         g.setColour (colours::text);

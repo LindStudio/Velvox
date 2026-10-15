@@ -5,8 +5,8 @@ namespace velvox::ui
 {
     namespace
     {
-        constexpr int heroH = 250;
-        constexpr int macroH = 216;
+        constexpr int heroH = 268;
+        constexpr int macroH = 196;
         constexpr int gapY = 14;
     }
 
@@ -29,8 +29,8 @@ namespace velvox::ui
         {
             macros[i].knob = std::make_unique<Knob> (p.getState(), defs[i].id, defs[i].name);
             macros[i].knob->setHero (true);
-            macros[i].knob->setMaxDialSize (104);
-            macros[i].description = defs[i].text;
+            macros[i].knob->setMaxDialSize (124);
+            macros[i].knob->setDescription (defs[i].text);
             addAndMakeVisible (*macros[i].knob);
         }
 
@@ -61,7 +61,8 @@ namespace velvox::ui
             juce::Path clip;
             clip.addRoundedRectangle (hero, 18.0f);
             g.reduceClipRegion (clip);
-            drawGlow (g, { hero.getCentreX(), hero.getBottom() + 40.0f }, hero.getWidth() * 0.55f, 0.07f);
+            drawGlow (g, { hero.getX() + hero.getWidth() * 0.3f, hero.getBottom() + 60.0f }, hero.getWidth() * 0.45f, 0.10f, colours::teal);
+            drawGlow (g, { hero.getX() + hero.getWidth() * 0.75f, hero.getBottom() + 60.0f }, hero.getWidth() * 0.45f, 0.09f, colours::blue);
         }
         drawGlass (g, hero, 18.0f, 0.012f);
 
@@ -71,16 +72,8 @@ namespace velvox::ui
         g.drawText ("Shape your vocal", title.removeFromTop (28), juce::Justification::centredLeft, false);
         g.setColour (colours::textDim);
         g.setFont (font (12.5f));
-        g.drawText ("Pick a preset, then move the six controls. Switch to Pro for every detail.",
+        g.drawText ("Pick a preset, then shape it with the six controls. Rest the mouse on one to see what it does.",
                     title, juce::Justification::centredLeft, true);
-
-        // Macros: descriptions under each dial
-        for (const auto& m : macros)
-        {
-            g.setColour (colours::textDim);
-            g.setFont (font (11.5f));
-            g.drawFittedText (m.description, m.textArea, juce::Justification::centredTop, 3, 1.0f);
-        }
 
         // Hints strip
         const auto h = hintArea.toFloat();
@@ -96,7 +89,7 @@ namespace velvox::ui
         {
             auto row = line.removeFromTop (22);
             const auto dot = juce::Point<float> ((float) row.getX() + 4.0f, (float) row.getCentreY());
-            const auto c = hint.level == Hint::Level::warning ? colours::warning : colours::accent;
+            const auto c = hint.level == Hint::Level::warning ? colours::warning : colours::teal;
             if (hint.level != Hint::Level::info)
                 drawGlow (g, dot, 9.0f, 0.4f, c);
             g.setColour (hint.level == Hint::Level::info ? colours::textFaint : c);
@@ -127,9 +120,7 @@ namespace velvox::ui
         {
             auto cell = juce::Rectangle<int> (macroArea.getX() + i * macroArea.getWidth() / n, macroArea.getY(),
                                               macroArea.getWidth() / n, macroArea.getHeight());
-            auto text = cell.removeFromBottom (52).reduced (12, 0);
-            macros[(size_t) i].textArea = text;
-            macros[(size_t) i].knob->setBounds (cell.reduced (4, 4));
+            macros[(size_t) i].knob->setBounds (cell.reduced (4, 2));
         }
     }
 }

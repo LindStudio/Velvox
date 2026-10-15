@@ -208,4 +208,39 @@ namespace velvox::dsp
         juce::AbstractFifo fifo { capacity };
         std::array<float, capacity> data {};
     };
+
+    // Lock-free stereo sample tap (goniometer). Same rules as SampleTap.
+    class StereoTap
+    {
+    public:
+        static constexpr int capacity = 8192;
+
+        void push (const float* const* io, int numChannels, int n) noexcept
+        {
+            int start1, size1, start2, size2;
+            fifo.prepareToWrite (n, start1, size1, start2, size2);
+            const float* r = io[numChannels > 1 ? 1 : 0];
+            std::copy_n (io[0], size1, left.data() + start1);
+            std::copy_n (r, size1, right.data() + start1);
+            std::copy_n (io[0] + size1, size2, left.data() + start2);
+            std::copy_n (r + size1, size2, right.data() + start2);
+            fifo.finishedWrite (size1 + size2);
+        }
+
+        int pull (float* destL, float* destR, int maxSamples) noexcept
+        {
+            int start1, size1, start2, size2;
+            fifo.prepareToRead (maxSamples, start1, size1, start2, size2);
+            std::copy_n (left.data() + start1, size1, destL);
+            std::copy_n (right.data() + start1, size1, destR);
+            std::copy_n (left.data() + start2, size2, destL + size1);
+            std::copy_n (right.data() + start2, size2, destR + size1);
+            fifo.finishedRead (size1 + size2);
+            return size1 + size2;
+        }
+
+    private:
+        juce::AbstractFifo fifo { capacity };
+        std::array<float, capacity> left {}, right {};
+    };
 }

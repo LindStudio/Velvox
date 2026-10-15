@@ -71,6 +71,7 @@ namespace velvox::dsp
 
         // Spectrum analyser feeds: after input gain, and what leaves the plugin
         SampleTap inputTap, outputTap;
+        StereoTap scopeTap;   // goniometer
     };
 
     //  Input -> serial modules in Routing order (delay/reverb only when "insert")

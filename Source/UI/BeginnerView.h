@@ -7,8 +7,8 @@ class VelvoxAudioProcessor;
 
 namespace velvox::ui
 {
-    // Beginner mode: a large live spectrum, six macros with plain-language
-    // descriptions, and live hints about level, clipping, mono compatibility
+    // Beginner mode: a large live spectrum, six macros (their plain-language
+    // descriptions appear on hover), and live hints about level, clipping, mono compatibility
     // and fair comparison.
     class BeginnerView final : public juce::Component
     {
@@ -26,8 +26,6 @@ namespace velvox::ui
         struct Macro
         {
             std::unique_ptr<Knob> knob;
-            juce::String description;
-            juce::Rectangle<int> textArea;
         };
 
         std::array<Macro, 6> macros;

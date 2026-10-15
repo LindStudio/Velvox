@@ -337,6 +337,7 @@ namespace velvox::dsp
         outputLoudness.process (io, loudnessChannels, n);
         meters.outputLufs.store (outputLoudness.getLufs(), std::memory_order_relaxed);
         meters.outputTap.push (io, numChannels, n);
+        meters.scopeTap.push (io, numChannels, n);
 
         if (s.monoMonitor && numChannels > 1)
         {

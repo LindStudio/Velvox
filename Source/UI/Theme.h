@@ -23,10 +23,46 @@ namespace velvox::ui
         inline const juce::Colour accent     { 0xffffffff };
         inline const juce::Colour warning    { 0xffff5c63 };
         inline const juce::Colour io         { 0xffc9ccd3 };
+
+        // Atmospheric accent: "aurora", teal fading into blue
+        inline const juce::Colour teal       { 0xff2ee6c5 };
+        inline const juce::Colour blue       { 0xff3b82f6 };
+    }
+
+    // Position on the aurora gradient (0 = teal, 1 = blue)
+    inline juce::Colour aurora (float t, float alpha = 1.0f)
+    {
+        return colours::teal.interpolatedWith (colours::blue, juce::jlimit (0.0f, 1.0f, t)).withAlpha (alpha);
+    }
+
+    inline juce::ColourGradient auroraGradient (juce::Point<float> from, juce::Point<float> to, float alpha = 1.0f)
+    {
+        return juce::ColourGradient (aurora (0.0f, alpha), from, aurora (1.0f, alpha), to, false);
     }
 
     // Every module shares the white accent; the chain position is shown by layout
     inline juce::Colour moduleColour (dsp::ModuleId) { return colours::accent; }
+
+    // Exponential approach used by every animation (called once per frame)
+    struct Smoothed
+    {
+        float current = 0.0f, target = 0.0f;
+
+        // Returns true while still moving
+        bool tick (float rate)
+        {
+            const float d = target - current;
+            if (std::abs (d) < 1.0e-3f)
+            {
+                const bool moved = current != target;
+                current = target;
+                return moved;
+            }
+            current += d * rate;
+            return true;
+        }
+        void snap (float v) { current = target = v; }
+    };
 
     //==========================================================================
     // Embedded typefaces (Inter, SIL OFL 1.1). Held alive by a

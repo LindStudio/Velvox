@@ -13,8 +13,8 @@ namespace velvox::ui
         setColour (juce::TextEditor::backgroundColourId, colours::raised);
         setColour (juce::TextEditor::textColourId, colours::text);
         setColour (juce::TextEditor::outlineColourId, colours::line);
-        setColour (juce::TextEditor::focusedOutlineColourId, colours::accent.withAlpha (0.5f));
-        setColour (juce::TextEditor::highlightColourId, colours::accent.withAlpha (0.2f));
+        setColour (juce::TextEditor::focusedOutlineColourId, colours::teal.withAlpha (0.6f));
+        setColour (juce::TextEditor::highlightColourId, colours::teal.withAlpha (0.25f));
         setColour (juce::CaretComponent::caretColourId, colours::text);
 
         setColour (juce::ComboBox::backgroundColourId, colours::raised);
@@ -25,7 +25,7 @@ namespace velvox::ui
         setColour (juce::PopupMenu::backgroundColourId, colours::raised);
         setColour (juce::PopupMenu::textColourId, colours::text);
         setColour (juce::PopupMenu::headerTextColourId, colours::textFaint);
-        setColour (juce::PopupMenu::highlightedBackgroundColourId, colours::accent.withAlpha (0.08f));
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, colours::teal.withAlpha (0.12f));
         setColour (juce::PopupMenu::highlightedTextColourId, colours::accent);
 
         setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
@@ -51,80 +51,150 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    // Dial: hairline track, white value arc with a soft glow, and a dark cap lit
-    // from above with a small indicator - no colour, light does the work.
+    // 3D dial. Outside: a recessed groove that carries the aurora value arc.
+    // Inside: a raised, machined knob lit from above - drop shadow, bevelled
+    // rim with knurling that turns with the value, satin face with a specular
+    // highlight, and a glowing LED line as the pointer.
     void VelvoxLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float pos,
                                               float startAngle, float endAngle, juce::Slider& slider)
     {
-        const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (4.0f);
+        using juce::Colour;
+        const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (2.0f);
         const float radius = std::min (bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto centre = bounds.getCentre();
         const bool enabled = slider.isEnabled();
-        const bool hero = (bool) slider.getProperties().getWithDefault (heroProperty, false);
-        const bool hover = slider.isMouseOverOrDragging() && enabled;
+        const auto& props = slider.getProperties();
+        const bool hero = (bool) props.getWithDefault (heroProperty, false);
+        const float shown = (float) (double) props.getWithDefault (animPosProperty, (double) pos);
+        const float hover = enabled ? (float) (double) props.getWithDefault (hoverProperty, 0.0) : 0.0f;
+        const float a = enabled ? 1.0f : 0.35f;
 
-        const float trackWidth = std::max (2.0f, radius * (hero ? 0.055f : 0.075f));
-        const float arcRadius = radius - trackWidth * 0.5f;
-
+        const float span = endAngle - startAngle;
         const auto range = slider.getRange();
         const bool bipolar = range.getStart() < 0.0 && range.getEnd() > 0.0;
-        const float valueAngle = startAngle + pos * (endAngle - startAngle);
+        const float valueAngle = startAngle + shown * span;
         float fromAngle = startAngle;
         if (bipolar)
-            fromAngle = startAngle + (float) slider.valueToProportionOfLength (0.0) * (endAngle - startAngle);
-        const float amount = bipolar ? std::abs (valueAngle - fromAngle) / (endAngle - startAngle) * 2.0f : pos;
+            fromAngle = startAngle + (float) slider.valueToProportionOfLength (0.0) * span;
+        const float amount = bipolar ? std::abs (valueAngle - fromAngle) / span * 2.0f : shown;
 
-        // Ambient light under the dial, stronger the further it is turned
-        if (hero && enabled)
-            drawGlow (g, centre, radius * 1.55f, 0.025f + 0.075f * amount);
+        const float groove = std::max (3.0f, radius * grooveRatio);
+        const float grooveR = radius - groove * 0.5f;
 
-        // Track
+        // Ambient aurora light under the dial, brighter the further it is turned
+        if (enabled && (hero || hover > 0.01f))
+            drawGlow (g, centre, radius * (hero ? 1.6f : 1.3f),
+                      (hero ? 0.03f + 0.11f * amount : 0.0f) + 0.05f * hover, aurora (amount * 0.8f));
+
+        // ---- Groove: dark channel, lit lower lip (it is cut into the panel)
         juce::Path track;
-        track.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
-        g.setColour (colours::accent.withAlpha (0.07f));
-        g.strokePath (track, juce::PathStrokeType (trackWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        track.addCentredArc (centre.x, centre.y, grooveR, grooveR, 0.0f, startAngle, endAngle, true);
+        g.setColour (Colour (0xff040506));
+        g.strokePath (track, juce::PathStrokeType (groove, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        juce::Path lip;
+        lip.addCentredArc (centre.x, centre.y, radius - 0.5f, radius - 0.5f, 0.0f,
+                           juce::MathConstants<float>::pi * 0.55f, juce::MathConstants<float>::pi * 1.45f, true);
+        g.setColour (colours::accent.withAlpha (0.06f));
+        g.strokePath (lip, juce::PathStrokeType (1.0f));
 
-        // Value arc with glow
-        if (std::abs (valueAngle - fromAngle) > 0.001f)
+        // ---- Value arc: aurora light inside the groove
+        if (std::abs (valueAngle - fromAngle) > 0.002f)
         {
-            juce::Path value;
-            value.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f,
-                                 std::min (fromAngle, valueAngle), std::max (fromAngle, valueAngle), true);
-            const float a = enabled ? 1.0f : 0.35f;
-            g.setColour (colours::accent.withAlpha (0.05f * a));
-            g.strokePath (value, juce::PathStrokeType (trackWidth * 4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            g.setColour (colours::accent.withAlpha (0.12f * a));
-            g.strokePath (value, juce::PathStrokeType (trackWidth * 2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            g.setColour (colours::accent.withAlpha (0.95f * a));
-            g.strokePath (value, juce::PathStrokeType (trackWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            const float lo = std::min (fromAngle, valueAngle), hi = std::max (fromAngle, valueAngle);
+            juce::Path arc;
+            arc.addCentredArc (centre.x, centre.y, grooveR, grooveR, 0.0f, lo, hi, true);
+
+            g.setColour (aurora (0.4f, (0.10f + 0.08f * hover) * a));
+            g.strokePath (arc, juce::PathStrokeType (groove * 2.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+            // Colour runs teal -> blue along the scale
+            const int segments = std::max (2, (int) ((hi - lo) / 0.06f));
+            for (int i = 0; i < segments; ++i)
+            {
+                const float s0 = lo + (hi - lo) * (float) i / (float) segments;
+                const float s1 = lo + (hi - lo) * (float) (i + 1) / (float) segments + 0.004f;
+                juce::Path seg;
+                seg.addCentredArc (centre.x, centre.y, grooveR, grooveR, 0.0f, s0, std::min (s1, hi), true);
+                g.setColour (aurora ((s0 - startAngle) / span, 0.95f * a));
+                g.strokePath (seg, juce::PathStrokeType (groove * 0.55f, juce::PathStrokeType::curved,
+                                                         i == 0 || i == segments - 1 ? juce::PathStrokeType::rounded : juce::PathStrokeType::butt));
+            }
+
+            // Bright head at the value end
+            const auto head = centre.getPointOnCircumference (grooveR, valueAngle);
+            drawGlow (g, head, groove * 1.6f, 0.55f * a, aurora (shown));
+            g.setColour (aurora (shown).interpolatedWith (juce::Colours::white, 0.65f).withAlpha (a));
+            g.fillEllipse (juce::Rectangle<float> (groove * 0.5f, groove * 0.5f).withCentre (head));
         }
 
-        // Cap: drop shadow, body lit from the top, rim highlight
-        const float capRadius = arcRadius - trackWidth * (hero ? 3.2f : 2.6f);
-        const auto cap = juce::Rectangle<float> (capRadius * 2.0f, capRadius * 2.0f).withCentre (centre);
+        // ---- Knob body
+        const float bodyR = grooveR - groove * 0.5f - std::max (2.0f, radius * 0.07f);
+        const float faceR = bodyR * 0.84f;
+        const auto body = juce::Rectangle<float> (bodyR * 2.0f, bodyR * 2.0f).withCentre (centre);
+        const auto face = juce::Rectangle<float> (faceR * 2.0f, faceR * 2.0f).withCentre (centre);
 
-        drawGlow (g, centre.translated (0.0f, capRadius * 0.18f), capRadius * 1.25f, 0.55f, juce::Colours::black);
+        // Contact shadow and cast shadow (light from above)
+        drawGlow (g, centre.translated (0.0f, bodyR * 0.28f), bodyR * 1.45f, 0.85f, juce::Colours::black);
 
-        g.setGradientFill (juce::ColourGradient (hover ? juce::Colour (0xff2a2c32) : juce::Colour (0xff232429), centre.x, cap.getY(),
-                                                 juce::Colour (0xff0c0d10), centre.x, cap.getBottom(), false));
-        g.fillEllipse (cap);
-        g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.20f), centre.x, cap.getY(),
-                                                 colours::accent.withAlpha (0.02f), centre.x, cap.getCentreY() + capRadius * 0.4f, false));
-        g.drawEllipse (cap.reduced (0.5f), 1.0f);
+        // Rim: bevel, bright on top, dark underneath
+        g.setGradientFill (juce::ColourGradient (Colour (0xff4a4e58).brighter (0.15f * hover), centre.x, body.getY(),
+                                                 Colour (0xff0a0b0e), centre.x, body.getBottom(), false));
+        g.fillEllipse (body);
 
-        // Indicator
-        const auto inner = centre.getPointOnCircumference (capRadius * 0.48f, valueAngle);
-        const auto outer = centre.getPointOnCircumference (capRadius * 0.80f, valueAngle);
-        const float lineW = std::max (1.8f, capRadius * 0.075f);
-        g.setColour (colours::accent.withAlpha (enabled ? 0.22f : 0.08f));
-        g.drawLine ({ inner, outer }, lineW * 3.0f);
-        g.setColour (enabled ? colours::text : colours::textFaint);
+        // Knurling on the rim, turning with the value
+        {
+            const int ridges = hero ? 44 : 32;
+            const float r0 = faceR + (bodyR - faceR) * 0.2f, r1 = bodyR - (bodyR - faceR) * 0.15f;
+            for (int i = 0; i < ridges; ++i)
+            {
+                const float ang = valueAngle + juce::MathConstants<float>::twoPi * (float) i / (float) ridges;
+                const float light = 0.5f + 0.5f * std::cos (ang);   // brighter where the rim faces the light
+                g.setColour (colours::accent.withAlpha ((0.025f + 0.11f * light) * a));
+                g.drawLine (juce::Line<float> (centre.getPointOnCircumference (r0, ang), centre.getPointOnCircumference (r1, ang)), 1.0f);
+            }
+        }
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.drawEllipse (body.reduced (0.3f), 0.8f);
+
+        // Face: satin top, slightly concave (lighter at the bottom edge)
+        g.setGradientFill (juce::ColourGradient (Colour (0xff2c2f36).brighter (0.12f * hover), centre.x, face.getY(),
+                                                 Colour (0xff15161a), centre.x, face.getBottom(), false));
+        g.fillEllipse (face);
+        {
+            juce::ColourGradient spec (colours::accent.withAlpha (0.13f + 0.04f * hover), centre.x - faceR * 0.25f, centre.y - faceR * 0.55f,
+                                       colours::accent.withAlpha (0.0f), centre.x - faceR * 0.25f + faceR * 0.95f, centre.y - faceR * 0.55f, true);
+            g.setGradientFill (spec);
+            g.fillEllipse (face);
+        }
+        // Rim light on the face edge (top) and its shadow side (bottom)
+        juce::Path topEdge, bottomEdge;
+        topEdge.addCentredArc (centre.x, centre.y, faceR - 0.5f, faceR - 0.5f, 0.0f, -1.2f, 1.2f, true);
+        bottomEdge.addCentredArc (centre.x, centre.y, faceR - 0.5f, faceR - 0.5f, 0.0f, juce::MathConstants<float>::pi - 1.0f,
+                                  juce::MathConstants<float>::pi + 1.0f, true);
+        g.setColour (colours::accent.withAlpha (0.22f));
+        g.strokePath (topEdge, juce::PathStrokeType (1.0f));
+        g.setColour (juce::Colours::black.withAlpha (0.5f));
+        g.strokePath (bottomEdge, juce::PathStrokeType (1.0f));
+
+        // ---- Pointer: a glowing LED line set into the face
+        const auto inner = centre.getPointOnCircumference (faceR * 0.36f, valueAngle);
+        const auto outer = centre.getPointOnCircumference (faceR * 0.80f, valueAngle);
+        const float lineW = std::max (2.0f, faceR * 0.085f);
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.drawLine ({ inner.translated (0.0f, 0.8f), outer.translated (0.0f, 0.8f) }, lineW + 1.5f);
+        if (enabled)
+        {
+            g.setColour (aurora (shown, 0.30f + 0.15f * hover));
+            g.drawLine ({ inner, outer }, lineW * 3.2f);
+        }
+        g.setColour (enabled ? aurora (shown).interpolatedWith (juce::Colours::white, 0.55f) : colours::textFaint);
         g.drawLine ({ inner, outer }, lineW);
     }
 
     juce::Label* VelvoxLookAndFeel::createSliderTextBox (juce::Slider& slider)
     {
         auto* l = LookAndFeel_V4::createSliderTextBox (slider);
+        l->setHasFocusOutline (false);
         l->setFont (medium (12.5f));
         l->setColour (juce::Label::textColourId, colours::text.withAlpha (0.78f));
         l->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
@@ -142,16 +212,24 @@ namespace velvox::ui
         auto r = b.getLocalBounds().toFloat().reduced (0.5f);
         const float corner = r.getHeight() * 0.5f;
 
-        g.setColour (on ? colours::accent.withAlpha (0.09f) : (highlighted ? colours::accent.withAlpha (0.03f) : juce::Colours::transparentBlack));
-        g.fillRoundedRectangle (r, corner);
-        g.setColour (on ? colours::accent.withAlpha (0.30f) : (highlighted ? colours::line.brighter (0.4f) : colours::line));
+        if (on)
+        {
+            g.setGradientFill (auroraGradient (r.getTopLeft(), r.getTopRight(), 0.10f));
+            g.fillRoundedRectangle (r, corner);
+        }
+        else if (highlighted)
+        {
+            g.setColour (colours::accent.withAlpha (0.03f));
+            g.fillRoundedRectangle (r, corner);
+        }
+        g.setColour (on ? aurora (0.3f, 0.45f) : (highlighted ? colours::line.brighter (0.4f) : colours::line));
         g.drawRoundedRectangle (r, corner, 1.0f);
 
         const float dot = std::max (5.0f, r.getHeight() * 0.22f);
         const auto dc = juce::Point<float> (r.getX() + corner * 1.05f, r.getCentreY());
         if (on)
-            drawGlow (g, dc, dot * 2.2f, 0.35f);
-        g.setColour (on ? colours::accent : colours::textFaint);
+            drawGlow (g, dc, dot * 2.6f, 0.55f, colours::teal);
+        g.setColour (on ? colours::teal.interpolatedWith (juce::Colours::white, 0.35f) : colours::textFaint);
         g.fillEllipse (juce::Rectangle<float> (dot, dot).withCentre (dc));
 
         g.setColour (on ? colours::text : colours::textDim);
@@ -173,15 +251,23 @@ namespace velvox::ui
         shape.addRoundedRectangle (r.getX(), r.getY(), r.getWidth(), r.getHeight(), corner, corner,
                                    ! flatL, ! flatR, ! flatL, ! flatR);
 
-        auto fill = on ? b.findColour (juce::TextButton::buttonOnColourId) : background;
-        if (down)
-            fill = colours::accent.withAlpha (on ? 0.16f : 0.08f);
-        else if (highlighted)
-            fill = on ? fill : colours::accent.withAlpha (0.045f);
-        g.setColour (fill);
-        g.fillPath (shape);
-
-        g.setColour (on ? colours::accent.withAlpha (0.22f) : colours::line);
+        if (on)
+        {
+            g.setGradientFill (auroraGradient (r.getTopLeft(), r.getBottomRight(), down ? 0.24f : 0.15f));
+            g.fillPath (shape);
+            g.setColour (aurora (0.4f, 0.45f));
+        }
+        else
+        {
+            auto fill = background;
+            if (down)
+                fill = colours::accent.withAlpha (0.08f);
+            else if (highlighted)
+                fill = colours::accent.withAlpha (0.045f);
+            g.setColour (fill);
+            g.fillPath (shape);
+            g.setColour (colours::line);
+        }
         g.strokePath (shape, juce::PathStrokeType (1.0f));
     }
 

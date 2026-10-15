@@ -125,6 +125,45 @@ public:
             const auto out = h.run (h.noise (0.2f, 0.3, 3));
             expect (allFinite (out));
         }
+
+        beginTest ("Hover info card sits next to its control and stays inside the window");
+        {
+            juce::Component parent;
+            parent.setBounds (0, 0, ui::baseWidth, ui::baseHeight);
+            ui::InfoPopup info;
+            parent.addChildComponent (info);
+
+            const juce::Rectangle<int> anchor (600, 400, 90, 110);
+            info.show (anchor, "Presence", "Brings the voice to the front: clearer top end, harsh S sounds kept in check.");
+            expect (info.isVisible());
+            expect (info.getBottom() <= anchor.getY() + 8, "above the control");
+            expect (parent.getLocalBounds().contains (info.getBounds()));
+
+            // Near the top edge it flips below the control
+            const juce::Rectangle<int> top (20, 10, 90, 110);
+            info.show (top, "Gain", "Input level");
+            expect (info.getY() >= top.getBottom(), "below the control");
+            expect (parent.getLocalBounds().contains (info.getBounds()));
+
+            // Optional visual check: VELVOX_DUMP_DIR=<folder>
+            const auto dumpDir = juce::SystemStats::getEnvironmentVariable ("VELVOX_DUMP_DIR", {});
+            if (dumpDir.isNotEmpty())
+            {
+                info.show (anchor, "Presence", "Brings the voice to the front: clearer top end, harsh S sounds kept in check.");
+                juce::Image img (juce::Image::ARGB, info.getWidth() + 40, info.getHeight() + 40, true);
+                info.setAlpha (1.0f);
+                {
+                    juce::Graphics g (img); // must finish before the pixels are read
+                    g.fillAll (ui::colours::background);
+                    g.setOrigin (20, 20);
+                    info.paintEntireComponent (g, true);
+                }
+                juce::FileOutputStream os (juce::File (dumpDir).getChildFile ("info-popup.png"));
+                os.setPosition (0);
+                os.truncate();
+                juce::PNGImageFormat().writeImageToStream (img, os);
+            }
+        }
     }
 };
 

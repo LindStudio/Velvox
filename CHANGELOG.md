@@ -10,9 +10,25 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
   - schlanke Kopfzeile mit Segment-Schaltern (Preset, A/B, Beginner/Pro), Signalkette als feine Kacheln, Meter als schmale Seitenleisten
 - **Live-Spektrum:** Eingang (Kontur) und Ausgang (beleuchtet) als großes Hero-Element im Beginner-Modus und als Streifen über den Pro-Panels; im EQ liegt die Filterkurve direkt über dem Spektrum.
 - **Schrift Inter** (OFL) ist eingebettet und sieht deshalb auf jedem System gleich aus.
+- **Aurora-Akzent:** Teal → Blau für Wertebögen, Glows, Spektrum, Meter und aktive Elemente. Dazu kommt ein langsam treibender Nebel über der Kette, der mit dem Pegel des Vocals heller wird.
+- **3D-Regler:** eingelassene Rille mit Aurora-Bogen, erhabene Kappe mit Schlagschatten, Fase, Glanzlicht und einer Riffelung, die sich mitdreht; als Zeiger dient eine leuchtende LED-Linie.
+- **Animationen (60 fps):** Regler gleiten zu neuen Werten (Preset, Automation, A/B), Hover-Licht blendet ein, die Auswahl-Markierung gleitet durch die Kette, Panels blenden beim Wechsel weich ein.
+- **Info-Popup:** Die Beschreibungstexte unter den Makros sind weg. Ruht die Maus etwa 1 s auf einem Regler, erscheint eine Karte mit Titel und Erklärung.
+- **Eigene Ansicht pro Modul** (ersetzt den Spektrum-Streifen):
+  - EQ: Spektrum mit Kurve und ziehbaren Band-Punkten
+  - Kompressor: Pegel- und GR-Verlauf sowie Kennlinie mit Live-Punkt
+  - De-Esser: S-Band über dem Spektrum und Reduktionsverlauf
+  - Sättigung: Kennlinie und Obertöne mit THD
+  - Doubler: Stereo-Bühne mit treibenden Stimmen
+  - Pitch: Klaviatur mit Transpositionsbogen
+  - Chop: Step-Sequencer mit Playhead
+  - Delay: Echos auf der Zeitachse, live geduckt
+  - Reverb: Nachhall-Hüllkurve mit Pre-Delay und Early Reflections
+  - Output: Goniometer und LUFS-Verlauf
 
 ### Technik
-- `SampleTap`: lock-freier Abgriff für das Spektrum am Eingang (nach Input-Gain) und am Ausgang. Das Signal wird nur gelesen; alle 1850 Prüfungen inklusive der bitgenauen Vergleiche bestehen unverändert.
+- `SampleTap`: lock-freier Abgriff für das Spektrum am Eingang (nach Input-Gain) und am Ausgang; `StereoTap` für das Goniometer. Beide lesen das Signal nur; alle Prüfungen inklusive der bitgenauen Vergleiche bestehen unverändert (jetzt 1855).
+- Die Meter werden einmal pro Frame zentral abgefragt (`LiveData`), alle Ansichten lesen daraus.
 - Fenstergröße, Parameter, State und Presets sind unverändert.
 
 ## [0.2.0] – 2026-10-14 (Release Candidate, FL-Studio-Test ausstehend)

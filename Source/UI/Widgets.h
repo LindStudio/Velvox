@@ -8,19 +8,49 @@ namespace velvox::ui
 {
     using APVTS = juce::AudioProcessorValueTreeState;
 
-    // Rotary control with caption, value read-out (with unit), tooltip and
-    // double-click-to-default. Optionally shows a marker where macros move the
-    // value to (the effective value that is actually processed).
-    class Knob : public juce::Component
+    // Implemented by the editor canvas: shows the hover info card for a control
+    struct InfoPopupHost
+    {
+        virtual ~InfoPopupHost() = default;
+        virtual void showInfo (juce::Component& anchor, const juce::String& title, const juce::String& text) = 0;
+        virtual void hideInfo (juce::Component& anchor) = 0;
+    };
+
+    // Floating glass card with a title and a description; fades and slides in
+    class InfoPopup final : public juce::Component
+    {
+    public:
+        InfoPopup();
+        void show (juce::Rectangle<int> anchorInParent, const juce::String& title, const juce::String& text);
+        void hide();
+        bool isShowingFor (juce::Rectangle<int> anchor) const { return shown && anchor == anchorArea; }
+        void paint (juce::Graphics&) override;
+
+    private:
+        void tick();
+
+        juce::String title, text;
+        juce::Rectangle<int> anchorArea, finalBounds;
+        Smoothed fade;
+        bool shown = false;
+        juce::VBlankAttachment vblank { this, [this] { tick(); } };
+    };
+
+    // Rotary control with caption and value read-out. The dial glides to new
+    // values (presets, automation), lights up on hover, and after resting the
+    // mouse on it for a second, shows its description in an info card.
+    class Knob : public juce::Component, private juce::Timer
     {
     public:
         Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent = colours::accent);
+        ~Knob() override;
         void resized() override;
         void paintOverChildren (juce::Graphics&) override;
 
         // Large dial with value-driven glow (Beginner macros)
         void setHero (bool isHero);
         void setMaxDialSize (int px) { maxDial = px; resized(); }
+        void setDescription (const juce::String& text) { description = text; }
 
         // Returns the processed value in parameter units; empty = no marker
         std::function<float()> effectiveValue;
@@ -33,11 +63,19 @@ namespace velvox::ui
 
     private:
         juce::Rectangle<float> dialBounds() const;
+        void tick();
+        void timerCallback() override;
+        void mouseEnter (const juce::MouseEvent&) override;
+        void mouseExit (const juce::MouseEvent&) override;
+        void mouseDown (const juce::MouseEvent&) override;
 
         std::unique_ptr<APVTS::SliderAttachment> attachment;
+        juce::String description;
         float lastEffective = std::numeric_limits<float>::quiet_NaN();
         int maxDial = 72;
         bool hero = false;
+        Smoothed shownPos, hover;
+        juce::VBlankAttachment vblank { this, [this] { tick(); } };
     };
 
     // Pill toggle bound to a bool parameter
@@ -136,39 +174,12 @@ namespace velvox::ui
         void resized() override { lastKey.clear(); refresh(); }
 
         static constexpr float rangeDb = 18.0f;
+        static juce::Rectangle<float> plotArea (juce::Rectangle<float> bounds) { return bounds.reduced (0.0f, 10.0f); }
 
     private:
         juce::Array<float> lastKey;
         bool active = true;
         juce::Path curve;
-    };
-
-    // Static transfer curve of the saturation stage
-    class SaturationCurve final : public juce::Component, public juce::SettableTooltipClient
-    {
-    public:
-        // drive dB, mix 0..1, character, active
-        std::function<void (float&, float&, int&, bool&)> provider;
-        void refresh();
-        void paint (juce::Graphics&) override;
-
-    private:
-        float drive = -1.0f, mix = -1.0f;
-        int character = -1;
-        bool active = false;
-    };
-
-    // 16-step chop pattern with the current step highlighted
-    class StepPatternView final : public juce::Component
-    {
-    public:
-        void set (const char* steps, int currentStep, bool active, juce::Colour accent = colours::accent);
-        void paint (juce::Graphics&) override;
-
-    private:
-        juce::String pattern;
-        int current = -1;
-        bool isActive = false;
     };
 
     // Short text hint line ("Input is clipping" ...), coloured by severity

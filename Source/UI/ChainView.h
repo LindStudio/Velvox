@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Widgets.h"
+#include "LiveData.h"
 #include "../DSP/Routing.h"
 
 class VelvoxAudioProcessor;
@@ -30,6 +31,7 @@ namespace velvox::ui
 
         std::function<void (int moduleIdOrOutput)> onSelect;
         void setSelected (int id) { selected = id; repaint(); }
+        void setLiveData (const LiveData* data) { live = data; }
         int getSelected() const noexcept { return selected; }
 
         // Parameter controlling each module's on/off state
@@ -76,5 +78,14 @@ namespace velvox::ui
 
         juce::String hint;
         juce::uint32 hintUntil = 0;
+
+        // Animation: the selection light glides between tiles, hover fades in
+        void tick();
+        juce::Rectangle<float> selectionTarget();
+        const LiveData* live = nullptr;
+        std::array<Smoothed, 4> sel {};   // x, y, w, h
+        bool selInitialised = false;
+        std::array<Smoothed, dsp::numModules> hoverGlow {};
+        juce::VBlankAttachment vblank { this, [this] { tick(); } };
     };
 }

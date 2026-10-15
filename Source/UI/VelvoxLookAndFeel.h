@@ -9,8 +9,16 @@ namespace velvox::ui
     public:
         VelvoxLookAndFeel();
 
-        // Slider property: "hero" = large macro dial with a value-driven glow
+        // Slider properties set by Knob:
+        //   hero    = large macro dial with a value-driven glow
+        //   animPos = displayed (animated) position 0..1
+        //   hover   = hover light 0..1
         static inline const juce::Identifier heroProperty { "hero" };
+        static inline const juce::Identifier animPosProperty { "animPos" };
+        static inline const juce::Identifier hoverProperty { "hover" };
+
+        // Width of the value groove relative to the dial radius
+        static constexpr float grooveRatio = 0.13f;
 
         void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height, float sliderPos,
                                float rotaryStartAngle, float rotaryEndAngle, juce::Slider&) override;
