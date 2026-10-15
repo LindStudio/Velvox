@@ -11,7 +11,7 @@ namespace velvox::ui
         constexpr float laneTileH = 30.0f;
         constexpr float laneOffset = 12.0f;
         constexpr float endW = 54.0f;
-        constexpr float gap = 10.0f;
+        constexpr float gap = 8.0f;
         constexpr float corner = 10.0f;
 
         bool canBeSend (ModuleId id) { return id == ModuleId::delay || id == ModuleId::reverb; }
@@ -100,7 +100,7 @@ namespace velvox::ui
 
     juce::Rectangle<float> ChainView::modeBounds (const Tile& t) const
     {
-        return t.bounds.withTrimmedLeft (t.bounds.getWidth() - 46.0f).reduced (4.0f, t.inLane ? 7.0f : 11.0f);
+        return t.bounds.withTrimmedLeft (t.bounds.getWidth() - 32.0f).reduced (3.0f, t.inLane ? 8.0f : 12.0f);
     }
 
     int ChainView::tileAt (juce::Point<float> p) const
@@ -252,10 +252,11 @@ namespace velvox::ui
         // Name
         auto textArea = r.withTrimmedLeft (28.0f);
         if (canBeSend (t.id))
-            textArea = textArea.withTrimmedRight (44.0f);
+            textArea = textArea.withTrimmedRight (30.0f);
         g.setColour (on ? colours::text : colours::textDim);
-        g.setFont (medium (t.inLane ? 12.5f : 13.0f));
-        g.drawFittedText (dsp::moduleDisplayName (t.id), textArea.toNearestInt(), juce::Justification::centredLeft, 1, 0.8f);
+        g.setFont (medium (t.inLane ? 12.5f : 12.0f));
+        g.drawFittedText (t.inLane ? dsp::moduleDisplayName (t.id) : dsp::moduleShortName (t.id), textArea.toNearestInt(),
+                          juce::Justification::centredLeft, 1, 0.85f);
 
         if (macroEngaged[idx] && ! onState[idx])
         {
@@ -272,7 +273,7 @@ namespace velvox::ui
             g.fillRoundedRectangle (m, m.getHeight() * 0.5f);
             g.setColour (colours::accent.withAlpha (send ? 0.30f : 0.14f));
             g.drawRoundedRectangle (m.reduced (0.5f), m.getHeight() * 0.5f, 1.0f);
-            drawCaption (g, send ? "Send" : "Ins", m, juce::Justification::centred, send ? colours::text : colours::textDim, 8.0f);
+            drawCaption (g, send ? "Send" : "Ins", m, juce::Justification::centred, send ? colours::text : colours::textDim, 7.0f);
         }
     }
 

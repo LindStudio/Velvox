@@ -13,6 +13,12 @@
 #include "Ducker.h"
 #include "PitchModule.h"
 #include "ChopModule.h"
+#include "PulseModule.h"
+#include "SmashModule.h"
+#include "ChoirModule.h"
+#include "SmoothModule.h"
+#include "CheckModule.h"
+#include "RideModule.h"
 
 namespace velvox::dsp
 {
@@ -35,6 +41,14 @@ namespace velvox::dsp
         bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
         bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
         float delayIntoReverb = 0.0f; // 0..1, only when both are sends
+
+        // 0.3 modules (all off by default)
+        PulseSettings pulse;
+        SmashSettings smash;
+        ChoirSettings choir;
+        SmoothSettings smooth;
+        bool checkOn = false;
+        RideSettings ride;
 
         DuckSettings delayDuck, reverbDuck;
         bool duckExternal = false;    // use the sidechain input when available
@@ -100,6 +114,12 @@ namespace velvox::dsp
         Ducker& getDelayDucker() noexcept { return delayDucker; }
         Ducker& getReverbDucker() noexcept { return reverbDucker; }
         int getChopStep() const noexcept { return chop.getDisplayStep(); }
+        PulseModule& getPulse() noexcept { return pulse; }
+        SmashModule& getSmash() noexcept { return smash; }
+        ChoirModule& getChoir() noexcept { return choir; }
+        SmoothModule& getSmooth() noexcept { return smooth; }
+        CheckModule& getCheck() noexcept { return check; }
+        RideModule& getRide() noexcept { return ride; }
         ChainMeters meters;
 
         // Exposed for tests: soft clip transfer curve
@@ -128,6 +148,12 @@ namespace velvox::dsp
         DoublerModule doubler;
         PitchModule pitch;
         ChopModule chop;
+        PulseModule pulse;
+        SmashModule smash;
+        ChoirModule choir;
+        SmoothModule smooth;
+        CheckModule check;
+        RideModule ride;
 
         ModuleGate eqGate, compGate, deessGate;
         juce::SmoothedValue<float> delayReturn { 0.0f }, reverbReturn { 0.0f };

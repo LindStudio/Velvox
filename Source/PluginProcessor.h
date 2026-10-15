@@ -4,6 +4,7 @@
 
 #include "DSP/VocalChain.h"
 #include "DSP/Macros.h"
+#include "DSP/VocalAnalyzer.h"
 #include "Parameters/ParameterLayout.h"
 #include "Presets/PresetManager.h"
 
@@ -64,6 +65,12 @@ public:
     bool isMonoMonitor() const noexcept { return monoMonitor.load(); }
     void setMonoMonitor (bool shouldBeMono) noexcept { monoMonitor.store (shouldBeMono); }
 
+    // VOCAL CHECK analysis (message thread). Fed from the Check module in the
+    // chain by a timer that runs while the module is on - also with the editor closed.
+    velvox::dsp::VocalAnalyzer& getAnalyzer() noexcept { return analyzer; }
+    // Drains the Check tap into the analyzer (called by the timer; tests call it directly)
+    void pumpAnalyzer();
+
 private:
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeRedirected (juce::ValueTree&) override;
@@ -118,9 +125,24 @@ private:
         Raw chopOn, chopPattern, chopRate, chopDepth, chopSmooth;
         Raw lowType, lowQ, highType, highQ, lpfOn, lpfFreq, lpfSlope, satCharacter, deessMode, compDetector, compScHpf;
         Raw macroPresence, macroWarmth, macroAggression, macroWidth, macroSpace, macroDensity;
+        Raw pulseOn, pulseRate, pulseDepth, pulseAttack, pulseRelease, pulseSmooth, pulseInterp, pulseTension, pulseMix, pulseBpm;
+        std::array<Raw, 6> pulseX, pulseY;
+        Raw smashOn, smashAmount, smashBlend, smashAttack, smashRelease, smashTone, smashOutput;
+        Raw choirOn, choirVoices, choirDetune, choirTiming, choirHumanize, choirWidth, choirDensity, choirMix;
+        Raw smoothOn, smoothAmount, smoothSensitivity, smoothLow, smoothHigh, smoothAttack, smoothRelease, smoothMode, smoothOutput, smoothDelta;
+        Raw checkOn, checkMode;
+        Raw rideOn, rideTarget, rideAmount, rideMaxBoost, rideMaxCut, rideResponse, ridePhrase, rideTransient, rideSilence;
     } raw;
 
     std::atomic<bool> monoMonitor { false };
+
+    velvox::dsp::VocalAnalyzer analyzer { chain.getCheck() };
+    struct AnalyzerTimer final : juce::Timer
+    {
+        explicit AnalyzerTimer (VelvoxAudioProcessor& p) : owner (p) {}
+        void timerCallback() override { owner.pumpAnalyzer(); }
+        VelvoxAudioProcessor& owner;
+    } analyzerTimer { *this };
 
     std::atomic<std::uint64_t> routingPacked { velvox::dsp::Routing::defaults().pack() };
 

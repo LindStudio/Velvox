@@ -43,7 +43,15 @@ public:
         {
             const auto def = Routing::defaults();
             expect (def.isValidPermutation());
-            expectEquals (def.toString(), juce::String ("eq,comp,deess,sat,doubler,pitch,delay:send,reverb:send,chop"));
+            expectEquals (def.toString(), juce::String ("eq,ride,comp,smash,deess,smooth,sat,doubler,choir,pitch,delay:send,reverb:send,chop,pulse,check"));
+
+            // A v0.2 routing string gains the 0.3 modules exactly at their default places
+            expect (Routing::fromString ("eq,comp,deess,sat,doubler,pitch,delay:send,reverb:send,chop") == def, "v0.2 default -> 0.3 default");
+            const auto custom = Routing::fromString ("sat,eq,comp,deess,doubler,pitch,delay:insert,reverb:send,chop");
+            expect (custom.isValidPermutation() && custom.delayInsert);
+            expect (custom.positionOf (ModuleId::sat) == 0 && custom.positionOf (ModuleId::ride) == custom.positionOf (ModuleId::eq) + 1,
+                    "custom order kept, ride placed after EQ");
+            expect (custom.positionOf (ModuleId::check) == dsp::numModules - 1, "check stays last");
             expect (Routing::fromString (def.toString()) == def);
             expect (Routing::unpack (def.pack()) == def);
 

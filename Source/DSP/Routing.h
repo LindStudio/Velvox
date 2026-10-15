@@ -11,13 +11,16 @@ namespace velvox::dsp
     // values are persisted (packed routing) - append only, never renumber.
     enum class ModuleId : std::uint8_t
     {
-        eq = 0, comp, deess, sat, doubler, pitch, delay, reverb, chop
+        eq = 0, comp, deess, sat, doubler, pitch, delay, reverb, chop,
+        // 0.3
+        pulse, smash, choir, smooth, check, ride
     };
 
-    inline constexpr int numModules = 9;
+    inline constexpr int numModules = 15;
 
     const char* moduleKey (ModuleId id) noexcept;          // stable key used in state/presets
     const char* moduleDisplayName (ModuleId id) noexcept;  // UI name
+    const char* moduleShortName (ModuleId id) noexcept;    // compact name for the chain tiles
     std::optional<ModuleId> moduleFromKey (const juce::String& key) noexcept;
 
     // Signal routing:

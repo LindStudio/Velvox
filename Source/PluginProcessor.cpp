@@ -26,10 +26,12 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
     syncRoutingFromState();
 
     apvts.addParameterListener (pid::pitchOn, this);
+    analyzerTimer.startTimerHz (15);
 }
 
 VelvoxAudioProcessor::~VelvoxAudioProcessor()
 {
+    analyzerTimer.stopTimer();
     cancelPendingUpdate();
     apvts.removeParameterListener (pid::pitchOn, this);
     apvts.state.removeListener (this);
@@ -45,6 +47,15 @@ void VelvoxAudioProcessor::parameterChanged (const juce::String&, float)
 void VelvoxAudioProcessor::handleAsyncUpdate()
 {
     updateHostLatency();
+}
+
+void VelvoxAudioProcessor::pumpAnalyzer()
+{
+    if (getSampleRate() > 0.0)
+        analyzer.setSampleRate (getSampleRate());
+    analyzer.setMode (raw.checkMode.index() == 1 ? dsp::VocalAnalyzer::Mode::capture : dsp::VocalAnalyzer::Mode::continuous);
+    if (raw.checkOn.on())
+        analyzer.pump();
 }
 
 void VelvoxAudioProcessor::updateHostLatency()
@@ -128,6 +139,35 @@ void VelvoxAudioProcessor::cacheParameterPointers()
     bind (raw.macroPresence, pid::macroPresence);   bind (raw.macroWarmth, pid::macroWarmth);
     bind (raw.macroAggression, pid::macroAggression); bind (raw.macroWidth, pid::macroWidth);
     bind (raw.macroSpace, pid::macroSpace);         bind (raw.macroDensity, pid::macroDensity);
+    bind (raw.pulseOn, pid::pulseOn);           bind (raw.pulseRate, pid::pulseRate);
+    bind (raw.pulseDepth, pid::pulseDepth);     bind (raw.pulseAttack, pid::pulseAttack);
+    bind (raw.pulseRelease, pid::pulseRelease); bind (raw.pulseSmooth, pid::pulseSmooth);
+    bind (raw.pulseInterp, pid::pulseInterp);   bind (raw.pulseTension, pid::pulseTension);
+    bind (raw.pulseMix, pid::pulseMix);         bind (raw.pulseBpm, pid::pulseBpm);
+    for (size_t i = 0; i < raw.pulseX.size(); ++i)
+    {
+        bind (raw.pulseX[i], pid::pulseX[i]);
+        bind (raw.pulseY[i], pid::pulseY[i]);
+    }
+    bind (raw.smashOn, pid::smashOn);           bind (raw.smashAmount, pid::smashAmount);
+    bind (raw.smashBlend, pid::smashBlend);     bind (raw.smashAttack, pid::smashAttack);
+    bind (raw.smashRelease, pid::smashRelease); bind (raw.smashTone, pid::smashTone);
+    bind (raw.smashOutput, pid::smashOutput);
+    bind (raw.choirOn, pid::choirOn);           bind (raw.choirVoices, pid::choirVoices);
+    bind (raw.choirDetune, pid::choirDetune);   bind (raw.choirTiming, pid::choirTiming);
+    bind (raw.choirHumanize, pid::choirHumanize); bind (raw.choirWidth, pid::choirWidth);
+    bind (raw.choirDensity, pid::choirDensity); bind (raw.choirMix, pid::choirMix);
+    bind (raw.smoothOn, pid::smoothOn);         bind (raw.smoothAmount, pid::smoothAmount);
+    bind (raw.smoothSensitivity, pid::smoothSensitivity); bind (raw.smoothLow, pid::smoothLow);
+    bind (raw.smoothHigh, pid::smoothHigh);     bind (raw.smoothAttack, pid::smoothAttack);
+    bind (raw.smoothRelease, pid::smoothRelease); bind (raw.smoothMode, pid::smoothMode);
+    bind (raw.smoothOutput, pid::smoothOutput); bind (raw.smoothDelta, pid::smoothDelta);
+    bind (raw.checkOn, pid::checkOn);           bind (raw.checkMode, pid::checkMode);
+    bind (raw.rideOn, pid::rideOn);             bind (raw.rideTarget, pid::rideTarget);
+    bind (raw.rideAmount, pid::rideAmount);     bind (raw.rideMaxBoost, pid::rideMaxBoost);
+    bind (raw.rideMaxCut, pid::rideMaxCut);     bind (raw.rideResponse, pid::rideResponse);
+    bind (raw.ridePhrase, pid::ridePhrase);     bind (raw.rideTransient, pid::rideTransient);
+    bind (raw.rideSilence, pid::rideSilence);
 }
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
@@ -240,6 +280,62 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     s.deess.mode = raw.deessMode.index();
     s.comp.detector = raw.compDetector.index();
     s.comp.sidechainHpfHz = raw.compScHpf.get();
+
+    s.pulse.enabled = raw.pulseOn.on();
+    s.pulse.rate = raw.pulseRate.index();
+    s.pulse.depth = raw.pulseDepth.get() * 0.01f;
+    s.pulse.attackMs = raw.pulseAttack.get();
+    s.pulse.releaseMs = raw.pulseRelease.get();
+    s.pulse.smoothMs = raw.pulseSmooth.get();
+    s.pulse.interpolation = raw.pulseInterp.index();
+    s.pulse.tension = raw.pulseTension.get() * 0.01f;
+    s.pulse.mix = raw.pulseMix.get() * 0.01f;
+    s.pulse.manualBpm = raw.pulseBpm.get();
+    for (size_t i = 0; i < raw.pulseX.size(); ++i)
+    {
+        s.pulse.x[i] = raw.pulseX[i].get();
+        s.pulse.y[i] = raw.pulseY[i].get();
+    }
+
+    s.smash.enabled = raw.smashOn.on();
+    s.smash.amount = raw.smashAmount.get() * 0.01f;
+    s.smash.blend = raw.smashBlend.get() * 0.01f;
+    s.smash.attackMs = raw.smashAttack.get();
+    s.smash.releaseMs = raw.smashRelease.get();
+    s.smash.tone = raw.smashTone.get() * 0.01f;
+    s.smash.outputDb = raw.smashOutput.get();
+
+    s.choir.enabled = raw.choirOn.on();
+    s.choir.voices = dsp::ChoirModule::voiceCountForIndex (raw.choirVoices.index());
+    s.choir.detuneCents = raw.choirDetune.get();
+    s.choir.timingMs = raw.choirTiming.get();
+    s.choir.humanize = raw.choirHumanize.get() * 0.01f;
+    s.choir.width = raw.choirWidth.get() * 0.01f;
+    s.choir.density = raw.choirDensity.get() * 0.01f;
+    s.choir.mix = raw.choirMix.get() * 0.01f;
+
+    s.smooth.enabled = raw.smoothOn.on();
+    s.smooth.amount = raw.smoothAmount.get() * 0.01f;
+    s.smooth.sensitivity = raw.smoothSensitivity.get() * 0.01f;
+    s.smooth.lowHz = raw.smoothLow.get();
+    s.smooth.highHz = raw.smoothHigh.get();
+    s.smooth.attackMs = raw.smoothAttack.get();
+    s.smooth.releaseMs = raw.smoothRelease.get();
+    s.smooth.mode = raw.smoothMode.index();
+    s.smooth.outputDb = raw.smoothOutput.get();
+    s.smooth.delta = raw.smoothDelta.on();
+
+    s.checkOn = raw.checkOn.on();
+
+    s.ride.enabled = raw.rideOn.on();
+    s.ride.targetDb = raw.rideTarget.get();
+    s.ride.amount = raw.rideAmount.get() * 0.01f;
+    s.ride.maxBoostDb = raw.rideMaxBoost.get();
+    s.ride.maxCutDb = raw.rideMaxCut.get();
+    s.ride.response = raw.rideResponse.get() * 0.01f;
+    s.ride.phrase = raw.ridePhrase.get() * 0.01f;
+    s.ride.transient = raw.rideTransient.get() * 0.01f;
+    s.ride.silenceDb = raw.rideSilence.get();
 
     return s;
 }

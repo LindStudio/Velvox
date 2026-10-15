@@ -62,6 +62,11 @@ namespace velvox::dsp
 
         pitch.prepare (sampleRate, bs);
         chop.prepare (sampleRate, bs);
+        pulse.prepare (sampleRate, bs);
+        smash.prepare (sampleRate, bs);
+        choir.prepare (sampleRate, bs);
+        smooth.prepare (sampleRate, bs);
+        ride.prepare (sampleRate, bs);
         bypassDelay.prepare (std::max (1, getLatencyFor (true)));
         bypassDelay.setDelay (getLatencySamples());
 
@@ -99,6 +104,11 @@ namespace velvox::dsp
         reverb.reset();
         doubler.reset();
         chop.reset();
+        pulse.reset();
+        smash.reset();
+        choir.reset();
+        smooth.reset();
+        ride.reset();
         delayDucker.reset();
         reverbDucker.reset();
         bypassDelay.reset();
@@ -129,6 +139,13 @@ namespace velvox::dsp
         pitch.setSettings (s.pitch);
         chop.setSettings (s.chop);
         chop.setTransport (s.hostBpm, s.hostPpq, s.hostPlaying);
+        pulse.setSettings (s.pulse);
+        pulse.setTransport (s.hostBpm, s.hostPpq, s.hostPlaying);
+        smash.setSettings (s.smash);
+        choir.setSettings (s.choir);
+        smooth.setSettings (s.smooth);
+        check.setEnabled (s.checkOn);
+        ride.setSettings (s.ride);
         pendingPitchOn = s.pitch.enabled;
         delayDucker.setSettings (s.delayDuck);
         reverbDucker.setSettings (s.reverbDuck);
@@ -381,6 +398,14 @@ namespace velvox::dsp
                 break;
 
             case ModuleId::chop:    chop.process (io, numChannels, n); break; // own on/off, zero latency
+
+            // 0.3 modules: each has its own click-free on/off and does nothing at all while off
+            case ModuleId::pulse:   pulse.process (io, numChannels, n); break;
+            case ModuleId::smash:   smash.process (io, numChannels, n); break;
+            case ModuleId::choir:   choir.process (io, numChannels, n); break;
+            case ModuleId::smooth:  smooth.process (io, numChannels, n); break;
+            case ModuleId::check:   check.process (io, numChannels, n); break; // read only
+            case ModuleId::ride:    ride.process (io, numChannels, n); break;
 
             case ModuleId::delay:
             case ModuleId::reverb:

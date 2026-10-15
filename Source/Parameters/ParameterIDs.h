@@ -139,4 +139,67 @@ namespace velvox::pid
     inline constexpr const char* macroWidth      = "macroWidth";
     inline constexpr const char* macroSpace      = "macroSpace";
     inline constexpr const char* macroDensity    = "macroDensity";
+
+    // ---- added in 0.3 (all modules default to off: older projects sound identical) ----
+
+    // PULSE - rhythmic volume shaper
+    inline constexpr const char* pulseOn      = "pulseOn";
+    inline constexpr const char* pulseRate    = "pulseRate";
+    inline constexpr const char* pulseDepth   = "pulseDepth";
+    inline constexpr const char* pulseAttack  = "pulseAttack";
+    inline constexpr const char* pulseRelease = "pulseRelease";
+    inline constexpr const char* pulseSmooth  = "pulseSmooth";
+    inline constexpr const char* pulseInterp  = "pulseInterp";
+    inline constexpr const char* pulseTension = "pulseTension";
+    inline constexpr const char* pulseMix     = "pulseMix";
+    inline constexpr const char* pulseBpm     = "pulseBpm";
+    // Curve points (time 0..1 within the cycle, level 0..1)
+    inline constexpr const char* pulseX[6] { "pulseX1", "pulseX2", "pulseX3", "pulseX4", "pulseX5", "pulseX6" };
+    inline constexpr const char* pulseY[6] { "pulseY1", "pulseY2", "pulseY3", "pulseY4", "pulseY5", "pulseY6" };
+
+    // VOCAL SMASH - parallel compression
+    inline constexpr const char* smashOn      = "smashOn";
+    inline constexpr const char* smashAmount  = "smashAmount";
+    inline constexpr const char* smashBlend   = "smashBlend";
+    inline constexpr const char* smashAttack  = "smashAttack";
+    inline constexpr const char* smashRelease = "smashRelease";
+    inline constexpr const char* smashTone    = "smashTone";
+    inline constexpr const char* smashOutput  = "smashOutput";
+
+    // CHOIR - multi-voice doubling
+    inline constexpr const char* choirOn       = "choirOn";
+    inline constexpr const char* choirVoices   = "choirVoices";
+    inline constexpr const char* choirDetune   = "choirDetune";
+    inline constexpr const char* choirTiming   = "choirTiming";
+    inline constexpr const char* choirHumanize = "choirHumanize";
+    inline constexpr const char* choirWidth    = "choirWidth";
+    inline constexpr const char* choirDensity  = "choirDensity";
+    inline constexpr const char* choirMix      = "choirMix";
+
+    // SMOOTH - adaptive resonance control
+    inline constexpr const char* smoothOn          = "smoothOn";
+    inline constexpr const char* smoothAmount      = "smoothAmount";
+    inline constexpr const char* smoothSensitivity = "smoothSensitivity";
+    inline constexpr const char* smoothLow         = "smoothLow";
+    inline constexpr const char* smoothHigh        = "smoothHigh";
+    inline constexpr const char* smoothAttack      = "smoothAttack";
+    inline constexpr const char* smoothRelease     = "smoothRelease";
+    inline constexpr const char* smoothMode        = "smoothMode";
+    inline constexpr const char* smoothOutput      = "smoothOutput";
+    inline constexpr const char* smoothDelta       = "smoothDelta";
+
+    // VOCAL CHECK - analysis only (never changes the audio)
+    inline constexpr const char* checkOn   = "checkOn";
+    inline constexpr const char* checkMode = "checkMode";
+
+    // LEVEL RIDE - vocal loudness rider
+    inline constexpr const char* rideOn        = "rideOn";
+    inline constexpr const char* rideTarget    = "rideTarget";
+    inline constexpr const char* rideAmount    = "rideAmount";
+    inline constexpr const char* rideMaxBoost  = "rideMaxBoost";
+    inline constexpr const char* rideMaxCut    = "rideMaxCut";
+    inline constexpr const char* rideResponse  = "rideResponse";
+    inline constexpr const char* ridePhrase    = "ridePhrase";
+    inline constexpr const char* rideTransient = "rideTransient";
+    inline constexpr const char* rideSilence   = "rideSilence";
 }

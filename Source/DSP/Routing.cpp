@@ -4,14 +4,31 @@ namespace velvox::dsp
 {
     namespace
     {
-        constexpr const char* keys[numModules]  { "eq", "comp", "deess", "sat", "doubler", "pitch", "delay", "reverb", "chop" };
-        constexpr const char* names[numModules] { "EQ", "Compressor", "De-esser", "Saturation", "Doubler", "Pitch", "Delay", "Reverb", "Chop" };
+        constexpr const char* keys[numModules]  { "eq", "comp", "deess", "sat", "doubler", "pitch", "delay", "reverb", "chop",
+                                                  "pulse", "smash", "choir", "smooth", "check", "ride" };
+        constexpr const char* names[numModules] { "EQ", "Compressor", "De-esser", "Saturation", "Doubler", "Pitch", "Delay", "Reverb", "Chop",
+                                                  "Pulse", "Vocal Smash", "Choir", "Smooth", "Vocal Check", "Level Ride" };
+        constexpr const char* shortNames[numModules] { "EQ", "Comp", "De-ess", "Sat", "Doubler", "Pitch", "Delay", "Reverb", "Chop",
+                                                       "Pulse", "Smash", "Choir", "Smooth", "Check", "Ride" };
+
+        // Default processing order. The nine v0.2 modules keep their relative
+        // order; the 0.3 modules sit where they usually belong: leveling before
+        // compression, parallel squash after it, resonance control after
+        // de-essing, rhythm effects late, analysis last.
+        constexpr ModuleId defaultOrder[numModules] {
+            ModuleId::eq, ModuleId::ride, ModuleId::comp, ModuleId::smash, ModuleId::deess, ModuleId::smooth,
+            ModuleId::sat, ModuleId::doubler, ModuleId::choir, ModuleId::pitch, ModuleId::delay, ModuleId::reverb,
+            ModuleId::chop, ModuleId::pulse, ModuleId::check
+        };
 
         constexpr int idx (ModuleId id) noexcept { return (int) id; }
+        constexpr int flagShift = 4 * numModules; // send/insert flags sit above the order nibbles
+        static_assert (flagShift + 2 <= 64, "routing must fit into one atomic 64-bit word");
     }
 
     const char* moduleKey (ModuleId id) noexcept         { return keys[idx (id)]; }
     const char* moduleDisplayName (ModuleId id) noexcept { return names[idx (id)]; }
+    const char* moduleShortName (ModuleId id) noexcept   { return shortNames[idx (id)]; }
 
     std::optional<ModuleId> moduleFromKey (const juce::String& key) noexcept
     {
@@ -25,7 +42,7 @@ namespace velvox::dsp
     {
         Routing r;
         for (int i = 0; i < numModules; ++i)
-            r.order[(size_t) i] = (ModuleId) i;
+            r.order[(size_t) i] = defaultOrder[i];
         return r;
     }
 
@@ -77,8 +94,8 @@ namespace velvox::dsp
         std::uint64_t v = 0;
         for (int i = 0; i < numModules; ++i)
             v |= (std::uint64_t) (idx (order[(size_t) i]) & 0xf) << (4 * i);
-        v |= (std::uint64_t) (delayInsert ? 1 : 0) << 48;
-        v |= (std::uint64_t) (reverbInsert ? 1 : 0) << 49;
+        v |= (std::uint64_t) (delayInsert ? 1 : 0) << flagShift;
+        v |= (std::uint64_t) (reverbInsert ? 1 : 0) << (flagShift + 1);
         return v;
     }
 
@@ -87,8 +104,8 @@ namespace velvox::dsp
         Routing r;
         for (int i = 0; i < numModules; ++i)
             r.order[(size_t) i] = (ModuleId) ((v >> (4 * i)) & 0xf);
-        r.delayInsert = ((v >> 48) & 1) != 0;
-        r.reverbInsert = ((v >> 49) & 1) != 0;
+        r.delayInsert = ((v >> flagShift) & 1) != 0;
+        r.reverbInsert = ((v >> (flagShift + 1)) & 1) != 0;
         return r.isValidPermutation() ? r : defaults();
     }
 
@@ -120,9 +137,9 @@ namespace velvox::dsp
 
     Routing Routing::fromString (const juce::String& text)
     {
-        Routing r = defaults();
+        std::vector<ModuleId> parsed;
         std::array<bool, numModules> used {};
-        int count = 0;
+        bool delayInsert = false, reverbInsert = false;
 
         for (const auto& token : juce::StringArray::fromTokens (text, ",", ""))
         {
@@ -133,17 +150,54 @@ namespace velvox::dsp
                 continue;
 
             used[(size_t) idx (*id)] = true;
-            r.order[(size_t) count++] = *id;
+            parsed.push_back (*id);
 
-            if (*id == ModuleId::delay)  r.delayInsert  = mode.equalsIgnoreCase ("insert");
-            if (*id == ModuleId::reverb) r.reverbInsert = mode.equalsIgnoreCase ("insert");
+            if (*id == ModuleId::delay)  delayInsert  = mode.equalsIgnoreCase ("insert");
+            if (*id == ModuleId::reverb) reverbInsert = mode.equalsIgnoreCase ("insert");
         }
 
-        // Modules missing from the text (e.g. older presets) keep default order at the end
-        for (int i = 0; i < numModules; ++i)
-            if (! used[(size_t) i])
-                r.order[(size_t) count++] = (ModuleId) i;
+        // Missing modules (older projects / presets):
+        //  - v0.2 modules keep the v0.2 rule: appended at the end in default order
+        //  - 0.3 modules go to their default place, directly after the module that
+        //    precedes them in the default order (or to the front)
+        // so a v0.2 routing string gains the new modules exactly where a fresh
+        // instance has them, and the given order is never rearranged.
+        constexpr int firstV03Module = (int) ModuleId::pulse;
+        for (int d = 0; d < numModules; ++d)
+        {
+            const auto id = defaultOrder[d];
+            if (idx (id) < firstV03Module && ! used[(size_t) idx (id)])
+            {
+                parsed.push_back (id);
+                used[(size_t) idx (id)] = true;
+            }
+        }
 
+        for (int d = 0; d < numModules; ++d)
+        {
+            const auto id = defaultOrder[d];
+            if (used[(size_t) idx (id)])
+                continue;
+
+            auto insertAt = parsed.begin();
+            for (int p = d - 1; p >= 0; --p)
+            {
+                const auto it = std::find (parsed.begin(), parsed.end(), defaultOrder[p]);
+                if (it != parsed.end())
+                {
+                    insertAt = it + 1;
+                    break;
+                }
+            }
+            parsed.insert (insertAt, id);
+            used[(size_t) idx (id)] = true;
+        }
+
+        Routing r;
+        for (int i = 0; i < numModules; ++i)
+            r.order[(size_t) i] = parsed[(size_t) i];
+        r.delayInsert = delayInsert;
+        r.reverbInsert = reverbInsert;
         return r;
     }
 }

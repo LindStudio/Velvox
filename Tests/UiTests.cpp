@@ -83,7 +83,7 @@ public:
 
             // ...and back onto the lane
             const auto delayNow = f.view.getTileBounds (ModuleId::delay);
-            drag (f.view, delayNow.getCentre().translated (-30.0f, 0.0f), f.view.getLaneBounds().getCentre());
+            drag (f.view, { delayNow.getX() + delayNow.getWidth() * 0.45f, delayNow.getCentreY() }, f.view.getLaneBounds().getCentre());
             expect (f.h.proc.getRouting().isSend (ModuleId::delay), "back to send");
         }
 
