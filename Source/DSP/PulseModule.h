@@ -49,7 +49,8 @@ namespace velvox::dsp
         // UI read-outs (relaxed atomics)
         std::atomic<float> displayPhase { -1.0f }; // < 0 while off
         std::atomic<float> displayGain { 1.0f };
-        double getEffectiveBpm() const noexcept { return bpm; }
+        std::atomic<float> displayBpm { 150.0f };
+        std::atomic<bool> displayHostTempo { false };
 
     private:
         void rebuildTable() noexcept;

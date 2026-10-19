@@ -36,7 +36,7 @@ namespace
     {
         Harness h;
         ui::ChainView view { h.proc };
-        ViewFixture() { view.setBounds (0, 0, 1248, 104); }
+        ViewFixture() { view.setBounds (0, 0, 1408, ui::ChainView::preferredHeight); }
     };
 }
 
@@ -50,6 +50,11 @@ public:
         beginTest ("Drag a module to the front of the chain");
         {
             ViewFixture f;
+            // Saturation starts beyond the visible row: scroll to it first. EQ is then
+            // scrolled out to the left; the drop lands where its card currently is
+            // (in the plugin the row auto-scrolls there while dragging)
+            f.view.scrollToShow (ModuleId::sat, false);
+            expect (f.view.isTileFullyVisible (ModuleId::sat));
             const auto sat = f.view.getTileBounds (ModuleId::sat);
             const auto eq = f.view.getTileBounds (ModuleId::eq);
             drag (f.view, sat.getCentre(), { eq.getX() + 5.0f, eq.getCentreY() });
@@ -100,14 +105,79 @@ public:
         beginTest ("Power dot switches the module, send/insert switch toggles the mode");
         {
             ViewFixture f;
-            const auto comp = f.view.getTileBounds (ModuleId::comp);
             const float before = f.h.get (pid::compOn);
-            click (f.view, { comp.getX() + 15.0f, comp.getCentreY() });
+            click (f.view, f.view.getPowerBounds (ModuleId::comp).getCentre());
             expectEquals (f.h.get (pid::compOn), 1.0f - before);
 
-            const auto reverb = f.view.getTileBounds (ModuleId::reverb);
-            click (f.view, { reverb.getRight() - 23.0f, reverb.getCentreY() });
+            click (f.view, f.view.getModeBounds (ModuleId::reverb).getCentre());
             expect (f.h.proc.getRouting().reverbInsert, "reverb switched to insert");
+        }
+
+        beginTest ("Module row: readable cards, horizontal scrolling, visual order = DSP order");
+        {
+            ViewFixture f;
+            const auto row = f.view.getRowViewport();
+
+            // Cards never shrink below the readable width; the row scrolls instead
+            for (auto id : f.h.proc.getRouting().order)
+                if (f.h.proc.getRouting().isInsert (id))
+                    expect (f.view.getTileBounds (id).getWidth() >= ui::ChainView::minCardW - 0.01f,
+                            juce::String ("card width ") + dsp::moduleDisplayName (id));
+            expect (f.view.getMaxScroll() > 0.0f, "15 modules do not fit: the row scrolls");
+            expect (! f.view.isTileFullyVisible (ModuleId::check), "last module starts out of view");
+
+            // Selecting a module brings its card into view
+            f.view.scrollToShow (ModuleId::check, false);
+            expect (f.view.isTileFullyVisible (ModuleId::check), "scrolled to the selected card");
+            f.view.scrollTo (0.0f, false);
+            expectEquals (f.view.getScroll(), 0.0f);
+
+            // Visual order always matches the processing order
+            const auto checkOrder = [&]
+            {
+                std::vector<std::pair<float, ModuleId>> onScreen;
+                for (auto id : f.h.proc.getRouting().order)
+                    if (f.h.proc.getRouting().isInsert (id))
+                        onScreen.push_back ({ f.view.getTileBounds (id).getX(), id });
+                std::sort (onScreen.begin(), onScreen.end(), [] (auto& a, auto& b) { return a.first < b.first; });
+                std::vector<ModuleId> serial;
+                for (auto id : f.h.proc.getRouting().order)
+                    if (f.h.proc.getRouting().isInsert (id))
+                        serial.push_back (id);
+                bool same = onScreen.size() == serial.size();
+                for (size_t i = 0; same && i < serial.size(); ++i)
+                    same = onScreen[i].second == serial[i];
+                return same;
+            };
+            expect (checkOrder(), "initial order");
+
+            // Scrolled to the end: drag the last visible card in front of the first visible one
+            f.view.scrollTo (f.view.getMaxScroll(), false);
+            std::vector<ModuleId> visible;
+            for (auto id : f.h.proc.getRouting().order)
+                if (f.h.proc.getRouting().isInsert (id) && f.view.isTileFullyVisible (id))
+                    visible.push_back (id);
+            expect (visible.size() >= 3, "several cards visible after scrolling");
+            if (visible.size() >= 3)
+            {
+                const auto first = f.view.getTileBounds (visible.front());
+                const auto last = f.view.getTileBounds (visible.back());
+                drag (f.view, last.getCentre(), { first.getX() + 6.0f, first.getCentreY() });
+                const auto r = f.h.proc.getRouting();
+                expect (r.positionOf (visible.back()) == r.positionOf (visible.front()) - 1, "dropped right before the first visible card");
+                expect (r.isValidPermutation());
+                expect (checkOrder(), "visual order follows the new DSP order");
+            }
+
+            // Clicks outside the visible part of the row never hit a hidden card
+            f.view.scrollTo (0.0f, false);
+            const auto offscreen = f.view.getTileBounds (ModuleId::check);
+            if (! row.contains (offscreen.getCentre()))
+            {
+                const float before = f.h.get (pid::checkOn);
+                click (f.view, f.view.getPowerBounds (ModuleId::check).getCentre());
+                expectEquals (f.h.get (pid::checkOn), before, "no click through on a scrolled-away card");
+            }
         }
 
         beginTest ("Selecting tiles opens the matching Pro panel; mode switch keeps the sound");

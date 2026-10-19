@@ -61,6 +61,7 @@ namespace velvox
             snapshot.applyTo (apvts, true);
         }
 
+        referenceName.clear();
         setCurrentPresetName (entry.name);
         return true;
     }
@@ -99,6 +100,7 @@ namespace velvox
             return false;
 
         refresh();
+        referenceName.clear();
         setCurrentPresetName (name);
         return true;
     }
@@ -135,5 +137,38 @@ namespace velvox
     void PresetManager::setCurrentPresetName (const juce::String& name)
     {
         apvts.state.setProperty (presetNameProperty, name, nullptr);
+    }
+}
+
+namespace velvox
+{
+    bool PresetManager::isCurrentPresetModified()
+    {
+        const auto name = getCurrentPresetName();
+        if (name.isEmpty())
+            return false;
+
+        if (name != referenceName)
+        {
+            referenceName = name;
+            reference.reset();
+            const int idx = getCurrentIndex();
+            if (idx >= 0)
+            {
+                const auto& entry = entries.getReference (idx);
+                if (entry.isFactory)
+                {
+                    const auto& factory = getFactoryPresets();
+                    if (juce::isPositiveAndBelow (idx, (int) factory.size()))
+                        reference = factory[(size_t) idx];
+                }
+                else if (const auto xml = juce::XmlDocument::parse (entry.file))
+                {
+                    reference = ParameterSnapshot::fromValueTree (juce::ValueTree::fromXml (*xml));
+                }
+            }
+        }
+
+        return reference.has_value() && reference->differsFrom (apvts);
     }
 }

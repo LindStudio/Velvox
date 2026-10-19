@@ -41,7 +41,7 @@ namespace velvox
             make ("Init", "Utility", "Neutral default settings.", {}),
 
             // =================== v0.2 presets ===================
-            make ("Clean Lead", "Lead",
+            make ("Clean Lead", "Clean",
                   "Natural, controlled lead: low cut, de-boxing, light compression, a short ducked plate.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
@@ -56,7 +56,7 @@ namespace velvox
                       { reverbDuckAmount, 3 }, { reverbDuckThreshold, -32 },
                   }),
 
-            make ("Hypertechno Lead", "EDM",
+            make ("Hypertechno Lead", "Punchy",
                   "Bright, dense lead that cuts through hard kicks: tube drive, doubled edges, ping-pong eighths and a big ducked plate.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 160 }, { hpfSlope, slope24 },
@@ -78,7 +78,7 @@ namespace velvox
                       { delayToReverb, 30 }, { stereoWidth, 115 }, { monoBelow, 150 }, { outputGain, -1.0f },
                   }),
 
-            make ("Aggressive Party Vocal", "EDM",
+            make ("Aggressive Party Vocal", "Aggressive",
                   "In-your-face hype vocal: upper-mid bite, fast heavy compression, hard drive, short slap and tight room.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 130 }, { hpfSlope, slope24 },
@@ -98,7 +98,7 @@ namespace velvox
                       { stereoWidth, 110 }, { outputGain, -2.0f },
                   }),
 
-            make ("Wide Festival Vocal", "EDM",
+            make ("Wide Festival Vocal", "Wide",
                   "Huge, open festival lead: doubled takes, dotted ping-pong, long plate fed by the delay, wide but mono-safe low end.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 100 }, { hpfSlope, slope24 },
@@ -120,7 +120,64 @@ namespace velvox
                       { delayToReverb, 40 }, { stereoWidth, 130 }, { monoBelow, 180 },
                   }),
 
-            make ("Bright Pop Vocal", "Pop",
+            // =================== 0.3 presets (use the new modules) ===================
+            make ("Hard Dance Lead", "Aggressive",
+                  "Level-ridden, resonance-free hard dance lead with parallel density and a quarter-note pump against the kick. VOCAL CHECK listens at the end.",
+                  {
+                      { rideOn, 1 }, { rideAmount, 70 }, { rideResponse, 50 }, { ridePhrase, 40 },
+                      { hpfOn, 1 }, { hpfFreq, 140 }, { hpfSlope, slope24 },
+                      { lowFreq, 280 }, { lowGain, -2.0f },
+                      { midFreq, 2600 }, { midGain, 2.5f }, { midQ, 1.0f },
+                      { highFreq, 10000 }, { highGain, 4.0f },
+                      { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 3 }, { compRelease, 70 },
+                      { compKnee, 4 }, { compMakeup, 4 }, { compScHpf, 120 },
+                      { smashOn, 1 }, { smashAmount, 65 }, { smashBlend, 40 }, { smashAttack, 1.5f }, { smashRelease, 70 }, { smashTone, 30 },
+                      { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -34 }, { deessRange, 8 },
+                      { smoothOn, 1 }, { smoothAmount, 55 }, { smoothSensitivity, 55 }, { smoothLow, 1500 }, { smoothHigh, 10000 },
+                      { satOn, 1 }, { satCharacter, tube }, { satDrive, 8 }, { satMix, 45 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8 }, { delayFeedback, 30 }, { delayMix, 14 },
+                      { delayLowCut, 500 }, { delayHighCut, 7000 }, { delayPingPong, 1 }, { delayDuckAmount, 8 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 18 }, { reverbDecay, 1.8f }, { reverbPreDelay, 30 },
+                      { reverbSize, 65 }, { reverbLowCut, 400 }, { reverbDuckAmount, 8 },
+                      { pulseOn, 1 }, { pulseRate, 2 }, { pulseDepth, 30 }, { pulseTension, 10 }, { pulseRelease, 20 },
+                      { checkOn, 1 },
+                      { stereoWidth, 115 }, { monoBelow, 150 }, { outputGain, -1.0f },
+                  }),
+
+            make ("Festival Choir Hook", "Wide",
+                  "A single vocal turned into a wide, lush choir for drops and sing-along hooks.",
+                  {
+                      { hpfOn, 1 }, { hpfFreq, 110 }, { hpfSlope, slope24 },
+                      { highFreq, 11000 }, { highGain, 3.0f },
+                      { compOn, 1 }, { compThreshold, -22 }, { compRatio, 3 }, { compAttack, 8 }, { compRelease, 120 }, { compMakeup, 3 },
+                      { smashOn, 1 }, { smashAmount, 40 }, { smashBlend, 25 },
+                      { deessOn, 1 }, { deessThreshold, -32 }, { deessRange, 6 },
+                      { choirOn, 1 }, { choirVoices, 3 }, { choirDetune, 16 }, { choirTiming, 32 }, { choirHumanize, 70 },
+                      { choirWidth, 100 }, { choirDensity, 70 }, { choirMix, 45 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 30 }, { reverbDecay, 3.2f }, { reverbPreDelay, 40 },
+                      { reverbSize, 85 }, { reverbLowCut, 300 }, { reverbDuckAmount, 6 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 30 }, { delayMix, 14 }, { delayPingPong, 1 },
+                      { stereoWidth, 120 }, { monoBelow, 180 },
+                  }),
+
+            make ("Pumping Party Vocal", "Creative",
+                  "Hard sidechain-style pumping and a smashed parallel layer - the vocal breathes with the kick.",
+                  {
+                      { rideOn, 1 }, { rideAmount, 60 },
+                      { hpfOn, 1 }, { hpfFreq, 150 },
+                      { midFreq, 2000 }, { midGain, 3.0f }, { highGain, 3.0f },
+                      { compOn, 1 }, { compThreshold, -26 }, { compRatio, 5 }, { compAttack, 2 }, { compRelease, 60 }, { compMakeup, 5 },
+                      { smashOn, 1 }, { smashAmount, 85 }, { smashBlend, 50 }, { smashAttack, 0.8f }, { smashRelease, 50 }, { smashTone, 40 },
+                      { deessOn, 1 }, { deessThreshold, -34 }, { deessRange, 8 },
+                      { pulseOn, 1 }, { pulseRate, 2 }, { pulseDepth, 85 }, { pulseInterp, 1 }, { pulseTension, 45 },
+                      { pulseAttack, 0.5f }, { pulseRelease, 8 }, { pulseSmooth, 1.5f },
+                      { pulseX[0], 0.0f }, { pulseX[1], 0.04f }, { pulseX[2], 0.35f }, { pulseX[3], 0.6f }, { pulseX[4], 0.8f }, { pulseX[5], 0.97f },
+                      { pulseY[0], 0.0f }, { pulseY[1], 0.0f }, { pulseY[2], 0.8f }, { pulseY[3], 1.0f }, { pulseY[4], 1.0f }, { pulseY[5], 1.0f },
+                      { reverbOn, 1 }, { reverbType, room }, { reverbMix, 12 }, { reverbDecay, 1.0f },
+                      { outputGain, -1.0f },
+                  }),
+
+            make ("Bright Pop Vocal", "Clean",
                   "Polished radio-pop vocal: presence and air, firm smooth compression, tape colour, synced quarter delay, ducked plate.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 100 }, { hpfSlope, slope24 },
@@ -192,7 +249,7 @@ namespace velvox
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 20 }, { reverbDecay, 1.8f }, { reverbDuckAmount, 6 },
                   }),
 
-            make ("Wide Adlibs", "Backing & Adlibs",
+            make ("Wide Adlibs", "Wide",
                   "Adlibs and backings that frame the lead: thinner lows, strong doubles, very wide, set back in level.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 200 }, { hpfSlope, slope24 },
@@ -210,7 +267,7 @@ namespace velvox
                       { stereoWidth, 150 }, { monoBelow, 200 }, { outputGain, -3.0f },
                   }),
 
-            make ("Heavy Parallel Compression", "Dynamics",
+            make ("Heavy Parallel Compression", "Punchy",
                   "Crushed compressor blended under the natural voice: thick and loud, transients stay alive.",
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },

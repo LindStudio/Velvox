@@ -16,9 +16,11 @@ namespace velvox::ui
         static inline const juce::Identifier heroProperty { "hero" };
         static inline const juce::Identifier animPosProperty { "animPos" };
         static inline const juce::Identifier hoverProperty { "hover" };
+        //   strong  = primary control: larger, brighter value read-out
+        static inline const juce::Identifier strongProperty { "strong" };
 
         // Width of the value groove relative to the dial radius
-        static constexpr float grooveRatio = 0.13f;
+        static constexpr float grooveRatio = 0.095f;
 
         void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height, float sliderPos,
                                float rotaryStartAngle, float rotaryEndAngle, juce::Slider&) override;
@@ -52,6 +54,10 @@ namespace velvox::ui
         void drawCornerResizer (juce::Graphics&, int w, int h, bool isMouseOver, bool isMouseDragging) override;
 
     private:
+        // Brushed-metal knob body for a dial radius (design units) at a physical pixel scale
+        const juce::Image& metalBody (float radius, float physicalScale);
+
         juce::SharedResourcePointer<EmbeddedFonts> fonts;
+        std::map<int, juce::Image> metalCache;   // key: diameter in physical pixels
     };
 }

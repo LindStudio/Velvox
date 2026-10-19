@@ -20,14 +20,14 @@ namespace velvox::ui
         void hGrid (juce::Graphics& g, juce::Rectangle<float> r, std::initializer_list<float> values, float lo, float hi,
                     const juce::String& suffix = {})
         {
-            g.setFont (medium (8.5f));
+            g.setFont (medium (10.5f));
             for (float v : values)
             {
                 const float y = yFor (v, lo, hi, r);
                 g.setColour (colours::accent.withAlpha (0.035f));
                 g.fillRect (juce::Rectangle<float> (r.getX(), y, r.getWidth(), 1.0f));
                 g.setColour (colours::textFaint);
-                g.drawText (juce::String ((int) v) + suffix, juce::Rectangle<float> (r.getRight() - 40.0f, y - 12.0f, 38.0f, 11.0f),
+                g.drawText (juce::String ((int) v) + suffix, juce::Rectangle<float> (r.getRight() - 44.0f, y - 14.0f, 42.0f, 13.0f),
                             juce::Justification::right, false);
             }
         }
@@ -544,7 +544,7 @@ namespace velvox::ui
                         g.fillRoundedRectangle (bar, 3.0f);
                     }
                     g.setColour (colours::textFaint);
-                    g.setFont (medium (9.0f));
+                    g.setFont (medium (10.5f));
                     g.drawText (juce::String (i + 1), juce::Rectangle<float> (x - 4.0f, bars.getBottom() + 3.0f, slot * 0.6f + 8.0f, 12.0f), juce::Justification::centred, false);
                 }
             }
@@ -701,11 +701,11 @@ namespace velvox::ui
                 auto keys = r.withTop (r.getBottom() - r.getHeight() * 0.38f);
 
                 // Read-out
-                const juce::String st = (shift.current > 0.05f ? "+" : "") + juce::String (s.semitones, 0) + " st";
+                const juce::String st = (shift.current > 0.05f ? "+" : "") + juce::String (juce::roundToInt (s.semitones)) + " st";
                 g.setColour (colours::text.withAlpha (0.4f + 0.6f * alpha));
                 g.setFont (display (30.0f));
                 g.drawText (st, r.withHeight (34.0f), juce::Justification::topLeft, false);
-                label (g, juce::String (s.cents, 0) + " ct fine   " + juce::String (juce::roundToInt (s.mix * 100.0f)) + " % mix",
+                label (g, juce::String (juce::roundToInt (s.cents)) + " ct fine   " + juce::String (juce::roundToInt (s.mix * 100.0f)) + " % mix",
                        r.withHeight (12.0f).translated (0.0f, 40.0f));
                 label (g, s.preserveFormants ? "Formants kept  " + juce::String (s.formantShift, 1) + " st" : "Formants follow the pitch",
                        r.withHeight (12.0f), juce::Justification::topRight);
@@ -748,7 +748,7 @@ namespace velvox::ui
                 };
 
                 // Octave labels
-                g.setFont (medium (9.0f));
+                g.setFont (medium (10.5f));
                 for (int o : { -24, -12, 0, 12, 24 })
                 {
                     g.setColour (o == 0 ? colours::text : colours::textFaint);
@@ -844,7 +844,7 @@ namespace velvox::ui
                         g.fillRoundedRectangle (cell, 5.0f);
                         g.setColour (c.withAlpha ((0.6f + 0.4f * f) * alpha));
                         g.drawRoundedRectangle (cell.reduced (0.5f), 5.0f, 1.2f);
-                        g.setFont (caps (10.0f));
+                        g.setFont (caps (11.5f));
                         g.drawText ("R", cell, juce::Justification::centred, false);
                     }
                     else
@@ -858,7 +858,7 @@ namespace velvox::ui
                     if (i % 4 == 0)
                     {
                         g.setColour (colours::textFaint);
-                        g.setFont (medium (9.0f));
+                        g.setFont (medium (10.5f));
                         g.drawText (juce::String (i / 4 + 1), juce::Rectangle<float> (cell.getX(), cell.getBottom() + 8.0f, w, 12.0f),
                                     juce::Justification::centredLeft, false);
                     }
@@ -916,7 +916,7 @@ namespace velvox::ui
 
                 // Time axis
                 const float stepMs = windowMs > 4000.0f ? 1000.0f : (windowMs > 1600.0f ? 500.0f : 250.0f);
-                g.setFont (medium (8.5f));
+                g.setFont (medium (10.5f));
                 for (float t = stepMs; t < windowMs; t += stepMs)
                 {
                     const float x = xFor (t);
@@ -1018,7 +1018,7 @@ namespace velvox::ui
                 const float gain = duck.current * (0.5f + 0.5f * juce::jlimit (0.0f, 1.0f, mix * 3.0f));
 
                 // Time axis
-                g.setFont (medium (8.5f));
+                g.setFont (medium (10.5f));
                 const float step = total > 4.0f ? 1.0f : 0.5f;
                 for (float t = step; t < total; t += step)
                 {
@@ -1170,6 +1170,622 @@ namespace velvox::ui
         private:
             const LiveData* live = nullptr;
         };
+
+        //======================================================================
+        // PULSE: the volume curve as an editor. Drag the six points; the
+        // playhead and the gain meter show what is applied right now.
+        class PulseView final : public ModuleView
+        {
+        public:
+            explicit PulseView (VelvoxAudioProcessor& p) : proc (p) {}
+
+            void update (const LiveData& d) override
+            {
+                s = d.settings.pulse;
+                const auto& m = proc.getChain().getPulse();
+                phase = m.displayPhase.load();
+                gain.target = m.displayGain.load();
+                gain.tick (0.4f);
+                bpm = m.displayBpm.load();
+                hostTempo = m.displayHostTempo.load();
+                for (int i = 0; i < 6; ++i)
+                {
+                    glow[(size_t) i].target = (i == hovered || i == dragged) ? 1.0f : 0.0f;
+                    glow[(size_t) i].tick (0.2f);
+                }
+                repaint();
+            }
+
+            void paint (juce::Graphics& g) override
+            {
+                const float alpha = s.enabled ? 1.0f : 0.45f;
+                auto r = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
+                label (g, "Volume curve  -  drag the points   (fill = applied gain at this depth)", r.withHeight (12.0f));
+                label (g, dsp::PulseModule::rateNames()[s.rate] + " cycle   " + juce::String (bpm, 1) + " BPM" + (hostTempo ? " (host)" : " (manual)"),
+                       r.withHeight (12.0f), juce::Justification::topRight, colours::text);
+
+                auto meter = r.withTrimmedTop (20.0f).removeFromRight (16.0f);
+                r.removeFromRight (30.0f);
+                const auto plot = curveArea();
+
+                // Grid: beats / sixteenths of the cycle and quarter levels
+                for (int i = 1; i < 16; ++i)
+                {
+                    g.setColour (colours::accent.withAlpha (i % 4 == 0 ? 0.06f : 0.025f));
+                    g.fillRect (juce::Rectangle<float> (plot.getX() + plot.getWidth() * (float) i / 16.0f, plot.getY(), 1.0f, plot.getHeight()));
+                }
+                for (int i = 1; i < 4; ++i)
+                {
+                    g.setColour (colours::accent.withAlpha (0.03f));
+                    g.fillRect (juce::Rectangle<float> (plot.getX(), plot.getY() + plot.getHeight() * (float) i / 4.0f, plot.getWidth(), 1.0f));
+                }
+
+                // Curve as drawn (0..1) and the gain that is applied (depth)
+                juce::Path curve, applied;
+                const int n = 240;
+                for (int i = 0; i <= n; ++i)
+                {
+                    const float ph = (float) i / (float) n;
+                    const float c = dsp::PulseModule::evaluate (s, ph);
+                    const float a = 1.0f - s.depth * (1.0f - c);
+                    const float x = plot.getX() + plot.getWidth() * ph;
+                    if (i == 0) { curve.startNewSubPath (x, yFor (c, 0.0f, 1.0f, plot)); applied.startNewSubPath (x, yFor (a, 0.0f, 1.0f, plot)); }
+                    else        { curve.lineTo (x, yFor (c, 0.0f, 1.0f, plot)); applied.lineTo (x, yFor (a, 0.0f, 1.0f, plot)); }
+                }
+                g.setGradientFill (auroraGradient (plot.getTopLeft(), plot.getTopRight(), 0.13f * alpha));
+                g.fillPath (closedTo (applied, plot, plot.getBottom()));
+                g.setColour (colours::accent.withAlpha (0.35f * alpha));
+                const float dash[] { 3.0f, 3.0f };
+                juce::Path dashed;
+                juce::PathStrokeType (1.0f).createDashedStroke (dashed, applied, dash, 2);   // applied gain (depth): fill + fine line
+                g.fillPath (dashed);
+                glowStroke (g, curve, plot, 2.0f, alpha);         // the editable curve with its points
+
+                // Playhead
+                if (phase >= 0.0f)
+                {
+                    const float x = plot.getX() + plot.getWidth() * phase;
+                    const float y = yFor (1.0f - s.depth * (1.0f - dsp::PulseModule::evaluate (s, phase)), 0.0f, 1.0f, plot);
+                    g.setGradientFill (juce::ColourGradient (colours::teal.withAlpha (0.0f), x - 80.0f, 0.0f, colours::teal.withAlpha (0.08f), x, 0.0f, false));
+                    g.fillRect (juce::Rectangle<float> (x - 80.0f, plot.getY(), 80.0f, plot.getHeight()).getIntersection (plot));
+                    g.setColour (colours::teal.withAlpha (0.5f));
+                    g.fillRect (juce::Rectangle<float> (x, plot.getY(), 1.0f, plot.getHeight()));
+                    drawGlow (g, { x, y }, 16.0f, 0.7f, colours::teal);
+                    g.setColour (juce::Colours::white);
+                    g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre ({ x, y }));
+                }
+
+                // Points
+                for (int i = 0; i < 6; ++i)
+                {
+                    const auto pt = pointPosition (i);
+                    const float gl = glow[(size_t) i].current;
+                    const auto c = aurora (s.x[(size_t) i]);
+                    drawGlow (g, pt, 12.0f + 10.0f * gl, (0.25f + 0.4f * gl) * alpha, c);
+                    g.setColour (colours::background);
+                    g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre (pt));
+                    g.setColour (c.withAlpha (alpha));
+                    g.drawEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre (pt), 1.6f);
+                    if (gl > 0.02f)
+                    {
+                        g.setColour (colours::text.withAlpha (gl));
+                        g.setFont (medium (10.5f));
+                        g.drawText (juce::String (juce::roundToInt (s.y[(size_t) i] * 100.0f)) + " %",
+                                    juce::Rectangle<float> (60.0f, 14.0f).withCentre (pt.translated (0.0f, -16.0f)), juce::Justification::centred, false);
+                    }
+                }
+
+                // Gain applied right now
+                g.setColour (juce::Colours::black.withAlpha (0.5f));
+                g.fillRoundedRectangle (meter.withSizeKeepingCentre (6.0f, meter.getHeight()), 3.0f);
+                const auto fill = meter.withSizeKeepingCentre (6.0f, meter.getHeight()).withTop (yFor (gain.current, 0.0f, 1.0f, meter));
+                g.setGradientFill (auroraGradient (fill.getBottomLeft(), fill.getTopLeft(), alpha));
+                g.fillRoundedRectangle (fill, 3.0f);
+                label (g, "Gain", meter.withY (meter.getBottom() + 2.0f).withHeight (12.0f).expanded (14.0f, 0.0f), juce::Justification::centred);
+            }
+
+            void mouseMove (const juce::MouseEvent& e) override
+            {
+                hovered = pointAt (e.position);
+                setMouseCursor (hovered >= 0 ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+            }
+            void mouseExit (const juce::MouseEvent&) override { hovered = -1; }
+
+            void mouseDown (const juce::MouseEvent& e) override
+            {
+                dragged = pointAt (e.position);
+                if (dragged >= 0)
+                    for (auto* id : { pid::pulseX[dragged], pid::pulseY[dragged] })
+                        if (auto* prm = proc.getState().getParameter (id))
+                            prm->beginChangeGesture();
+            }
+
+            void mouseDrag (const juce::MouseEvent& e) override
+            {
+                if (dragged < 0)
+                    return;
+                const auto plot = curveArea();
+                setParam (proc, pid::pulseX[dragged], juce::jlimit (0.0f, 1.0f, (e.position.x - plot.getX()) / plot.getWidth()));
+                setParam (proc, pid::pulseY[dragged], juce::jlimit (0.0f, 1.0f, (plot.getBottom() - e.position.y) / plot.getHeight()));
+            }
+
+            void mouseUp (const juce::MouseEvent&) override
+            {
+                if (dragged >= 0)
+                    for (auto* id : { pid::pulseX[dragged], pid::pulseY[dragged] })
+                        if (auto* prm = proc.getState().getParameter (id))
+                            prm->endChangeGesture();
+                dragged = -1;
+            }
+
+        private:
+            juce::Rectangle<float> curveArea() const
+            {
+                auto r = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
+                r.removeFromRight (46.0f);
+                return r.withTrimmedTop (24.0f).withTrimmedBottom (14.0f).reduced (6.0f, 6.0f);
+            }
+
+            juce::Point<float> pointPosition (int i) const
+            {
+                const auto plot = curveArea();
+                const float x = raw (proc, pid::pulseX[i]), y = raw (proc, pid::pulseY[i]);
+                return { plot.getX() + plot.getWidth() * x, yFor (y, 0.0f, 1.0f, plot) };
+            }
+
+            int pointAt (juce::Point<float> p) const
+            {
+                int best = -1;
+                float bestD = 14.0f;
+                for (int i = 0; i < 6; ++i)
+                {
+                    const float d = pointPosition (i).getDistanceFrom (p);
+                    if (d < bestD) { bestD = d; best = i; }
+                }
+                return best;
+            }
+
+            VelvoxAudioProcessor& proc;
+            dsp::PulseSettings s;
+            float phase = -1.0f, bpm = 150.0f;
+            bool hostTempo = false;
+            Smoothed gain { 1.0f, 1.0f };
+            std::array<Smoothed, 6> glow {};
+            int hovered = -1, dragged = -1;
+        };
+
+        //======================================================================
+        // VOCAL SMASH: reduction over time, and the curve of the squashed path
+        // (input level -> level of the added path) against the original
+        class SmashView final : public ModuleView
+        {
+        public:
+            explicit SmashView (VelvoxAudioProcessor& p) : proc (p) {}
+
+            void update (const LiveData& d) override
+            {
+                live = &d;
+                s = d.settings.smash;
+                level.target = d.inputDb.ago (0);
+                level.tick (0.35f);
+                added.target = proc.getChain().getSmash().blendLevelDb.load();
+                added.tick (0.3f);
+                repaint();
+            }
+
+            void paint (juce::Graphics& g) override
+            {
+                if (live == nullptr)
+                    return;
+                const float alpha = s.enabled ? 1.0f : 0.4f;
+                auto r = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
+                auto transfer = r.removeFromRight (r.getHeight()).reduced (4.0f, 0.0f);
+                r.removeFromRight (18.0f);
+
+                label (g, "Squashed path  -  gain reduction", r.withHeight (12.0f));
+                auto plot = r.withTrimmedTop (18.0f);
+                hGrid (g, plot, { 6.0f, 12.0f, 18.0f }, 24.0f, 0.0f, " dB");
+
+                const auto gr = historyPath (live->smashGr, plot, 0.0f, 24.0f, true);
+                g.setGradientFill (juce::ColourGradient (colours::blue.withAlpha (0.35f * alpha), 0.0f, plot.getY(),
+                                                         colours::teal.withAlpha (0.04f * alpha), 0.0f, plot.getBottom(), false));
+                g.fillPath (closedTo (gr, plot, plot.getY()));
+                glowStroke (g, gr, plot, 1.4f, alpha);
+
+                g.setColour (colours::text);
+                g.setFont (display (22.0f));
+                g.drawText ("-" + juce::String (live->smashGr.ago (0), 1), plot.withTrimmedRight (46.0f).withHeight (26.0f).translated (0.0f, plot.getHeight() - 40.0f),
+                            juce::Justification::bottomRight, false);
+                label (g, "Blend " + juce::String (juce::roundToInt (s.blend * 100.0f)) + " %   added path " + juce::String (added.current, 1) + " dBFS",
+                       plot.withTrimmedRight (46.0f).withY (plot.getBottom() - 12.0f).withHeight (12.0f), juce::Justification::bottomLeft);
+
+                // Curve: original (diagonal) and squashed path output level
+                g.setColour (juce::Colours::black.withAlpha (0.25f));
+                g.fillRoundedRectangle (transfer, 10.0f);
+                const auto t = transfer.reduced (12.0f);
+                const auto mapX = [&] (float db) { return juce::jmap (juce::jlimit (-60.0f, 0.0f, db), -60.0f, 0.0f, t.getX(), t.getRight()); };
+                const auto mapY = [&] (float db) { return yFor (db, -60.0f, 0.0f, t); };
+                g.setColour (colours::accent.withAlpha (0.12f));
+                g.drawLine (t.getX(), t.getBottom(), t.getRight(), t.getY(), 1.0f);
+                juce::Path curve;
+                for (int i = 0; i <= 90; ++i)
+                {
+                    const float x = -60.0f + 60.0f * (float) i / 90.0f;
+                    const auto pt = juce::Point<float> (mapX (x), mapY (x + dsp::SmashModule::wetGainDb (x, s.amount)));
+                    if (i == 0) curve.startNewSubPath (pt); else curve.lineTo (pt);
+                }
+                {
+                    juce::Graphics::ScopedSaveState save (g);
+                    g.reduceClipRegion (t.toNearestInt());
+                    glowStroke (g, curve, t, 2.0f, alpha);
+                }
+                if (live->hasSignal)
+                {
+                    const float lv = level.current + 9.0f; // RMS meter -> detector peak, roughly
+                    const auto dot = juce::Point<float> (mapX (lv), mapY (lv + dsp::SmashModule::wetGainDb (lv, s.amount)));
+                    drawGlow (g, dot, 16.0f, 0.6f * alpha, colours::teal);
+                    g.setColour (juce::Colours::white);
+                    g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre (dot));
+                }
+                label (g, "Level in -> squashed out", transfer.reduced (12.0f, 10.0f));
+                label (g, "Thr " + juce::String (juce::roundToInt (dsp::SmashModule::thresholdFor (s.amount))) + " dB  " + juce::String (dsp::SmashModule::ratioFor (s.amount), 1) + ":1",
+                       transfer.reduced (12.0f, 10.0f), juce::Justification::bottomRight, colours::text);
+            }
+
+        private:
+            VelvoxAudioProcessor& proc;
+            const LiveData* live = nullptr;
+            dsp::SmashSettings s;
+            Smoothed level, added { -100.0f, -100.0f };
+        };
+
+        //======================================================================
+        // CHOIR: every voice on the stage with its real pitch offset
+        class ChoirView final : public ModuleView
+        {
+        public:
+            explicit ChoirView (VelvoxAudioProcessor& p) : proc (p) {}
+
+            void update (const LiveData& d) override
+            {
+                s = d.settings.choir;
+                time = d.time;
+                level.target = d.level();
+                level.tick (0.15f);
+                spread.target = s.width;
+                spread.tick (0.12f);
+                auto& m = proc.getChain().getChoir();
+                corr.target = s.enabled ? m.outputCorrelation.load() : 1.0f;
+                corr.tick (0.1f);
+                for (int i = 0; i < dsp::ChoirModule::maxVoices; ++i)
+                    cents[(size_t) i] = m.voiceCents[(size_t) i].load();
+                repaint();
+            }
+
+            void paint (juce::Graphics& g) override
+            {
+                const float alpha = s.enabled ? 1.0f : 0.35f;
+                auto r = getLocalBounds().toFloat().reduced (24.0f, 14.0f);
+                label (g, juce::String (s.voices) + " voices", r.withHeight (12.0f));
+                auto meter = r.removeFromBottom (16.0f);
+                const float cy = r.getCentreY() + 4.0f;
+                const auto centre = juce::Point<float> (r.getCentreX(), cy);
+
+                g.setColour (colours::accent.withAlpha (0.04f));
+                g.fillRect (juce::Rectangle<float> (r.getCentreX() - 0.5f, r.getY() + 14.0f, 1.0f, r.getHeight() - 14.0f));
+                label (g, "L", r.withWidth (20.0f), juce::Justification::centredLeft);
+                label (g, "R", r.withLeft (r.getRight() - 20.0f), juce::Justification::centredRight);
+
+                drawGlow (g, centre, 40.0f + 18.0f * level.current, 0.18f + 0.25f * level.current);
+                g.setColour (juce::Colours::white);
+                g.fillEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre (centre));
+
+                const auto& sh = dsp::ChoirModule::shapes();
+                for (int v = 0; v < s.voices; ++v)
+                {
+                    const auto& shape = sh[(size_t) v];
+                    const float pan = shape.pan * spread.current;
+                    const float x = centre.x + pan * r.getWidth() * 0.44f;
+                    // Later voices stand further back (higher on the stage)
+                    const float y = cy - (r.getHeight() * 0.32f) * (s.timingMs / dsp::ChoirModule::maxTimingMs) * shape.timing
+                                    + std::sin ((float) time * (0.7f + 0.13f * (float) v) + (float) v) * 3.0f * s.humanize;
+                    const auto p = juce::Point<float> (x, y);
+                    const auto c = aurora ((pan + 1.0f) * 0.5f);
+                    const float size = 6.0f + 4.0f * s.density;
+
+                    g.setColour (c.withAlpha (0.12f * alpha));
+                    g.drawLine (juce::Line<float> (centre, p), 1.0f);
+                    drawGlow (g, p, 20.0f + 12.0f * level.current * s.density, (0.25f + 0.4f * s.mix) * alpha, c);
+                    g.setColour (c.interpolatedWith (juce::Colours::white, 0.5f).withAlpha (alpha));
+                    g.fillEllipse (juce::Rectangle<float> (size, size).withCentre (p));
+
+                    const float ct = cents[(size_t) v];
+                    g.setFont (medium (10.5f));
+                    g.setColour (colours::textDim.withAlpha (alpha));
+                    g.drawText ((ct >= 0.0f ? "+" : "") + juce::String (juce::roundToInt (ct)) + " ct", juce::Rectangle<float> (50.0f, 12.0f).withCentre (p.translated (0.0f, 14.0f)),
+                                juce::Justification::centred, false);
+                }
+
+                // Mono compatibility of the module output
+                // Only real cancellation (negative correlation) is a mono problem
+                const bool risk = s.enabled && corr.current < 0.0f;
+                label (g, risk ? "Mono risk - reduce Width" : "Mono compatibility", meter.withWidth (150.0f), juce::Justification::centredLeft,
+                       risk ? colours::warning : colours::textDim);
+                auto bar = meter.withTrimmedLeft (160.0f).withTrimmedRight (60.0f).withSizeKeepingCentre (meter.getWidth() - 220.0f, 3.0f);
+                g.setColour (juce::Colours::black.withAlpha (0.5f));
+                g.fillRoundedRectangle (bar, 1.5f);
+                const float x = juce::jmap (juce::jlimit (-1.0f, 1.0f, corr.current), -1.0f, 1.0f, bar.getX(), bar.getRight());
+                const auto c = risk ? colours::warning : colours::teal;
+                drawGlow (g, { x, bar.getCentreY() }, 10.0f, 0.45f, c);
+                g.setColour (c);
+                g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ x, bar.getCentreY() }));
+                label (g, juce::String (corr.current, 2), meter.withLeft (bar.getRight() + 8.0f), juce::Justification::centredLeft, colours::text);
+            }
+
+        private:
+            VelvoxAudioProcessor& proc;
+            dsp::ChoirSettings s;
+            double time = 0.0;
+            Smoothed level, spread, corr { 1.0f, 1.0f };
+            std::array<float, dsp::ChoirModule::maxVoices> cents {};
+        };
+
+        //======================================================================
+        // SMOOTH: spectrum with the reductions that are applied right now
+        class SmoothView final : public ModuleView
+        {
+        public:
+            SmoothView (VelvoxAudioProcessor& p, const SpectrumSource* src) : proc (p), spectrum (src)
+            {
+                addAndMakeVisible (spectrum);
+                spectrum.setRange (-90.0f, 0.0f);
+                spectrum.setIntensity (0.6f);
+            }
+
+            void resized() override { spectrum.setBounds (getLocalBounds().withTrimmedTop (22)); }
+
+            void update (const LiveData& d) override
+            {
+                s = d.settings.smooth;
+                auto& m = proc.getChain().getSmooth();
+                for (int b = 0; b < dsp::SmoothModule::numBands; ++b)
+                {
+                    cut[(size_t) b].target = m.bandCutDb[(size_t) b].load();
+                    cut[(size_t) b].tick (0.35f);
+                }
+                spectrum.refresh();
+                repaint();
+            }
+
+            void paintOverChildren (juce::Graphics& g) override
+            {
+                const float alpha = s.enabled ? 1.0f : 0.4f;
+                const auto plot = spectrum.getBounds().toFloat();
+                auto head = getLocalBounds().toFloat().reduced (16.0f, 6.0f).withHeight (12.0f);
+
+                // Untreated range is shaded
+                const float lo = SpectrumView::xForFrequency (std::min (s.lowHz, s.highHz), plot);
+                const float hi = SpectrumView::xForFrequency (std::max (s.lowHz, s.highHz), plot);
+                g.setColour (colours::background.withAlpha (0.55f));
+                g.fillRect (plot.withRight (lo));
+                g.fillRect (plot.withLeft (hi));
+                g.setColour (colours::teal.withAlpha (0.35f * alpha));
+                g.fillRect (juce::Rectangle<float> (lo, plot.getY(), 1.0f, plot.getHeight()));
+                g.fillRect (juce::Rectangle<float> (hi, plot.getY(), 1.0f, plot.getHeight()));
+
+                // Reductions hang from the top, one bar per band
+                float maxCut = 0.0f, maxHz = 0.0f;
+                for (int b = 0; b < dsp::SmoothModule::numBands; ++b)
+                {
+                    const float c = cut[(size_t) b].current;
+                    if (c < 0.05f)
+                        continue;
+                    const float f = dsp::SmoothModule::bandFrequency (b);
+                    const float x = SpectrumView::xForFrequency (f, plot);
+                    const float h = plot.getHeight() * 0.75f * juce::jlimit (0.0f, 1.0f, c / 18.0f);
+                    const auto bar = juce::Rectangle<float> (x - 3.0f, plot.getY(), 6.0f, h);
+                    const auto col = aurora (juce::jlimit (0.0f, 1.0f, (x - plot.getX()) / plot.getWidth()));
+                    drawGlow (g, { x, bar.getBottom() }, 10.0f + h * 0.3f, 0.35f * alpha, col);
+                    g.setGradientFill (juce::ColourGradient (col.withAlpha (0.15f * alpha), 0.0f, bar.getY(), col.withAlpha (0.9f * alpha), 0.0f, bar.getBottom(), false));
+                    g.fillRoundedRectangle (bar, 3.0f);
+                    if (c > maxCut) { maxCut = c; maxHz = f; }
+                }
+
+                label (g, "Live reductions", head);
+                label (g, maxCut > 0.3f ? "Strongest  -" + juce::String (maxCut, 1) + " dB at " + hz (maxHz) : juce::String ("Nothing to tame right now"),
+                       head, juce::Justification::topRight, colours::text);
+            }
+
+        private:
+            VelvoxAudioProcessor& proc;
+            SpectrumView spectrum;
+            dsp::SmoothSettings s;
+            std::array<Smoothed, dsp::SmoothModule::numBands> cut {};
+        };
+
+        //======================================================================
+        // VOCAL CHECK: what the analysis measured - long-term spectrum and balance
+        class CheckView final : public ModuleView
+        {
+        public:
+            explicit CheckView (VelvoxAudioProcessor& p) : proc (p) {}
+
+            void update (const LiveData& d) override
+            {
+                on = d.settings.checkOn;
+                pulse = (float) (0.5 + 0.5 * std::sin (d.time * 3.0));
+                repaint();
+            }
+
+            void paint (juce::Graphics& g) override
+            {
+                const auto& r = proc.getLatestAnalysis();
+                const float alpha = on ? 1.0f : 0.4f;
+                auto area = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
+                auto stats = area.removeFromRight (230.0f);
+                area.removeFromRight (18.0f);
+
+                // Long-term spectrum of the voice
+                label (g, "Average spectrum of the voice", area.withHeight (12.0f));
+                auto plot = area.withTrimmedTop (18.0f).withTrimmedBottom (14.0f);
+                SpectrumView::drawFrequencyGrid (g, plot.withTrimmedBottom (-14.0f), true);
+                if (! r.spectrumDb.empty())
+                {
+                    float top = -200.0f;
+                    for (auto v : r.spectrumDb)
+                        top = std::max (top, v);
+                    juce::Path p;
+                    bool started = false;
+                    float firstX = 0.0f, lastX = 0.0f;
+                    for (int b = 0; b < (int) r.spectrumDb.size(); ++b)
+                    {
+                        if (r.spectrumDb[(size_t) b] < -150.0f)
+                            continue;
+                        const float f = dsp::VocalAnalyzer::bandCentre (b);
+                        const float x = SpectrumView::xForFrequency (std::max (20.0f, f), plot);
+                        const float y = yFor (r.spectrumDb[(size_t) b] - top, -60.0f, 3.0f, plot);
+                        if (! started) { p.startNewSubPath (x, y); started = true; firstX = x; }
+                        else p.lineTo (x, y);
+                        lastX = x;
+                    }
+                    if (started)
+                    {
+                        g.setGradientFill (auroraGradient (plot.getTopLeft(), plot.getTopRight(), 0.12f * alpha));
+                        juce::Path fill (p);
+                        fill.lineTo (lastX, plot.getBottom());
+                        fill.lineTo (firstX, plot.getBottom());
+                        fill.closeSubPath();
+                        g.fillPath (fill);
+                        glowStroke (g, p, plot, 1.5f, alpha);
+                    }
+                }
+                else
+                {
+                    label (g, on ? "Listening ..." : "Switch VOCAL CHECK on to analyse", plot, juce::Justification::centred, colours::textDim);
+                }
+
+                // Balance bars (relative to the 300 Hz - 2 kHz core) and key numbers
+                label (g, "Balance vs. core", stats.withHeight (12.0f));
+                auto bars = stats.withTrimmedTop (18.0f).removeFromTop (stats.getHeight() * 0.55f);
+                const char* names[] { "Low", "Body", "Core", "Pres", "S", "Air" };
+                const float bw = bars.getWidth() / 6.0f;
+                const float zeroY = yFor (0.0f, -30.0f, 6.0f, bars.withTrimmedBottom (14.0f));
+                g.setColour (colours::accent.withAlpha (0.08f));
+                g.fillRect (juce::Rectangle<float> (bars.getX(), zeroY, bars.getWidth(), 1.0f));
+                for (int i = 0; i < 6; ++i)
+                {
+                    const auto cell = juce::Rectangle<float> (bars.getX() + bw * (float) i, bars.getY(), bw, bars.getHeight());
+                    if (r.enoughMaterial || ! r.spectrumDb.empty())
+                    {
+                        const float v = i == 2 ? 0.0f : juce::jlimit (-30.0f, 6.0f, r.bandDb[(size_t) i]);
+                        const float y = yFor (v, -30.0f, 6.0f, bars.withTrimmedBottom (14.0f));
+                        const auto bar = juce::Rectangle<float> (cell.getCentreX() - 5.0f, std::min (y, zeroY), 10.0f, std::max (2.0f, std::abs (y - zeroY)));
+                        const auto c = aurora ((float) i / 5.0f);
+                        g.setColour (c.withAlpha (0.85f * alpha));
+                        g.fillRoundedRectangle (bar, 3.0f);
+                    }
+                    label (g, names[i], cell.withY (cell.getBottom() - 12.0f).withHeight (12.0f), juce::Justification::centred);
+                }
+
+                auto lines = stats.withTrimmedTop (18.0f + stats.getHeight() * 0.55f + 6.0f);
+                const auto line = [&] (const juce::String& k, const juce::String& v)
+                {
+                    auto row = lines.removeFromTop (15.0f);
+                    label (g, k, row, juce::Justification::centredLeft);
+                    g.setColour (colours::text.withAlpha (alpha));
+                    g.setFont (medium (11.0f));
+                    g.drawText (v, row, juce::Justification::centredRight, false);
+                };
+                line ("Voice analysed", juce::String (r.voicedSeconds, 1) + " s");
+                line ("Peak", r.peakDb <= -99.0f ? juce::String ("-") : juce::String (r.peakDb, 1) + " dBFS");
+                line ("Level range", r.loudnessRangeDb > 0.0f ? juce::String (r.loudnessRangeDb, 1) + " dB" : juce::String ("-"));
+                line ("S vs vowels", r.sibilanceVsVowelDb > -99.0f ? juce::String (r.sibilanceVsVowelDb, 1) + " dB" : juce::String ("-"));
+
+                if (on)
+                    drawGlow (g, { stats.getRight() - 4.0f, stats.getY() + 5.0f }, 8.0f, 0.3f + 0.4f * pulse, colours::teal);
+            }
+
+        private:
+            VelvoxAudioProcessor& proc;
+            bool on = false;
+            float pulse = 0.0f;
+        };
+
+        //======================================================================
+        // LEVEL RIDE: detected level, the gain ride and the result over time
+        class RideView final : public ModuleView
+        {
+        public:
+            void update (const LiveData& d) override
+            {
+                live = &d;
+                s = d.settings.ride;
+                repaint();
+            }
+
+            void paint (juce::Graphics& g) override
+            {
+                if (live == nullptr)
+                    return;
+                const float alpha = s.enabled ? 1.0f : 0.4f;
+                auto r = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
+                auto readout = r.removeFromRight (110.0f);
+                r.removeFromRight (16.0f);
+                label (g, "Voice level and gain ride", r.withHeight (12.0f));
+                auto plot = r.withTrimmedTop (18.0f);
+                auto gainBand = plot.removeFromBottom (plot.getHeight() * 0.32f);
+                plot.removeFromBottom (8.0f);
+
+                // Level lanes (dB): detected, result, target, pause threshold
+                hGrid (g, plot, { -12.0f, -24.0f, -36.0f, -48.0f }, -60.0f, 0.0f, " dB");
+                const auto in = historyPath (live->rideLevel, plot, -60.0f, 0.0f);
+                g.setColour (colours::accent.withAlpha (0.22f));
+                g.strokePath (in, juce::PathStrokeType (1.0f));
+
+                juce::Path out;
+                for (int i = 0; i < LiveData::historySize; ++i)
+                {
+                    const float x = plot.getRight() - plot.getWidth() * (float) i / (float) (LiveData::historySize - 1);
+                    const float y = yFor (live->rideLevel.ago (i) + live->rideGain.ago (i), -60.0f, 0.0f, plot);
+                    if (i == 0) out.startNewSubPath (x, y); else out.lineTo (x, y);
+                }
+                glowStroke (g, out, plot, 1.5f, alpha);
+
+                const float ty = yFor (s.targetDb, -60.0f, 0.0f, plot);
+                const float dash[] { 4.0f, 4.0f };
+                g.setColour (colours::teal.withAlpha (0.6f * alpha));
+                g.drawDashedLine (juce::Line<float> (plot.getX(), ty, plot.getRight(), ty), dash, 2, 1.0f);
+                label (g, "Target", juce::Rectangle<float> (plot.getX() + 4.0f, ty - 13.0f, 60.0f, 12.0f), juce::Justification::centredLeft, colours::teal);
+                const float sy = yFor (s.silenceDb, -60.0f, 0.0f, plot);
+                g.setColour (colours::accent.withAlpha (0.12f));
+                g.drawDashedLine (juce::Line<float> (plot.getX(), sy, plot.getRight(), sy), dash, 2, 1.0f);
+                label (g, "Pause below", juce::Rectangle<float> (plot.getX() + 4.0f, sy + 2.0f, 80.0f, 12.0f), juce::Justification::centredLeft, colours::textFaint);
+
+                // Gain ride (+ above, - below the centre line)
+                const float zero = gainBand.getCentreY();
+                g.setColour (colours::accent.withAlpha (0.08f));
+                g.fillRect (juce::Rectangle<float> (gainBand.getX(), zero, gainBand.getWidth(), 1.0f));
+                const auto gainPath = historyPath (live->rideGain, gainBand, -18.0f, 18.0f);
+                g.setGradientFill (auroraGradient (gainBand.getTopLeft(), gainBand.getTopRight(), 0.18f * alpha));
+                g.fillPath (closedTo (gainPath, gainBand, zero));
+                glowStroke (g, gainPath, gainBand, 1.4f, alpha);
+                label (g, "Gain  +/-18 dB", gainBand.withHeight (12.0f));
+
+                const float gNow = live->rideGain.ago (0);
+                g.setColour (colours::text);
+                g.setFont (display (28.0f));
+                g.drawText ((gNow > 0.05f ? "+" : "") + juce::String (gNow, 1), readout.withHeight (34.0f).translated (0.0f, readout.getHeight() * 0.3f),
+                            juce::Justification::centred, false);
+                label (g, "dB ride", readout.withHeight (12.0f).translated (0.0f, readout.getHeight() * 0.3f + 36.0f), juce::Justification::centred);
+                const bool voice = live->rideLevel.ago (0) > s.silenceDb;
+                label (g, voice ? "Voice" : "Pause", readout.withHeight (12.0f).translated (0.0f, readout.getHeight() * 0.3f + 54.0f),
+                       juce::Justification::centred, voice ? colours::teal : colours::textFaint);
+            }
+
+        private:
+            const LiveData* live = nullptr;
+            dsp::RideSettings s;
+        };
     }
 
     std::unique_ptr<ModuleView> createModuleView (VelvoxAudioProcessor& p, int id, const SpectrumSource* spectrum)
@@ -1187,6 +1803,12 @@ namespace velvox::ui
             case ModuleId::chop:    return std::make_unique<ChopView>();
             case ModuleId::delay:   return std::make_unique<DelayView>();
             case ModuleId::reverb:  return std::make_unique<ReverbView>();
+            case ModuleId::pulse:   return std::make_unique<PulseView> (p);
+            case ModuleId::smash:   return std::make_unique<SmashView> (p);
+            case ModuleId::choir:   return std::make_unique<ChoirView> (p);
+            case ModuleId::smooth:  return std::make_unique<SmoothView> (p, spectrum);
+            case ModuleId::check:   return std::make_unique<CheckView> (p);
+            case ModuleId::ride:    return std::make_unique<RideView>();
         }
         return std::make_unique<OutputView>();
     }

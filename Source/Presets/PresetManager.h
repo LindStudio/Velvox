@@ -37,6 +37,10 @@ namespace velvox
         juce::String getCurrentPresetName() const;
         int getCurrentIndex() const;
 
+        // True when a preset is loaded and any of its values (or the module
+        // order) was changed since. The preset's values are read once per name.
+        bool isCurrentPresetModified();
+
         juce::File getUserPresetDirectory() const { return userDirectory; }
 
         static inline const juce::Identifier presetNameProperty { "presetName" };
@@ -47,5 +51,9 @@ namespace velvox
         juce::AudioProcessorValueTreeState& apvts;
         juce::File userDirectory;
         juce::Array<Entry> entries;
+
+        // Reference values of the current preset (for isCurrentPresetModified)
+        juce::String referenceName;
+        std::optional<ParameterSnapshot> reference;
     };
 }

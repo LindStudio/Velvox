@@ -24,6 +24,24 @@ namespace velvox::dsp
         return y - x;
     }
 
+    float SmashModule::wetGainDb (float envDb, float amount) noexcept
+    {
+        const float makeup = makeupFor (amount);
+        float g = gainComputerDb (envDb, amount);
+
+        // Below the threshold the lift of the squashed path runs out: back to
+        // 0 dB at 18 dB under the threshold and further down from there, so
+        // breaths and room noise are never pulled up by the makeup gain
+        const float expandFrom = thresholdFor (amount) - expanderStartDb;
+        if (envDb < expandFrom)
+            g -= std::min (makeup + 24.0f, (expandFrom - envDb) * makeup / expanderSpanDb);
+
+        // Absolute floor: near the noise floor the squashed path may never be
+        // louder than the original (0 dB lift at -46 dBFS peak, 2 dB less per dB below)
+        g = std::min (g, (envDb - liftFloorDb) * 2.0f - makeup);
+        return g + makeup;
+    }
+
     void SmashModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
@@ -107,22 +125,11 @@ namespace velvox::dsp
             const float levelDb = gainToDb (det);
             envDb = levelDb > envDb ? levelDb : levelDb + levelCoeff * (envDb - levelDb);
 
-            // Gain computer, smoothed with attack / release
+            // Static curve, smoothed with attack / release
             const float amt = amountSmoothed.getNextValue();
             const float makeup = makeupFor (amt);
             const float compression = gainComputerDb (envDb, amt);
-            float target = compression;
-
-            // Below the threshold the lift of the squashed path runs out: back to
-            // 0 dB at 18 dB under the threshold and further down from there, so
-            // breaths and room noise are never pulled up by the makeup gain
-            const float expandFrom = thresholdFor (amt) - expanderStartDb;
-            if (envDb < expandFrom)
-                target -= std::min (makeup + 24.0f, (expandFrom - envDb) * makeup / expanderSpanDb);
-
-            // Absolute floor: near the noise floor the squashed path may never be
-            // louder than the original (0 dB lift at -46 dBFS peak, falling 2 dB per dB below)
-            target = std::min (target, (envDb - liftFloorDb) * 2.0f - makeup);
+            const float target = wetGainDb (envDb, amt) - makeup;
             grDb = target + (target < grDb ? attackCoeff : releaseCoeff) * (grDb - target);
 
             const float wetGain = dbToGain (grDb + makeup);

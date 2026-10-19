@@ -71,6 +71,27 @@ namespace velvox
             apvts.state.setProperty (statekeys::routing, dsp::Routing::defaults().toString(), nullptr);
     }
 
+    bool ParameterSnapshot::differsFrom (juce::AudioProcessorValueTreeState& apvts) const
+    {
+        for (auto* p : apvts.processor.getParameters())
+        {
+            auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p);
+            if (rp == nullptr || isExcludedFromSnapshots (rp->getParameterID()))
+                continue;
+
+            const auto it = values.find (rp->getParameterID());
+            const float expected = it != values.end() && std::isfinite (it->second)
+                                     ? rp->convertTo0to1 (rp->getNormalisableRange().snapToLegalValue (it->second))
+                                     : rp->getDefaultValue();
+            if (std::abs (expected - rp->getValue()) > 1.0e-4f)
+                return true;
+        }
+
+        const auto expectedRouting = routing.isNotEmpty() ? dsp::Routing::fromString (routing) : dsp::Routing::defaults();
+        const auto current = dsp::Routing::fromString (apvts.state.getProperty (statekeys::routing).toString());
+        return expectedRouting != current;
+    }
+
     juce::StringArray ParameterSnapshot::validate() const
     {
         juce::StringArray problems;

@@ -114,6 +114,8 @@ namespace velvox::dsp
     {
         hostTempoKnown = newBpm > 20.0 && newBpm < 999.0;
         bpm = hostTempoKnown ? newBpm : juce::jlimit (20.0, 400.0, (double) settings.manualBpm);
+        displayBpm.store ((float) bpm, std::memory_order_relaxed);
+        displayHostTempo.store (hostTempoKnown, std::memory_order_relaxed);
         hostPpq = ppq;
         hostPlaying = playing && ppq >= 0.0;
     }

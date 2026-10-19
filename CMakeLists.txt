@@ -59,6 +59,7 @@ set(VELVOX_SOURCES
     Source/Presets/ParameterSnapshot.cpp
     Source/Presets/FactoryPresets.cpp
     Source/Presets/PresetManager.cpp
+    Source/Presets/ModulePresets.cpp
     Source/Mixing/ProposalSession.cpp
     Source/UI/Theme.cpp
     Source/UI/VelvoxLookAndFeel.cpp
@@ -69,6 +70,16 @@ set(VELVOX_SOURCES
     Source/UI/DetailPanels.cpp
     Source/UI/BeginnerView.cpp
     Source/UI/TopBar.cpp
+    Source/UI/AssistantView.cpp
+    Source/Assistant/IntentParser.cpp
+    Source/Assistant/StyleProfiles.cpp
+    Source/Assistant/AssistantPlanner.cpp
+    Source/Assistant/AssistantSession.cpp
+    Source/Assistant/AssistantContextBuilder.cpp
+    Source/UI/UserSettings.cpp
+    Source/UI/HelpContent.cpp
+    Source/UI/HelpOverlay.cpp
+    Source/UI/TutorialOverlay.cpp
 )
 
 set(VELVOX_COMMON_DEFINITIONS
@@ -123,7 +134,7 @@ juce_add_plugin(Velvox
 target_sources(Velvox PRIVATE ${VELVOX_SOURCES})
 target_include_directories(Velvox PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
 if(MSVC)
-    target_compile_options(Velvox PRIVATE /bigobj)
+    target_compile_options(Velvox PRIVATE /bigobj /utf-8)
 endif()
 target_compile_definitions(Velvox PUBLIC ${VELVOX_COMMON_DEFINITIONS})
 target_link_libraries(Velvox
@@ -139,10 +150,10 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AssistantTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
-        target_compile_options(VelvoxTests PRIVATE /bigobj)
+        target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)
     endif()
     # Modal loops only for the test runner (used to pump the message loop for UI snapshots)
     target_compile_definitions(VelvoxTests PRIVATE ${VELVOX_COMMON_DEFINITIONS} JUCE_MODAL_LOOPS_PERMITTED=1)

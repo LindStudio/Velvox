@@ -21,6 +21,14 @@ namespace velvox::ui
 
         void setVisual (std::unique_ptr<ModuleView> view);
         void setLiveData (const LiveData* data) { live = data; }
+        // Module identity: icon in the header and its module presets (if any)
+        void setModule (int moduleIdOrOutput);
+
+        // Asks the editor to show another module (e.g. from a VOCAL CHECK finding)
+        std::function<void (int moduleId)> onOpenModule;
+        // Opens the help page for this module (the editor shows the help overlay)
+        std::function<void (int moduleIdOrOutput)> onHelp;
+        juce::TextButton& getHelpButton() noexcept { return helpButton; }
 
     protected:
         virtual void layoutContent (juce::Rectangle<int> area) = 0;
@@ -33,7 +41,7 @@ namespace velvox::ui
         static void row (std::initializer_list<juce::Component*> items, juce::Rectangle<int> area);
         void section (const juce::String& caption, juce::Rectangle<int> area); // labelled group behind controls
 
-        int visualHeight = 206;
+        int visualHeight = 172;
         const LiveData* live = nullptr;
 
         VelvoxAudioProcessor& proc;
@@ -42,8 +50,12 @@ namespace velvox::ui
     private:
         juce::String title, subtitle;
         const char* onParamId;
+        void showModulePresets();
+
         std::unique_ptr<PowerButton> power;
         std::unique_ptr<ModuleView> visual;
+        int moduleId = -2;
+        juce::TextButton presetsButton { "Presets" }, helpButton { "?" };
         std::vector<std::unique_ptr<juce::Component>> owned;
         std::vector<Knob*> knobs;
         struct Section { juce::String caption; juce::Rectangle<int> area; };

@@ -45,6 +45,15 @@ namespace velvox::ui
         void refresh();
 
         std::function<void (bool pro)> onModeChange;
+        std::function<void()> onAssistant;     // the Assistant tab was clicked
+        void setAssistantOpen (bool open);
+        juce::TextButton& getAssistantButton() noexcept { return assistantTab; }
+        std::function<void()> onHelp;
+        juce::TextButton& getHelpButton() noexcept { return help; }
+        juce::Rectangle<int> getPresetArea() const;
+        juce::Rectangle<int> getCompareArea() const;   // A / B and copy
+        juce::Rectangle<int> getModeArea() const;
+        juce::Rectangle<int> getBypassArea() const { return bypass.getBounds(); }
         void setProMode (bool pro);
 
     private:
@@ -58,8 +67,12 @@ namespace velvox::ui
         juce::TextButton presetButton, prev { juce::String::fromUTF8 ("\xe2\x80\xb9") }, next { juce::String::fromUTF8 ("\xe2\x80\xba") },
                          save { "Save" }, remove { "Delete" };
         juce::TextButton slotA { "A" }, slotB { "B" }, copy { "Copy A to B" };
-        juce::TextButton beginner { "Beginner" }, pro { "Pro" };
+        juce::TextButton beginner { "Beginner" }, pro { "Pro" }, assistantTab { "Assistant" };
+        bool assistantOpen = false, proMode = false;
         Toggle bypass;
+        juce::TextButton help { "Help" };
+        bool shownModified = false;
+        int modifiedCheck = 0;
 
         juce::String shownPreset;
         int shownSlot = -1;

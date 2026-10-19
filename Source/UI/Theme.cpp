@@ -27,5 +27,5 @@ namespace velvox::ui
     juce::Font font (float height, bool bold)  { return make (bold ? &EmbeddedFonts::semibold : &EmbeddedFonts::regular, height); }
     juce::Font medium (float height)           { return make (&EmbeddedFonts::medium, height); }
     juce::Font display (float height, bool bold) { return make (bold ? &EmbeddedFonts::semibold : &EmbeddedFonts::light, height); }
-    juce::Font caps (float height)             { return make (&EmbeddedFonts::semibold, height, 0.12f); }
+    juce::Font caps (float height)             { return make (&EmbeddedFonts::semibold, height, 0.03f); }
 }

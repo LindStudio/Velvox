@@ -22,6 +22,11 @@ namespace velvox::ui
         void setSpectrumSource (const SpectrumSource* source) { spectrum.setSource (source); }
         void refreshSpectrum() { spectrum.refresh(); }
 
+        // A module clicked in the chain: name, one line about it, "Edit in Pro" and "?"
+        void showModule (int moduleIdOrOutput);
+        int getFocusModule() const noexcept { return focusModule; }
+        std::function<void (int moduleIdOrOutput)> onEditInPro, onHelp;
+
     private:
         struct Macro
         {
@@ -33,5 +38,9 @@ namespace velvox::ui
         SpectrumView spectrum;
         std::vector<Hint> currentHints;
         juce::Rectangle<int> heroArea, macroArea, hintArea;
+        int focusModule = -2;   // -2 = none
+        juce::String focusTitle, focusText;
+        juce::TextButton editInPro { "Edit in Pro" }, focusHelp { "?" };
+        juce::Rectangle<int> focusRow() const;
     };
 }

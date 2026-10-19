@@ -90,9 +90,9 @@ namespace velvox::ui
             if (withLabels)
             {
                 g.setColour (colours::textFaint);
-                g.setFont (medium (9.5f));
+                g.setFont (medium (11.0f));
                 g.drawText (f >= 1000.0f ? juce::String ((int) (f / 1000.0f)) + "k" : juce::String ((int) f),
-                            juce::Rectangle<float> (x + 4.0f, r.getBottom() - 15.0f, 30.0f, 12.0f), juce::Justification::left, false);
+                            juce::Rectangle<float> (x + 4.0f, r.getBottom() - 18.0f, 34.0f, 14.0f), juce::Justification::left, false);
             }
         }
     }

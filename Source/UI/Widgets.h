@@ -36,6 +36,22 @@ namespace velvox::ui
         juce::VBlankAttachment vblank { this, [this] { tick(); } };
     };
 
+    // Rotary slider with incremental dragging: holding Shift or Ctrl switches to
+    // fine adjustment at any moment without the value jumping.
+    class FineSlider final : public juce::Slider
+    {
+    public:
+        static constexpr int normalPixels = 220;   // pixels for the full range
+        static constexpr int fineFactor = 8;       // Shift / Ctrl: this many times finer
+
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent&) override;
+
+    private:
+        juce::Point<float> lastPos;
+        double dragProportion = 0.0;   // unsnapped, so stepped parameters still move in fine mode
+    };
+
     // Rotary control with caption and value read-out. The dial glides to new
     // values (presets, automation), lights up on hover, and after resting the
     // mouse on it for a second, shows its description in an info card.
@@ -46,9 +62,15 @@ namespace velvox::ui
         ~Knob() override;
         void resized() override;
         void paintOverChildren (juce::Graphics&) override;
+        // The value box is created by the look-and-feel; panels build their knobs
+        // before they join the editor, so refresh it once the knob is in place
+        void parentHierarchyChanged() override { slider.sendLookAndFeelChange(); }
 
         // Large dial with value-driven glow (Beginner macros)
         void setHero (bool isHero);
+        // Visual weight: primary controls get the large dial and a brighter name
+        enum class Prominence { primary, secondary, detail };
+        void setProminence (Prominence p);
         void setMaxDialSize (int px) { maxDial = px; resized(); }
         void setDescription (const juce::String& text) { description = text; }
 
@@ -56,13 +78,14 @@ namespace velvox::ui
         std::function<float()> effectiveValue;
         void refreshEffective();
 
-        juce::Slider slider;
+        FineSlider slider;
 
     protected:
         juce::Label name;
 
     private:
         juce::Rectangle<float> dialBounds() const;
+        void applyLabelStyle();
         void tick();
         void timerCallback() override;
         void mouseEnter (const juce::MouseEvent&) override;
@@ -72,8 +95,10 @@ namespace velvox::ui
         std::unique_ptr<APVTS::SliderAttachment> attachment;
         juce::String description;
         float lastEffective = std::numeric_limits<float>::quiet_NaN();
-        int maxDial = 72;
+        int maxDial = dialsize::secondary;
+        int valueBoxH = 25;
         bool hero = false;
+        Prominence prominence = Prominence::secondary;
         Smoothed shownPos, hover;
         juce::VBlankAttachment vblank { this, [this] { tick(); } };
     };
@@ -83,6 +108,8 @@ namespace velvox::ui
     {
     public:
         Toggle (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent = colours::accent);
+        // Disabled switches fade back so they never read as "off but usable"
+        void enablementChanged() override { setAlpha (isEnabled() ? 1.0f : 0.5f); }
 
     private:
         std::unique_ptr<APVTS::ButtonAttachment> attachment;

@@ -26,6 +26,9 @@ namespace velvox::ui
         History inputDb { -100.0f }, outputDb { -100.0f }, inputLufs { -100.0f }, outputLufs { -100.0f };
         History compGr, deessGr, delayDuck, reverbDuck;
 
+        // 0.3 modules
+        History smashGr, rideGain, rideLevel { -100.0f };
+
         // Most recent stereo samples of the output (goniometer), oldest first
         static constexpr int scopeSize = 1024;
         std::array<float, scopeSize> scopeL {}, scopeR {};

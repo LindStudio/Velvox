@@ -12,24 +12,24 @@ namespace velvox::ui
             return juce::jmap (juce::jlimit (minDb, maxDb, db), minDb, maxDb, r.getBottom(), r.getY());
         }
 
-        juce::Label& styleCaption (juce::Label& l, float size = 9.5f)
+        juce::Label& styleCaption (juce::Label& l, float size = typesize::label)
         {
-            l.setFont (caps (size));
+            l.setFont (medium (size));
             l.setJustificationType (juce::Justification::centred);
             l.setColour (juce::Label::textColourId, colours::textDim);
             l.setInterceptsMouseClicks (false, false);
             return l;
         }
 
-        constexpr int knobLabelH = 14, knobValueH = 16, knobGap = 4;
-        constexpr int popupWidth = 250;
+        constexpr int knobLabelH = 18, knobValueH = 20, knobGap = 5;
+        constexpr int popupWidth = 290;
 
         juce::TextLayout layoutText (const juce::String& text, float width)
         {
             juce::AttributedString s;
             s.setJustification (juce::Justification::topLeft);
             s.setLineSpacing (2.0f);
-            s.append (text, font (12.0f), colours::text.withAlpha (0.72f));
+            s.append (text, font (13.5f), colours::text.withAlpha (0.8f));
             juce::TextLayout layout;
             layout.createLayout (s, width);
             return layout;
@@ -50,8 +50,8 @@ namespace velvox::ui
         anchorArea = anchor;
 
         const auto layout = layoutText (text, (float) popupWidth - 32.0f);
-        const int h = 16 + 18 + 10 + (int) std::ceil (layout.getHeight()) + 16;
-        auto parent = getParentComponent() != nullptr ? getParentComponent()->getLocalBounds() : juce::Rectangle<int> (0, 0, 1280, 800);
+        const int h = 16 + 20 + 10 + (int) std::ceil (layout.getHeight()) + 16;
+        auto parent = getParentComponent() != nullptr ? getParentComponent()->getLocalBounds() : juce::Rectangle<int> (0, 0, baseWidth, baseHeight);
 
         auto b = juce::Rectangle<int> (popupWidth, h).withCentre ({ anchor.getCentreX(), 0 });
         b.setY (anchor.getY() - h - 6);
@@ -99,8 +99,8 @@ namespace velvox::ui
 
         auto inner = r.reduced (16.0f, 16.0f);
         g.setColour (colours::text);
-        g.setFont (font (13.0f, true));
-        g.drawText (title, inner.removeFromTop (18.0f), juce::Justification::centredLeft, false);
+        g.setFont (font (14.5f, true));
+        g.drawText (title, inner.removeFromTop (20.0f), juce::Justification::centredLeft, false);
         inner.removeFromTop (4.0f);
         g.setGradientFill (auroraGradient (inner.getTopLeft(), inner.getTopLeft().translated (36.0f, 0.0f)));
         g.fillRoundedRectangle (inner.getX(), inner.getY(), 36.0f, 2.0f, 1.0f);
@@ -109,13 +109,37 @@ namespace velvox::ui
     }
 
     //==========================================================================
+    void FineSlider::mouseDown (const juce::MouseEvent& e)
+    {
+        juce::Slider::mouseDown (e);   // gesture start, Alt-click reset, text box handling
+        lastPos = e.position;
+        dragProportion = valueToProportionOfLength (getValue());
+    }
+
+    void FineSlider::mouseDrag (const juce::MouseEvent& e)
+    {
+        if (! isEnabled() || e.mods.isPopupMenu() || getRange().getLength() <= 0.0)
+            return;
+
+        // Up / right raises the value. Measured from the last event (not the
+        // drag start), so pressing or releasing the fine modifier never jumps.
+        const float diff = (e.position.x - lastPos.x) + (lastPos.y - e.position.y);
+        lastPos = e.position;
+
+        const bool fine = e.mods.isShiftDown() || e.mods.isCtrlDown() || e.mods.isCommandDown();
+        const double pixels = (double) normalPixels * (fine ? fineFactor : 1);
+        dragProportion = juce::jlimit (0.0, 1.0, dragProportion + (double) diff / pixels);
+        setValue (proportionOfLengthToValue (dragProportion), juce::sendNotificationSync);
+    }
+
+    //==========================================================================
     Knob::Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour)
     {
         slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
         slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, knobValueH);
         slider.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
-        slider.setMouseDragSensitivity (220);
-        slider.setVelocityModeParameters (0.9, 1, 0.08, true, juce::ModifierKeys::shiftModifier);
+        slider.setMouseDragSensitivity (FineSlider::normalPixels);   // also used by the mouse wheel
+        slider.setVelocityModeParameters (0.9, 1, 0.08, false);     // fine mode is handled by FineSlider
         slider.addMouseListener (this, true);
         addAndMakeVisible (slider);
 
@@ -144,30 +168,51 @@ namespace velvox::ui
     {
         hero = isHero;
         slider.getProperties().set (VelvoxLookAndFeel::heroProperty, isHero);
-        styleCaption (name, isHero ? 10.5f : 9.5f);
-        name.setColour (juce::Label::textColourId, isHero ? colours::text.withAlpha (0.9f) : colours::textDim);
+        applyLabelStyle();
         resized();
         repaint();
+    }
+
+    void Knob::setProminence (Prominence p)
+    {
+        prominence = p;
+        maxDial = p == Prominence::primary ? dialsize::primary : (p == Prominence::detail ? dialsize::detail : dialsize::secondary);
+        applyLabelStyle();
+        resized();
+        repaint();
+    }
+
+    void Knob::applyLabelStyle()
+    {
+        // Primary controls read first: larger, brighter name and read-out
+        const bool strong = hero || prominence == Prominence::primary;
+        styleCaption (name, hero ? 15.0f : (strong ? 14.5f : typesize::label));
+        name.setColour (juce::Label::textColourId, strong ? colours::text : colours::textDim);
+        slider.getProperties().set (VelvoxLookAndFeel::strongProperty, strong);
+        slider.sendLookAndFeelChange();
     }
 
     void Knob::resized()
     {
         // Caption, dial and value stay together as one block, centred in the cell
         auto r = getLocalBounds();
-        const int labelH = hero ? knobLabelH + 4 : knobLabelH;
-        const int dial = juce::jlimit (24, maxDial, std::min (r.getWidth() - 8, r.getHeight() - labelH - knobValueH - 2 * knobGap));
-        auto block = r.withSizeKeepingCentre (r.getWidth(), labelH + knobGap + dial + knobValueH);
+        const bool strong = hero || prominence == Prominence::primary;
+        const int labelH = strong ? knobLabelH + 2 : knobLabelH;
+        const int valueH = strong ? knobValueH + 2 : knobValueH;
+        const int dial = juce::jlimit (24, maxDial, std::min (r.getWidth() - 8, r.getHeight() - labelH - valueH - 2 * knobGap));
+        auto block = r.withSizeKeepingCentre (r.getWidth(), labelH + knobGap + dial + knobGap + valueH);
 
         name.setBounds (block.removeFromTop (labelH));
         block.removeFromTop (knobGap);
-        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, block.getWidth(), knobValueH);
+        valueBoxH = valueH + knobGap;
+        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, block.getWidth(), valueBoxH);
         slider.setBounds (block);
     }
 
     juce::Rectangle<float> Knob::dialBounds() const
     {
         // Same area the look-and-feel draws the dial into
-        auto b = slider.getBounds().toFloat().withTrimmedBottom ((float) knobValueH);
+        auto b = slider.getBounds().toFloat().withTrimmedBottom ((float) valueBoxH);
         const float size = std::min (b.getWidth(), b.getHeight());
         return b.withSizeKeepingCentre (size, size).reduced (2.0f);
     }
@@ -296,10 +341,10 @@ namespace velvox::ui
         auto r = getLocalBounds();
         if (caption.isVisible())
         {
-            auto block = r.withSizeKeepingCentre (r.getWidth(), knobLabelH + 8 + 28);
+            auto block = r.withSizeKeepingCentre (r.getWidth(), knobLabelH + 8 + 34);
             caption.setBounds (block.removeFromTop (knobLabelH));
             block.removeFromTop (8);
-            box.setBounds (block.withSizeKeepingCentre (std::min (block.getWidth() - 8, 150), 28));
+            box.setBounds (block.withSizeKeepingCentre (std::min (block.getWidth() - 8, 180), 34));
         }
         else
         {
@@ -373,37 +418,48 @@ namespace velvox::ui
         constexpr float minDb = -60.0f, maxDb = 6.0f;
         auto r = getLocalBounds().toFloat();
 
-        // LUFS read-out
-        auto readout = r.removeFromBottom (40.0f);
+        // LUFS read-out on a recessed plate
+        auto readout = r.removeFromBottom (58.0f);
+        {
+            const auto plate = readout.reduced (2.0f, 2.0f);
+            g.setColour (juce::Colours::black.withAlpha (0.28f));
+            g.fillRoundedRectangle (plate, radius::control);
+            g.setColour (colours::lineSoft);
+            g.drawRoundedRectangle (plate.reduced (0.5f), radius::control, 1.0f);
+        }
+        readout.removeFromTop (6.0f);
         g.setColour (colours::text);
-        g.setFont (display (22.0f));
+        g.setFont (display (30.0f));
         g.drawText (loudness <= -99.0f ? juce::String ("-") : juce::String (loudness, 1),
-                    readout.removeFromTop (24.0f), juce::Justification::centred, false);
-        drawCaption (g, "LUFS", readout, juce::Justification::centredTop, colours::textFaint, 9.0f);
+                    readout.removeFromTop (32.0f), juce::Justification::centred, false);
+        drawCaption (g, "LUFS", readout, juce::Justification::centredTop, colours::textDim, 9.5f);
+        r.removeFromBottom (12.0f);
 
         // Clip lamp
-        auto lampRow = r.removeFromTop (10.0f);
-        r.removeFromTop (8.0f);
-        const auto lamp = juce::Rectangle<float> (6.0f, 6.0f).withCentre (lampRow.getCentre());
+        auto lampRow = r.removeFromTop (12.0f);
+        r.removeFromTop (10.0f);
+        const auto lamp = juce::Rectangle<float> (8.0f, 8.0f).withCentre (lampRow.getCentre());
         if (clipLatched)
-            drawGlow (g, lamp.getCentre(), 9.0f, 0.5f, colours::warning);
-        g.setColour (clipLatched ? colours::warning : colours::accent.withAlpha (0.08f));
+            drawGlow (g, lamp.getCentre(), 11.0f, 0.5f, colours::warning);
+        g.setColour (clipLatched ? colours::warning : colours::accent.withAlpha (0.12f));
         g.fillEllipse (lamp);
 
-        auto scale = scaleLeft ? r.removeFromLeft (20.0f) : r.removeFromRight (20.0f);
-        auto bars = r.withSizeKeepingCentre (std::min (r.getWidth(), 18.0f), r.getHeight());
-        if (scaleLeft)
-            bars.setX (r.getX() + 4.0f);
-        else
-            bars.setX (r.getRight() - 4.0f - bars.getWidth());
+        // Scale on one side, two bars next to it, both centred as one block
+        constexpr float scaleW = 30.0f, barsW = 26.0f, scaleGap = 6.0f;
+        auto block = r.withSizeKeepingCentre (std::min (r.getWidth(), scaleW + scaleGap + barsW), r.getHeight());
+        auto scale = scaleLeft ? block.removeFromLeft (scaleW) : block.removeFromRight (scaleW);
+        auto bars = scaleLeft ? block.removeFromRight (barsW) : block.removeFromLeft (barsW);
 
-        g.setFont (medium (9.0f));
-        for (float db : { 0.0f, -6.0f, -12.0f, -24.0f, -36.0f, -48.0f })
+        g.setFont (medium (11.5f));
+        for (float db : { 6.0f, 0.0f, -6.0f, -12.0f, -18.0f, -24.0f, -36.0f, -48.0f })
         {
             const float y = dbToY (db, bars, minDb, maxDb);
-            g.setColour (colours::textFaint);
-            g.drawText (juce::String ((int) std::abs (db)), scale.withY (y - 6.0f).withHeight (12.0f),
+            g.setColour (db == 0.0f ? colours::textDim : colours::textFaint);
+            g.drawText (db > 0.0f ? "+" + juce::String ((int) db) : juce::String ((int) std::abs (db)), scale.withY (y - 7.0f).withHeight (14.0f),
                         scaleLeft ? juce::Justification::centredRight : juce::Justification::centredLeft, false);
+            g.setColour (colours::accent.withAlpha (db == 0.0f ? 0.22f : 0.08f));
+            g.fillRect (scaleLeft ? juce::Rectangle<float> (bars.getX() - 5.0f, y - 0.5f, 3.0f, 1.0f)
+                                  : juce::Rectangle<float> (bars.getRight() + 2.0f, y - 0.5f, 3.0f, 1.0f));
         }
 
         const float barGap = 4.0f;
@@ -451,25 +507,31 @@ namespace velvox::ui
     {
         auto r = getLocalBounds().toFloat();
         if (caption.isNotEmpty())
-            drawCaption (g, caption, r.removeFromTop (16.0f), juce::Justification::centred, colours::textDim, 9.0f);
-        auto label = r.removeFromBottom (20.0f);
-        r.removeFromTop (4.0f);
+            drawCaption (g, caption, r.removeFromTop (20.0f), juce::Justification::centred, colours::textDim, 10.0f);
+        auto label = r.removeFromBottom (24.0f);
+        r.removeFromTop (6.0f);
 
-        const auto bar = r.withSizeKeepingCentre (6.0f, r.getHeight());
+        const auto bar = r.withSizeKeepingCentre (10.0f, r.getHeight());
         g.setColour (juce::Colours::black.withAlpha (0.5f));
-        g.fillRoundedRectangle (bar, 3.0f);
+        g.fillRoundedRectangle (bar, 5.0f);
+
+        // Scale ticks every 6 dB
+        for (float db = 6.0f; db < maxDb; db += 6.0f)
+        {
+            g.setColour (colours::accent.withAlpha (0.10f));
+            g.fillRect (juce::Rectangle<float> (bar.getRight() + 3.0f, bar.getY() + bar.getHeight() * db / maxDb - 0.5f, 4.0f, 1.0f));
+        }
 
         const float h = bar.getHeight() * juce::jlimit (0.0f, 1.0f, shown / maxDb);
         if (h > 0.5f)
         {
             const auto fill = bar.withHeight (h);
-            drawGlow (g, { fill.getCentreX(), fill.getBottom() }, 14.0f, 0.35f, colours::blue);
             g.setGradientFill (auroraGradient (fill.getTopLeft(), fill.getBottomLeft()));
-            g.fillRoundedRectangle (fill, 3.0f);
+            g.fillRoundedRectangle (fill, 5.0f);
         }
 
-        g.setColour (colours::text.withAlpha (0.8f));
-        g.setFont (medium (11.5f));
+        g.setColour (colours::text);
+        g.setFont (medium (13.5f));
         g.drawText (shown < 0.05f ? "0.0" : "-" + juce::String (shown, 1), label, juce::Justification::centred, false);
     }
 
@@ -487,9 +549,9 @@ namespace velvox::ui
     void CorrelationView::paint (juce::Graphics& g)
     {
         auto r = getLocalBounds().toFloat();
-        auto labels = r.removeFromBottom (12.0f);
-        g.setFont (medium (9.0f));
-        g.setColour (colours::textFaint);
+        auto labels = r.removeFromBottom (15.0f);
+        g.setFont (medium (11.5f));
+        g.setColour (colours::textDim);
         g.drawText ("-1", labels, juce::Justification::left, false);
         g.drawText ("0", labels, juce::Justification::centred, false);
         g.drawText ("+1", labels, juce::Justification::right, false);
@@ -565,10 +627,10 @@ namespace velvox::ui
         }
         g.setColour (colours::accent.withAlpha (0.08f));
         g.fillRect (juce::Rectangle<float> (r.getX(), zeroY, r.getWidth(), 1.0f));
-        g.setFont (medium (9.0f));
+        g.setFont (medium (11.0f));
         g.setColour (colours::textFaint);
         for (float db : { -12.0f, 0.0f, 12.0f })
-            g.drawText ((db > 0 ? "+" : "") + juce::String ((int) db), juce::Rectangle<float> (r.getRight() - 34.0f, dbToY (db, r, -rangeDb, rangeDb) - 13.0f, 26.0f, 12.0f),
+            g.drawText ((db > 0 ? "+" : "") + juce::String ((int) db), juce::Rectangle<float> (r.getRight() - 38.0f, dbToY (db, r, -rangeDb, rangeDb) - 15.0f, 30.0f, 14.0f),
                         juce::Justification::right, false);
 
         const float a = active ? 1.0f : 0.35f;

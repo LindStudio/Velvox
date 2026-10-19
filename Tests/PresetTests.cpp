@@ -34,7 +34,7 @@ public:
                 categories.addIfNotAlreadyThere (p.category);
                 expect (p.description.isNotEmpty(), p.name + " needs a description");
             }
-            for (auto* c : { "Lead", "EDM", "Pop", "Creative", "Backing & Adlibs", "Dynamics", "Classic (v0.1)", "Utility" })
+            for (auto* c : { "Clean", "Punchy", "Aggressive", "Wide", "Creative", "Classic (v0.1)", "Utility" })
                 expect (categories.contains (c), juce::String ("missing category ") + c);
             for (auto* n : { "Clean Lead", "Hypertechno Lead", "Aggressive Party Vocal", "Wide Festival Vocal", "Bright Pop Vocal",
                              "Telephone Vocal", "Vocal Chop", "Wide Adlibs", "Heavy Parallel Compression",

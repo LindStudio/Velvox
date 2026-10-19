@@ -4,6 +4,40 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 
 ## [Unveröffentlicht] – Branch `ui-redesign`
 
+### Neu – Smart Assistant (lokal, ohne KI-Dienst)
+- **Assistant-Tab** in der Kopfzeile (neben Beginner/Pro): Klangwünsche frei formulieren („Weniger Tiefen“, „etwas mehr Reverb“, „präsenter, aber nicht schärfer“). Enter analysiert, Shift+Enter fügt eine neue Zeile ein.
+- **Regelbasierte Textinterpretation** (Deutsch, gängige englische Begriffe): Synonyme, Komparative, Beschwerden („zu basslastig“, „klingt dumpf“), Intensität (etwas / moderat / deutlich / stark, „aber nicht zu viel“). Negationen werden als Grenze verstanden („nicht schärfer“, „nicht mehr Höhen“), nie als Gegenteil. Widersprüche und vage Wünsche („alles extremer“) führen zu Rückfragen statt zu Änderungen.
+- **Änderungsvorschläge** mit Modul, Parameter, aktuellem und vorgeschlagenem Wert, Begründung und Kennzeichnung Messung/Regel. Jeder Vorschlag lässt sich einzeln ab- und anwählen.
+- **Anwenden** über die normalen Parameter (Gesten für DAW-Automation, sichtbar in den Modulen, gespeichert mit Projekt und Presets). Validierung vorab, alles oder nichts. Wurden Werte seit der Analyse geändert, wird neu geplant statt alte Werte zu setzen.
+- **Rückgängig** stellt den Zustand vor der letzten Assistant-Aktion wieder her; inzwischen vom Nutzer geänderte Werte bleiben erhalten.
+- **Beat-Sidechain:** Verbindungsstatus und Pegel (RMS) werden lock-frei gemessen und angezeigt. Ein Frequenzvergleich Vocal gegen Beat (Maskierung) ist noch nicht implementiert und wird als „nicht verfügbar“ gekennzeichnet.
+- Vocal-Check-Messungen fließen ein, wenn genug Stimme analysiert wurde. Keine Netzwerkzugriffe, keine Sprachmodelle.
+- **Sofort anwenden** (Schalter, pro Nutzer gespeichert, standardmäßig an): erkannte Wünsche werden direkt nach der Analyse umgesetzt; ein Klick auf Rückgängig nimmt alles zurück.
+- **Stilprofile** „im Stil von Ski Aggu / Tream“: typische, hörbare Merkmale als allgemeine Regeln (kein Nachbau von Aufnahmen). Eigene Wünsche haben Vorrang, widersprüchliche Merkmale mehrerer Stile bleiben unverändert, unbekannte Namen werden gemeldet.
+- Neue Klangwörter: klar / klare Stimme, crisp, spritzig, frisch.
+
+### Geändert – Lesbarkeit und Layout (v0.4 „Anthracite“)
+- **Größere Designfläche:** 1440 × 900 statt 1280 × 800. Das Fenster öffnet in voller Größe, wenn der Bildschirm (inklusive Windows-Skalierung) Platz hat, sonst in der größten passenden Größe. Es ist frei skalierbar von 70 % bis 160 %.
+- **Modulnavigation:** große Modulkarten (80 px hoch, mindestens 168 px breit) mit vollem Namen, Symbol, Ein/Aus-Schalter, Status, Position und Aktivitätsbalken. Die Reihe scrollt horizontal (Mausrad, Pfeile, Scrollbalken), statt die Karten zu verkleinern. Beim Ziehen scrollt sie an den Rändern automatisch mit, das ausgewählte Modul wird automatisch sichtbar gemacht. Input und Output sind als feste Ports abgesetzt, parallele Sends haben eine eigene Spur mit markierter Ablagezone.
+- **Typografie:** durchgehend größere Schrift, Beschriftungen in normaler Schreibweise statt Versalien, hellere Sekundärtexte; ausgeschaltete Module sind weniger stark abgeblendet.
+- **3D-Metallknobs:** gebürstetes dunkles Metall mit Fase, Rändelung, Lichtreflexen und cyanfarbenem Zeiger; Haupt-, Neben- und Detailregler sind unterschiedlich groß (bis ~120 px im Beginner-Modus). Die Metalloberfläche wird je Größe einmal gerendert und zwischengespeichert.
+- **Seitenleisten** breiter (150 px): größere LUFS-Anzeige, feinere und besser lesbare Pegelskala, größere Gain-Regler, Mono und Clip Guard als volle Schaltflächen.
+- **Pro-Panels:** größere Kopfzeile mit „Off“-Kennzeichnung, lesbare Gruppenüberschriften, mehr Abstand; Visualisierungen und Reglerbereiche je Modul neu gewichtet.
+- Dunkler Anthrazit-Hintergrund und dezente Cyan-Akzente; die Hintergrund-Leuchteffekte sind deutlich zurückgenommen.
+- DSP, Parameter-IDs, Wertebereiche, Presets und Automation sind unverändert. Die Fenstergröße wird unter neuem Schlüssel gespeichert, damit ältere Projekte in der neuen Standardgröße öffnen.
+
+### Neu – Bedienung, Hilfe und Organisation
+- **Offline-Hilfe:** HELP-Button oben rechts; allgemeine Kapitel (Signalkette, Module organisieren, Bedienung, Beginner/Pro, Presets, Vergleich, Meter, typische Vocal-Probleme) und eine Seite pro Modul mit sieben festen Abschnitten. Der **?**-Button in jedem Modul öffnet direkt dessen Seite.
+- **Onboarding:** Beim ersten Start eine Begrüßung (Tutorial starten / Direkt zum Plugin / Später ansehen) und eine Tour in 9 Schritten mit Hervorhebung. Klicks außerhalb der Karte gehen an das Plugin. Der Abschluss wird in den Benutzereinstellungen gespeichert, die Tour lässt sich aus der Hilfe neu starten.
+- **Module organisieren:** Rechtsklick auf eine Kachel (öffnen, ein/aus, ausblenden, an Anfang/Ende, Hilfe), dazu der **Modules**-Button mit Übersicht aller Module inklusive ausgeblendeter Module und deren Status. Ausblenden ändert nur die Ansicht. Die Standardreihenfolge lässt sich wiederherstellen, das eigene Layout speichern und laden. Griff-Markierung beim Hover, Drag & Drop berücksichtigt ausgeblendete Module.
+- **Presets:** Kategorien Clean, Punchy, Aggressive, Wide, Creative, Utility, Classic. Factory- und User-Presets sind im Menü getrennt, das Preset-Feld zeigt „(edited)“ nach Änderungen, im Menü gibt es „Änderungen verwerfen“ und „Speichern“.
+- **Bypass** ist unübersehbar: bernsteinfarbener Rahmen, Label „Bypassed“ und ein amberfarbener Schalter.
+- **Regler:** Shift/Strg-Feinjustierung jederzeit ohne Sprung (8× feiner), auch für Parameter mit Rasterung.
+- **Beginner:** Ein Klick auf ein Modul zeigt eine Kurzbeschreibung mit „Edit in Pro“ und „?“.
+
+### Behoben
+- Wertefelder mancher Regler (z. B. EQ Mix) erschienen im JUCE-Standardstil mit Rahmen und falscher Schrift.
+
 ### Geändert
 - **Neues Design „Deep Dark“:** komplett überarbeitete Oberfläche, monochrom (Schwarz, Grau, Weiß) mit Glas-Flächen und weichem Licht statt Neonfarben. Rot erscheint nur noch bei echten Problemen (Clipping, Phasenauslöschung).
   - Regler mit beleuchteter Kappe und leuchtendem Wertebogen; die Beginner-Makros leuchten stärker, je weiter sie aufgedreht sind

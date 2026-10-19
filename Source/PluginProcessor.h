@@ -65,11 +65,25 @@ public:
     bool isMonoMonitor() const noexcept { return monoMonitor.load(); }
     void setMonoMonitor (bool shouldBeMono) noexcept { monoMonitor.store (shouldBeMono); }
 
+    // Beat sidechain status for the assistant (written by the audio thread, lock-free).
+    // Levels are short-term RMS in dBFS (~300 ms), measured before any processing.
+    struct SidechainStatus
+    {
+        bool connected = false;   // the host enabled the sidechain bus
+        float beatRmsDb = -100.0f;
+        float vocalRmsDb = -100.0f;
+        bool hasSignal() const noexcept { return connected && beatRmsDb > -60.0f; }
+    };
+    SidechainStatus getSidechainStatus() const noexcept;
+
     // VOCAL CHECK analysis (message thread). Fed from the Check module in the
     // chain by a timer that runs while the module is on - also with the editor closed.
     velvox::dsp::VocalAnalyzer& getAnalyzer() noexcept { return analyzer; }
     // Drains the Check tap into the analyzer (called by the timer; tests call it directly)
     void pumpAnalyzer();
+    // Latest findings (recomputed about twice a second while the module is on)
+    const velvox::dsp::AnalysisResult& getLatestAnalysis() const noexcept { return latestAnalysis; }
+    void refreshAnalysis() { latestAnalysis = analyzer.analyse(); lastAnalysisMs = juce::Time::getMillisecondCounterHiRes(); }
 
 private:
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
@@ -136,7 +150,15 @@ private:
 
     std::atomic<bool> monoMonitor { false };
 
+    // Sidechain / vocal level (audio thread state + published values)
+    float scMeanSquare = 0.0f, vocalMeanSquare = 0.0f;
+    std::atomic<bool> scConnected { false };
+    std::atomic<float> scRmsDb { -100.0f }, vocalRmsDb { -100.0f };
+    void measureLevels (const juce::AudioBuffer<float>& vocal, int vocalChannels, const juce::AudioBuffer<float>* sidechain) noexcept;
+
     velvox::dsp::VocalAnalyzer analyzer { chain.getCheck() };
+    velvox::dsp::AnalysisResult latestAnalysis;
+    double lastAnalysisMs = 0.0;
     struct AnalyzerTimer final : juce::Timer
     {
         explicit AnalyzerTimer (VelvoxAudioProcessor& p) : owner (p) {}

@@ -55,7 +55,11 @@ void VelvoxAudioProcessor::pumpAnalyzer()
         analyzer.setSampleRate (getSampleRate());
     analyzer.setMode (raw.checkMode.index() == 1 ? dsp::VocalAnalyzer::Mode::capture : dsp::VocalAnalyzer::Mode::continuous);
     if (raw.checkOn.on())
+    {
         analyzer.pump();
+        if (juce::Time::getMillisecondCounterHiRes() - lastAnalysisMs > 500.0)
+            refreshAnalysis();
+    }
 }
 
 void VelvoxAudioProcessor::updateHostLatency()
@@ -474,7 +478,51 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     if (hasSidechain)
         sidechain = getBusBuffer (buffer, true, 1);
 
+    measureLevels (main, std::min (mainIn, main.getNumChannels()), hasSidechain ? &sidechain : nullptr);
     chain.process (main, std::min (mainIn, main.getNumChannels()), settings, hasSidechain ? &sidechain : nullptr);
+}
+
+// Short-term RMS of the vocal input and of the sidechain: a few multiply-adds
+// per sample, no allocation, no locks
+void VelvoxAudioProcessor::measureLevels (const juce::AudioBuffer<float>& vocal, int vocalChannels,
+                                          const juce::AudioBuffer<float>* sidechain) noexcept
+{
+    const int n = vocal.getNumSamples();
+    if (n <= 0)
+        return;
+    const double fs = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+    const float a = 1.0f - (float) std::exp (-(double) n / (0.3 * fs));
+
+    const auto meanSquare = [n] (const juce::AudioBuffer<float>& b, int channels)
+    {
+        double sum = 0.0;
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            const float* d = b.getReadPointer (ch);
+            for (int i = 0; i < n; ++i)
+                sum += (double) d[i] * d[i];
+        }
+        return channels > 0 ? (float) (sum / ((double) n * channels)) : 0.0f;
+    };
+
+    vocalMeanSquare += a * (meanSquare (vocal, vocalChannels) - vocalMeanSquare);
+    vocalRmsDb.store (juce::Decibels::gainToDecibels (std::sqrt (vocalMeanSquare), -100.0f), std::memory_order_relaxed);
+
+    const bool connected = sidechain != nullptr && sidechain->getNumChannels() > 0 && sidechain->getNumSamples() >= n;
+    scConnected.store (connected, std::memory_order_relaxed);
+    scMeanSquare += a * ((connected ? meanSquare (*sidechain, sidechain->getNumChannels()) : 0.0f) - scMeanSquare);
+    if (! std::isfinite (scMeanSquare) || ! std::isfinite (vocalMeanSquare))
+        scMeanSquare = vocalMeanSquare = 0.0f;
+    scRmsDb.store (juce::Decibels::gainToDecibels (std::sqrt (scMeanSquare), -100.0f), std::memory_order_relaxed);
+}
+
+VelvoxAudioProcessor::SidechainStatus VelvoxAudioProcessor::getSidechainStatus() const noexcept
+{
+    SidechainStatus s;
+    s.connected = scConnected.load (std::memory_order_relaxed);
+    s.beatRmsDb = scRmsDb.load (std::memory_order_relaxed);
+    s.vocalRmsDb = vocalRmsDb.load (std::memory_order_relaxed);
+    return s;
 }
 
 //==============================================================================

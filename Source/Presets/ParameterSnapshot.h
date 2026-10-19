@@ -30,6 +30,10 @@ namespace velvox
         // Bypass, input gain and level-match settings are never touched by a snapshot.
         void applyTo (juce::AudioProcessorValueTreeState& apvts, bool resetMissingToDefault = true) const;
 
+        // True when the current state differs from what applyTo (apvts, true)
+        // would set - i.e. the user edited something after loading this snapshot.
+        bool differsFrom (juce::AudioProcessorValueTreeState& apvts) const;
+
         // Returns a list of problems (unknown IDs, out-of-range values)
         juce::StringArray validate() const;
 

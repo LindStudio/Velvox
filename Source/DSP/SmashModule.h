@@ -40,6 +40,8 @@ namespace velvox::dsp
         static float thresholdFor (float amount) noexcept { return -12.0f - 30.0f * juce::jlimit (0.0f, 1.0f, amount); }
         static float ratioFor (float amount) noexcept     { return 2.0f + 18.0f * juce::jlimit (0.0f, 1.0f, amount); }
         static float makeupFor (float amount) noexcept    { return -gainComputerDb (-12.0f, amount); }
+        // Total static gain of the squashed path (compression, makeup, breath expander, floor)
+        static float wetGainDb (float detectorLevelDb, float amount) noexcept;
 
         PeakMeter gainReductionDb;              // squashed path, dB (positive)
         std::atomic<float> blendLevelDb { -100.0f }; // level of the added path after blend
