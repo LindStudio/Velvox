@@ -25,18 +25,18 @@ namespace velvox::ui::help
             std::vector<Page> p;
 
             //==================================================================
-            p.push_back ({ "start", "Welcome to Velvox", gStart, R"(Velvox is a vocal processing system for modern EDM, hypertechno, hard dance and hardstyle vocals. Everything a lead vocal usually needs - cleaning, dynamics, tone, width, space and rhythmic effects - sits in one chain of modules.
+            p.push_back ({ "start", "Welcome to Velvox", gStart, R"(Velvox is an automatic vocal mixer for EDM, hypertechno, hard dance, party and pop vocals. It listens to a section of your vocal, measures it, and sets up its modules - cleaning, dynamics, S sounds, tone, width and space - for a finished-sounding vocal. Every module stays fully editable afterwards.
 
 ## Your first minute
-- Pick a preset from the field at the top centre. The Punchy and Aggressive presets are good starting points for hard dance leads.
-- Play your vocal. The input meter on the left should sit roughly around -20 LUFS; use Input gain if it is much quieter or clips.
-- In Beginner mode, shape the sound with the six large controls. Rest the mouse on one for a second to read what it does.
-- Press Bypass (top right) to hear the original, and A / B to compare two versions.
+- Load Velvox on the mixer track of your vocal. A new instance asks: "Let's mix your vocal."
+- Click "Audio analysieren" and start playback of the vocal in your DAW. Velvox captures a limited section (pauses are skipped) and stops by itself.
+- The analysis and the mix run in the background; the playback is never interrupted. When it is done, the Auto Mix view shows what was set up and why.
+- Use "Vorher / Velvox Mix" and "Original" to compare at equal loudness, and the Feinschliff controls to fine-tune.
 
-## Two ways to work
-- Beginner: six musical controls, a live spectrum and live tips.
-- Pro: every module with all of its real parameters, meters and visualisations.
-Both modes control the same sound. Switching never changes or resets a value.
+## Two views
+- Auto Mix: status of the analysis, the processing that was set up, comparison and six fine-tuning controls.
+- Module: every module with all of its real parameters, meters and visualisations. Click a module card to open it.
+Both views control the same sound. Switching never changes or resets a value.
 
 ## Help is always here
 The Help button at the top right opens this guide. Inside a module, the ? button jumps straight to the page for that module. You can restart the tutorial from the bottom of the navigation.)" });
@@ -46,7 +46,7 @@ The Help button at the top right opens this guide. Inside a module, the ? button
 ## Reading a tile
 - The dot on the left is the power switch. Lit = the module processes audio, hollow = it is switched off and bypassed.
 - The dot glows brighter while the module is working hard (for example while a compressor reduces gain).
-- An "M" on a switched-off tile means a Beginner control currently drives this module.
+- An "M" on a switched-off tile means a Feinschliff control currently drives this module. "Auto" marks modules set up by the automatic mix.
 - Delay and Reverb carry an Ins / Send switch: Ins processes in series like every other module, Send runs them in parallel on the lower lane.
 
 ## Why order matters
@@ -58,7 +58,7 @@ Every module hears what the modules before it did. Typical consequences:
 The default order follows these rules and is a safe place to start.)" });
 
             p.push_back ({ "modules", "Organising modules", gWork, R"(## Open a module
-Click a tile to open it. In Pro mode its controls appear below the chain. In Beginner mode you see a short description and can jump to Pro to edit it.
+Click a tile to open it: the Module view shows all of its controls below the chain.
 
 ## Switch on and off
 Click the dot on a tile, or the power button in the module header. A switched-off module is bypassed: it is removed from the active processing and costs no CPU.
@@ -98,41 +98,41 @@ The order and hidden modules of each instance are also saved with your project a
 ## Automation
 Every knob, switch and menu is a real plugin parameter: your DAW can automate it, and presets and A/B store it. Velvox reports changes to the host as proper gestures, so recorded automation is clean.)" });
 
-            p.push_back ({ "modes", "Beginner and Pro", gWork, R"(## Beginner
-Six large controls change several modules at once in a musical way:
-- Presence: more high-end air on the EQ, and a little more de-essing to keep the extra S sounds in check.
-- Warmth: more low-end body, slightly softer highs and gentle saturation.
-- Aggression: heavier and faster compression with more drive.
-- Width: doubled voices left and right and a wider stereo image. The centre stays untouched.
-- Space: reverb and delay that duck while you sing.
-- Density: more compression and a touch of saturation for a steady, thick vocal.
-The Fair compare menu sets how Bypass compares (see Compare: Bypass and A/B).
+            p.push_back ({ "modes", "Auto Mix and Module views", gWork, R"(## Auto Mix
+The overview after an analysis:
+- Vocal status: how much voice was analysed, whether that was enough, how many modules were set up, the live input level, the beat sidechain and the output level.
+- Notes on the recording: only what was measured, each marked gemessen (measured), wahrscheinlich (likely) or möglich (possible).
+- Automatic mix: every processing step that was actually set up, with the reason. Click a step to open its module.
+- Feinschliff: six controls that change several modules at once - Presence (highs and de-essing), Warmth (body, softer highs, saturation), Punch (faster, firmer compression and drive), Width (doubler and stereo width), Space (ducked reverb and delay) and Density (compression and saturation). They work on top of the automatic mix and move the real parameters.
 
-## Pro
-Every module with all its parameters. When a Beginner control moves a parameter, the knob in Pro shows a small teal marker at the value that is actually processed.
+## Module
+Every module with all its parameters. When a Feinschliff control moves a parameter, the knob shows a small marker at the value that is actually processed. Cards set up by the automatic mix carry an "Auto" badge.
 
 ## Switching
-Beginner and Pro are two views of the same settings. Switching mode never changes the sound or resets anything: the Beginner controls stay active in Pro, and the Pro settings stay underneath in Beginner.)" });
+Both views show the same settings. Switching never changes the sound or resets anything.)" });
 
-            p.push_back ({ "assistant", "Assistant", gWork, R"(## What it does
-Describe the sound you want in your own words - in German or English - and the Assistant proposes concrete changes to the Velvox modules. It runs completely inside the plugin: no internet, no cloud, no language model.
+            p.push_back ({ "automix", "Automatic mix", gWork, R"(## What it does
+Velvox records a limited section of the vocal while your DAW plays it (about 14 seconds of singing, at most 24 seconds including short gaps), analyses it and sets up the modules. Everything runs inside the plugin: no internet, no cloud, no AI service. A plugin only hears what the DAW plays through it - Velvox never reads the audio file itself, so only the captured section is analysed.
 
-## How to use it
-- Open the Assistant tab at the top (next to Beginner and Pro).
-- Type your wish, e.g. "weniger Tiefen", "etwas mehr Reverb", "mach die Stimme präsenter, aber nicht schärfer". Several wishes in one sentence are fine.
-- Enter (or Analysieren) builds the change list; Shift+Enter starts a new line.
-- Every proposal shows the module, the parameter, the current and the proposed value and why. Untick what you do not want, then click Vorschläge anwenden.
-- Rückgängig restores the values from before the last Assistant action. Values you changed yourself in the meantime are kept.
+## What is measured
+- Loudness (ITU-R BS.1770), peaks, clipping, the level difference between loud and quiet words, crest factor and noise floor (when there are pauses).
+- Pitch range of the voice, the long-term spectrum (rumble, body, low mids, presence, S range, air), S sounds against vowels, narrow resonances (partials of the sung notes are excluded), room or effect tails, and stereo width.
+- With a beat on the sidechain: its level and how much it overlaps the voice's presence range. This is only a hint, never proof of masking - the beat is never heard through Velvox.
 
-## What it understands
-Low end, presence, highs, reverb, delay, level, stereo width, warmth, harshness, S sounds, punch, compression, and "the vocal should cut through the beat". Words like etwas / ein wenig / deutlich / stark set how far it goes. "Nicht schärfer" or "nicht mehr Höhen" are read as limits, never as the opposite wish. Vague or contradictory requests get a question instead of a guess.
+## What is set up
+The decisions follow the measurements: the low cut sits well below the lowest sung notes, highs are only raised on dark recordings, the de-esser threshold sits between vowel and S level, resonance control only runs when something sticks out, reverb and delay are reduced or left off on roomy recordings. Creative effects (Pitch, Chop, Pulse, Choir) stay off.
 
-## Measurements
-- With VOCAL CHECK on and enough voice analysed, proposals quote the measured balance of the voice and are tagged Messung.
-- The beat sidechain is used for a level comparison only. A frequency comparison of vocal and beat (masking) is not implemented yet - the Assistant says so instead of pretending.
+## Checked before it is applied
+Velvox renders the captured section through the complete chain, measures the result and corrects it where the measurement is reliable: compression that is too strong or too weak, S sounds that the chain made louder, lost body or too much brightness, mono compatibility. Finally the output is matched to the loudness of the original (so the comparison is fair) with 1 dB of headroom.
 
-## Good to know
-The Assistant only moves the normal module parameters. Everything stays visible in the modules, works with presets, A/B and automation, and nothing is stored separately.)" });
+## Compare and undo
+- Vorher / Velvox Mix switches the real parameters between the state before the analysis and the mix (including your changes to it).
+- Original plays the unprocessed vocal; with Fair compare = Bypass match at the same loudness.
+- "Vorherigen Zustand wiederherstellen" discards the mix.
+- Neu analysieren is always available; the current state is kept as the new "Vorher".
+
+## Limits
+A short or quiet capture gives conservative settings (and says so). The analysis judges the recording, not your taste - treat the result as a well-prepared starting point and listen. It is not a guarantee of a perfect mix for every recording.)" });
 
             p.push_back ({ "presets", "Presets and saving", gWork, R"(## Factory presets
 Click the preset field at the top centre to open the browser. Factory presets are grouped by character (Clean, Punchy, Aggressive, Wide, Creative, ...); your own presets are listed separately under User presets. The arrows left and right step through all presets.
@@ -152,13 +152,13 @@ The Presets button inside a module loads starting points for that module only; t
 Input gain, Bypass and the Fair compare / Level match settings belong to your recording and monitoring, so presets and A/B never change them.
 
 ## Projects
-Your DAW project stores the complete state of every Velvox instance: all parameters, the module order, the hidden modules, the view mode and the window size.)" });
+Your DAW project stores the complete state of every Velvox instance: all parameters, the module order, the hidden modules, the view mode, the window size, the automatic-mix report and the state before it.)" });
 
             p.push_back ({ "compare", "Compare: Bypass and A/B", gWork, R"(## Bypass
 Bypass (top right) plays the unprocessed vocal, delay-compensated so it stays in time. While bypass is on, Velvox shows an amber frame and a BYPASSED label so you never forget it. It is also the host's bypass parameter.
 
 ## Fair comparison
-A louder sound almost always seems better. Set Fair compare (Beginner) or Level match (Pro, Output) to:
+A louder sound almost always seems better. Set Fair compare (Auto Mix view) or Level match (Output module) to:
 - Bypass match: Bypass plays as loud as the processed vocal, so you compare tone, not loudness.
 - Auto gain: the processed vocal is continuously kept as loud as the input.
 - Off: no level adjustment.
@@ -217,7 +217,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- Lower Threshold = reacts to more and quieter S sounds.\n- Higher Range = stronger reduction.\n- Frequency: lower values also catch lower hiss but can make the voice lisp.",
                 "- Frequency 5 to 7 kHz, Range 6 dB.\n- Turn on Listen, move Frequency until you hear mostly S sounds, turn Listen off.\n- Lower Threshold until only the S sounds are reduced.",
                 "- Too much Range: the singer sounds as if they had a lisp.\n- Leaving Listen switched on (you only hear the S band).\n- Using Wideband on a dense mix where the whole vocal then ducks audibly.",
-                "Place it after EQ boosts and compression, which both make S sounds louder. Presence in Beginner mode raises the de-essing automatically together with the highs. Smooth handles ringing resonances, the de-esser handles sibilance."));
+                "Place it after EQ boosts and compression, which both make S sounds louder. Presence (Feinschliff) raises the de-essing automatically together with the highs. Smooth handles ringing resonances, the de-esser handles sibilance."));
 
             p.push_back (modulePage ("sat", "Saturation",
                 "Adds harmonics: warmth, grit, density and a stronger presence in a loud mix. The drive is level compensated, so it changes character rather than volume.",
@@ -226,7 +226,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- More Drive = more harmonics and more audible distortion.\n- Lower Mix = subtler, keeps the clean transients.\n- Hard character distorts most at the same Drive.",
                 "- Warm or Tape, Drive 4 to 8 dB, Mix 100 %.\n- For aggressive leads: Hard with Mix 30 to 50 %.",
                 "- Too much drive on S sounds - put the De-esser before it or lower Drive.\n- Judging distortion only on solo; in the mix more is often fine, but check.",
-                "Saturation increases density similar to compression; with Vocal Smash or heavy compression use less. Warmth, Aggression and Density in Beginner mode add saturation automatically."));
+                "Saturation increases density similar to compression; with Vocal Smash or heavy compression use less. Warmth, Punch and Density (Feinschliff) add saturation automatically."));
 
             p.push_back (modulePage ("doubler", "Doubler",
                 "Creates two extra takes left and right with small timing and pitch differences, for a wide and thick vocal while the original stays in the centre.",
@@ -235,7 +235,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- Higher Mix = more obvious doubling.\n- More Detune and Timing = looser, more chorus-like; too much sounds out of tune or echoey.\n- Mono safe 100 % = mono playback sounds exactly like the original.",
                 "- Mix 40 to 50 %, Width 80 %, Timing 12 to 18 ms, Detune 6 to 10 ct, Mono safe 50 to 100 %.",
                 "- Too much Detune on a tuned lead.\n- Forgetting the club: check with Mono on the output rail.",
-                "Choir is the bigger brother for whole groups of voices; you rarely need both at full level. Width in Beginner mode drives the doubler. Put reverb after the doubler so both doubles get the same room."));
+                "Choir is the bigger brother for whole groups of voices; you rarely need both at full level. Width (Feinschliff) drives the doubler. Put reverb after the doubler so both doubles get the same room."));
 
             p.push_back (modulePage ("pitch", "Pitch",
                 "Creative transposition: shifts the vocal by semitones and cents, with optional formant control. It is not a pitch correction tool.",
@@ -262,7 +262,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- More Feedback = longer tail. Very high values build up.\n- Higher Mix = louder echoes.\n- More duck Amount = clearer words while singing, echoes bloom in the gaps.",
                 "- Send, Sync on, 1/8 or 1/4 dotted, Feedback 25 to 35 %, Mix 15 to 25 %.\n- Low cut 300 Hz, High cut 6 kHz, duck Amount 6 to 10 dB.",
                 "- Too much Mix without ducking: the vocal gets blurry.\n- Unfiltered repeats that fight with the lead in the high end.",
-                "As a send it is not compressed or saturated by the chain. Space in Beginner mode drives Delay and Reverb together. Use Into reverb for a smooth, washed tail."));
+                "As a send it is not compressed or saturated by the chain. Space (Feinschliff) drives Delay and Reverb together. Use Into reverb for a smooth, washed tail."));
 
             p.push_back (modulePage ("reverb", "Reverb",
                 "Room and depth: a Room or Plate reverb with pre-delay, tone and low cut, plus ducking that clears space while the vocal is singing.",
@@ -334,7 +334,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "## " + moduleSectionHeadings()[3] + "\n- Width above 100 % widens, below narrows, 0 % is mono.\n- Higher Mono below = more of the low end in mono.\n\n"
                 "## " + moduleSectionHeadings()[4] + "\n- Width 100 to 120 %, Mono below 120 Hz for club playback.\n- Level match: Bypass match while you work.\n\n"
                 "## " + moduleSectionHeadings()[5] + "\n- Extreme Width that pushes correlation below 0.\n- Forgetting that Auto gain changes the output level continuously.\n\n"
-                "## " + moduleSectionHeadings()[6] + "\nWidth in Beginner mode drives the output width together with the Doubler. Output gain on the right rail sets the final level after this stage." });
+                "## " + moduleSectionHeadings()[6] + "\nWidth (Feinschliff) drives the output width together with the Doubler. Output gain on the right rail sets the final level after this stage." });
 
             return p;
         }

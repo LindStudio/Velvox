@@ -69,7 +69,7 @@ public:
                 expect (ui::help::shortDescription (id).isNotEmpty());
             }
 
-            for (auto* key : { "start", "chain", "modules", "controls", "modes", "presets", "compare", "meters", "problems" })
+            for (auto* key : { "start", "chain", "modules", "controls", "modes", "automix", "presets", "compare", "meters", "problems" })
                 expect (ui::help::find (key) != nullptr, juce::String ("general page ") + key);
 
             // Keys are unique

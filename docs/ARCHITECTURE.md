@@ -1,4 +1,4 @@
-# Velvox – Architektur (ab v0.2)
+# Velvox – Architektur (ab v0.2, Auto-Mix ab 0.3)
 
 Entscheidungen vom 14.10.2026 (mit dem Produktinhaber abgestimmt).
 
@@ -76,3 +76,30 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 - `BeginnerView`: Makros und Hinweise; die Hinweise berechnet der Editor aus den Metern.
 - `DetailPanel`: eine Klasse pro Modul plus Output, erzeugt über `createDetailPanel`.
 - Der Ansichtszustand (`uiMode`, `uiSelection`, `uiWidth`) liegt als State-Property im Projekt und beeinflusst nie das Audio.
+
+## Automatischer Mix (0.3)
+
+```
+Audio-Thread:  processBlock ─ CaptureBuffer.push (nur Kopie, vorab reserviert) ─ VocalChain
+                                   │ complete
+Message-Thread: AutoMixController (Timer 15 Hz, nur solange aktiv)
+                                   │ copyOut
+Worker-Thread:  VocalProfiler ─> AutoMixPlanner ─> AutoMixEngine (Render + Messung, max. 4 Runden, Pegel)
+                                   │ AutoMixResult
+Message-Thread: applyResult: Snapshot "Vorher", Parameter mit Gesten setzen, Routing, Bericht
+```
+
+- **CaptureBuffer:** feste Kapazität (24 s, oberhalb 96 kHz entsprechend kürzer), Start bei Signal (RMS > −50 dBFS), digitale Stille wird nicht gespeichert, Stopp bei 14 s Gesang. Neu-Armieren/Abbrechen nutzt einen Handshake (Zustand + "writing"-Flag, seq_cst), damit der Puffer nie während eines Kopiervorgangs neu angelegt wird. Der Audio-Thread wartet nie.
+- **VocalProfiler:** reine Funktion der Audiodaten. Messungen haben Gültigkeitsflags; Heuristiken erscheinen nur als `Issue` mit Konfidenz (gemessen / wahrscheinlich / möglich).
+- **AutoMixPlanner:** reine Funktion (Profil + aktuelle Werte -> `MixPlan`). Jede Entscheidung trägt eine Begründung und ob sie auf einer Messung beruht. Nur vorhandene Parameter, Werte auf ihre Bereiche geklemmt.
+- **AutoMixEngine:** rendert den Abschnitt durch eine private `VocalChain`; die Parameterabbildung kommt aus `SettingsReader`, also dieselbe wie im Plugin (per Test bitgenau abgesichert). S-Laute werden nach der Kette auf exakt denselben Frames gemessen wie vorher.
+- **Ausgangspegel:** an die Lautheit des Originals angeglichen (−24 bis −14 LUFS), Spitze ≤ −1 dBFS. Lauter klingt nicht automatisch besser; der Vergleich bleibt fair.
+- **Zustand:** Kind-Knoten `AutoMix` im Plugin-State (Popup-Status `pending/done/dismissed`, Bericht, Snapshots "Vorher" und "Mix"). State-Version 3; Projekte < 3 ohne Knoten gelten als bereits gemischt (kein Popup).
+- **Vergleich:** "Vorher / Velvox Mix" tauscht vollständige Parameter-Snapshots (Änderungen am Mix bleiben erhalten); "Original" ist der latenzkompensierte, auf Wunsch pegelangeglichene Bypass.
+- **Sidechain:** wird mit erfasst und nur analysiert. Sie erreicht den Ausgang nicht (Ducking-Quelle ausgenommen, wie bisher).
+
+## UI (0.3)
+
+- `AutoMixView` ersetzt die Beginner-Ansicht; `AnalysisOverlay` ist das Popup (Intro, Warten, Erfassen, Analyse, Fertig, Fehler).
+- Der `uiMode`-Wert bleibt aus Kompatibilitätsgründen "beginner"/"pro" und steht für "Auto Mix"/"Module".
+- Der Hintergrund der Leinwand wird einmal pro Bildschirmskalierung gerendert und danach nur kopiert (keine Dauer-Animation).

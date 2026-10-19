@@ -1,4 +1,4 @@
-﻿#include "VocalProfile.h"
+#include "VocalProfile.h"
 #include "../DSP/Loudness.h"
 #include <juce_dsp/juce_dsp.h>
 #include <map>
@@ -755,8 +755,8 @@ namespace velvox::automix
         };
 
         if (p.clipRuns > 0)
-            add ("clipping", C::measured, de ("Ãœbersteuerung im Eingang"),
-                 juce::String (p.clipRuns) + de (" Stelle(n) mit Samples auf Vollaussteuerung. Velvox kann Verzerrung nicht rÃ¼ckgÃ¤ngig machen - Aufnahme- oder Spurpegel senken."), 100.0f);
+            add ("clipping", C::measured, de ("Übersteuerung im Eingang"),
+                 juce::String (p.clipRuns) + de (" Stelle(n) mit Samples auf Vollaussteuerung. Velvox kann Verzerrung nicht rückgängig machen - Aufnahme- oder Spurpegel senken."), 100.0f);
         else if (p.peakDb > -0.5f)
             add ("hotInput", C::measured, de ("Sehr hoher Eingangspegel"),
                  de ("Spitzenpegel ") + db (p.peakDb) + de (" dBFS - kaum Reserve."), 50.0f);
@@ -769,52 +769,52 @@ namespace velvox::automix
             return p;
 
         if (p.snrValid && p.snrDb < 30.0f)
-            add ("noise", p.snrDb < 22.0f ? C::likely : C::possible, de ("HÃ¶rbares Hintergrundrauschen"),
+            add ("noise", p.snrDb < 22.0f ? C::likely : C::possible, de ("Hörbares Hintergrundrauschen"),
                  de ("Abstand Stimme zu Pausen ") + juce::String (p.snrDb, 1) + de (" dB. Anhebungen werden begrenzt, damit Rauschen nicht lauter wird."), 30.0f);
 
         if (p.rumbleDb > -24.0f)
             add ("rumble", p.rumbleDb > -16.0f ? C::likely : C::possible, de ("Viel Energie unter 90 Hz"),
-                 de ("Rumpeln/Trittschall: ") + db (p.rumbleDb) + de (" gegenÃ¼ber dem Kern der Stimme."), 35.0f + p.rumbleDb);
+                 de ("Rumpeln/Trittschall: ") + db (p.rumbleDb) + de (" gegenüber dem Kern der Stimme."), 35.0f + p.rumbleDb);
 
         if (p.lowMidDb > -1.0f)
             add ("mud", p.lowMidDb > 2.0f ? C::likely : C::possible, de ("Viel Tiefmitten-Energie"),
-                 de ("250-500 Hz liegt bei ") + db (p.lowMidDb) + de (" gegenÃ¼ber 300 Hz-2 kHz (Maximum um ") + hz (p.lowMidPeakHz) + ").", 20.0f + p.lowMidDb);
+                 de ("250-500 Hz liegt bei ") + db (p.lowMidDb) + de (" gegenüber 300 Hz-2 kHz (Maximum um ") + hz (p.lowMidPeakHz) + ").", 20.0f + p.lowMidDb);
 
         if (p.topDb < -16.0f)
-            add ("dull", p.topDb < -20.0f ? C::likely : C::possible, de ("Wenig HÃ¶hen und PrÃ¤senz"),
-                 de ("Alles Ã¼ber 2 kHz liegt bei ") + db (p.topDb) + de (" gegenÃ¼ber dem Kern der Stimme."), 25.0f - p.topDb * 0.5f);
+            add ("dull", p.topDb < -20.0f ? C::likely : C::possible, de ("Wenig Höhen und Präsenz"),
+                 de ("Alles über 2 kHz liegt bei ") + db (p.topDb) + de (" gegenüber dem Kern der Stimme."), 25.0f - p.topDb * 0.5f);
         else if (p.presenceDb > -2.0f)
             add ("harsh", p.presenceDb > 1.0f ? C::likely : C::possible, de ("Betonte obere Mitten"),
-                 de ("2-5 kHz liegt bei ") + db (p.presenceDb) + de (" gegenÃ¼ber dem Kern der Stimme - kann scharf klingen."), 25.0f + p.presenceDb);
+                 de ("2-5 kHz liegt bei ") + db (p.presenceDb) + de (" gegenüber dem Kern der Stimme - kann scharf klingen."), 25.0f + p.presenceDb);
 
         if (p.sibilanceValid && p.sibilanceVsVowelDb > -5.0f)
-            add ("sibilance", p.sibilanceVsVowelDb > -2.0f ? C::likely : C::possible, de ("AusgeprÃ¤gte S-Laute"),
-                 de ("S-Laute liegen ") + db (p.sibilanceVsVowelDb) + de (" gegenÃ¼ber den Vokalen, Schwerpunkt um ") + hz (p.sibilanceHz) + ".", 35.0f + p.sibilanceVsVowelDb);
+            add ("sibilance", p.sibilanceVsVowelDb > -2.0f ? C::likely : C::possible, de ("Ausgeprägte S-Laute"),
+                 de ("S-Laute liegen ") + db (p.sibilanceVsVowelDb) + de (" gegenüber den Vokalen, Schwerpunkt um ") + hz (p.sibilanceHz) + ".", 35.0f + p.sibilanceVsVowelDb);
 
         for (auto& r : p.resonances)
             add ("resonance", r.strong && p.pitchSpreadSemitones > 3.0f ? C::likely : C::possible, de ("Schmalbandige Resonanz"),
-                 de ("Spitze um ") + hz (r.hz) + ", " + db (r.excessDb) + de (" Ã¼ber der Umgebung (kann bei wenig TonhÃ¶henwechsel auch ein Teilton sein)."),
+                 de ("Spitze um ") + hz (r.hz) + ", " + db (r.excessDb) + de (" über der Umgebung (kann bei wenig Tonhöhenwechsel auch ein Teilton sein)."),
                  10.0f + r.excessDb);
 
         if (p.dynamicsValid && p.dynamicsDb > 12.0f)
-            add ("dynamics", p.dynamicsDb > 16.0f ? C::likely : C::possible, de ("GroÃŸe LautstÃ¤rkeschwankungen"),
-                 de ("Laute und leise WÃ¶rter liegen ") + juce::String (p.dynamicsDb, 1) + de (" dB auseinander (400-ms-Pegel, 10. bis 95. Perzentil)."), 20.0f + p.dynamicsDb);
+            add ("dynamics", p.dynamicsDb > 16.0f ? C::likely : C::possible, de ("Große Lautstärkeschwankungen"),
+                 de ("Laute und leise Wörter liegen ") + juce::String (p.dynamicsDb, 1) + de (" dB auseinander (400-ms-Pegel, 10. bis 95. Perzentil)."), 20.0f + p.dynamicsDb);
 
         if (p.heavilyCompressed)
             add ("compressed", C::possible, de ("Bereits stark komprimiert"),
-                 de ("Nur ") + juce::String (p.dynamicsDb, 1) + de (" dB Pegelunterschied zwischen WÃ¶rtern und ") + juce::String (p.crestDb, 1) + de (" dB Crest-Faktor."), 15.0f);
+                 de ("Nur ") + juce::String (p.dynamicsDb, 1) + de (" dB Pegelunterschied zwischen Wörtern und ") + juce::String (p.crestDb, 1) + de (" dB Crest-Faktor."), 15.0f);
 
         if (p.reverberant)
-            add ("reverberant", p.tailSeconds > 1.2f ? C::likely : C::possible, de ("HÃ¶rbarer Raum oder Hall auf der Aufnahme"),
-                 de ("Nach WÃ¶rtern dauert es etwa ") + juce::String (p.tailSeconds, 1) + de (" s bis zum Abklingen um 30 dB."), 18.0f + p.tailSeconds);
+            add ("reverberant", p.tailSeconds > 1.2f ? C::likely : C::possible, de ("Hörbarer Raum oder Hall auf der Aufnahme"),
+                 de ("Nach Wörtern dauert es etwa ") + juce::String (p.tailSeconds, 1) + de (" s bis zum Abklingen um 30 dB."), 18.0f + p.tailSeconds);
 
         if (p.stereoContent && p.correlation < 0.3f)
-            add ("mono", p.correlation < 0.0f ? C::measured : C::possible, de ("EingeschrÃ¤nkte MonokompatibilitÃ¤t"),
+            add ("mono", p.correlation < 0.0f ? C::measured : C::possible, de ("Eingeschränkte Monokompatibilität"),
                  de ("Korrelation links/rechts ") + juce::String (p.correlation, 2) + ".", 30.0f);
 
         if (p.maskingHint)
-            add ("masking", C::possible, de ("Beat Ã¼berlagert den PrÃ¤senzbereich"),
-                 de ("Der Beat ist bei 2-5 kHz ") + db (p.beatPresenceVsVocalDb) + de (" lauter als die Stimme. Das ist nur ein Hinweis, kein Beweis fÃ¼r Verdeckung."), 12.0f);
+            add ("masking", C::possible, de ("Beat überlagert den Präsenzbereich"),
+                 de ("Der Beat ist bei 2-5 kHz ") + db (p.beatPresenceVsVocalDb) + de (" lauter als die Stimme. Das ist nur ein Hinweis, kein Beweis für Verdeckung."), 12.0f);
 
         std::stable_sort (p.issues.begin(), p.issues.end(), [] (const Issue& a, const Issue& b)
         {

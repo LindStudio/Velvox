@@ -445,14 +445,14 @@ namespace velvox::ui
         // ---- D: fine-tuning
         drawGlassPanel (g, macroArea.toFloat(), radius::panel, colours::blue, 0.05f);
         {
-            auto a = macroArea.reduced (20, 14);
+            auto head = macroArea.reduced (20, 14).removeFromTop (24);
             g.setColour (colours::text);
             g.setFont (font (17.0f, true));
-            g.drawText ("Feinschliff", a.removeFromTop (24), juce::Justification::centredLeft, false);
+            g.drawText ("Feinschliff", head, juce::Justification::centredLeft, false);
             g.setColour (colours::textFaint);
             g.setFont (font (12.5f));
             g.drawText (de ("Makros wirken auf die echten Modulparameter - zusätzlich zum Auto-Mix"),
-                        a.withHeight (24).withTrimmedLeft (110), juce::Justification::centredLeft, false);
+                        head.withTrimmedLeft (110), juce::Justification::centredLeft, false);
         }
     }
 

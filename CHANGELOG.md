@@ -2,6 +2,29 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [0.3.0] – Branch `feature/automix` (Entwicklungsstand, FL-Studio- und Hörtest ausstehend)
+
+### Neu – Automatischer Vocal-Mix
+- **Analyse-Popup** „Let's mix your vocal.“ beim ersten Öffnen einer neuen Instanz (Audio analysieren / Später). Ältere Projekte und bereits analysierte Instanzen fragen nicht erneut; „Neu analysieren“ ist jederzeit verfügbar.
+- **Begrenzte Erfassung** während der Wiedergabe: vorab reservierter Puffer (max. 24 s), Start bei Signal, Stille wird übersprungen, automatischer Stopp bei 14 s Gesang; Hinweise bei fehlendem Signal, zu leisem Pegel, Übersteuerung und gestoppter Wiedergabe; Analyse mit vorhandenem Material möglich.
+- **Analyse:** BS.1770-Lautheit, Lautheitsumfang, Wortdynamik, Peaks/Clipping, Crest, Rauschabstand, Tonhöhe, Langzeitspektrum, S-Laute, Resonanzen (ohne Teiltöne), Raum, Stereo, optional Beat-Überlappung; jede Feststellung mit Konfidenz.
+- **Planung und Prüfung:** regelbasierte Einstellung von EQ, Level Ride, Kompressor, Vocal Smash, De-Esser, Smooth, Sättigung, Doubler, Hall und Delay; Prüf-Renderings durch die echte Kette mit Korrekturen; Lautheit an das Original angeglichen, 1 dB Reserve.
+- **Auto-Mix-Ansicht:** Vocal-Status, tatsächlich eingestellte Schritte mit Begründung (Klick öffnet das Modul), Vorher/Mix- und Original-Vergleich, Wiederherstellen, Feinschliff-Makros.
+- **Modulkarten:** Auto-Abzeichen, Bypass-Zustand, Farbakzent nach Position.
+- **Infokarten** an Reglern mit aktuellem Wert, Wirkung und Rolle im Auto-Mix (nach 0,45 s).
+
+### Geändert
+- Text-Assistent (Freitext, Chat-Ansicht) aus Oberfläche und Build entfernt; Ansichten heißen jetzt „Auto Mix“ und „Module“.
+- Liquid-Glass-Gestaltung: Navy-Grund, Licht in Cyan/Blau/Violett hinter Glasflächen, Glas-Panels mit Glanzkante, Wertebögen im Verlauf.
+- Hilfe: neue Seite „Automatic mix“, Texte an den neuen Ablauf angepasst.
+- State-Version 3 (Knoten „AutoMix“). Parameter-IDs, Bereiche, Presets und Automation unverändert.
+
+### Technik
+- `SettingsReader`: eine Parameter→DSP-Abbildung für Plugin und Offline-Rendering.
+- Test-Harness legt den Prozessor auf den Heap (der Prozessor ist ~220 kB groß).
+- Neue Tests: `AutoMixTests` (Erfassung, Analyse, Regeln, Engine auf 8 Materialtypen, Workflow mono/stereo/44,1/96 kHz/Sidechain, Zustand, Editor-Ablauf), synthetische Test-Vocals.
+- `VelvoxTests --automix <wav> <ordner>` für Tests mit echten Aufnahmen.
+
 ## [Unveröffentlicht] – Branch `ui-redesign`
 
 ### Neu – Smart Assistant (lokal, ohne KI-Dienst)

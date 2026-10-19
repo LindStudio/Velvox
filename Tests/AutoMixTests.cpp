@@ -56,18 +56,24 @@ namespace
     }
 
     // Feeds the processor with audio until the capture is complete, then waits for the worker
-    bool runWorkflow (Harness& h, const CapturedAudio& a, double timeoutSeconds = 90.0)
+    bool runWorkflow (Harness& h, const CapturedAudio& a, double timeoutSeconds = 90.0, const CapturedAudio* beat = nullptr)
     {
         auto& am = h.proc.getAutoMix();
-        juce::AudioBuffer<float> buffer (2, h.blockSize);
+        const int mainCh = h.proc.getMainBusNumInputChannels();
+        const int totalCh = std::max (h.proc.getTotalNumInputChannels(), h.proc.getTotalNumOutputChannels());
+        juce::AudioBuffer<float> buffer (totalCh, h.blockSize);
         juce::MidiBuffer midi;
         for (int start = 0; start < a.numSamples() && am.getPhase() != AutoMixController::Phase::analysing; start += h.blockSize)
         {
             const int n = std::min (h.blockSize, a.numSamples() - start);
-            buffer.clear();
-            for (int ch = 0; ch < 2; ++ch)
-                buffer.copyFrom (ch, 0, a.vocal[(size_t) std::min (ch, a.channels - 1)].data() + start, n);
-            h.proc.processBlock (buffer, midi);
+            juce::AudioBuffer<float> view (buffer.getArrayOfWritePointers(), totalCh, n);
+            view.clear();
+            for (int ch = 0; ch < mainCh; ++ch)
+                view.copyFrom (ch, 0, a.vocal[(size_t) std::min (ch, a.channels - 1)].data() + start, n);
+            if (beat != nullptr)
+                for (int ch = mainCh; ch < totalCh; ++ch)
+                    view.copyFrom (ch, 0, beat->vocal[(size_t) std::min (ch - mainCh, beat->channels - 1)].data() + start, n);
+            h.proc.processBlock (view, midi);
             if ((start / h.blockSize) % 32 == 0)
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (1);
         }
@@ -550,6 +556,91 @@ public:
             am.restorePrevious();
             expectWithinAbsoluteError (h.get (pid::hpfFreq), hpfBefore, 0.01f);
             expect (! am.hasMix());
+        }
+
+        beginTest ("Workflow: mono track at 44.1 kHz with an odd host block size");
+        {
+            Harness h (44100.0, 333, 1);
+            auto& am = h.proc.getAutoMix();
+            am.start();
+            VocalSpec s; s.seconds = 20.0; s.sampleRate = 44100.0; s.channels = 1;
+            expect (runWorkflow (h, makeVocal (s)), "mono mix finished");
+            expect (am.hasMix());
+            expect (am.getReport().voicedSeconds >= 5.0f);
+            const auto out = h.run (h.noise (0.1f, 0.5, 4));
+            expect (allFinite (out));
+        }
+
+        beginTest ("Workflow: 96 kHz stereo");
+        {
+            Harness h (96000.0, 1024, 2);
+            auto& am = h.proc.getAutoMix();
+            am.start();
+            VocalSpec s; s.seconds = 26.0; s.sampleRate = 96000.0; s.channels = 2;
+            const bool ok96 = runWorkflow (h, makeVocal (s));
+            expect (ok96, "96 kHz mix finished: phase " + juce::String ((int) am.getPhase()) + ", " + am.getStatus().error
+                          + ", voiced " + juce::String (am.getStatus().capture.voicedSeconds));
+            expect (am.hasMix());
+        }
+
+        beginTest ("Workflow: the beat on the sidechain is analysed but never heard");
+        {
+            juce::AudioProcessor::BusesLayout layout;
+            layout.inputBuses.add (juce::AudioChannelSet::stereo());
+            layout.inputBuses.add (juce::AudioChannelSet::stereo());
+            layout.outputBuses.add (juce::AudioChannelSet::stereo());
+
+            // A loud "beat" with strong presence-range energy (noise bursts, high-passed)
+            CapturedAudio beat;
+            beat.sampleRate = 48000.0;
+            beat.channels = 2;
+            {
+                juce::Random r (11);
+                std::vector<float> b ((size_t) (48000 * 20));
+                dsp::Biquad hp;
+                hp.setCoeffs (dsp::design::highPass (48000.0, 1500.0, 0.7071));
+                for (size_t i = 0; i < b.size(); ++i)
+                    b[i] = 0.5f * hp.process (r.nextFloat() * 2.0f - 1.0f, 0) * ((i % 12000) < 3000 ? 1.0f : 0.3f);
+                beat.vocal = { b, b };
+            }
+
+            Harness h;
+            expect (h.proc.setBusesLayout (layout), "sidechain layout accepted");
+            h.proc.prepareToPlay (48000.0, 512);
+            auto& am = h.proc.getAutoMix();
+            am.start();
+            VocalSpec s; s.seconds = 20.0; s.channels = 2;
+            expect (runWorkflow (h, makeVocal (s), 90.0, &beat), "mix with beat finished");
+            expect (am.getReport().beatAnalysed, "beat was analysed");
+
+            // The sidechain never reaches the output (ducking source = vocal)
+            h.set (pid::duckSource, 0.0f);
+            juce::AudioBuffer<float> a (4, 48000), b (4, 48000);
+            juce::Random r (2);
+            for (int i = 0; i < 48000; ++i)
+            {
+                const float v = 0.1f * (r.nextFloat() * 2.0f - 1.0f);
+                for (int ch = 0; ch < 2; ++ch) { a.setSample (ch, i, v); b.setSample (ch, i, v); }
+                for (int ch = 2; ch < 4; ++ch) { a.setSample (ch, i, 0.0f); b.setSample (ch, i, beat.vocal[0][(size_t) i]); }
+            }
+            Harness h2;
+            h2.proc.setBusesLayout (layout);
+            h2.proc.prepareToPlay (48000.0, 512);
+            juce::MemoryBlock st;
+            h.proc.getStateInformation (st);
+            h2.proc.setStateInformation (st.getData(), (int) st.getSize());
+            h2.set (pid::duckSource, 0.0f);
+            juce::MidiBuffer midi;
+            for (int start = 0; start < 48000; start += 512)
+            {
+                juce::AudioBuffer<float> va (a.getArrayOfWritePointers(), 4, start, 512), vb (b.getArrayOfWritePointers(), 4, start, 512);
+                h.proc.processBlock (va, midi);
+                h2.proc.processBlock (vb, midi);
+            }
+            // The two processors are not sample-identical (reverb/doubler state), so compare
+            // levels: a beat 20 dB louder than the vocal would dominate if it leaked through
+            const float la = rmsDb (a, 24000, 24000), lb = rmsDb (b, 24000, 24000);
+            expectWithinAbsoluteError (lb, la, 1.0f, "output level independent of the sidechain beat");
         }
 
         beginTest ("Workflow: a project from an older version is not asked to analyse; presets never start one");

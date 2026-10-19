@@ -1,133 +1,95 @@
-# Velvox – Vocal Production Suite (Version 0.2.0)
+# Velvox – automatischer Vocal-Mixer (Version 0.3.0, Entwicklungsstand)
 
-Velvox ist ein VST3-Vocal-Plugin für Windows (JUCE 8.0.9, C++20) für EDM, Hypertechno, Dance und Pop: Lead-Vocals, Adlibs, Backings und kreative Vocal-Effekte.
+Velvox ist ein VST3-Plugin für Windows (JUCE 8.0.9, C++20) für EDM, Hypertechno, Hard Dance, Party- und Pop-Vocals. Es erfasst während der Wiedergabe einen begrenzten Abschnitt der Vocal, analysiert ihn, stellt die vorhandenen Module danach ein und prüft das Ergebnis, bevor es angewendet wird. Alle Module bleiben danach frei einstellbar.
 
 „Velvox“ und „Lind Audio“ sind Arbeitstitel. Vor einem Verkauf ist eine Markenrecherche nötig.
 
+> **Ehrlicher Stand:** Die automatische Mischung ist regelbasiert und messwertgestützt, nicht „KI“. Sie wurde mit synthetischen Testsignalen und zehn realen Vocal-Aufnahmen technisch geprüft (siehe unten). Ein **Hörtest durch Menschen** und ein **Test in FL Studio** stehen für 0.3 noch aus. Ein perfekter Mix für jede Aufnahme ist nicht garantiert.
+
 ---
 
-## Überblick
+## Ablauf
 
-```
-          ┌──────────── serielle Kette, Reihenfolge per Drag & Drop ────────────┐
-Input ─ Gain ─ EQ ─ Compressor ─ De-esser ─ Saturation ─ Doubler ─ Pitch ─ Chop ─┬───────────────── + ─ Stereo ─ Level-Match ─ Output-Gain ─ Clip Guard ─ Out
-                                                                                └─ Delay ─┬─ Reverb ┘   (parallele Sends: nur Effektanteil, trockenes Signal genau einmal)
-                                                                                          └ Delay → Reverb (einstellbar)
-```
+1. Velvox auf den Mixer-Kanal der Vocal laden. Beim **ersten Öffnen einer neuen Instanz** erscheint „Let's mix your vocal.“
+2. **Audio analysieren** klicken und die Vocal in der DAW abspielen.
+3. Velvox wartet auf Signal, erfasst einen begrenzten Abschnitt (Ziel: 14 s Gesang, höchstens 24 s inklusive kurzer Lücken; Stille wird übersprungen) und stoppt von selbst.
+4. Analyse, Planung und Prüfung laufen im Hintergrund. Die Wiedergabe läuft ungestört weiter, auch bei geschlossenem Fenster.
+5. Die Einstellungen werden über die normalen Parameter gesetzt (DAW-Automation, Presets, A/B sehen sie). Die Ansicht **Auto Mix** zeigt, was eingestellt wurde und warum.
+6. Vergleichen: **Vorher / Velvox Mix** (echter Parameterwechsel), **Original** (Bypass, mit „Fairer Vergleich = Bypass match“ in gleicher Lautheit), **Vorherigen Zustand wiederherstellen**.
+7. **Neu analysieren** ist jederzeit verfügbar (Kopfzeile und Auto-Mix-Ansicht).
 
-- **Delay und Reverb** laufen wahlweise als **paralleler Send** (Standard) oder als **Insert** an beliebiger Stelle der Kette.
-- **Zwei Bedienmodi** greifen auf dieselbe DSP-Engine zu. Der Wechsel ändert nie den Klang.
-  - **Beginner:** sechs Makros (Presence, Warmth, Aggression, Width, Space, Density) mit Klartext-Beschreibung und Live-Hinweisen.
-  - **Pro:** die vollständige Detailansicht jedes Moduls plus Ausgangsstufe.
+Instanzverhalten: Das Popup erscheint nur bei einer neuen, noch nicht analysierten Instanz. „Später“ wird gespeichert. Projekte älterer Versionen und analysierte Instanzen fragen nicht erneut. Presets und A/B starten nie eine Analyse.
+
+## Was gemessen wird
+
+| Bereich | Messung |
+|---|---|
+| Pegel | integrierte Lautheit (ITU-R BS.1770, mit Gating), Lautheitsumfang (EBU Tech 3342), Wortdynamik (400-ms-Pegel, 10.–95. Perzentil), Spitzenpegel, Clipping (≥ 3 Samples auf Vollaussteuerung), Crest-Faktor, Rauschboden und Rauschabstand (nur wenn Pausen erfasst wurden) |
+| Tonhöhe | Autokorrelation je Frame: tiefe / mittlere / hohe Töne, gesungene Noten, Anteil tonaler Frames (Gesang vs. Sprechgesang) |
+| Spektrum | 1/12-Oktav-Langzeitspektrum der Stimme; Rumpeln, Körper, Tiefmitten, Präsenz, S-Bereich, Luft, Neigung |
+| S-Laute | S-Frames gegen Vokal-Frames, Schwerpunktfrequenz, Detektorpegel für die De-Esser-Schwelle |
+| Resonanzen | schmale Spitzen über der Umgebung; Teiltöne der gesungenen Noten werden ausgeschlossen |
+| Raum | Abklinggeschwindigkeit nach Wörtern (vorhandener Raum oder Effekte) |
+| Stereo | Korrelation, Balance, Seiten- zu Mittenanteil |
+| Beat-Sidechain (optional) | Lautheit und Überlappung im Präsenzbereich – nur als Hinweis, nie hörbar |
+
+Jede Auffälligkeit trägt eine Sicherheit: *gemessen*, *wahrscheinlich* oder *möglich*. Velvox behauptet keine Stimmtyp-Erkennung.
+
+## Wie entschieden wird (Auszug)
+
+- **Low Cut** bei 0,6 × tiefster gesungener Ton (70–150 Hz); bei Rumpeln steiler und etwas höher.
+- **EQ:** Höhen nur bei dunklen Aufnahmen (begrenzt bei Rauschen/S-Lauten), nie bei scharfen; Tiefmitten- oder Resonanzschnitt nur bei klarem Befund; Wärme nur bei tiefen Stimmen.
+- **Level Ride** bei großer Wortdynamik, Anhebung begrenzt bei Rauschen; nicht bei komprimiertem Material.
+- **Kompressor** (RMS) mit Schwelle aus dem Stimmpegel, Ziel wenige dB Reduktion; sanft bei bereits komprimierten Aufnahmen.
+- **De-Esser** mit Schwelle zwischen Vokal- und S-Pegel; dezent vorsorglich, kräftiger bei ausgeprägten S-Lauten.
+- **Smooth** (adaptive Resonanzkontrolle) nur bei Schärfe oder Resonanzen über 1,2 kHz.
+- **Sättigung, Vocal Smash, Doubler** dezent; aus bei Clipping, starker Kompression, bereits breiten oder gesprochenen Aufnahmen.
+- **Hall und Delay** als geduckte Sends; weniger oder keiner bei Aufnahmen mit Raum; kürzer/trockener bei Sprechgesang.
+- **Kreativ-Module** (Pitch, Chop, Pulse, Choir) bleiben aus.
+
+**Prüfung vor dem Anwenden:** Der erfasste Abschnitt wird durch eine private Kopie der kompletten Kette gerechnet (gleiche Parameterabbildung wie im Plugin). Korrigiert wird nur, wo die Messung zuverlässig ist: Kompression zu stark/zu schwach, S-Laute durch die Kette angehoben, Höhen oder Körper verloren, Monoverlust. Danach wird der Ausgang auf die Lautheit des Originals gebracht (−24 bis −14 LUFS) mit 1 dB Reserve. Clip Guard bleibt aktiv.
 
 ## Module
 
-| Modul | Funktion | Pro-Parameter |
-|---|---|---|
-| **EQ** | Low Cut, Low-Band, Mid-Bell, High-Band, High Cut | Low/High Cut 12/24 dB/Okt, Low/High-Band als Shelf oder Bell mit Q, Mix |
-| **Compressor** | Feed-Forward, Soft-Knee, Stereo-Link | Threshold, Ratio, Attack, Release, Knee, Makeup, Mix (parallele Kompression), Detektor Peak/RMS, Sidechain-Hochpass |
-| **De-esser** | Split-Band (dynamischer Shelf) oder Breitband | Frequency, Threshold, Range, Mode, Listen |
-| **Saturation** | 2× Oversampling, pegelkompensiert | Character Warm/Tape/Tube/Hard, Drive, Output, Mix |
-| **Doubler** | zwei modulierte Stimmen, latenzfrei | Mix, Width, Timing, Detune (Cent), Mono safe, Tone |
-| **Pitch** | kreativer Pitch-Shifter (Signalsmith Stretch) | ±24 Halbtöne, Fine, Keep formants, Formant, Mix |
-| **Chop** | tempo-synchrones 16-Step-Gate mit Stutter | 10 Patterns, Step-Länge 1/8 bis 1/32, Depth, Smooth |
-| **Delay** | Ringpuffer, gefilterte, begrenzte Rückkopplung | Time oder Sync-Notenwert, Feedback, Mix, Low/High Cut, Ping-Pong, Delay→Reverb, Ducking |
-| **Reverb** | 8-Kanal-FDN, Room/Plate | Mix, Decay, Pre-Delay, Size, Tone, Low Cut, Width, Ducking |
-| **Output** | Stereo und Lautheit | Width 0–200 % (nur Seitensignal), Mono below, Level Match (Off / Bypass match / Auto gain), Messfenster, Max. Korrektur, Clip Guard |
+EQ, Level Ride, Compressor, Vocal Smash, De-esser, Smooth (adaptive Resonanzkontrolle, 32 Bänder), Saturation, Doubler, Choir, Pitch (Signalsmith Stretch), Delay, Reverb, Chop, Pulse, Vocal Check, dazu Ein-/Ausgangsstufe mit Stereo-Breite, Level-Matcher, Clip Guard, Mono-Check und A/B. Delay und Reverb laufen als Send oder Insert; die Reihenfolge ist per Drag & Drop änderbar.
 
-**Ducking:** Reverb und Delay haben je Amount, Threshold, Attack und Release und eine eigene Absenkungsanzeige. Als Quelle dient entweder das **Vocal selbst** (intern) oder der **Sidechain-Eingang** des Plugins.
+Grenzen: **Choir** ist eine DSP-Stimmvervielfachung (Pitch-Shift, Timing, Panorama) und kein Chor-Synthesizer. **Pitch** ist ein kreativer Pitch-Shifter, keine Tonhöhenkorrektur.
 
-**Level-Matcher:** misst die Lautheit nach ITU-R BS.1770 (LUFS).
-- *Bypass match:* Der Bypass spielt genauso laut wie das bearbeitete Signal, für einen fairen A/B-Vergleich.
-- *Auto gain:* hält das bearbeitete Signal dauerhaft auf Eingangslautheit, langsam geregelt, begrenzt und bei Stille eingefroren.
+## Bedienung
 
-**Meter:** Ein- und Ausgang mit Peak, Peak-Hold, Clip-Lampe und LUFS, Phasenkorrelation, Gain-Reduction für Kompressor, De-Esser und beide Ducker. Dazu ein Mono-Check-Schalter, der bewusst nicht im Projekt gespeichert wird.
+- Ansichten **Auto Mix** (Status, eingestellte Schritte, Vergleich, Feinschliff mit sechs Makros) und **Module** (alle Parameter). Ein Klick auf eine Modulkarte öffnet das Modul.
+- Modulkarten zeigen An / Aus / Bypass / Auswahl und ein **Auto**-Abzeichen für vom Auto-Mix eingestellte Module.
+- Regler: Ziehen, Shift/Strg fein, Doppelklick = Standardwert, Mausrad, Wert anklicken zum Eintippen. Nach kurzem Verweilen zeigt eine Infokarte Name, aktuellen Wert, Wirkung und die Rolle im Auto-Mix.
+- Hilfe (offline) mit Seite „Automatic mix“ und Tour.
 
-**Latenz:** 3 Samples (Oversampling der Saturation). Solange **Pitch** eingeschaltet ist, kommen etwa **120 ms** hinzu; das Plugin meldet sie dem Host, und FL Studio gleicht sie automatisch aus. Mehr dazu unter „Bekannte Einschränkungen“.
+## Presets und Kompatibilität
 
-## Presets
-
-| Kategorie | Presets |
-|---|---|
-| Lead | Clean Lead |
-| EDM | Hypertechno Lead, Aggressive Party Vocal, Wide Festival Vocal |
-| Pop | Bright Pop Vocal |
-| Creative | Telephone Vocal, Vocal Chop, Octave Down Layer, Chipmunk Hook |
-| Backing & Adlibs | Wide Adlibs |
-| Dynamics | Heavy Parallel Compression |
-| Classic (v0.1) | Clean Vocal, Modern Pop, Hypertechno Lead v0.1, Aggressive Vocal, Wide Vocal |
-| Utility | Init |
-
-- Presets setzen **alle** Module und das Routing vollständig.
-- **Input-Gain und Level-Match-Einstellungen bleiben beim Preset-Wechsel unverändert**, weil sie zur Aufnahme bzw. zum Abhören gehören.
-- Eigene Presets: *Save* in der Kopfleiste. Sie liegen unter `Dokumente\Lind Audio\Velvox\Presets\*.vvpreset` (XML, Format 2 mit Routing).
+- Parameter-IDs und Plugin-Codes (`Lnda`/`Vlvx`) sind unverändert; Automationen bleiben gültig.
+- State-Version 3: zusätzlich ein Knoten „AutoMix“ (Bericht, Zustand vor dem Mix, Popup-Status). Ältere Projekte laden unverändert und zeigen kein Analyse-Popup.
+- Presets setzen alle Module und das Routing; Input-Gain und Level-Match bleiben unverändert.
 
 ---
-
-## Kompatibilität mit v0.1
-
-- **Projekte:** v0.1-Projekte laden unverändert. Alle in v0.2 neuen Parameter werden dabei ausdrücklich auf ihren neutralen Standard gesetzt (Module aus), das Routing auf die v0.1-Reihenfolge. Ein v0.1-Projekt klingt dadurch genauso wie vorher; das ist per Test abgesichert.
-- **User-Presets** im Format 1 (v0.1) laden weiterhin. Unbekannte neue Module bleiben aus, und es gilt die Standard-Reihenfolge.
-- **Plugin-IDs** (`Lnda`/`Vlvx`) und alle Parameter-IDs sind unverändert, deshalb funktionieren bestehende FL-Automationen weiter.
-- **Neu:** ein optionaler Sidechain-Eingang. Er ist standardmäßig deaktiviert; FL Studio bietet ihn in den Routing-Einstellungen des Plugins an.
-
----
-
-## Voraussetzungen (Windows)
-
-1. **Visual Studio 2022** mit der Workload **„Desktopentwicklung mit C++“** (MSVC v143, Windows SDK, CMake)
-2. **Git**
-3. **JUCE 8.0.9**:
-   ```powershell
-   git clone --depth 1 --branch 8.0.9 https://github.com/juce-framework/JUCE.git "$env:USERPROFILE\dev\JUCE-8.0.9"
-   ```
-
-Signalsmith Stretch und Signalsmith Linear (beide MIT) liegen bereits im Repository unter `third_party/`. Für den Build ist kein Netzzugriff nötig.
-
-## Quellcode und Sicherung
-
-- **Arbeitskopie (Git):** `C:\Users\jakob\dev\velvox`, Branch `main`, Release-Stände als Tags (`v0.1.0`, …)
-- **Sicherung nach Google Drive:**
-  ```powershell
-  powershell -ExecutionPolicy Bypass -File .\scripts\backup-to-drive.ps1
-  ```
-  Das Skript schreibt ein vollständiges Git-Bundle mit der gesamten Historie nach `G:\Meine Ablage\MUSIC\Plugin\_git-backup\velvox.bundle` und kopiert die aktuellen Quellen in den Drive-Ordner. Wiederherstellen mit `git clone velvox.bundle velvox`.
 
 ## Bauen und testen
+
+Voraussetzungen: Visual Studio 2022 (Desktopentwicklung mit C++), Git, JUCE 8.0.9 unter `%USERPROFILE%\dev\JUCE-8.0.9`.
 
 ```powershell
 cd C:\Users\jakob\dev\velvox
 powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
 ```
 
-Das Skript baut **VST3**, **Standalone** und den **Test-Runner** in `build\` (Git-ignoriert) und führt die Tests aus.
+Baut VST3, Standalone und den Test-Runner (`build\`) und führt alle Prüfungen aus.
 
-- VST3: `build\Velvox_artefacts\Release\VST3\Velvox.vst3`
-- Standalone: `build\Velvox_artefacts\Release\Standalone\Velvox.exe`
+Nützliche Aufrufe des Test-Runners (`build\VelvoxTests_artefacts\Release\VelvoxTests.exe`):
 
-### Automatisierte Prüfungen
-
-Der Test-Runner `VelvoxTests.exe` umfasst **1850 Prüfungen**: DSP-Messungen mit echten Signalen, State und Migration, Presets, UI-Interaktion mit simulierten Maus-Ereignissen sowie Rechenlast. Auswahl der Messwerte:
-
-| Bereich | Ergebnis |
+| Aufruf | Zweck |
 |---|---|
-| v0.1-Kette mit Standard-Routing | bitgenau wie v0.1 |
-| Delay als letzter Insert gegen Send | identisch (Differenz 0) |
-| Routing-Umbau während der Wiedergabe | klickfrei (größter Sprung 0,009) |
-| K-Gewichtung / Kalibrierung | +0,69 dB @ 1 kHz; −20 dBFS-Sinus = −20,00 LUFS |
-| Auto Gain / Bypass Match | Ausgang = Eingang ±0,0 LUFS; Bypass = bearbeitet ±0,02 LUFS |
-| Width 0–200 % | Monosumme unverändert (< 1e-5) |
-| Doubler | Mono safe 100 % → Monosumme bitgenau; Korrelation L/R 0,82 bei 0,01 dB Pegeldifferenz |
-| Ducking | Reverb −12,0 dB unter dem Vocal, 0,0 dB in Pausen; externer Sidechain wirkt, Vocal allein nicht |
-| Pitch | 1–6 Cent Genauigkeit über ±12 Halbtöne; gemeldete Latenz = gemessene Latenz |
-| Chop | Stutter-Wiederholung bitgenau; alle Patterns klickfrei |
-| Drag & Drop | Umsortieren, Send/Insert per Ziehen, unzulässige Ziele abgelehnt und erklärt |
-| Presets | alle 17 laden, Durchschalten während der Wiedergabe ohne Übersteuerung |
-| CPU, alle Module an | 3,7 % eines Kerns @ 48 kHz, 7,7 % @ 96 kHz |
+| `--test "automatic mix"` | nur eine Testgruppe |
+| `--automix <in.wav> <ordner>` | Auto-Mix auf eine echte Aufnahme anwenden: Abschnitt wie im Plugin erfassen, analysieren, ganze Datei rendern; schreibt `<name>_velvox.wav` und `<name>_report.txt` |
+| `--snapshot out.png <preset> 1440 beginner 0 intro` | UI ohne DAW rendern (Overlays: `intro`, `listening`, `capturing`, `mixed`, `mixed+done`, `help:<seite>` …). In PowerShell keinen leeren String als Presetnamen übergeben. |
 
-Zusätzlich: **pluginval 1.0.4, Strenge 10**, inklusive Steinberg-VST3-Validator, Editor-Tests, Bus-Layouts und Parameter-Fuzzing. Ergebnis: **SUCCESS**.
-
-UI-Snapshot ohne DAW: `VelvoxTests.exe --snapshot ui.png "Hypertechno Lead" 1280 pro 0` (Modul-ID 0–8, −1 = Output)
+Zusätzlich geprüft mit **pluginval 1.0.4, Strenge 10**: SUCCESS.
 
 ## Installation
 
@@ -135,82 +97,50 @@ UI-Snapshot ohne DAW: `VelvoxTests.exe --snapshot ui.png "Hypertechno Lead" 1280
 powershell -ExecutionPolicy Bypass -File .\scripts\install-vst3.ps1
 ```
 
-Das Skript kopiert `Velvox.vst3` nach `C:\Program Files\Common Files\VST3\` (UAC-Bestätigung nötig) und ersetzt dabei v0.1.
+Kopiert `Velvox.vst3` nach `C:\Program Files\Common Files\VST3\` (UAC-Bestätigung nötig).
 
-## Test in FL Studio (Checkliste v0.2)
+## Test in FL Studio (Checkliste 0.3)
 
-1. FL Studio starten. Ein bestehendes Projekt mit Velvox 0.1 öffnen: Es muss **gleich klingen** wie vorher.
-2. Velvox in einen Mixer-Insert einer Vocal-Spur laden. Das Plugin startet im **Beginner**-Modus.
-3. **Presets:** Den Preset-Namen anklicken, um das Menü nach Kategorien zu öffnen. „Hypertechno Lead“ und „Wide Festival Vocal“ ausprobieren.
-4. **Makros:** Presence, Width und Space bewegen; der Klang muss sich hörbar ändern. In **Pro** zeigt ein weißer Punkt am Regler, wohin das Makro den Wert schiebt.
-5. **Fair compare:** Auf *Bypass match* stellen und Bypass umschalten. Beide Varianten sind gleich laut.
-6. **Routing:** In der Kette „Saturation“ vor „EQ“ ziehen. Delay auf die obere Reihe ziehen (wird Insert) und wieder zurück auf die untere Spur.
-7. **Ducking:** Im Pro-Modus Reverb wählen, Amount auf 6–10 dB stellen. Der Hall tritt zurück, solange gesungen wird.
-   - *Externer Sidechain:* In FL eine Kick-Spur per „Sidechain to this track“ auf den Mixer-Kanal mit Velvox routen, in den Wrapper-Einstellungen des Plugins (Zahnrad-Symbol, Bereich *Processing*) den Sidechain-Eingang von Velvox zuordnen und in Velvox *Duck source = Sidechain input* wählen. Ohne Zuordnung zeigt Velvox „No sidechain connected“ und folgt dem Vocal. Die genaue Bezeichnung im FL-Wrapper habe ich nicht selbst geprüft; bitte im Test bestätigen.
-8. **Pitch:** Preset „Octave Down Layer“. FL meldet die neue Latenz; das Vocal bleibt im Timing zur Musik.
-9. **Chop:** Preset „Vocal Chop“, Wiedergabe starten. Der Chop folgt dem Song-Tempo und der Position.
-10. **Mono check:** Rechts unten einschalten. Der Klang soll nicht hohl oder leise werden; die Korrelationsanzeige bleibt im grünen Bereich.
-11. **Speichern:** Projekt speichern, FL schließen, neu öffnen. Werte, Routing, A/B, Modus und Fenstergröße sind wiederhergestellt.
-12. **Automation:** Einen Makro-Regler automatisieren (*Tools → Last tweaked → Create automation clip*).
-
----
+1. Velvox auf einen Mixer-Insert mit einer Vocal laden → Popup „Let's mix your vocal.“
+2. *Audio analysieren*, dann Wiedergabe starten. Fortschritt läuft; bei gestoppter Wiedergabe erscheint ein Hinweis.
+3. Nach der Analyse: hörbare Veränderung, Liste der Schritte, Auto-Abzeichen auf den Modulkarten.
+4. *Vorher / Velvox Mix* und *Original* umschalten – gleich laut?
+5. Ein Modul öffnen und ändern; Feinschliff-Makros bewegen.
+6. Projekt speichern, FL schließen, neu öffnen: kein Popup, Bericht und Vergleich sind noch da.
+7. Zweite Instanz auf einem anderen Kanal: Popup erscheint dort wieder.
+8. Optional: Beat per Sidechain zuordnen, neu analysieren – Status „Beat-Sidechain analysiert“, Beat nicht im Ausgang hörbar.
+9. Eine Preset-Auswahl darf keine Analyse starten.
 
 ## Projektstruktur
 
 ```
 Source/
-  PluginProcessor.*          Parameter, State v2 + Migration, Routing, Latenz, Sidechain-Bus, A/B
-  PluginEditor.*             skalierbare Leinwand, Beginner/Pro, Hinweise, Meter
-  StateKeys.h                Nicht-Parameter-Zustand (stateVersion, routing, uiMode)
-  Parameters/                IDs + tabellengesteuerte Definitionen (Bereich, Einheit, Beschreibung)
-  DSP/
-    VocalChain               Routing-Reihenfolge, Sends/Inserts, Ausgangsstufe, Bypass, Meter
-    Routing                  Modulreihenfolge + Send/Insert, lock-freie Übergabe
-    Macros                   Makros als Offset-Schicht (reine Funktion)
-    Equalizer/Compressor/DeEsser/Saturation/Doubler/Pitch/Chop/Delay/Reverb-Module
-    Ducker, Loudness (BS.1770 + LevelMatcher), StereoStage (+ Korrelation)
-  Presets/                   ParameterSnapshot (Werte + Routing), Factory-Presets, PresetManager
-  Mixing/                    Schnittstelle Smart-Mixing (ohne KI) + ProposalSession
-  UI/                        Theme (+ eingebettete Schrift), LookAndFeel, Widgets, Spectrum, ChainView, DetailPanels, BeginnerView, TopBar
-Resources/Fonts/             Inter 4.1 (SIL OFL 1.1), als Binärdaten ins Plugin eingebettet
-Tests/                       Offline-Tests (JUCE UnitTest), UI-Snapshots
-third_party/                 Signalsmith Stretch 1.4.0 + Linear 0.6.4 (MIT, header-only)
-docs/ARCHITECTURE.md         Architekturentscheidungen
+  PluginProcessor.*      Parameter, State v3, Routing, Latenz, Sidechain, A/B, Erfassungs-Abgriff
+  PluginEditor.*         Leinwand, Overlays, Ansichten
+  Parameters/            IDs, Parameterdefinitionen, SettingsReader (Parameter -> DSP, auch offline)
+  AutoMix/               CaptureBuffer, VocalProfiler, AutoMixPlanner, AutoMixEngine, AutoMixController
+  DSP/                   VocalChain und alle Module
+  Presets/               Snapshots, Factory-/User-/Modul-Presets
+  UI/                    Theme, LookAndFeel, Widgets, ChainView, AutoMixView, AnalysisOverlay, DetailPanels, Hilfe
+Tests/                   Offline-Tests (JUCE UnitTest), SyntheticVocal.h, UI-Snapshots
+third_party/             Signalsmith Stretch 1.4.0 + Linear 0.6.4 (MIT)
+docs/ARCHITECTURE.md     Architekturentscheidungen
 ```
 
-### Echtzeit- und Thread-Sicherheit
-- Der Audio-Thread liest Parameter nur über Atomics. Das Routing wird als gepackter 64-Bit-Wert lock-free übergeben.
-- Im Audio-Callback wird nichts alloziert. Alle Puffer und der Pitch-Shifter werden in `prepareToPlay` vorbereitet.
-- Strukturänderungen (Reihenfolge, Pitch an/aus) werden unter einer kurzen Ausblendung übernommen.
-- Die Latenzmeldung an den Host erfolgt auf dem Message-Thread.
-- NaN/Inf am Ein- und Ausgang wird ersetzt. Module mit ungültigem Filterzustand setzen sich zurück.
-- Hosts, die weniger Kanäle liefern als ausgehandelt, führen nicht zum Absturz.
+## Echtzeit-Regeln
 
-### Vorbereitung Smart-Mixing (ohne KI)
-Bereits vorhanden und getestet sind folgende Bausteine:
-- das Parameter-Schema (`createParameterSchema`), also alle Parameter mit Beschreibung
-- `ParameterSnapshot` inklusive Routing als einheitliches Format für Presets, A/B und Vorschläge
-- die Makro-Abbildung `applyMacros`
-- die `ProposalSession`: Vorschlag anwenden, mit dem Original vergleichen, übernehmen oder exakt verwerfen
+- Der Audio-Thread liest Parameter über Atomics und kopiert während einer Erfassung nur Samples in einen vorab reservierten, begrenzten Puffer (keine Allokation, keine Locks, keine Datei- oder Netzzugriffe).
+- Analyse, Planung und Prüf-Renderings laufen auf einem eigenen Thread mit niedriger Priorität; Ergebnisse werden auf dem Message-Thread angewendet.
+- Keine Netzwerkzugriffe, keine Cloud, keine externen KI-Dienste.
 
-Eine KI-Anbindung, Sprachsteuerung oder Audioanalyse gibt es **nicht**.
+## Bekannte Einschränkungen (0.3.0)
 
----
-
-## Bekannte Einschränkungen (0.2.0)
-
-- **In FL Studio noch nicht getestet:** v0.2 ist automatisiert und mit pluginval geprüft, der Test in FL Studio (Checkliste oben) steht aus. Besonders zu prüfen sind der Sidechain-Eingang und die Latenzänderung beim Ein- und Ausschalten von Pitch.
-- **Pitch:**
-  - Er erzeugt etwa 120 ms Latenz, solange er an ist, und eignet sich daher nicht zum Live-Einsingen mit Monitoring durch das Plugin.
-  - Kürzere Fenster wurden gemessen und verworfen: Sie verstimmten um bis zu 70 Cent.
-  - Den Pitch-Schalter nicht automatisieren, da jede Latenzänderung den Host neu kompensieren lässt.
-  - Es handelt sich um **keine** Tonhöhenkorrektur (Key/Scale/Retune), sondern um einen kreativen Effekt.
-- **Formant-Erhalt** kostet etwas Genauigkeit (bis ca. 6 Cent statt 2 Cent).
-- **Doubler:** Bei Mono safe < 100 % entsteht in Mono ein leichter, wandernder Kammfilter-Anteil (gemessen und gegenüber 0 % stark reduziert).
-- **Level-Matcher:** Die Fenster sind exponentielle Näherungen (0,4 s, 3 s, 10 s) und keine exakte integrierte BS.1770-Messung mit Gating. Auto Gain regelt langsam (6 dB/s) und hält bei Stille an.
-- **Chop:** Ohne laufenden Host-Transport läuft er frei (Host-Tempo oder 120 BPM) und ist dann nicht taktgenau ausgerichtet.
-- **Routing:** Ein Umbau erzeugt eine kurze Pegelabsenkung (etwa 2 × 8 ms), die bewusst statt eines Klicks gewählt ist. „Delay → Reverb“ wirkt nur, wenn beide als Send laufen.
-- **Low Cut und High Cut** bieten 12/24 dB/Okt. 48 dB/Okt sind im DSP vorhanden, werden aber nicht angeboten, weil eine Erweiterung des bestehenden Parameters FL-Automationen verschieben würde.
-- Es gibt keine Anzeige „Preset verändert“, kein Undo/Redo und keine Preset-Suche.
-- Nur Windows x64 VST3 (plus Standalone für Entwicklung), kein signierter Installer, kein Kopierschutz.
-- Lizenzen: Für einen closed-source Verkauf ist eine JUCE-Lizenz nötig, siehe [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+- **Nicht in FL Studio getestet** und **nicht von Menschen gegengehört** – nur kompiliert, automatisch geprüft und mit pluginval validiert.
+- Analysiert wird nur der erfasste Abschnitt, nicht die ganze Spur.
+- Raum-/Hallerkennung braucht erkennbare Pausen; eine durchgehend verhallte Aufnahme ohne Pausen wird nicht immer erkannt.
+- Rauschabstand ist nur messbar, wenn Pausen mit Rauschen erfasst wurden (digitale Stille wird nicht gespeichert).
+- Resonanzerkennung ist eine Langzeit-Spektralmessung; bei sehr wenig Tonhöhenwechsel können Teiltöne verbleiben.
+- Die Beat-Sidechain liefert nur Hinweise (Pegel, Überlappung im Präsenzbereich), keinen Maskierungsnachweis.
+- Oberfläche: Auto-Mix-Ablauf deutsch, Modultexte und Hilfe englisch.
+- Die Dateien des früheren Text-Assistenten (`Source/Assistant/*`, `Source/UI/AssistantView.*`, `Source/UI/BeginnerView.*`, `Tests/AssistantTests.cpp`) liegen noch im Repository, werden aber nicht mehr gebaut.
+- Nur Windows x64 VST3 (plus Standalone), kein signierter Installer. Für einen closed-source Verkauf ist eine JUCE-Lizenz nötig ([THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)).
