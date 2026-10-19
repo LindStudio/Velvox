@@ -6,7 +6,9 @@
 #include "DSP/Macros.h"
 #include "DSP/VocalAnalyzer.h"
 #include "Parameters/ParameterLayout.h"
+#include "Parameters/SettingsReader.h"
 #include "Presets/PresetManager.h"
+#include "AutoMix/AutoMixController.h"
 
 class VelvoxAudioProcessor final : public juce::AudioProcessor,
                                    private juce::ValueTree::Listener,
@@ -50,6 +52,9 @@ public:
     velvox::PresetManager& getPresetManager() noexcept { return presetManager; }
     velvox::dsp::VocalChain& getChain() noexcept { return chain; }
 
+    // Automatic mix: capture during playback, analysis, plan, apply (see AutoMix/)
+    velvox::automix::AutoMixController& getAutoMix() noexcept { return autoMix; }
+
     // A/B comparison (message thread only)
     int getActiveSlot() const noexcept { return activeSlot; }
     void selectSlot (int slot);
@@ -65,7 +70,7 @@ public:
     bool isMonoMonitor() const noexcept { return monoMonitor.load(); }
     void setMonoMonitor (bool shouldBeMono) noexcept { monoMonitor.store (shouldBeMono); }
 
-    // Beat sidechain status for the assistant (written by the audio thread, lock-free).
+    // Beat sidechain status (written by the audio thread, lock-free).
     // Levels are short-term RMS in dBFS (~300 ms), measured before any processing.
     struct SidechainStatus
     {
@@ -112,41 +117,9 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     velvox::PresetManager presetManager;
     velvox::dsp::VocalChain chain;
+    velvox::automix::AutoMixController autoMix { *this, apvts };
 
-    struct Raw
-    {
-        std::atomic<float>* p = nullptr;
-        float get() const noexcept { return p->load (std::memory_order_relaxed); }
-        bool on() const noexcept { return get() > 0.5f; }
-        int index() const noexcept { return (int) std::lround (get()); }
-    };
-
-    struct
-    {
-        Raw inputGain, outputGain, bypass, safetyClip;
-        Raw eqOn, eqMix, hpfOn, hpfFreq, hpfSlope, lowFreq, lowGain, midFreq, midGain, midQ, highFreq, highGain;
-        Raw compOn, compThreshold, compRatio, compAttack, compRelease, compKnee, compMakeup, compMix;
-        Raw deessOn, deessFreq, deessThreshold, deessRange, deessListen;
-        Raw satOn, satDrive, satOutput, satMix;
-        Raw delayOn, delayTime, delaySync, delayDivision, delayFeedback, delayMix, delayLowCut, delayHighCut, delayPingPong;
-        Raw reverbOn, reverbType, reverbMix, reverbDecay, reverbPreDelay, reverbSize, reverbDamping, reverbLowCut, reverbWidth;
-        Raw delayToReverb;
-        Raw stereoWidth, monoBelow, levelMatchMode, levelMatchWindow, levelMatchRange;
-        Raw doublerOn, doublerMix, doublerWidth, doublerDelay, doublerDetune, doublerMonoSafe, doublerTone;
-        Raw duckSource, delayDuckAmount, delayDuckThreshold, delayDuckAttack, delayDuckRelease;
-        Raw reverbDuckAmount, reverbDuckThreshold, reverbDuckAttack, reverbDuckRelease;
-        Raw pitchOn, pitchSemitones, pitchCents, pitchPreserveFormants, pitchFormant, pitchMix;
-        Raw chopOn, chopPattern, chopRate, chopDepth, chopSmooth;
-        Raw lowType, lowQ, highType, highQ, lpfOn, lpfFreq, lpfSlope, satCharacter, deessMode, compDetector, compScHpf;
-        Raw macroPresence, macroWarmth, macroAggression, macroWidth, macroSpace, macroDensity;
-        Raw pulseOn, pulseRate, pulseDepth, pulseAttack, pulseRelease, pulseSmooth, pulseInterp, pulseTension, pulseMix, pulseBpm;
-        std::array<Raw, 6> pulseX, pulseY;
-        Raw smashOn, smashAmount, smashBlend, smashAttack, smashRelease, smashTone, smashOutput;
-        Raw choirOn, choirVoices, choirDetune, choirTiming, choirHumanize, choirWidth, choirDensity, choirMix;
-        Raw smoothOn, smoothAmount, smoothSensitivity, smoothLow, smoothHigh, smoothAttack, smoothRelease, smoothMode, smoothOutput, smoothDelta;
-        Raw checkOn, checkMode;
-        Raw rideOn, rideTarget, rideAmount, rideMaxBoost, rideMaxCut, rideResponse, ridePhrase, rideTransient, rideSilence;
-    } raw;
+    velvox::SettingsReader reader;
 
     std::atomic<bool> monoMonitor { false };
 

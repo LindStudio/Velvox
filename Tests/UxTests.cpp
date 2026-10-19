@@ -85,6 +85,7 @@ public:
         {
             ui::settings::set (ui::settings::tutorialDone, false);
             Harness h;
+            h.proc.getAutoMix().dismissPrompt();   // the analysis popup has priority on a new instance
             {
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
                 auto& tour = asVelvox (*e).getTutorial();
@@ -134,6 +135,7 @@ public:
         {
             ui::settings::set (ui::settings::tutorialDone, false);
             Harness h;
+            h.proc.getAutoMix().dismissPrompt();
             {
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
                 auto& tour = asVelvox (*e).getTutorial();
@@ -177,19 +179,16 @@ public:
             expectEquals (ed.getHelp().getCurrentKey(), juce::String ("start"));
         }
 
-        beginTest ("Beginner: clicking a module explains it; Edit in Pro opens it with its controls");
+        beginTest ("Auto Mix view: clicking a module card opens it with all its controls");
         {
             Harness h;
             h.proc.getState().state.setProperty ("uiMode", "beginner", nullptr);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = asVelvox (*e);
             const auto before = h.proc.readSettings();
-
-            ed.getChainView().onSelect ((int) ModuleId::smash);
-            expectEquals (ed.getBeginnerView().getFocusModule(), (int) ModuleId::smash);
             expect (! ed.isProMode());
 
-            ed.getBeginnerView().onEditInPro (ed.getBeginnerView().getFocusModule());
+            ed.getChainView().onSelect ((int) ModuleId::smash);
             expect (ed.isProMode());
             expect (ed.getDetail() != nullptr);
             expectEquals (ed.getChainView().getSelected(), (int) ModuleId::smash);

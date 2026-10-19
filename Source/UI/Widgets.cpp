@@ -43,11 +43,18 @@ namespace velvox::ui
         setVisible (false);
     }
 
-    void InfoPopup::show (juce::Rectangle<int> anchor, const juce::String& t, const juce::String& body)
+    void InfoPopup::show (juce::Rectangle<int> anchor, const juce::String& t, const juce::String& v, const juce::String& body)
     {
+        const bool sameCard = shown && anchor == anchorArea && t == title && body == text;
         title = t;
+        value = v;
         text = body;
         anchorArea = anchor;
+        if (sameCard)
+        {
+            repaint();   // live value update while the card is open
+            return;
+        }
 
         const auto layout = layoutText (text, (float) popupWidth - 32.0f);
         const int h = 16 + 20 + 10 + (int) std::ceil (layout.getHeight()) + 16;
@@ -98,9 +105,18 @@ namespace velvox::ui
         drawGlass (g, r, 12.0f, 0.02f);
 
         auto inner = r.reduced (16.0f, 16.0f);
+        auto head = inner.removeFromTop (20.0f);
+        if (value.isNotEmpty())
+        {
+            const auto valueFont = display (15.0f, true);
+            const float vw = (float) juce::GlyphArrangement::getStringWidthInt (valueFont, value) + 4.0f;
+            g.setFont (valueFont);
+            g.setColour (colours::cyan);
+            g.drawText (value, head.removeFromRight (vw), juce::Justification::centredRight, false);
+        }
         g.setColour (colours::text);
         g.setFont (font (14.5f, true));
-        g.drawText (title, inner.removeFromTop (20.0f), juce::Justification::centredLeft, false);
+        g.drawText (title, head, juce::Justification::centredLeft, true);
         inner.removeFromTop (4.0f);
         g.setGradientFill (auroraGradient (inner.getTopLeft(), inner.getTopLeft().translated (36.0f, 0.0f)));
         g.fillRoundedRectangle (inner.getX(), inner.getY(), 36.0f, 2.0f, 1.0f);
@@ -147,11 +163,15 @@ namespace velvox::ui
         addAndMakeVisible (styleCaption (name));
 
         attachment = std::make_unique<APVTS::SliderAttachment> (state, paramId, slider);
+        this->paramId = paramId;
 
         if (const auto* spec = findParameterSpec (paramId))
         {
             slider.setDoubleClickReturnValue (true, spec->defaultValue);
             description = spec->description;
+            if (const auto role = autoMixRole (paramId); role.isNotEmpty())
+                description << "\n\n" << role;
+            description << juce::String::fromUTF8 ("\n\nDoppelklick: Standardwert. Shift/Strg: fein.");
         }
 
         shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
@@ -241,12 +261,24 @@ namespace velvox::ui
             slider.getProperties().set (VelvoxLookAndFeel::hoverProperty, hover.current);
             slider.repaint();
         }
+
+        // Keep the read-out of an open info card current (wheel, keys, automation)
+        if (infoShown)
+        {
+            const auto v = slider.getTextFromValue (slider.getValue());
+            if (v != shownValue)
+                if (auto* host = findParentComponentOfClass<InfoPopupHost>())
+                {
+                    shownValue = v;
+                    host->showInfo (*this, name.getText(), v, description);
+                }
+        }
     }
 
     void Knob::mouseEnter (const juce::MouseEvent&)
     {
         if (description.isNotEmpty() && ! slider.isMouseButtonDown())
-            startTimer (1000);
+            startTimer (motion::hoverInfoDelayMs);
     }
 
     void Knob::mouseExit (const juce::MouseEvent&)
@@ -254,6 +286,7 @@ namespace velvox::ui
         if (isMouseOver (true))
             return;
         stopTimer();
+        infoShown = false;
         if (auto* host = findParentComponentOfClass<InfoPopupHost>())
             host->hideInfo (*this);
     }
@@ -261,6 +294,7 @@ namespace velvox::ui
     void Knob::mouseDown (const juce::MouseEvent&)
     {
         stopTimer();
+        infoShown = false;
         if (auto* host = findParentComponentOfClass<InfoPopupHost>())
             host->hideInfo (*this);
     }
@@ -271,7 +305,11 @@ namespace velvox::ui
         if (slider.isMouseButtonDown() || ! isMouseOver (true))
             return;
         if (auto* host = findParentComponentOfClass<InfoPopupHost>())
-            host->showInfo (*this, name.getText(), description);
+        {
+            shownValue = slider.getTextFromValue (slider.getValue());
+            infoShown = true;
+            host->showInfo (*this, name.getText(), shownValue, description);
+        }
     }
 
     void Knob::refreshEffective()
@@ -647,5 +685,42 @@ namespace velvox::ui
         core.addColour (0.5, colours::teal.interpolatedWith (juce::Colours::white, 0.45f).withAlpha (a));
         g.setGradientFill (core);
         g.strokePath (curve, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+
+    //==========================================================================
+    juce::String autoMixRole (const juce::String& id)
+    {
+        static const std::map<juce::String, const char*> roles {
+            { pid::hpfFreq,        "Auto-Mix: knapp unter den tiefsten gesungenen Ton gesetzt (gemessen)." },
+            { pid::lowGain,        "Auto-Mix: nur bei dröhnender oder sehr dünner Stimme verändert." },
+            { pid::midGain,        "Auto-Mix: schneidet eine gemessene Resonanz oder Mulmigkeit unter 1,2 kHz." },
+            { pid::midFreq,        "Auto-Mix: Frequenz der gemessenen Resonanz bzw. der Tiefmitten." },
+            { pid::highGain,       "Auto-Mix: hebt nur dunkle Aufnahmen an, nie scharfe." },
+            { pid::rideTarget,     "Auto-Mix: auf den mittleren Pegel der analysierten Stimme gesetzt." },
+            { pid::rideAmount,     "Auto-Mix: richtet sich nach dem gemessenen Lautheitsumfang." },
+            { pid::rideMaxBoost,   "Auto-Mix: bei Rauschen begrenzt, damit Pausen nicht lauter werden." },
+            { pid::compThreshold,  "Auto-Mix: aus dem Stimmpegel berechnet und am Ergebnis nachgeprüft (Ziel: wenige dB Reduktion)." },
+            { pid::compRatio,      "Auto-Mix: 3:1 als Standard, sanfter bei bereits komprimierten Aufnahmen." },
+            { pid::compMakeup,     "Auto-Mix: gleicht die gemessene Reduktion aus (Gain-Staging)." },
+            { pid::deessThreshold, "Auto-Mix: zwischen Vokal- und S-Pegel gesetzt, damit nur S-Laute reduziert werden." },
+            { pid::deessFreq,      "Auto-Mix: aus dem gemessenen Schwerpunkt der S-Laute." },
+            { pid::deessRange,     "Auto-Mix: richtet sich nach der Stärke der S-Laute." },
+            { pid::smoothAmount,   "Auto-Mix: nur bei gemessener Schärfe oder Resonanz eingeschaltet." },
+            { pid::satDrive,       "Auto-Mix: dezent; aus bei bereits verzerrten Aufnahmen." },
+            { pid::satMix,         "Auto-Mix: dezent; aus bei bereits verzerrten Aufnahmen." },
+            { pid::smashBlend,     "Auto-Mix: kleiner Anteil für Dichte; aus bei bereits komprimierten Aufnahmen." },
+            { pid::doublerMix,     "Auto-Mix: dezent und mono-sicher; aus bei bereits breiten Aufnahmen." },
+            { pid::reverbMix,      "Auto-Mix: weniger oder kein Hall, wenn die Aufnahme schon Raum hat." },
+            { pid::delayMix,       "Auto-Mix: tempo-synchron und geduckt; aus bei verhallten Aufnahmen." },
+            { pid::outputGain,     "Auto-Mix: gleicht die Lautheit an das Original an (fairer Vergleich) und hält 1 dB Reserve." },
+            { pid::macroPresence,  "Feinschliff nach dem Auto-Mix: wirkt auf EQ-Höhen und De-Esser." },
+            { pid::macroWarmth,    "Feinschliff nach dem Auto-Mix: wirkt auf Tiefen, Höhen und Sättigung." },
+            { pid::macroAggression,"Feinschliff nach dem Auto-Mix: wirkt auf Kompressor und Sättigung." },
+            { pid::macroWidth,     "Feinschliff nach dem Auto-Mix: wirkt auf Doubler und Stereobreite." },
+            { pid::macroSpace,     "Feinschliff nach dem Auto-Mix: wirkt auf Hall, Delay und deren Ducking." },
+            { pid::macroDensity,   "Feinschliff nach dem Auto-Mix: wirkt auf Kompressor und Sättigung." },
+        };
+        auto it = roles.find (id);
+        return it != roles.end() ? juce::String::fromUTF8 (it->second) : juce::String();
     }
 }

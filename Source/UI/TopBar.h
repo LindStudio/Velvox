@@ -45,9 +45,9 @@ namespace velvox::ui
         void refresh();
 
         std::function<void (bool pro)> onModeChange;
-        std::function<void()> onAssistant;     // the Assistant tab was clicked
-        void setAssistantOpen (bool open);
-        juce::TextButton& getAssistantButton() noexcept { return assistantTab; }
+        std::function<void()> onAnalyse;       // "Analysieren": start an automatic mix (always available)
+        juce::TextButton& getAnalyseButton() noexcept { return analyse; }
+        void setHasMix (bool hasMix);
         std::function<void()> onHelp;
         juce::TextButton& getHelpButton() noexcept { return help; }
         juce::Rectangle<int> getPresetArea() const;
@@ -67,8 +67,8 @@ namespace velvox::ui
         juce::TextButton presetButton, prev { juce::String::fromUTF8 ("\xe2\x80\xb9") }, next { juce::String::fromUTF8 ("\xe2\x80\xba") },
                          save { "Save" }, remove { "Delete" };
         juce::TextButton slotA { "A" }, slotB { "B" }, copy { "Copy A to B" };
-        juce::TextButton beginner { "Beginner" }, pro { "Pro" }, assistantTab { "Assistant" };
-        bool assistantOpen = false, proMode = false;
+        juce::TextButton beginner { "Auto Mix" }, pro { "Module" }, analyse { "Analysieren" };
+        bool proMode = false;
         Toggle bypass;
         juce::TextButton help { "Help" };
         bool shownModified = false;

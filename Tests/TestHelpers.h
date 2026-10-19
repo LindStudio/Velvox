@@ -11,7 +11,10 @@ namespace velvox::test
 
     struct Harness
     {
-        VelvoxAudioProcessor proc;
+        // The processor is large (~220 kB, the DSP chain): on the heap, like in
+        // a host, so tests with several harnesses do not exhaust the stack
+        std::unique_ptr<VelvoxAudioProcessor> procHolder = std::make_unique<VelvoxAudioProcessor>();
+        VelvoxAudioProcessor& proc = *procHolder;
         double fs;
         int blockSize;
         int channels;

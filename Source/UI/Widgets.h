@@ -12,7 +12,8 @@ namespace velvox::ui
     struct InfoPopupHost
     {
         virtual ~InfoPopupHost() = default;
-        virtual void showInfo (juce::Component& anchor, const juce::String& title, const juce::String& text) = 0;
+        // `value` is the current read-out with its unit (may be empty)
+        virtual void showInfo (juce::Component& anchor, const juce::String& title, const juce::String& value, const juce::String& text) = 0;
         virtual void hideInfo (juce::Component& anchor) = 0;
     };
 
@@ -21,7 +22,7 @@ namespace velvox::ui
     {
     public:
         InfoPopup();
-        void show (juce::Rectangle<int> anchorInParent, const juce::String& title, const juce::String& text);
+        void show (juce::Rectangle<int> anchorInParent, const juce::String& title, const juce::String& value, const juce::String& text);
         void hide();
         bool isShowingFor (juce::Rectangle<int> anchor) const { return shown && anchor == anchorArea; }
         void paint (juce::Graphics&) override;
@@ -29,7 +30,7 @@ namespace velvox::ui
     private:
         void tick();
 
-        juce::String title, text;
+        juce::String title, value, text;
         juce::Rectangle<int> anchorArea, finalBounds;
         Smoothed fade;
         bool shown = false;
@@ -73,6 +74,7 @@ namespace velvox::ui
         void setProminence (Prominence p);
         void setMaxDialSize (int px) { maxDial = px; resized(); }
         void setDescription (const juce::String& text) { description = text; }
+        const juce::String& getParamId() const noexcept { return paramId; }
 
         // Returns the processed value in parameter units; empty = no marker
         std::function<float()> effectiveValue;
@@ -93,7 +95,9 @@ namespace velvox::ui
         void mouseDown (const juce::MouseEvent&) override;
 
         std::unique_ptr<APVTS::SliderAttachment> attachment;
-        juce::String description;
+        juce::String paramId, description;
+        bool infoShown = false;
+        juce::String shownValue;
         float lastEffective = std::numeric_limits<float>::quiet_NaN();
         int maxDial = dialsize::secondary;
         int valueBoxH = 25;
@@ -208,6 +212,9 @@ namespace velvox::ui
         bool active = true;
         juce::Path curve;
     };
+
+    // What the automatic mix does with a parameter (German, empty = no role)
+    juce::String autoMixRole (const juce::String& paramId);
 
     // Short text hint line ("Input is clipping" ...), coloured by severity
     struct Hint

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Velvox VERSION 0.2.0 LANGUAGES C CXX)
+project(Velvox VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -68,14 +68,15 @@ set(VELVOX_SOURCES
     Source/UI/ModuleViews.cpp
     Source/UI/ChainView.cpp
     Source/UI/DetailPanels.cpp
-    Source/UI/BeginnerView.cpp
+    Source/UI/AutoMixView.cpp
+    Source/UI/AnalysisOverlay.cpp
     Source/UI/TopBar.cpp
-    Source/UI/AssistantView.cpp
-    Source/Assistant/IntentParser.cpp
-    Source/Assistant/StyleProfiles.cpp
-    Source/Assistant/AssistantPlanner.cpp
-    Source/Assistant/AssistantSession.cpp
-    Source/Assistant/AssistantContextBuilder.cpp
+    Source/Parameters/SettingsReader.cpp
+    Source/AutoMix/CaptureBuffer.cpp
+    Source/AutoMix/VocalProfiler.cpp
+    Source/AutoMix/AutoMixPlanner.cpp
+    Source/AutoMix/AutoMixEngine.cpp
+    Source/AutoMix/AutoMixController.cpp
     Source/UI/UserSettings.cpp
     Source/UI/HelpContent.cpp
     Source/UI/HelpOverlay.cpp
@@ -122,7 +123,7 @@ juce_add_plugin(Velvox
     PLUGIN_CODE                 Vlvx
     FORMATS                     VST3 Standalone
     PRODUCT_NAME                "Velvox"
-    DESCRIPTION                 "Vocal chain: EQ, compressor, de-esser, saturation, delay, reverb"
+    DESCRIPTION                 "Automatic vocal mixer: analysis, EQ, dynamics, de-essing, resonance control, effects"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE
     NEEDS_MIDI_OUTPUT           FALSE
@@ -150,7 +151,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AssistantTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)

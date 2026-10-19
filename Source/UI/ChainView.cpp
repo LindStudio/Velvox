@@ -345,6 +345,13 @@ namespace velvox::ui
 
     void ChainView::refresh()
     {
+        const bool bypassedNow = proc.getState().getRawParameterValue (pid::bypass)->load() > 0.5f;
+        if (bypassedNow != globalBypass)
+        {
+            globalBypass = bypassedNow;
+            repaint();
+        }
+
         bool changed = false;
         readHidden();
 
@@ -492,7 +499,12 @@ namespace velvox::ui
         g.fillRoundedRectangle (r, corner);
         if (on)
         {
-            g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.045f), r.getX(), r.getY(),
+            // Lit glass: a white sheen plus a hint of the aurora colour for its place in the chain
+            const float place = juce::jlimit (0.0f, 1.0f, (float) (t.position - 1) / (float) std::max (1, dsp::numModules - 1));
+            g.setGradientFill (juce::ColourGradient (aurora (place, 0.10f), r.getX(), r.getY(),
+                                                     aurora (place, 0.0f), r.getRight(), r.getBottom(), false));
+            g.fillRoundedRectangle (r, corner);
+            g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.05f), r.getX(), r.getY(),
                                                      colours::accent.withAlpha (0.0f), r.getX(), r.getBottom(), false));
             g.fillRoundedRectangle (r, corner);
         }
@@ -552,8 +564,8 @@ namespace velvox::ui
             // Status line with the module icon
             const auto iconArea = juce::Rectangle<float> (r.getX() + 16.0f, r.getY() + 46.0f, 20.0f, 20.0f);
             drawModuleIcon (g, (int) t.id, iconArea, on ? colours::cyan.interpolatedWith (colours::text, 0.25f) : colours::textFaint);
-            juce::String status = onState[idx] ? "On" : (engagedOnly ? "On via macro" : "Off");
-            g.setColour (on ? colours::text.withAlpha (0.82f) : colours::textFaint);
+            juce::String status = onState[idx] ? (globalBypass ? "Bypass" : "On") : (engagedOnly ? "On via macro" : "Off");
+            g.setColour (onState[idx] && globalBypass ? colours::bypass : (on ? colours::text.withAlpha (0.82f) : colours::textFaint));
             g.setFont (medium (13.0f));
             auto statusArea = juce::Rectangle<float> (textX, iconArea.getY(), r.getRight() - 12.0f - textX, iconArea.getHeight());
             if (canBeSend (t.id))
@@ -567,6 +579,17 @@ namespace velvox::ui
                 g.setFont (medium (12.0f));
                 g.drawText (juce::String (t.position).paddedLeft ('0', 2), juce::Rectangle<float> (r.getRight() - 42.0f, iconArea.getY(), 28.0f, iconArea.getHeight()),
                             juce::Justification::centredRight, false);
+            }
+
+            // Set up by the automatic mix
+            if (autoKeys.contains (dsp::moduleKey (t.id)) && onState[idx])
+            {
+                const auto badge = juce::Rectangle<float> (r.getRight() - 50.0f, r.getY() + 9.0f, 40.0f, 17.0f);
+                g.setGradientFill (auroraGradient (badge.getTopLeft(), badge.getBottomRight(), 0.30f));
+                g.fillRoundedRectangle (badge, 8.5f);
+                g.setColour (colours::text);
+                g.setFont (medium (11.0f));
+                g.drawText ("Auto", badge, juce::Justification::centred, false);
             }
 
             // Activity bar along the bottom edge (gain reduction, ducking, movement)

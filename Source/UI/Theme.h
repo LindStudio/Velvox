@@ -11,25 +11,29 @@ namespace velvox::ui
 {
     namespace colours
     {
-        inline const juce::Colour background { 0xff101216 };
-        inline const juce::Colour panel      { 0xff171a1f };   // main panels (opaque equivalent)
-        inline const juce::Colour raised     { 0xff1f2329 };   // controls, cards
-        inline const juce::Colour raisedHi   { 0xff272c33 };
-        inline const juce::Colour line       { 0xff2e333b };   // hairlines
-        inline const juce::Colour lineSoft   { 0xff23272e };
-        inline const juce::Colour text       { 0xfff4f6f8 };
-        inline const juce::Colour textDim    { 0xffaab0ba };   // secondary labels: dimmer, still clearly legible
-        inline const juce::Colour textFaint  { 0xff7a818c };   // scales, units, tertiary hints
+        // Deep navy base: neutral enough for long sessions, dark enough that the
+        // coloured light behind the glass reads as depth, not decoration
+        inline const juce::Colour background { 0xff090c15 };
+        inline const juce::Colour panel      { 0xff121726 };   // main panels (opaque equivalent)
+        inline const juce::Colour raised     { 0xff1a2031 };   // controls, cards
+        inline const juce::Colour raisedHi   { 0xff22293d };
+        inline const juce::Colour line       { 0xff2c344a };   // hairlines
+        inline const juce::Colour lineSoft   { 0xff21283a };
+        inline const juce::Colour text       { 0xfff4f6fb };
+        inline const juce::Colour textDim    { 0xffb0b7ca };   // secondary labels: dimmer, still clearly legible
+        inline const juce::Colour textFaint  { 0xff7f879d };   // scales, units, tertiary hints
         inline const juce::Colour accent     { 0xffffffff };
-        inline const juce::Colour warning    { 0xffff5c63 };
-        inline const juce::Colour io         { 0xffc9ccd3 };
+        inline const juce::Colour warning    { 0xffff5c6c };
+        inline const juce::Colour ok         { 0xff4be3a6 };
+        inline const juce::Colour io         { 0xffc9cfdc };
 
-        // Atmospheric accent: "aurora", teal fading into blue
-        inline const juce::Colour teal       { 0xff2ee6c5 };
-        inline const juce::Colour blue       { 0xff3b82f6 };
+        // Light of the glass: cyan -> blue -> violet ("aurora")
+        inline const juce::Colour teal       { 0xff3ddcf5 };   // cyan end
+        inline const juce::Colour blue       { 0xff5b7dff };
+        inline const juce::Colour violet     { 0xff9a72ff };
 
         // Interaction accent: selection, knob pointers, active states
-        inline const juce::Colour cyan       { 0xff35d4ee };
+        inline const juce::Colour cyan       { 0xff4fd6ff };
     }
 
     // Layout tokens (design units on the 1440 x 900 canvas). New components use
@@ -70,7 +74,7 @@ namespace velvox::ui
     {
         inline constexpr int revealMs = 260;     // panels sliding in
         inline constexpr float fadeRate = 0.2f;  // per-frame approach for Smoothed fades
-        inline constexpr int hoverInfoDelayMs = 1000;
+        inline constexpr int hoverInfoDelayMs = 450;
     }
 
     namespace colours
@@ -81,15 +85,20 @@ namespace velvox::ui
         inline const juce::Colour scrim  { 0xd8050608 };   // behind dialogs and overlays
     }
 
-    // Position on the aurora gradient (0 = teal, 1 = blue)
+    // Position on the aurora gradient (0 = cyan, 0.5 = blue, 1 = violet)
     inline juce::Colour aurora (float t, float alpha = 1.0f)
     {
-        return colours::teal.interpolatedWith (colours::blue, juce::jlimit (0.0f, 1.0f, t)).withAlpha (alpha);
+        t = juce::jlimit (0.0f, 1.0f, t);
+        const auto c = t < 0.5f ? colours::teal.interpolatedWith (colours::blue, t * 2.0f)
+                                : colours::blue.interpolatedWith (colours::violet, (t - 0.5f) * 2.0f);
+        return c.withAlpha (alpha);
     }
 
     inline juce::ColourGradient auroraGradient (juce::Point<float> from, juce::Point<float> to, float alpha = 1.0f)
     {
-        return juce::ColourGradient (aurora (0.0f, alpha), from, aurora (1.0f, alpha), to, false);
+        juce::ColourGradient g (aurora (0.0f, alpha), from, aurora (1.0f, alpha), to, false);
+        g.addColour (0.5, aurora (0.5f, alpha));
+        return g;
     }
 
     // Every module shares the white accent; the chain position is shown by layout
@@ -146,14 +155,52 @@ namespace velvox::ui
         g.fillEllipse (juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (centre));
     }
 
-    // Glass surface: faint fill, hairline border whose top edge catches the light
+    // Liquid glass surface: a faint frosted body that is brighter at the top, a
+    // soft sheen over the upper part, and a rim whose top edge catches the light.
+    // Drawn over an opaque panel colour, so text on it always keeps its contrast.
     inline void drawGlass (juce::Graphics& g, juce::Rectangle<float> r, float corner, float fillAlpha = 0.026f)
     {
-        g.setColour (colours::accent.withAlpha (fillAlpha));
+        g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (fillAlpha * 1.7f), r.getX(), r.getY(),
+                                                 colours::accent.withAlpha (fillAlpha * 0.5f), r.getX(), r.getBottom(), false));
         g.fillRoundedRectangle (r, corner);
-        g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.11f), r.getX(), r.getY(),
-                                                 colours::accent.withAlpha (0.04f), r.getX(), r.getY() + std::min (r.getHeight(), 140.0f), false));
+
+        {
+            // Sheen: a soft highlight across the top third
+            juce::Graphics::ScopedSaveState s (g);
+            juce::Path clip;
+            clip.addRoundedRectangle (r, corner);
+            g.reduceClipRegion (clip);
+            const float h = std::min (r.getHeight() * 0.42f, 120.0f);
+            g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.045f), r.getX(), r.getY(),
+                                                     colours::accent.withAlpha (0.0f), r.getX(), r.getY() + h, false));
+            g.fillRect (r.withHeight (h));
+        }
+
+        // Rim: bright on top, fading down the sides
+        g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.17f), r.getX(), r.getY(),
+                                                 colours::accent.withAlpha (0.045f), r.getX(), r.getY() + std::min (r.getHeight(), 160.0f), false));
         g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
+
+        // Specular line along the top edge
+        juce::ColourGradient spec (colours::accent.withAlpha (0.0f), r.getX() + corner, r.getY(),
+                                   colours::accent.withAlpha (0.0f), r.getRight() - corner, r.getY(), false);
+        spec.addColour (0.35, colours::accent.withAlpha (0.30f));
+        spec.addColour (0.65, colours::accent.withAlpha (0.12f));
+        g.setGradientFill (spec);
+        g.fillRect (juce::Rectangle<float> (r.getX() + corner, r.getY() + 0.5f, r.getWidth() - 2.0f * corner, 1.0f));
+    }
+
+    // A main glass panel: soft shadow underneath, translucent tinted body, glass on top
+    inline void drawGlassPanel (juce::Graphics& g, juce::Rectangle<float> r, float corner, juce::Colour tint = colours::teal, float tintAlpha = 0.05f)
+    {
+        g.setColour (juce::Colours::black.withAlpha (0.28f));
+        g.fillRoundedRectangle (r.translated (0.0f, 4.0f).expanded (1.0f), corner + 1.0f);
+        g.setColour (colours::panel.withAlpha (0.88f));
+        g.fillRoundedRectangle (r, corner);
+        g.setGradientFill (juce::ColourGradient (tint.withAlpha (tintAlpha), r.getX(), r.getY(),
+                                                 tint.withAlpha (0.0f), r.getX() + r.getWidth() * 0.6f, r.getY() + r.getHeight() * 0.8f, false));
+        g.fillRoundedRectangle (r, corner);
+        drawGlass (g, r, corner, 0.022f);
     }
 
     // Small caption (sentence case, lightly tracked). Sizes below the readable

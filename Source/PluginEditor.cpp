@@ -8,17 +8,15 @@ using namespace velvox::ui;
 
 namespace
 {
-    // Window width in pixels. A new key for the 1440 x 900 layout, so projects
-    // saved with the old, smaller canvas open at the new default size.
+    // Window width in pixels (key of the 1440 x 900 layout)
     const juce::Identifier uiWidthProperty { "uiWindowWidth" };
     const juce::Identifier uiSelectionProperty { "uiSelection" };
-    const juce::Identifier uiAssistantProperty { "uiAssistant" };
 
     // "Remind me later" hides the welcome card until the plugin is loaded again
     bool tutorialPostponedThisSession = false;
 
     // Canvas layout (design units): header, module navigation, then the body
-    // with the input rail, the selected module and the output rail
+    // with the input rail, the main view and the output rail
     constexpr int topBarH = 68;
     constexpr int margin = 16;
     constexpr int chainTop = topBarH + 8;
@@ -42,7 +40,7 @@ namespace
     {
         c.setAlpha (0.0f);
         c.setBounds (finalBounds.translated (0, 14));
-        juce::Desktop::getInstance().getAnimator().animateComponent (&c, finalBounds, 1.0f, 260, false, 0.0, 0.0);
+        juce::Desktop::getInstance().getAnimator().animateComponent (&c, finalBounds, 1.0f, motion::revealMs, false, 0.0, 0.0);
     }
 }
 
@@ -50,32 +48,37 @@ namespace
 VelvoxAudioProcessorEditor::Canvas::Canvas()
 {
     addChildComponent (info);
+    setOpaque (true);
 }
 
 void VelvoxAudioProcessorEditor::Canvas::paint (juce::Graphics& g)
 {
-    g.fillAll (colours::background);
-
-    // Atmosphere: a faint, slow light above the header that breathes with the vocal
-    const float drift = (float) phase;
-    const float a = 0.025f + 0.035f * ambient;
-    drawGlow (g, { 380.0f + 90.0f * std::sin (drift * 0.7f), -120.0f + 20.0f * std::sin (drift * 0.43f) }, 560.0f, a, colours::cyan);
-    drawGlow (g, { 1080.0f + 100.0f * std::cos (drift * 0.53f), -110.0f + 24.0f * std::cos (drift * 0.37f) }, 600.0f, a * 0.8f, colours::blue);
-
-    for (auto rail : { leftRail(), rightRail() })
+    // The atmosphere is static: coloured light behind the glass panels, rendered
+    // once per physical size and then only blitted (no idle redraws, no CPU load)
+    const float scale = juce::jlimit (0.5f, 4.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+    if (backdrop.isNull() || std::abs (scale - backdropScale) > 0.01f)
     {
-        const auto r = rail.toFloat();
-        g.setColour (colours::panel);
-        g.fillRoundedRectangle (r, radius::panel);
-        drawGlass (g, r, radius::panel, 0.012f);
-    }
+        backdropScale = scale;
+        backdrop = juce::Image (juce::Image::RGB, juce::roundToInt (baseWidth * scale), juce::roundToInt (baseHeight * scale), false);
+        juce::Graphics b (backdrop);
+        b.addTransform (juce::AffineTransform::scale (scale));
+        b.fillAll (colours::background);
+        drawGlow (b, { 240.0f, -40.0f }, 640.0f, 0.17f, colours::teal);
+        drawGlow (b, { 1280.0f, 140.0f }, 720.0f, 0.15f, colours::violet);
+        drawGlow (b, { 760.0f, 1000.0f }, 820.0f, 0.10f, colours::blue);
+        drawGlow (b, { 60.0f, 760.0f }, 420.0f, 0.07f, colours::violet);
 
-    for (auto [rail, text] : { std::pair (leftRail(), "Input"), std::pair (rightRail(), "Output") })
-    {
-        g.setColour (colours::text);
-        g.setFont (font (15.0f, true));
-        g.drawText (text, rail.toFloat().withHeight ((float) railCaptionH).withTrimmedTop (4.0f), juce::Justification::centred, false);
+        for (auto rail : { leftRail(), rightRail() })
+            drawGlassPanel (b, rail.toFloat(), radius::panel, colours::teal, 0.04f);
+
+        for (auto [rail, text] : { std::pair (leftRail(), "Input"), std::pair (rightRail(), "Output") })
+        {
+            b.setColour (colours::text);
+            b.setFont (font (15.0f, true));
+            b.drawText (text, rail.toFloat().withHeight ((float) railCaptionH).withTrimmedTop (4.0f), juce::Justification::centred, false);
+        }
     }
+    g.drawImage (backdrop, juce::Rectangle<float> ((float) baseWidth, (float) baseHeight));
 }
 
 void VelvoxAudioProcessorEditor::Canvas::paintOverChildren (juce::Graphics& g)
@@ -100,10 +103,10 @@ void VelvoxAudioProcessorEditor::Canvas::paintOverChildren (juce::Graphics& g)
     drawCaption (g, text, pill, juce::Justification::centred, colours::bypass, 9.5f);
 }
 
-void VelvoxAudioProcessorEditor::Canvas::showInfo (juce::Component& anchor, const juce::String& title, const juce::String& text)
+void VelvoxAudioProcessorEditor::Canvas::showInfo (juce::Component& anchor, const juce::String& title, const juce::String& value, const juce::String& text)
 {
     infoAnchor = &anchor;
-    info.show (getLocalArea (&anchor, anchor.getLocalBounds()), title, text);
+    info.show (getLocalArea (&anchor, anchor.getLocalBounds()), title, value, text);
 }
 
 void VelvoxAudioProcessorEditor::Canvas::hideInfo (juce::Component& anchor)
@@ -126,8 +129,8 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
       scopeL ((size_t) dsp::StereoTap::capacity), scopeR ((size_t) dsp::StereoTap::capacity),
       topBar (p, dialog),
       chainView (p),
-      beginnerView (p),
-      assistantView (p),
+      mixView (p),
+      analysis (p.getAutoMix()),
       inputGain (p.getState(), pid::inputGain, "Gain"),
       outputGain (p.getState(), pid::outputGain, "Gain"),
       safetyClip (p.getState(), pid::safetyClip, "Clip guard")
@@ -137,15 +140,14 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     addAndMakeVisible (canvas);
     canvas.setBounds (0, 0, baseWidth, baseHeight);
 
-    for (auto* c : std::initializer_list<juce::Component*> { &topBar, &chainView, &beginnerView, &inputMeter, &outputMeter,
+    for (auto* c : std::initializer_list<juce::Component*> { &topBar, &chainView, &mixView, &inputMeter, &outputMeter,
                                                               &inputGain, &outputGain, &safetyClip, &monoCheck, &correlation })
         canvas.addAndMakeVisible (c);
-    canvas.addChildComponent (assistantView);
+    canvas.addChildComponent (analysis);
     canvas.addChildComponent (dialog);
     canvas.addChildComponent (help);
     canvas.addChildComponent (tutorial);
 
-    beginnerView.setSpectrumSource (&spectrum);
     chainView.setLiveData (&live);
 
     inputMeter.setTooltip ("Level entering the chain (after input gain), loudness in LUFS");
@@ -161,40 +163,24 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     outputGain.setMaxDialSize (dialsize::rail);
 
     topBar.onModeChange = [this] (bool pro) { setProMode (pro); };
-    topBar.onAssistant = [this] { setAssistantOpen (true); };
+    topBar.onAnalyse = [this] { startAnalysis(); };
     topBar.onHelp = [this]
     {
-        showHelp (assistantOpen ? juce::String ("assistant")
-                                : (detail != nullptr && proMode ? help::keyForModule (selected) : juce::String ("start")));
+        showHelp (detail != nullptr && proMode ? help::keyForModule (selected) : juce::String ("start"));
     };
-    assistantView.onOpenModule = [this] (int id)
-    {
-        // "Modul oeffnen" from a suggestion: show that module with all its controls
-        selected = id;
-        setProMode (true);
-    };
+    mixView.onAnalyse = [this] { startAnalysis(); };
+    mixView.onOpenModule = [this] (int id) { openModule (id); };
+    analysis.onFinished = [this] { if (proMode) setProMode (false); };
+
     chainView.onSelect = [this] (int id)
     {
-        if (assistantOpen)
-        {
-            // A module tab closes the assistant and shows the module in the current view
-            selected = id;
-            setProMode (proMode);
-            if (! proMode)
-                beginnerView.showModule (id);
-            return;
-        }
-        select (id);
+        // A module card always opens that module with all its controls
         if (! proMode)
-            beginnerView.showModule (id);
+            openModule (id);
+        else
+            select (id);
     };
     chainView.onHelp = [this] (int id) { showHelp (help::keyForModule (id)); };
-    beginnerView.onHelp = [this] (int id) { showHelp (help::keyForModule (id)); };
-    beginnerView.onEditInPro = [this] (int id)
-    {
-        selected = id;
-        setProMode (true);
-    };
     help.onStartTutorial = [this] { startTutorial (false); };
     tutorial.targetFor = [this] (const juce::String& key) { return tutorialTarget (key); };
     tutorial.onClose = [] (TutorialOverlay::Outcome outcome)
@@ -225,17 +211,14 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     right.removeFromBottom (14);
     outputMeter.setBounds (right);
 
-    dialog.setBounds (0, 0, baseWidth, baseHeight);
-    help.setBounds (0, 0, baseWidth, baseHeight);
-    tutorial.setBounds (0, 0, baseWidth, baseHeight);
+    for (auto* overlay : std::initializer_list<juce::Component*> { &analysis, &dialog, &help, &tutorial })
+        overlay->setBounds (0, 0, baseWidth, baseHeight);
 
     // ---- View state (stored with the project, never affects audio)
     const auto mode = proc.getState().state.getProperty (statekeys::uiMode, "beginner").toString();
     selected = (int) proc.getState().state.getProperty (uiSelectionProperty, 0);
     chainView.setSelected (selected);
     setProMode (mode == "pro");
-    if ((bool) proc.getState().state.getProperty (uiAssistantProperty, false))
-        setAssistantOpen (true);
     constructed = true;
 
     // ---- Window: resizable, fixed aspect ratio, remembered per project.
@@ -259,70 +242,74 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     const int w = juce::jlimit (minW, maxW, savedWidth);
     setSize (w, juce::roundToInt (w * (double) baseHeight / baseWidth));
 
+    auto& autoMix = proc.getAutoMix();
+    autoMix.addChangeListener (this);
+    chainView.setAutoMixModules (autoMix.getReport().changedModules);
+    topBar.setHasMix (autoMix.hasMix());
+
     startTimerHz (frameRate);
 
-    // First start: welcome card with the offer of a short tour
-    if (! settings::getBool (settings::tutorialDone) && ! tutorialPostponedThisSession)
+    // First open of a new instance: the analysis popup. A capture or analysis
+    // that is still running (the editor was closed meanwhile) shows its progress.
+    using Phase = automix::AutoMixController::Phase;
+    const auto phase = autoMix.getPhase();
+    if (phase == Phase::listening || phase == Phase::capturing || phase == Phase::analysing)
+        analysis.showProgress();
+    else if (autoMix.shouldShowPrompt())
+        analysis.showIntro();
+    else if (! settings::getBool (settings::tutorialDone) && ! tutorialPostponedThisSession)
         startTutorial (true);
+    raiseOverlays();
 }
 
 VelvoxAudioProcessorEditor::~VelvoxAudioProcessorEditor()
 {
     stopTimer();
+    proc.getAutoMix().removeChangeListener (this);
     auto& animator = juce::Desktop::getInstance().getAnimator();
-    animator.cancelAnimation (&beginnerView, false);
-    animator.cancelAnimation (&assistantView, false);
+    animator.cancelAnimation (&mixView, false);
     if (detail != nullptr)
         animator.cancelAnimation (detail.get(), false);
     setLookAndFeel (nullptr);
 }
 
-void VelvoxAudioProcessorEditor::setAssistantOpen (bool open)
+void VelvoxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster*)
 {
-    if (! open)
-    {
-        setProMode (proMode);
-        return;
-    }
-
-    assistantOpen = true;
-    proc.getState().state.setProperty (uiAssistantProperty, true, nullptr);
-    topBar.setAssistantOpen (true);
-    chainView.setSelected (-2);   // no module card is "open" while the assistant is shown
-    beginnerView.setVisible (false);
+    // A new mix, a restored state or a compare switch: every view follows at once
+    auto& autoMix = proc.getAutoMix();
+    chainView.setAutoMixModules (autoMix.getReport().changedModules);
+    topBar.setHasMix (autoMix.hasMix());
     if (detail != nullptr)
-    {
-        juce::Desktop::getInstance().getAnimator().cancelAnimation (detail.get(), false);
-        canvas.removeChildComponent (detail.get());
-        detail.reset();
-    }
-    assistantView.setVisible (true);
-    if (constructed)
-        reveal (assistantView, bodyArea());
-    else
-        assistantView.setBounds (bodyArea());
-    assistantView.refresh();
+        detail->refresh();
+}
+
+void VelvoxAudioProcessorEditor::startAnalysis()
+{
+    help.close();
+    if (tutorial.isActive())
+        tutorial.finish (TutorialOverlay::Outcome::later);
+    proc.getAutoMix().start();
+    analysis.showProgress();
     raiseOverlays();
+}
+
+void VelvoxAudioProcessorEditor::openModule (int id)
+{
+    selected = id;
+    setProMode (true);
 }
 
 void VelvoxAudioProcessorEditor::setProMode (bool pro)
 {
-    const bool wasAssistant = assistantOpen;
-    if (assistantOpen)
-    {
-        assistantOpen = false;
-        proc.getState().state.setProperty (uiAssistantProperty, false, nullptr);
-        juce::Desktop::getInstance().getAnimator().cancelAnimation (&assistantView, false);
-        assistantView.setVisible (false);
-    }
-    const bool changed = pro != proMode || wasAssistant;
+    const bool changed = pro != proMode;
     proMode = pro;
     topBar.setProMode (pro);
     proc.getState().state.setProperty (statekeys::uiMode, pro ? "pro" : "beginner", nullptr);
-    beginnerView.setVisible (! pro);
-    beginnerView.setBounds (bodyArea());
+    mixView.setVisible (! pro);
+    mixView.setBounds (bodyArea());
     if (! pro && changed && constructed)
-        reveal (beginnerView, bodyArea());
+        reveal (mixView, bodyArea());
+    chainView.setSelected (pro ? selected : -2);   // no module card is "open" in the overview
     select (selected);
 }
 
@@ -331,7 +318,8 @@ void VelvoxAudioProcessorEditor::select (int id)
     const bool changed = id != selected || detail == nullptr;
     selected = id;
     proc.getState().state.setProperty (uiSelectionProperty, id, nullptr);
-    chainView.setSelected (id);
+    if (proMode)
+        chainView.setSelected (id);
 
     if (detail != nullptr)
     {
@@ -340,7 +328,7 @@ void VelvoxAudioProcessorEditor::select (int id)
     }
     detail.reset();
 
-    if (proMode && ! assistantOpen)
+    if (proMode)
     {
         detail = createDetailPanel (proc, id, &spectrum, &live);
         // Open another module (e.g. from a VOCAL CHECK finding) after the current click has finished
@@ -348,7 +336,7 @@ void VelvoxAudioProcessorEditor::select (int id)
         {
             juce::MessageManager::callAsync ([safe, moduleId] { if (safe != nullptr) safe->select (moduleId); });
         };
-        detail->onHelp = [this] (int id) { showHelp (help::keyForModule (id)); };
+        detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };
         canvas.addAndMakeVisible (*detail);
         detail->setBounds (bodyArea());
         detail->refresh();
@@ -362,9 +350,12 @@ void VelvoxAudioProcessorEditor::select (int id)
 void VelvoxAudioProcessorEditor::raiseOverlays()
 {
     canvas.info.toFront (false);
+    analysis.toFront (false);
     dialog.toFront (false);
     help.toFront (false);
     tutorial.toFront (false);
+    if (analysis.isVisible())
+        analysis.toFront (true);
 }
 
 void VelvoxAudioProcessorEditor::showHelp (const juce::String& pageKey)
@@ -390,40 +381,6 @@ juce::Rectangle<int> VelvoxAudioProcessorEditor::tutorialTarget (const juce::Str
     if (key == "help")    return topBar.getHelpButton().getBounds();
     if (key == "body")    return bodyArea();
     return chainView.getBounds();   // "chain", "chainAndModules"
-}
-
-std::vector<Hint> VelvoxAudioProcessorEditor::computeHints()
-{
-    std::vector<Hint> hints;
-    const auto& m = proc.getChain().meters;
-    const float inLufs = m.inputLufs.load();
-    const bool signal = inLufs > -70.0f;
-
-    if (inputMeter.getPeakDb() > -0.5f)
-        hints.push_back ({ Hint::Level::warning, "Input is clipping - turn Input gain down until the meter stays below 0." });
-    else if (signal && inLufs < -36.0f)
-        hints.push_back ({ Hint::Level::info, "Input is quiet - raise Input gain so the controls react properly (about -20 LUFS is ideal)." });
-
-    if (outputMeter.isClipLatched())
-        hints.push_back ({ Hint::Level::warning, "Output went over 0 dBFS - lower Output gain or keep Clip guard on (click the red lamp to reset)." });
-
-    if (signal && m.correlation.load() < 0.0f)
-        hints.push_back ({ Hint::Level::warning, "Mono check: parts of the sound cancel in mono - reduce Width or raise the doubler's Mono safe." });
-
-    if (proc.getState().getRawParameterValue (pid::pitchOn)->load() > 0.5f)
-        hints.push_back ({ Hint::Level::info, "Pitch is on and adds latency; FL Studio compensates it automatically." });
-
-    if (proc.getState().getRawParameterValue (pid::levelMatchMode)->load() < 0.5f)
-        hints.push_back ({ Hint::Level::info, "Tip: set Fair compare to Bypass match, then use Bypass to hear the difference at equal loudness." });
-    else if (signal)
-        hints.push_back ({ Hint::Level::good, "Fair compare is on: Bypass plays at the same loudness as the processed vocal." });
-
-    if (! signal)
-        hints.insert (hints.begin(), { Hint::Level::info, "Play your vocal to see levels and live tips." });
-
-    if (hints.size() > 4)
-        hints.resize (4);
-    return hints;
 }
 
 void VelvoxAudioProcessorEditor::paint (juce::Graphics& g)
@@ -497,24 +454,10 @@ void VelvoxAudioProcessorEditor::timerCallback()
 
     if (detail != nullptr)
         detail->refresh();
-    if (assistantOpen && frame % 6 == 0)
-        assistantView.refresh();
-    if (beginnerView.isVisible())
-    {
-        beginnerView.refreshSpectrum();
-        if (frame % 4 == 0)
-            beginnerView.setHints (computeHints());
-    }
-
-    // Atmosphere: drifts slowly, breathes with the vocal; only the sky above the body is redrawn
-    ambient.target = live.level();
-    ambient.tick (0.05f);
-    canvas.phase = live.time * 0.25;
-    if (frame % 3 == 0)
-    {
-        canvas.ambient = ambient.current;
-        canvas.repaint (0, 0, baseWidth, bodyTop);
-    }
+    if (mixView.isVisible() && frame % 6 == 0)
+        mixView.refresh();
+    if (analysis.isVisible() && frame % 2 == 0)
+        analysis.update();
 
     const bool bypassed = proc.getState().getRawParameterValue (pid::bypass)->load() > 0.5f;
     if (bypassed != canvas.bypassed)

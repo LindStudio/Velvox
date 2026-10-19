@@ -204,14 +204,14 @@ public:
             parent.addChildComponent (info);
 
             const juce::Rectangle<int> anchor (600, 400, 90, 110);
-            info.show (anchor, "Presence", "Brings the voice to the front: clearer top end, harsh S sounds kept in check.");
+            info.show (anchor, "Presence", "25 %", "Brings the voice to the front: clearer top end, harsh S sounds kept in check.");
             expect (info.isVisible());
             expect (info.getBottom() <= anchor.getY() + 8, "above the control");
             expect (parent.getLocalBounds().contains (info.getBounds()));
 
             // Near the top edge it flips below the control
             const juce::Rectangle<int> top (20, 10, 90, 110);
-            info.show (top, "Gain", "Input level");
+            info.show (top, "Gain", "0.0 dB", "Input level");
             expect (info.getY() >= top.getBottom(), "below the control");
             expect (parent.getLocalBounds().contains (info.getBounds()));
 
@@ -219,7 +219,7 @@ public:
             const auto dumpDir = juce::SystemStats::getEnvironmentVariable ("VELVOX_DUMP_DIR", {});
             if (dumpDir.isNotEmpty())
             {
-                info.show (anchor, "Presence", "Brings the voice to the front: clearer top end, harsh S sounds kept in check.");
+                info.show (anchor, "Presence", "25 %", "Brings the voice to the front: clearer top end, harsh S sounds kept in check.");
                 juce::Image img (juce::Image::ARGB, info.getWidth() + 40, info.getHeight() + 40, true);
                 info.setAlpha (1.0f);
                 {

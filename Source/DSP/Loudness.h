@@ -29,8 +29,10 @@ namespace velvox::dsp
         static float integratedLufs (const float* const* channels, int numChannels, int numSamples,
                                      double sampleRate, int skip);
 
-    private:
+        // K-weighting filter pair for a sample rate (also used by the offline analysis)
         static void designKWeighting (double sampleRate, BiquadCoeffs& shelf, BiquadCoeffs& highPass);
+
+    private:
 
         double fs = 48000.0;
         Biquad shelf, highPass;

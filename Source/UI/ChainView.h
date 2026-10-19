@@ -38,6 +38,12 @@ namespace velvox::ui
 
         void refresh();   // once per frame from the editor
 
+        // Modules set up by the last automatic mix (module keys) - shown with an "Auto" badge
+
+        void setAutoMixModules (const juce::StringArray& keys) { if (keys != autoKeys) { autoKeys = keys; repaint(); } }
+
+        bool isAutoMixModule (dsp::ModuleId id) const { return autoKeys.contains (dsp::moduleKey (id)); }
+
         std::function<void (int moduleIdOrOutput)> onSelect;
         std::function<void (int moduleIdOrOutput)> onHelp;   // "Help for this module" in the menus
         void setSelected (int id);
@@ -144,5 +150,7 @@ namespace velvox::ui
         bool pendingReveal = true;   // show the selected card once the view has a size
         std::array<Smoothed, dsp::numModules> hoverGlow {};
         juce::VBlankAttachment vblank { this, [this] { tick(); } };
+        juce::StringArray autoKeys;
+        bool globalBypass = false;
     };
 }

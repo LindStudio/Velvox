@@ -252,9 +252,12 @@ namespace velvox::ui
             const float lo = std::min (fromAngle, valueAngle), hi = std::max (fromAngle, valueAngle);
             juce::Path arc;
             arc.addCentredArc (centre.x, centre.y, d.grooveR, d.grooveR, 0.0f, lo, hi, true);
-            g.setColour (colours::cyan.withAlpha ((0.12f + 0.08f * hover) * a));
+            // Light runs cyan -> blue -> violet along the travel of the dial
+            const auto from = centre.getPointOnCircumference (d.grooveR, startAngle);
+            const auto to = centre.getPointOnCircumference (d.grooveR, endAngle);
+            g.setGradientFill (auroraGradient (from, to, (0.13f + 0.09f * hover) * a));
             g.strokePath (arc, juce::PathStrokeType (d.groove * 1.9f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            g.setColour (colours::cyan.withAlpha (0.95f * a));
+            g.setGradientFill (auroraGradient (from, to, 0.97f * a));
             g.strokePath (arc, juce::PathStrokeType (d.groove * 0.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
@@ -368,6 +371,20 @@ namespace velvox::ui
         shape.addRoundedRectangle (r.getX(), r.getY(), r.getWidth(), r.getHeight(), corner, corner,
                                    ! flatL, ! flatR, ! flatL, ! flatR);
 
+        if ((bool) b.getProperties().getWithDefault ("primary", false))
+        {
+            // Primary action: a lit glass pill in the aurora colours
+            const float a = b.isEnabled() ? 1.0f : 0.35f;
+            g.setGradientFill (auroraGradient (r.getTopLeft(), r.getBottomRight(), (down ? 0.62f : (highlighted ? 0.55f : 0.46f)) * a));
+            g.fillPath (shape);
+            g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.22f * a), r.getX(), r.getY(),
+                                                     colours::accent.withAlpha (0.0f), r.getX(), r.getCentreY(), false));
+            g.fillPath (shape);
+            g.setColour (colours::accent.withAlpha (0.35f * a));
+            g.strokePath (shape, juce::PathStrokeType (1.0f));
+            return;
+        }
+
         if (on)
         {
             g.setColour (colours::cyan.withAlpha (down ? 0.24f : 0.16f));
@@ -394,6 +411,8 @@ namespace velvox::ui
         auto c = b.findColour (on ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId);
         if (highlighted && ! on)
             c = colours::text.withAlpha (0.9f);
+        if ((bool) b.getProperties().getWithDefault ("primary", false))
+            c = colours::text;
         if (! b.isEnabled())
             c = colours::textFaint;
         g.setColour (c);
