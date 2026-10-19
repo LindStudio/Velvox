@@ -1,0 +1,52 @@
+{
+  "_comment": "Test-vocal sources for the Velvox benchmark. Audio is NEVER committed to the repository; it is downloaded into the data directory (default %USERPROFILE%/dev/velvox-data). 'approved' lists what the license allows us to do.",
+  "sources": [
+    {
+      "id": "vocalset11",
+      "name": "VocalSet: A Singing Voice Dataset (v1.1)",
+      "url": "https://zenodo.org/records/1442513",
+      "download": "https://zenodo.org/api/records/1442513/files/VocalSet11.zip/content",
+      "file": "VocalSet11.zip",
+      "md5": "0c09396242f946e7111ad7d8fc649b81",
+      "bytes": 2077243579,
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Wilkins, J., Seetharaman, P., Wahl, A., Pardo, B. (2018). VocalSet: A Singing Voice Dataset. ISMIR 2018. doi:10.5281/zenodo.1442513",
+      "approved": ["internal testing", "commercial product development", "derived measurements"],
+      "restrictions": ["attribution required if material or derivatives are shared"],
+      "status": "approved",
+      "notes": "20 professional singers (11 male, 9 female), dry studio recordings of scales, arpeggios, long tones and excerpts in many techniques (straight, breathy, belt, vibrato, vocal fry, ...). Not genre-specific pop/EDM performances."
+    },
+    {
+      "id": "sonovox-free-demo",
+      "name": "Sonovox free vocal dataset demo pack (Sonja)",
+      "url": "https://sonovox.ai/products/free-vocal-dataset-pack-by-sonja",
+      "download": "https://sonovox.ai/api/download/free-demo-vocal-dataset",
+      "license": "Sonovox demo terms (custom)",
+      "license_url": "https://sonovox.ai/pages/vocal-data-license-agreement",
+      "approved": ["internal evaluation and prototyping"],
+      "restrictions": ["demo provided 'for evaluation and prototyping'", "no redistribution or resale of the raw stems", "commercial-product use of the demo not explicitly granted - full license is a paid agreement"],
+      "status": "evaluation-only",
+      "notes": "Dry WAV stems, 25 female / 25 male. Use only for internal evaluation; do not tune shipped defaults exclusively on it until rights are clarified with Sonovox."
+    },
+    {
+      "id": "musdb18",
+      "name": "MUSDB18 / MUSDB18-HQ",
+      "url": "https://sigsep.github.io/datasets/musdb.html",
+      "license": "academic use only (MedleyDB parts CC BY-NC-SA)",
+      "approved": [],
+      "restrictions": ["'the tracks can only be used for academic purposes'", "non-commercial licenses", "access request on Zenodo"],
+      "status": "not-approved",
+      "notes": "Not used: commercial product development is not covered."
+    },
+    {
+      "id": "selekt",
+      "name": "Selekt cleared stems",
+      "url": "https://selektaudio.com/stems",
+      "license": "unverified (site returned HTTP 429 during review)",
+      "approved": [],
+      "status": "unverified",
+      "notes": "Could not inspect the terms; not used until verified."
+    }
+  ]
+}

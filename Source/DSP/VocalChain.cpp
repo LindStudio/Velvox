@@ -91,6 +91,8 @@ namespace velvox::dsp
         adoptRoutingImmediately = true;
 
         prepared = true;
+        meters.prepareCount.fetch_add (1, std::memory_order_relaxed);
+        meters.samplesProcessed.store (0, std::memory_order_relaxed);
         reset();
     }
 
@@ -238,7 +240,12 @@ namespace velvox::dsp
         }
 
         if (sanitize (buffer.getArrayOfWritePointers(), ioChannels, numSamples))
+        {
             reset(); // something produced invalid values: start from a clean state
+            meters.nonFiniteResets.fetch_add (1, std::memory_order_relaxed);
+            meters.lastResetAtSample.store (meters.samplesProcessed.load (std::memory_order_relaxed), std::memory_order_relaxed);
+        }
+        meters.samplesProcessed.fetch_add (numSamples, std::memory_order_relaxed);
 
         for (int ch = 0; ch < ioChannels; ++ch)
             meters.output[(size_t) ch].push (buffer.getMagnitude (ch, 0, numSamples));
@@ -549,6 +556,8 @@ namespace velvox::dsp
 
     void VocalChain::applyPendingStructure() noexcept
     {
+        if (activeRouting != pendingRouting || activePitchOn != pendingPitchOn)
+            meters.structureSwitches.fetch_add (1, std::memory_order_relaxed);
         activeRouting = pendingRouting;
 
         const bool pitchChanged = pendingPitchOn != activePitchOn;

@@ -177,6 +177,27 @@ juce::AudioProcessorParameter* VelvoxAudioProcessor::getBypassParameter() const
 void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
+    const auto startTicks = juce::Time::getHighResolutionTicks();
+    struct LoadMeter
+    {
+        CallbackLoad& load;
+        juce::int64 start;
+        int numSamples;
+        double fs;
+        ~LoadMeter()
+        {
+            if (numSamples <= 0 || fs <= 0.0)
+                return;
+            const double seconds = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - start);
+            const float ratio = (float) (seconds * fs / numSamples);
+            if (ratio > load.worstRatio.load (std::memory_order_relaxed) && numSamples >= 32)
+                load.worstRatio.store (ratio, std::memory_order_relaxed);
+            if (ratio > 1.0f && numSamples >= 32)
+                load.overruns.fetch_add (1, std::memory_order_relaxed);
+            const float avg = load.averageRatio.load (std::memory_order_relaxed);
+            load.averageRatio.store (avg + 0.01f * (ratio - avg), std::memory_order_relaxed);
+        }
+    } loadMeter { callbackLoad, startTicks, buffer.getNumSamples(), getSampleRate() };
 
     auto settings = readEffectiveSettings();
 

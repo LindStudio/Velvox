@@ -83,6 +83,13 @@ namespace velvox::dsp
         std::atomic<float> correlation { 1.0f };
         std::atomic<bool> sidechainInUse { false }; // ducking currently follows the external sidechain
 
+        // Audio diagnostics (bounded, lock-free; read by the UI). Sample counters
+        // give the time of the last event in samples since prepare().
+        std::atomic<int> nonFiniteResets { 0 };       // chain reset because something produced NaN/Inf
+        std::atomic<int> structureSwitches { 0 };     // routing / pitch changes applied under a fade
+        std::atomic<int> prepareCount { 0 };
+        std::atomic<long long> lastResetAtSample { -1 }, samplesProcessed { 0 };
+
         // Spectrum analyser feeds: after input gain, and what leaves the plugin
         SampleTap inputTap, outputTap;
         StereoTap scopeTap;   // goniometer

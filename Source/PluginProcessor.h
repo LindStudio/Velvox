@@ -81,6 +81,17 @@ public:
     };
     SidechainStatus getSidechainStatus() const noexcept;
 
+    // Real-time load of the audio callback (diagnostics; written by the audio thread).
+    // ratio = callback time / duration of the block. Above 1.0 the host can drop out.
+    struct CallbackLoad
+    {
+        std::atomic<float> worstRatio { 0.0f };    // since the last resetLoadStats()
+        std::atomic<float> averageRatio { 0.0f };  // slow average
+        std::atomic<int> overruns { 0 };           // callbacks that took longer than their block
+    };
+    const CallbackLoad& getCallbackLoad() const noexcept { return callbackLoad; }
+    void resetLoadStats() noexcept { callbackLoad.worstRatio.store (0.0f); callbackLoad.overruns.store (0); }
+
     // VOCAL CHECK analysis (message thread). Fed from the Check module in the
     // chain by a timer that runs while the module is on - also with the editor closed.
     velvox::dsp::VocalAnalyzer& getAnalyzer() noexcept { return analyzer; }
@@ -122,6 +133,7 @@ private:
     velvox::SettingsReader reader;
 
     std::atomic<bool> monoMonitor { false };
+    CallbackLoad callbackLoad;
 
     // Sidechain / vocal level (audio thread state + published values)
     float scMeanSquare = 0.0f, vocalMeanSquare = 0.0f;

@@ -81,14 +81,9 @@ namespace velvox::dsp
 
     float DoublerModule::read (float delay) const noexcept
     {
-        const int size = (int) buffer.size();
-        float pos = (float) writePos - delay;
-        while (pos < 0.0f)
-            pos += (float) size;
-        const int i0 = (int) pos;
-        const float frac = pos - (float) i0;
-        const int i1 = i0 + 1 >= size ? 0 : i0 + 1;
-        return buffer[(size_t) i0] + frac * (buffer[(size_t) i1] - buffer[(size_t) i0]);
+        // The newest sample sits at writePos (written just before the read);
+        // integer-safe wrap, see fractionalIndex
+        return readFractional (buffer, writePos, delay);
     }
 
     void DoublerModule::process (float* const* ch, int numChannels, int numSamples) noexcept

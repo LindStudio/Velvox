@@ -90,6 +90,44 @@ namespace velvox::dsp
         bool wasActive = false;
     };
 
+    // Read position for a fractional delay in a circular buffer.
+    //
+    // The integer part is wrapped with integer arithmetic. The obvious float
+    // version (pos = writePos - delay; while (pos < 0) pos += size; i0 = (int) pos)
+    // is wrong: for pos a few float ulps below zero, pos + size rounds to exactly
+    // `size`, and i0 then points one element past the buffer - a rare,
+    // modulation-dependent out-of-bounds read that was heard as an occasional pop.
+    struct FractionalIndex
+    {
+        int i0 = 0, i1 = 0;   // older and newer neighbour, both in [0, size)
+        float frac = 0.0f;    // weight of i0 (0 = exactly at i1)
+    };
+
+    // `newest` = index of the most recently written sample; `delay` >= 0 samples behind it
+    inline FractionalIndex fractionalIndex (int newest, float delay, int size) noexcept
+    {
+        FractionalIndex r;
+        if (size <= 1)
+            return r;
+        const float d = std::isfinite (delay) ? juce::jlimit (0.0f, (float) (size - 2), delay) : 0.0f;
+        const int whole = (int) d;
+        r.frac = d - (float) whole;
+        int i1 = (newest - whole) % size;
+        if (i1 < 0)
+            i1 += size;
+        r.i1 = i1;
+        r.i0 = i1 == 0 ? size - 1 : i1 - 1;
+        return r;
+    }
+
+    // Linear interpolation `delay` samples behind the newest sample
+    inline float readFractional (const std::vector<float>& buffer, int newest, float delay) noexcept
+    {
+        const auto f = fractionalIndex (newest, delay, (int) buffer.size());
+        const float a = buffer[(size_t) f.i1], b = buffer[(size_t) f.i0];
+        return a + f.frac * (b - a);
+    }
+
     // Fixed integer delay used to time-align dry paths with latent processing.
     class IntegerDelay
     {

@@ -45,16 +45,11 @@ namespace velvox::dsp
             }
 
             // Linear interpolated read, `delay` samples behind the last write
+            // (integer-safe wrap, see fractionalIndex)
             float read (float delay) const noexcept
             {
-                const int sz = (int) buffer.size();
-                float pos = (float) writePos - 1.0f - delay;
-                while (pos < 0.0f)
-                    pos += (float) sz;
-                const int i0 = (int) pos;
-                const float frac = pos - (float) i0;
-                const int i1 = i0 + 1 >= sz ? 0 : i0 + 1;
-                return buffer[(size_t) i0] + frac * (buffer[(size_t) i1] - buffer[(size_t) i0]);
+                const int newest = writePos == 0 ? (int) buffer.size() - 1 : writePos - 1;
+                return readFractional (buffer, newest, delay);
             }
         };
 

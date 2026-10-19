@@ -4,6 +4,7 @@
 #include "UI/UserSettings.h"
 #include "AutoMix/AutoMixEngine.h"
 #include "SyntheticVocal.h"
+#include "PopScan.h"
 
 struct StdoutLogger final : juce::Logger
 {
@@ -253,6 +254,17 @@ int main (int argc, char* argv[])
         std::printf ("processor %d, chain %d, automix %d, capture %d, editor %d\n", (int) sizeof (VelvoxAudioProcessor),
                      (int) sizeof (velvox::dsp::VocalChain), (int) sizeof (velvox::automix::AutoMixController),
                      (int) sizeof (velvox::automix::CaptureBuffer), (int) sizeof (VelvoxAudioProcessorEditor));
+        return 0;
+    }
+
+    // VelvoxTests --popscan <silence|floor|tone|vocal> <automix 0/1> <editor 0/1> <seconds> <sampleRate> <realtime 0/1>
+    if (argc >= 8 && juce::String (argv[1]) == "--popscan")
+    {
+        const auto r = velvox::test::runPopScan (argv[2], juce::String (argv[3]).getIntValue() != 0, juce::String (argv[4]).getIntValue() != 0,
+                                                 juce::String (argv[5]).getDoubleValue(), juce::String (argv[6]).getDoubleValue(),
+                                                 juce::String (argv[7]).getIntValue() != 0);
+        std::printf ("popscan %s: %d events during silence (max %.1f dBFS), %d discontinuities\n%s\n", argv[2], r.silentEvents,
+                     r.maxSilentDb, r.discontinuities, r.log.joinIntoString ("\n").toRawUTF8());
         return 0;
     }
 
