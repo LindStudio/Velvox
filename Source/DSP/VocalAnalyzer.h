@@ -7,17 +7,29 @@
 
 namespace velvox::dsp
 {
-    // One detected issue. Only produced when the measurement supports it;
-    // `sure` findings passed a strict threshold, `possible` ones a softer one.
+    // One diagnosis. Only produced when the measurement supports it:
+    //  - certainty `sure`     = likely problem (a strict threshold was passed)
+    //  - certainty `possible` = uncertain observation (softer threshold; may be intended)
+    // Every finding names its evidence (the measurement), why it matters musically, a
+    // suggestion, and a confidence. The confidence is a documented heuristic, not a
+    // probability: how far the measurement lies beyond its threshold, scaled down when
+    // little material was analysed. Sample-accurate level facts (clipping) are ~0.99.
     struct Finding
     {
         enum class Certainty { sure, possible };
         Certainty certainty = Certainty::possible;
-        juce::String title;          // short statement
-        juce::String detail;         // what was measured
-        juce::String advice;         // what to do, naming the Headliner module
+        juce::String title;          // the issue
+        juce::String detail;         // evidence: what was measured
+        juce::String advice;         // suggested correction, naming the Headliner module
         std::optional<ModuleId> module;
         float severity = 0.0f;       // for sorting (larger = more important)
+        juce::String why;            // why it matters musically
+        float confidence = 0.5f;     // 0..1 (see above)
+
+        // Filled in by the processor from the chain around VOCAL CHECK
+        enum class Handling { notHandled, handledLater, appliedBefore, autoMix };
+        Handling handling = Handling::notHandled;
+        juce::String handlingText;   // e.g. "De-esser is on after this point"
     };
 
     struct AnalysisResult
@@ -35,6 +47,8 @@ namespace velvox::dsp
         float correlation = 1.0f;
         bool stereo = false;
         float sibilanceVsVowelDb = -100.0f;
+        float noiseFloorDb = -200.0f;     // median level of the pauses (only with enough pause frames)
+        float snrDb = 0.0f;               // loud voice level above the noise floor
         std::array<float, 6> bandDb {};   // rumble, body, mid, presence, sibilance, air (relative to mid)
         std::vector<float> spectrumDb;    // 1/12 octave average spectrum (voice frames), for the UI
         float spectrumLowHz = 40.0f;      // first band centre

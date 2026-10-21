@@ -56,10 +56,13 @@ public:
     // Automatic mix: capture during playback, analysis, plan, apply (see AutoMix/)
     velvox::automix::AutoMixController& getAutoMix() noexcept { return autoMix; }
 
-    // A/B comparison (message thread only)
+    // A/B comparison (message thread only): two complete states - every parameter and the
+    // chain with its instances. An empty slot starts as a copy of the active one.
     int getActiveSlot() const noexcept { return activeSlot; }
     void selectSlot (int slot);
     void copyActiveSlotToOther();
+    bool isSlotFilled (int slot) const noexcept { return slotValid[(size_t) juce::jlimit (0, 1, slot)]; }
+    bool slotsAreEqual();   // the other slot sounds like the current state (or is empty)
 
     // Module instances in the chain, order, send-insert modes. setRouting is
     // message-thread only; the audio thread reads a lock-free copy (SeqLockValue).
@@ -100,7 +103,9 @@ public:
     void pumpAnalyzer();
     // Latest findings (recomputed about twice a second while the module is on)
     const velvox::dsp::AnalysisResult& getLatestAnalysis() const noexcept { return latestAnalysis; }
-    void refreshAnalysis() { latestAnalysis = analyzer.analyse(); lastAnalysisMs = juce::Time::getMillisecondCounterHiRes(); }
+    void refreshAnalysis();
+    // True when that module instance is in the chain and audible with the current settings
+    bool isInstanceAudible (velvox::dsp::ModuleId id, int instance) const;
 
 private:
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;

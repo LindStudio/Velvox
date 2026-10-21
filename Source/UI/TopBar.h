@@ -67,6 +67,7 @@ namespace velvox::ui
         juce::TextButton presetButton, prev { juce::String::fromUTF8 ("\xe2\x80\xb9") }, next { juce::String::fromUTF8 ("\xe2\x80\xba") },
                          save { "Save" }, remove { "Delete" };
         juce::TextButton slotA { "A" }, slotB { "B" }, copy { "Copy A to B" };
+        int abCheckCounter = 0;
         juce::TextButton beginner { "Auto Mix" }, pro { "Module" }, analyse { "Analysieren" };
         bool proMode = false;
         Toggle bypass;

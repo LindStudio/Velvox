@@ -202,6 +202,29 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     };
     pump (40);
 
+    // "check": VOCAL CHECK in the chain after a problematic take (rumble, resonance, noise, big level range)
+    if (overlay == "check")
+    {
+        proc.getState().getParameter ("checkOn")->setValueNotifyingHost (1.0f);
+        test::VocalSpec s;
+        s.seconds = 14.0;
+        s.channels = 2;
+        s.rumbleDb = -26.0f;
+        s.resonanceHz = 3150.0f;
+        s.resonanceDb = 16.0f;
+        s.noiseDb = -46.0f;
+        s.phraseRangeDb = 18.0f;
+        const auto v = test::makeVocal (s);
+        for (int start = 0; start + 512 <= v.numSamples(); start += 512)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                buffer.copyFrom (ch, 0, v.vocal[(size_t) ch].data() + start, 512);
+            proc.processBlock (buffer, midi);
+            proc.pumpAnalyzer();
+        }
+        proc.refreshAnalysis();
+        proc.getState().state.setProperty ("uiSelection", (int) velvox::dsp::ModuleId::check, nullptr);
+    }
     if (overlay == "bypass")
         proc.getState().getParameter ("bypass")->setValueNotifyingHost (1.0f);
     if (overlay.startsWith ("hide:"))

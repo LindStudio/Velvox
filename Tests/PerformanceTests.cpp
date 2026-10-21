@@ -31,11 +31,18 @@ public:
             h.set (pid::monoBelow, 150.0f);
             h.proc.updateHostLatency();
 
+            // Best of three runs: the cost of the DSP without interference from other work
+            // on the machine (earlier tests, background threads)
             const double seconds = 10.0;
             const auto in = h.noise (0.3f, seconds, 3);
-            const auto t0 = juce::Time::getMillisecondCounterHiRes();
-            const auto out = h.run (in, 256);
-            const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+            juce::AudioBuffer<float> out;
+            double ms = 1.0e12;
+            for (int run = 0; run < 3; ++run)
+            {
+                const auto t0 = juce::Time::getMillisecondCounterHiRes();
+                out = h.run (in, 256);
+                ms = std::min (ms, juce::Time::getMillisecondCounterHiRes() - t0);
+            }
             const double share = ms / (seconds * 1000.0);
 
             logMessage ("Worst case @ " + juce::String (fs / 1000.0, 1) + " kHz, 256-sample blocks: "

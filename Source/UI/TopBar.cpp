@@ -281,12 +281,23 @@ namespace velvox::ui
             }
         }
 
-        if (proc.getActiveSlot() != shownSlot)
+        // A/B: the active slot is lit; the copy button also says whether A and B differ
+        // (checked a few times per second - it compares every parameter and the chain)
+        if (++abCheckCounter >= 12 || proc.getActiveSlot() != shownSlot)
         {
+            abCheckCounter = 0;
             shownSlot = proc.getActiveSlot();
             slotA.setToggleState (shownSlot == 0, juce::dontSendNotification);
             slotB.setToggleState (shownSlot == 1, juce::dontSendNotification);
-            copy.setButtonText (shownSlot == 0 ? "Copy A to B" : "Copy B to A");
+            const bool equal = proc.slotsAreEqual();
+            const juce::String text = equal ? "A = B" : (shownSlot == 0 ? "Copy A to B" : "Copy B to A");
+            if (copy.getButtonText() != text)
+            {
+                copy.setButtonText (text);
+                copy.setTooltip (equal ? "A and B are identical. Change something to compare two versions - or click to copy anyway."
+                                       : juce::String ("A and B differ. Click to copy the active slot (") + (shownSlot == 0 ? "A" : "B")
+                                             + ") to the other one.");
+            }
         }
     }
 

@@ -37,6 +37,18 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
     for (auto& id : structureParams)
         apvts.addParameterListener (id, this);
     analyzerTimer.startTimerHz (15);
+
+    // The automatic mix compares through the A/B slots: A = before, B = the mix
+    autoMix.onMixApplied = [this] (const ParameterSnapshot& before, const ParameterSnapshot& mix)
+    {
+        slots = { before, mix };
+        slots[0].name = "A";
+        slots[1].name = "B";
+        slotValid = { true, true };
+        activeSlot = 1;
+    };
+    autoMix.selectCompare = [this] (bool previous) { selectSlot (previous ? 0 : 1); };
+    autoMix.isComparePrevious = [this] { return activeSlot == 0; };
 }
 
 VelvoxAudioProcessor::~VelvoxAudioProcessor()
@@ -114,6 +126,74 @@ void VelvoxAudioProcessor::pumpAnalyzer()
         analyzer.pump();
         if (juce::Time::getMillisecondCounterHiRes() - lastAnalysisMs > 500.0)
             refreshAnalysis();
+    }
+}
+
+bool VelvoxAudioProcessor::isInstanceAudible (dsp::ModuleId id, int k) const
+{
+    using M = dsp::ModuleId;
+    if (! getRouting().contains (id, k))
+        return false;
+    const auto e = readEffectiveSettings();
+    const auto b = e.instance (k);
+    switch (id)
+    {
+        case M::eq:      return b.eqOn && b.eqMix > 0.0f;
+        case M::comp:    return b.compOn && b.compMix > 0.0f;
+        case M::deess:   return b.deessOn;
+        case M::sat:     return b.sat.enabled && b.sat.mix > 0.0f;
+        case M::doubler: return b.doubler.enabled && b.doubler.mix > 0.0f;
+        case M::delay:   return b.delayOn && b.delayMix > 0.0f;
+        case M::reverb:  return b.reverbOn && b.reverbMix > 0.0f;
+        case M::smash:   return b.smash.enabled;
+        case M::choir:   return b.choir.enabled;
+        case M::smooth:  return b.smooth.enabled;
+        case M::ride:    return b.ride.enabled;
+        case M::pitch:   return e.pitch.enabled;
+        case M::chop:    return e.chop.enabled;
+        case M::pulse:   return e.pulse.enabled;
+        case M::check:   return e.checkOn;
+    }
+    return false;
+}
+
+void VelvoxAudioProcessor::refreshAnalysis()
+{
+    latestAnalysis = analyzer.analyse();
+    lastAnalysisMs = juce::Time::getMillisecondCounterHiRes();
+
+    // Does the chain already take care of a finding? VOCAL CHECK measures at its own
+    // place: an active module after it works on the problem, one before it is already
+    // part of the measurement (and may need more), the auto mix may have set it up.
+    const auto routing = getRouting();
+    const int checkAt = routing.indexOf (dsp::ModuleId::check);
+    const auto& report = autoMix.getReport();
+    for (auto& f : latestAnalysis.findings)
+    {
+        if (! f.module.has_value())
+            continue;
+        const auto m = *f.module;
+        const juce::String name (dsp::moduleDisplayName (m));
+        for (int i = 0; i < routing.size(); ++i)
+        {
+            const auto& slot = routing[i];
+            if (slot.id != m || ! isInstanceAudible (m, slot.instance))
+                continue;
+            const bool after = checkAt < 0 || i > checkAt;
+            if (after)
+            {
+                f.handling = dsp::Finding::Handling::handledLater;
+                f.handlingText = name + " is on after VOCAL CHECK - it already works on this (not visible in this measurement).";
+                break;
+            }
+            f.handling = dsp::Finding::Handling::appliedBefore;
+            f.handlingText = name + " is on before VOCAL CHECK - this is measured after it, so it may need more.";
+        }
+        if (f.handling == dsp::Finding::Handling::notHandled && report.valid && report.changedModules.contains (dsp::moduleKey (m)))
+        {
+            f.handling = dsp::Finding::Handling::autoMix;
+            f.handlingText = "The automatic mix set up " + name + ".";
+        }
     }
 }
 
@@ -453,14 +533,26 @@ void VelvoxAudioProcessor::selectSlot (int slot)
     if (slot == activeSlot)
         return;
 
-    // Store what we are leaving, then recall the target (or keep current if empty)
+    // Store what we are leaving, then recall the target. An empty target starts as an
+    // explicit copy of the current state.
     slots[(size_t) activeSlot] = ParameterSnapshot::capture (apvts, "AB");
     slotValid[(size_t) activeSlot] = true;
 
     if (slotValid[(size_t) slot])
         slots[(size_t) slot].applyTo (apvts, true);
+    else
+    {
+        slots[(size_t) slot] = slots[(size_t) activeSlot];
+        slotValid[(size_t) slot] = true;
+    }
 
     activeSlot = slot;
+}
+
+bool VelvoxAudioProcessor::slotsAreEqual()
+{
+    const int other = 1 - activeSlot;
+    return ! slotValid[(size_t) other] || ! slots[(size_t) other].differsFrom (apvts);
 }
 
 void VelvoxAudioProcessor::copyActiveSlotToOther()

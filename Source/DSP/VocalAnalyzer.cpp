@@ -166,24 +166,40 @@ namespace velvox::dsp
         r.analysedSeconds = (float) (frames.size() * hop / fs);
 
         using C = Finding::Certainty;
-        const auto add = [&r] (C c, juce::String title, juce::String detail, juce::String advice,
-                               std::optional<ModuleId> module, float severity)
+        // Material factor: little voice material lowers every spectral / dynamic confidence
+        float material = 1.0f;
+        const auto add = [&r, &material] (C c, juce::String title, juce::String detail, juce::String advice,
+                                          std::optional<ModuleId> module, float severity, juce::String why, float margin01)
         {
-            r.findings.push_back ({ c, std::move (title), std::move (detail), std::move (advice), module, severity });
+            Finding f;
+            f.certainty = c;
+            f.title = std::move (title);
+            f.detail = std::move (detail);
+            f.advice = std::move (advice);
+            f.module = module;
+            f.severity = severity;
+            f.why = std::move (why);
+            // 0.5 at the threshold, up to 0.95 when the measurement is far beyond it
+            f.confidence = juce::jlimit (0.05f, 0.99f, (0.5f + 0.45f * juce::jlimit (0.0f, 1.0f, margin01)) * material);
+            r.findings.push_back (std::move (f));
         };
+        // How far `v` lies beyond `threshold`, relative to `span` (0..1)
+        const auto beyond = [] (float v, float threshold, float span) { return juce::jlimit (0.0f, 1.0f, (v - threshold) / span); };
 
         // ---- Level problems: measured sample-accurately in the audio thread
         if (r.clipEvents > 0)
             add (C::sure, "Clipping detected",
                  juce::String (r.clipEvents) + " run(s) of samples at full scale reached this point of the chain.",
                  "Lower the gain before this point (Input gain or the module that boosts), or keep Clip guard on.",
-                 std::nullopt, 100.0f);
+                 std::nullopt, 100.0f, "Clipped samples are distortion that no later module can remove - it sounds crunchy and harsh.", 1.2f);
         else if (r.peakDb > -0.3f)
-            add (C::sure, "Peaks hit the ceiling", "Highest peak: " + db (r.peakDb) + " dBFS - no headroom left.",
-                 "Reduce the level before this point; a few dB of headroom keep the vocal clean.", std::nullopt, 60.0f);
+            add (C::sure, "Peaks hit the ceiling", "Highest peak: " + juce::String (r.peakDb, 1) + " dBFS - no headroom left.",
+                 "Reduce the level before this point; a few dB of headroom keep the vocal clean.", std::nullopt, 60.0f,
+                 "Without headroom any boost later in the chain or on the master clips.", 1.0f);
         else if (r.peakDb > -1.0f)
-            add (C::possible, "Very little headroom", "Highest peak: " + db (r.peakDb) + " dBFS.",
-                 "Leave about 1-3 dB of headroom before the output stage.", std::nullopt, 20.0f);
+            add (C::possible, "Very little headroom", "Highest peak: " + juce::String (r.peakDb, 1) + " dBFS.",
+                 "Leave about 1-3 dB of headroom before the output stage.", std::nullopt, 20.0f,
+                 "It works, but there is no safety margin for louder takes or later boosts.", 0.3f);
 
         if (frames.empty())
             return r;
@@ -205,6 +221,29 @@ namespace velvox::dsp
         }
         r.voicedSeconds = (float) (voicedCount * hop / fs);
         r.enoughMaterial = r.voicedSeconds >= minVoicedSeconds;
+        material = juce::jlimit (0.6f, 1.0f, 0.6f + 0.4f * (r.voicedSeconds - minVoicedSeconds) / 11.0f);
+
+        // Noise floor: frames at least 25 dB below the loud parts of the voice are pauses
+        // (breaths, gaps between phrases). With less than 1 s of them nothing is claimed;
+        // digital silence does not count.
+        {
+            std::vector<float> audible;
+            for (auto& f : frames)
+                if (f.rmsDb > -110.0f)
+                    audible.push_back (f.rmsDb);
+            if (! audible.empty())
+            {
+                std::vector<float> pauses;
+                for (float l : audible)
+                    if (l < loud - 25.0f)
+                        pauses.push_back (l);
+                if ((float) pauses.size() * hop / fs >= 1.0f)
+                {
+                    r.noiseFloorDb = percentile (pauses, 0.5f);
+                    r.snrDb = loud - r.noiseFloorDb;
+                }
+            }
+        }
 
         // ---- Long-term spectrum of the voice
         std::array<double, numBands> avg {};
@@ -244,34 +283,44 @@ namespace velvox::dsp
         if (presence > -2.0f)
             add (C::sure, "Upper mids are aggressive",
                  "The 2-5 kHz range is " + db (presence) + " against the core of the voice (usually about -10 to -5 dB).",
-                 "SMOOTH can tame it dynamically; or pull the EQ mid / high band down around 3 kHz.", ModuleId::smooth, 40.0f + presence);
+                 "SMOOTH can tame it dynamically; or pull the EQ mid / high band down around 3 kHz.", ModuleId::smooth, 40.0f + presence,
+                 "The ear is most sensitive at 2-5 kHz: too much there sounds piercing and tiring at club volume. A bright lead can be intended - judge by ear.",
+                 beyond (presence, -2.0f, 6.0f));
         else if (presence > -5.0f)
             add (C::possible, "Upper mids may sound harsh",
                  "The 2-5 kHz range is " + db (presence) + " against the core of the voice.",
-                 "Listen for harshness; if so, try SMOOTH or a gentle EQ cut around 3 kHz.", ModuleId::smooth, 15.0f + presence);
+                 "Listen for harshness; if so, try SMOOTH or a gentle EQ cut around 3 kHz.", ModuleId::smooth, 15.0f + presence,
+                 "Slightly forward upper mids help a vocal cut through a dense EDM mix; they only become a problem if it sounds harsh.",
+                 beyond (presence, -5.0f, 3.0f));
 
         const float top = toDb (ePres + eSib + eAir) - midDb;
         if (top < -20.0f)
             add (C::sure, "The vocal sounds dull",
                  "Everything above 2 kHz is " + db (top) + " against the core of the voice - very little presence and air.",
-                 "Raise the EQ high band (shelf around 8-10 kHz) or use the Presence macro.", ModuleId::eq, 30.0f - top * 0.5f);
+                 "Raise the EQ high band (shelf around 8-10 kHz) or use the Presence macro.", ModuleId::eq, 30.0f - top * 0.5f,
+                 "Consonants and air carry intelligibility; a dull vocal sinks behind synths and hats.", beyond (-top, 20.0f, 8.0f));
         else if (top < -16.0f)
             add (C::possible, "The vocal may lack presence",
                  "Everything above 2 kHz is " + db (top) + " against the core of the voice.",
-                 "A small high-shelf boost or the Presence macro can open it up.", ModuleId::eq, 10.0f - top * 0.3f);
+                 "A small high-shelf boost or the Presence macro can open it up.", ModuleId::eq, 10.0f - top * 0.3f,
+                 "A darker vocal can be a style choice; in a bright EDM mix it may need a little more top to stay clear.", beyond (-top, 16.0f, 4.0f));
 
         if (r.bandDb[0] > -10.0f)
             add (C::sure, "Too much low end / rumble",
                  "Below 100 Hz is " + db (r.bandDb[0]) + " against the core of the voice - a vocal rarely needs that.",
-                 "Switch on the EQ low cut (about 80-120 Hz).", ModuleId::eq, 35.0f + r.bandDb[0]);
+                 "Switch on the EQ low cut (about 80-120 Hz).", ModuleId::eq, 35.0f + r.bandDb[0],
+                 "Rumble and handling noise fill the low end that belongs to kick and bass, and make compressors pump.", beyond (r.bandDb[0], -10.0f, 8.0f));
         else if (r.bandDb[0] > -16.0f)
             add (C::possible, "Noticeable low end below 100 Hz",
                  "Below 100 Hz is " + db (r.bandDb[0]) + " against the core of the voice.",
-                 "Check the EQ low cut - it often cleans up the mix.", ModuleId::eq, 12.0f + r.bandDb[0] * 0.5f);
+                 "Check the EQ low cut - it often cleans up the mix.", ModuleId::eq, 12.0f + r.bandDb[0] * 0.5f,
+                 "Deep voices have real energy here; only cut what does not belong to the voice.", beyond (r.bandDb[0], -16.0f, 6.0f));
         if (r.bandDb[1] < -18.0f)
             add (C::possible, "The vocal may sound thin",
                  "100-300 Hz is " + db (r.bandDb[1]) + " against the core of the voice.",
-                 "Less low cut or a little low shelf / the Warmth macro add body.", ModuleId::eq, 8.0f);
+                 "Less low cut or a little low shelf / the Warmth macro add body.", ModuleId::eq, 8.0f,
+                 "The 100-300 Hz range gives a vocal weight and warmth; without it the voice can sound small. Thin can also be intended (telephone, lo-fi).",
+                 beyond (-r.bandDb[1], 18.0f, 8.0f));
 
         // ---- Sibilance: level of S-frames against vowel frames
         std::vector<float> sibLevels, vowelLevels;
@@ -295,11 +344,13 @@ namespace velvox::dsp
             if (diff > -3.0f)
                 add (C::sure, "S sounds stick out clearly",
                      "S / T sounds are " + db (diff) + " against the vowels (natural is about -10 to -6 dB).",
-                     "Switch on the DE-ESSER and lower its threshold carefully.", ModuleId::deess, 45.0f + diff);
+                     "Switch on the DE-ESSER and lower its threshold carefully.", ModuleId::deess, 45.0f + diff,
+                     "Loud S / T sounds hurt at high volume and get even sharper with compression, saturation and reverb.", beyond (diff, -3.0f, 6.0f));
             else if (diff > -6.0f)
                 add (C::possible, "S sounds are quite present",
                      "S / T sounds are " + db (diff) + " against the vowels.",
-                     "A little more DE-ESSER range may help - listen on headphones.", ModuleId::deess, 18.0f + diff);
+                     "A little more DE-ESSER range may help - listen on headphones.", ModuleId::deess, 18.0f + diff,
+                     "Clear consonants help the words; they only need control if they start to hiss.", beyond (diff, -6.0f, 3.0f));
         }
 
         // ---- Resonances: narrow peaks of the long-term spectrum over their octave
@@ -337,7 +388,10 @@ namespace velvox::dsp
                      juce::String (sure ? "Strong" : "Possible") + " resonance in the " + region,
                      "Narrow peak around " + hz (f) + ", " + db (peaks[i].excess) + " above its surroundings.",
                      "SMOOTH reduces it only when it rings; or cut with the EQ mid band at " + hz (f) + ".",
-                     ModuleId::smooth, (sure ? 30.0f : 12.0f) + peaks[i].excess);
+                     ModuleId::smooth, (sure ? 30.0f : 12.0f) + peaks[i].excess,
+                     "A narrow peak rings on every word that hits it (room, mic or voice) - it sounds " + region.fromFirstOccurrenceOf ("(", false, false).upToFirstOccurrenceOf (")", false, false)
+                         + " and draws attention away from the performance.",
+                     beyond (peaks[i].excess, 8.0f, 8.0f));
             }
         }
 
@@ -370,15 +424,19 @@ namespace velvox::dsp
                 if (lra > 16.0f)
                     add (C::sure, "Very large level differences",
                          "Loud and quiet passages are " + juce::String (lra, 1) + " dB apart (10th to 95th percentile).",
-                         "LEVEL RIDE evens out words and phrases without squashing them.", ModuleId::ride, 30.0f + lra);
+                         "LEVEL RIDE evens out words and phrases without squashing them.", ModuleId::ride, 30.0f + lra,
+                         "Quiet words disappear behind the beat, loud ones jump out; a compressor alone would have to work too hard.", beyond (lra, 16.0f, 8.0f));
                 else if (lra > 12.0f)
                     add (C::possible, "Noticeable level differences",
                          "Loud and quiet passages are " + juce::String (lra, 1) + " dB apart.",
-                         "LEVEL RIDE (moderate Amount) keeps the vocal steadier in the mix.", ModuleId::ride, 10.0f + lra);
+                         "LEVEL RIDE (moderate Amount) keeps the vocal steadier in the mix.", ModuleId::ride, 10.0f + lra,
+                         "Some movement is musical; in a loud EDM mix a steadier vocal stays on top.", beyond (lra, 12.0f, 4.0f));
                 else if (lra < 3.0f && r.crestDb < 8.0f)
                     add (C::possible, "Possibly over-compressed",
                          "Only " + juce::String (lra, 1) + " dB level range and " + juce::String (r.crestDb, 1) + " dB crest factor left.",
-                         "If it sounds flat, reduce Compressor ratio or VOCAL SMASH blend.", ModuleId::comp, 9.0f);
+                         "If it sounds flat, reduce Compressor ratio or VOCAL SMASH blend.", ModuleId::comp, 9.0f,
+                         "Already very even material: more compression adds pumping and breath noise, not loudness. Heavy density can be intended.",
+                         beyond (3.0f - lra, 0.0f, 3.0f));
             }
         }
 
@@ -399,11 +457,13 @@ namespace velvox::dsp
                 if (r.correlation < 0.0f)
                     add (C::sure, "Mono compatibility problem",
                          "Left / right correlation is " + juce::String (r.correlation, 2) + " - parts of the vocal cancel in mono.",
-                         "Reduce Width, CHOIR width or raise the Doubler's Mono safe.", ModuleId::choir, 50.0f);
+                         "Reduce Width, CHOIR width or raise the Doubler's Mono safe.", ModuleId::choir, 50.0f,
+                         "Club systems and phones are often mono: a vocal with negative correlation loses level or tone there.", beyond (-r.correlation, 0.0f, 0.3f));
                 else if (r.correlation < 0.3f)
                     add (C::possible, "Weak mono compatibility",
                          "Left / right correlation is " + juce::String (r.correlation, 2) + ".",
-                         "Check with Mono; narrow the widest module if the vocal loses level.", ModuleId::choir, 14.0f);
+                         "Check with Mono; narrow the widest module if the vocal loses level.", ModuleId::choir, 14.0f,
+                         "Wide vocals sound big on headphones but can thin out in mono.", beyond (0.3f - r.correlation, 0.0f, 0.3f));
             }
         }
 
@@ -439,8 +499,24 @@ namespace velvox::dsp
                 if (decay > 0.9f)
                     add (C::possible, "The vocal may sound washed out",
                          "After words the sound takes about " + juce::String (decay, 1) + " s to fade by 30 dB - long effect tails.",
-                         "Lower Reverb / Delay mix or add ducking so the words stay clear.", ModuleId::reverb, 8.0f + decay);
+                         "Lower Reverb / Delay mix or add ducking so the words stay clear.", ModuleId::reverb, 8.0f + decay,
+                         "Long effect tails between words blur the next syllables. Big spaces can be intended - ducking keeps both.", beyond (decay, 0.9f, 1.5f));
             }
+        }
+
+        // ---- Background noise in the pauses (only with enough pause material)
+        if (r.noiseFloorDb > -199.0f)
+        {
+            if (r.snrDb < 30.0f)
+                add (r.snrDb < 22.0f ? C::sure : C::possible,
+                     r.snrDb < 22.0f ? "Noisy recording" : "Audible background noise in the pauses",
+                     "The pauses sit at " + juce::String (r.noiseFloorDb, 1) + " dBFS, only " + juce::String (r.snrDb, 1)
+                         + " dB below the loud parts of the voice (clean studio takes: more than 40 dB).",
+                     "Compression and LEVEL RIDE bring the noise up; keep RIDE's 'Ignore below' above the noise and use gentle compression.",
+                     ModuleId::ride, 20.0f + (30.0f - r.snrDb),
+                     "Noise, room or bleed between the words is lifted by every dynamics module and gets louder in the final mix. "
+                     "The analysis of tone is also less reliable on noisy material.",
+                     beyond (30.0f - r.snrDb, 0.0f, 12.0f));
         }
 
         std::stable_sort (r.findings.begin(), r.findings.end(), [] (const Finding& a, const Finding& b)

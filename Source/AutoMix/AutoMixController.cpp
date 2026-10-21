@@ -291,6 +291,8 @@ namespace velvox::automix
         apvts.state.setProperty (statekeys::routing, result.plan.routing.toString(), nullptr);
 
         mixSnapshot = ParameterSnapshot::capture (apvts, de ("Headliner Auto-Mix"));
+        if (onMixApplied)
+            onMixApplied (previousSnapshot, mixSnapshot);
 
         // Report for the UI (only what was really set up)
         MixReport r;
@@ -324,6 +326,15 @@ namespace velvox::automix
 
     void AutoMixController::showPrevious (bool previous)
     {
+        if (selectCompare)
+        {
+            if (! hasPreviousSnapshot || ! hasMix())
+                return;
+            selectCompare (previous);
+            showingPrevious = previous;
+            sendChangeMessage();
+            return;
+        }
         if (! hasPreviousSnapshot || ! hasMix() || previous == showingPrevious)
             return;
         if (previous)
