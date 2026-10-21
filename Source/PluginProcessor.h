@@ -5,6 +5,7 @@
 #include "DSP/VocalChain.h"
 #include "DSP/Macros.h"
 #include "DSP/VocalAnalyzer.h"
+#include "DSP/SeqLockValue.h"
 #include "Parameters/ParameterLayout.h"
 #include "Parameters/SettingsReader.h"
 #include "Presets/PresetManager.h"
@@ -60,8 +61,8 @@ public:
     void selectSlot (int slot);
     void copyActiveSlotToOther();
 
-    // Module order / send-insert modes. setRouting is message-thread only;
-    // the audio thread reads a packed atomic copy.
+    // Module instances in the chain, order, send-insert modes. setRouting is
+    // message-thread only; the audio thread reads a lock-free copy (SeqLockValue).
     velvox::dsp::Routing getRouting() const noexcept;
     void setRouting (const velvox::dsp::Routing& routing);
 
@@ -109,6 +110,10 @@ private:
     // Latency follows the pitch module (on/off, quality); reported on the message thread
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
+    // A module instance switched on (automation, macro, preset) that is not in the chain
+    // joins it at its usual place - removing a module must never silence automation
+    void insertEngagedInstances();
+    juce::StringArray structureParams;   // on-switches and macros watched for that
 public:
     // Recomputes the latency for the current parameters and reports it to the host
     void updateHostLatency();
@@ -151,7 +156,8 @@ private:
         VelvoxAudioProcessor& owner;
     } analyzerTimer { *this };
 
-    std::atomic<std::uint64_t> routingPacked { velvox::dsp::Routing::defaults().pack() };
+    velvox::dsp::SeqLockValue<velvox::dsp::Routing> routingShared { velvox::dsp::Routing::defaults() };
+    velvox::dsp::Routing audioRouting = velvox::dsp::Routing::defaults();   // audio thread's last good copy
 
     // A/B slots hold full parameter snapshots
     std::array<velvox::ParameterSnapshot, 2> slots;

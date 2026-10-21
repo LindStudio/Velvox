@@ -1,14 +1,82 @@
 #include "ParameterLayout.h"
 #include "../DSP/ChopModule.h"
 #include "../DSP/PulseModule.h"
+#include "../DSP/Instances.h"
+#include <deque>
+#include <unordered_map>
 
 namespace velvox
 {
     using T = ParameterSpec::Type;
 
+    std::optional<dsp::ModuleId> moduleOfParameter (const ParameterSpec& s)
+    {
+        using M = dsp::ModuleId;
+        const juce::String module (s.module), id (s.id);
+        if (module == "EQ")         return M::eq;
+        if (module == "Compressor") return M::comp;
+        if (module == "De-Esser")   return M::deess;
+        if (module == "Saturation") return M::sat;
+        if (module == "Delay")      return M::delay;
+        if (module == "Reverb")     return M::reverb;
+        if (module == "Doubler")    return M::doubler;
+        if (module == "Smash")      return M::smash;
+        if (module == "Choir")      return M::choir;
+        if (module == "Smooth")     return M::smooth;
+        if (module == "Ride")       return M::ride;
+        if (module == "Pitch")      return M::pitch;
+        if (module == "Chop")       return M::chop;
+        if (module == "Pulse")      return M::pulse;
+        if (module == "Check")      return M::check;
+        if (module == "Ducking")
+        {
+            if (id.startsWith ("delayDuck"))  return M::delay;
+            if (id.startsWith ("reverbDuck")) return M::reverb;
+        }
+        return std::nullopt;
+    }
+
+    namespace
+    {
+        // Parameters of instances 2..n, generated from the instance-1 table
+        void appendInstanceBanks (std::vector<ParameterSpec>& specs)
+        {
+            static std::deque<std::string> strings;   // stable storage for generated IDs / names
+            const auto keep = [] (const juce::String& t) { strings.push_back (t.toStdString()); return strings.back().c_str(); };
+
+            const auto base = specs;   // instance-1 table
+            for (int instance = 1; instance <= dsp::maxExtraInstances; ++instance)
+                for (const auto& spec : base)
+                {
+                    const auto module = moduleOfParameter (spec);
+                    if (! module.has_value() || instance >= dsp::maxInstances (*module))
+                        continue;
+
+                    // "Comp Threshold" -> "Compressor 2: Threshold"
+                    juce::String name (spec.name);
+                    for (auto* prefix : { "EQ ", "Comp ", "De-Ess ", "Sat ", "Delay ", "Reverb ", "Doubler ", "Smash ", "Choir ", "Smooth ", "Ride " })
+                        if (name.startsWith (prefix))
+                        {
+                            name = name.substring ((int) std::strlen (prefix));
+                            break;
+                        }
+
+                    ParameterSpec copy = spec;
+                    copy.id = keep (dsp::instanceParamId (spec.id, instance));
+                    copy.name = keep (dsp::instanceDisplayName (*module, instance) + ": " + name);
+                    // A new EQ instance starts neutral: no low cut
+                    if (juce::String (spec.id) == pid::hpfOn)
+                        copy.defaultValue = 0.0f;
+                    specs.push_back (copy);
+                }
+        }
+    }
+
     const std::vector<ParameterSpec>& getParameterSpecs()
     {
-        static const std::vector<ParameterSpec> specs
+        static const std::vector<ParameterSpec> specs = []
+        {
+            std::vector<ParameterSpec> table
         {
             // ---------------- Global ----------------
             { pid::inputGain,  "Input Gain",  "Global", T::Float, -24.0f, 24.0f, 0.0f, 0.0f, "dB", {}, "Gain applied before the processing chain." },
@@ -271,16 +339,24 @@ namespace velvox
             { pid::delayMod,       "Delay Modulation","Delay", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Slow wow and flutter on the repeats, like a tape echo." },
         };
+            appendInstanceBanks (table);
+            return table;
+        }();
 
         return specs;
     }
 
     const ParameterSpec* findParameterSpec (const juce::String& id)
     {
-        for (auto& s : getParameterSpecs())
-            if (id == s.id)
-                return &s;
-        return nullptr;
+        static const auto index = []
+        {
+            std::unordered_map<std::string, const ParameterSpec*> m;
+            for (auto& s : getParameterSpecs())
+                m[s.id] = &s;
+            return m;
+        }();
+        const auto it = index.find (id.toStdString());
+        return it != index.end() ? it->second : nullptr;
     }
 
     namespace delaydiv
@@ -306,7 +382,8 @@ namespace velvox
     {
         const juce::String unit (spec.unit);
 
-        if ((juce::String (spec.id) == pid::monoBelow || juce::String (spec.id) == pid::compScHpf) && value <= 20.5f)
+        const auto baseId = dsp::splitInstanceParamId (spec.id).first;
+        if ((baseId == pid::monoBelow || baseId == pid::compScHpf) && value <= 20.5f)
             return "Off";
 
         if (unit == "Hz")
@@ -375,7 +452,7 @@ namespace velvox
 
                 case T::Choice:
                 {
-                    const auto choices = juce::String (s.id) == pid::delayDivision ? delaydiv::names() : s.choices;
+                    const auto choices = dsp::splitInstanceParamId (s.id).first == pid::delayDivision ? delaydiv::names() : s.choices;
                     layout.add (std::make_unique<juce::AudioParameterChoice> (id, s.name, choices, (int) s.defaultValue));
                     break;
                 }
@@ -407,7 +484,7 @@ namespace velvox
 
             if (s.type == T::Choice)
             {
-                const auto choices = juce::String (s.id) == pid::delayDivision ? delaydiv::names() : s.choices;
+                const auto choices = dsp::splitInstanceParamId (s.id).first == pid::delayDivision ? delaydiv::names() : s.choices;
                 juce::Array<juce::var> c;
                 for (auto& ch : choices)
                     c.add (ch);

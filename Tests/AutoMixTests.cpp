@@ -358,7 +358,7 @@ public:
             }
             for (auto* id : { pid::pitchOn, pid::chopOn, pid::pulseOn, pid::choirOn, pid::macroPresence, pid::macroSpace })
                 expectEquals (plan.get (id, -1.0f), 0.0f, id);
-            expect (plan.routing.isValidPermutation());
+            expect (plan.routing.isValid());
 
             // Every decision belongs to a module the plan really switches on
             const auto active = plan.activeModules();
@@ -532,7 +532,7 @@ public:
             expect (am.getReport().steps.size() > 0 && am.getReport().steps[0].title.startsWith ("Low Cut"), "low cut decided by the analysis");
             expect (h.get (pid::hpfOn) > 0.5f, "low cut on");
             expect (h.get (pid::levelMatchMode) > 0.5f, "fair compare enabled");
-            expect (h.proc.getRouting().isValidPermutation());
+            expect (h.proc.getRouting().isValid());
 
             // Compare with the previous state (real parameter switch) and back
             const float mixHpf = h.get (pid::hpfFreq);

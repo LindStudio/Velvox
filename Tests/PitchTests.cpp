@@ -126,7 +126,7 @@ public:
             Harness h;
             pitchOnly (h, 0.0f);
             const int reported = h.proc.getLatencySamples();
-            const int expected = h.proc.getChain().getLatencyFor (true);
+            const int expected = h.proc.getChain().getLatencyFor (h.proc.getRouting(), true);
             expectEquals (reported, expected);
 
             // Aperiodic input: a periodic tone would make the correlation ambiguous
@@ -194,7 +194,7 @@ public:
             h.set (pid::pitchOn, 0.0f);
             juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
             logMessage ("Latency: pitch off " + juce::String (base) + ", pitch on " + juce::String (withPitch) + " samples");
-            expectEquals (base, 3);
+            expectEquals (base, 0);   // nothing latent in the default chain
             expectGreaterThan (withPitch, base);
             expectEquals (h.proc.getLatencySamples(), base);
         }

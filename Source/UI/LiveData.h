@@ -33,6 +33,9 @@ namespace velvox::ui
         static constexpr int scopeSize = 1024;
         std::array<float, scopeSize> scopeL {}, scopeR {};
 
+        // Activity of every module instance (0..1: gain reduction, ducking, movement) for the chain cards
+        std::array<std::array<float, dsp::maxExtraInstances + 1>, dsp::numModules> activity {};
+
         dsp::ChainSettings settings;   // effective (macros applied)
         double time = 0.0;             // seconds, for idle animations
         double sampleRate = 48000.0;

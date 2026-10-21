@@ -44,7 +44,7 @@ namespace
 class UxTests final : public juce::UnitTest
 {
 public:
-    UxTests() : juce::UnitTest ("Velvox UX: help, tutorial, organisation", "Velvox") {}
+    UxTests() : juce::UnitTest ("Headliner UX: help, tutorial, organisation", "Headliner") {}
 
     void runTest() override
     {
@@ -155,6 +155,14 @@ public:
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = asVelvox (*e);
 
+            // Every module in the chain (a fresh chain has only a few)
+            for (int id = 0; id < dsp::numModules; ++id)
+                if (! h.proc.getRouting().contains ((ModuleId) id))
+                {
+                    auto r = h.proc.getRouting();
+                    r.insertDefault ((ModuleId) id, 0);
+                    h.proc.setRouting (r);
+                }
             for (int id = -1; id < dsp::numModules; ++id)
             {
                 ed.selectModule (id);
@@ -188,10 +196,10 @@ public:
             const auto before = h.proc.readSettings();
             expect (! ed.isProMode());
 
-            ed.getChainView().onSelect ((int) ModuleId::smash);
+            ed.getChainView().onSelect ((int) ModuleId::deess);
             expect (ed.isProMode());
             expect (ed.getDetail() != nullptr);
-            expectEquals (ed.getChainView().getSelected(), (int) ModuleId::smash);
+            expectEquals (ed.getChainView().getSelected(), (int) ModuleId::deess);
 
             // Switching views never changes a parameter
             const auto after = h.proc.readSettings();
@@ -199,90 +207,26 @@ public:
             expectEquals (after.comp.ratio, before.comp.ratio);
         }
 
-        beginTest ("Hiding modules is view only: same routing, same sound, saved with the project");
-        {
-            Harness a, b;
-            for (auto* hh : { &a, &b })
-            {
-                hh->set (pid::satOn, 1.0f);
-                hh->set (pid::satDrive, 12.0f);
-            }
-
-            ui::ChainView view (b.proc);
-            view.setBounds (0, 0, 1408, ui::ChainView::preferredHeight);
-            const auto routingBefore = b.proc.getRouting();
-            view.setHidden (ModuleId::sat, true);      // on and processing
-            view.setHidden (ModuleId::pitch, true);    // off
-            expect (view.isHidden (ModuleId::sat));
-            expectEquals (view.getNumHidden(), 2);
-            expect (view.getTileBounds (ModuleId::sat).isEmpty(), "hidden tile is not drawn");
-            expect (b.proc.getRouting() == routingBefore, "hiding never changes the order");
-
-            const auto input = a.noise (0.3f, 0.5, 9);
-            const auto outA = a.run (input);
-            const auto outB = b.run (input);
-            float maxDiff = 0.0f;
-            for (int ch = 0; ch < outA.getNumChannels(); ++ch)
-                for (int i = 0; i < outA.getNumSamples(); ++i)
-                    maxDiff = std::max (maxDiff, std::abs (outA.getSample (ch, i) - outB.getSample (ch, i)));
-            expectEquals (maxDiff, 0.0f, "identical output with hidden modules");
-
-            juce::MemoryBlock state;
-            b.proc.getStateInformation (state);
-            Harness c;
-            c.proc.setStateInformation (state.getData(), (int) state.getSize());
-            ui::ChainView restored (c.proc);
-            expect (restored.isHidden (ModuleId::sat) && restored.isHidden (ModuleId::pitch), "hidden modules restored with the project");
-            expect (! restored.isHidden (ModuleId::eq));
-
-            view.showAllModules();
-            expectEquals (view.getNumHidden(), 0);
-        }
-
-        beginTest ("Drag and drop with hidden modules lands where the marker shows");
-        {
-            Harness h;
-            ui::ChainView view (h.proc);
-            view.setBounds (0, 0, 1408, ui::ChainView::preferredHeight);
-            view.setHidden (ModuleId::ride, true);   // between EQ and Comp by default
-
-            const auto sat = view.getTileBounds (ModuleId::sat);
-            const auto comp = view.getTileBounds (ModuleId::comp);
-            const juce::Point<float> from = sat.getCentre(), to { comp.getX() + 4.0f, comp.getCentreY() };
-            view.mouseDown (mouseAt (view, from, from, false));
-            view.mouseDrag (mouseAt (view, (from + to) * 0.5f, from, true));
-            view.mouseDrag (mouseAt (view, to, from, true));
-            view.mouseUp (mouseAt (view, to, from, true));
-
-            const auto r = h.proc.getRouting();
-            expectEquals (r.positionOf (ModuleId::sat) + 1, r.positionOf (ModuleId::comp), "saturation directly before the compressor");
-            expect (r.positionOf (ModuleId::eq) < r.positionOf (ModuleId::sat));
-            expect (r.isValidPermutation());
-        }
-
-        beginTest ("Default order and personal layouts");
+        beginTest ("Chain menu: usual order and personal default chains (with repeated instances)");
         {
             Harness h;
             ui::ChainView view (h.proc);
             view.setBounds (0, 0, 1408, ui::ChainView::preferredHeight);
 
-            auto r = h.proc.getRouting();
-            r.move (ModuleId::reverb, 0);
-            r.reverbInsert = true;
-            r.move (ModuleId::sat, 1);
+            auto r = dsp::Routing::fromString ("v2,deess,eq#2,comp,eq,reverb:insert,delay:send");
             h.proc.setRouting (r);
-            view.setHidden (ModuleId::chop, true);
             view.saveLayoutAsDefault();
 
-            view.restoreDefaultOrder();
-            expect (h.proc.getRouting().order == dsp::Routing::defaults().order, "factory order back");
-            expect (h.proc.getRouting().reverbInsert, "send / insert mode kept");
+            view.restoreDefaultChain();
+            expectEquals (h.proc.getRouting().toString(), juce::String ("v2,eq#2,eq,comp,deess,delay:send,reverb:insert"),
+                          "sorted into the usual order, instances of a module together, modes kept");
+            expect (view.undo(), "sorting can be undone");
+            expect (h.proc.getRouting() == r);
 
             Harness other;
             ui::ChainView otherView (other.proc);
             expect (otherView.loadDefaultLayout());
-            expect (other.proc.getRouting() == r, "personal layout applied");
-            expect (otherView.isHidden (ModuleId::chop));
+            expect (other.proc.getRouting() == r, "personal default chain applied: " + other.proc.getRouting().toString());
         }
 
         beginTest ("Preset field knows when a preset was edited");
@@ -306,7 +250,7 @@ public:
             expect (! pm.isCurrentPresetModified(), "reloaded");
 
             auto r = h.proc.getRouting();
-            r.move (ModuleId::sat, 0);
+            r.moveTo (ModuleId::deess, 0, 0);
             h.proc.setRouting (r);
             expect (pm.isCurrentPresetModified(), "module order changed");
 

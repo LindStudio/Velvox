@@ -67,11 +67,13 @@ set(VELVOX_SOURCES
     Source/UI/Spectrum.cpp
     Source/UI/ModuleViews.cpp
     Source/UI/ChainView.cpp
+    Source/UI/ModuleBrowser.cpp
     Source/UI/DetailPanels.cpp
     Source/UI/AutoMixView.cpp
     Source/UI/AnalysisOverlay.cpp
     Source/UI/TopBar.cpp
     Source/Parameters/SettingsReader.cpp
+    Source/Parameters/RoutingMigration.cpp
     Source/AutoMix/CaptureBuffer.cpp
     Source/AutoMix/VocalProfiler.cpp
     Source/AutoMix/AutoMixPlanner.cpp

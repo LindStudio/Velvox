@@ -4,9 +4,23 @@ namespace velvox
 {
     void SettingsReader::bind (const Lookup& lookup)
     {
-        const auto bind = [&lookup] (Raw& r, const char* id)
+        bindParams (raw, lookup, 0);
+        for (int k = 1; k <= dsp::maxExtraInstances; ++k)
+            bindParams (extraRaw[(size_t) k - 1], lookup, k);
+    }
+
+    // Binds every field. For instance k >= 1 the module parameters use their bank IDs
+    // ("lowGain_2"); fields without a bank (global, output, macros, single-instance
+    // modules) fall back to the instance-1 parameter and are never used from that bank.
+    void SettingsReader::bindParams (Params& raw, const Lookup& lookup, int instance)
+    {
+        const auto bind = [&lookup, instance] (Raw& r, const char* id)
         {
-            r.p = lookup (id);
+            r.p = nullptr;
+            if (instance > 0)
+                r.p = lookup (dsp::instanceParamId (id, instance).toRawUTF8());
+            if (r.p == nullptr)
+                r.p = lookup (id);
             jassert (r.p != nullptr);
         };
 
@@ -107,7 +121,17 @@ namespace velvox
     bind (raw.delayDiffusion, pid::delayDiffusion); bind (raw.delayMod, pid::delayMod);
     }
 
-    dsp::ChainSettings SettingsReader::read (std::uint64_t routingPacked, bool monoMonitor) const noexcept
+    dsp::ChainSettings SettingsReader::read (const dsp::Routing& routing, bool monoMonitor) const noexcept
+    {
+        auto s = readParams (raw);
+        s.routing = routing;
+        s.monoMonitor = monoMonitor;
+        for (int k = 1; k <= dsp::maxExtraInstances; ++k)
+            s.extra[(size_t) k - 1] = readParams (extraRaw[(size_t) k - 1]).instance0();
+        return s;
+    }
+
+    dsp::ChainSettings SettingsReader::readParams (const Params& raw) noexcept
     {
     dsp::ChainSettings s;
 
@@ -179,7 +203,6 @@ namespace velvox
     s.reverb.highCutHz = raw.reverbHighCut.get();
 
     s.delayIntoReverb = raw.delayToReverb.get() * 0.01f;
-    s.routing = dsp::Routing::unpack (routingPacked);
 
     s.stereo.width = raw.stereoWidth.get() * 0.01f;
     s.stereo.monoBelowHz = raw.monoBelow.get();
@@ -188,7 +211,6 @@ namespace velvox
     static constexpr float windows[] { 0.4f, 3.0f, 10.0f };
     s.levelMatchWindowSeconds = windows[juce::jlimit (0, 2, raw.levelMatchWindow.index())];
     s.levelMatchRangeDb = raw.levelMatchRange.get();
-    s.monoMonitor = monoMonitor;
 
     s.doubler.enabled = raw.doublerOn.on();
     s.doubler.mix = raw.doublerMix.get() * 0.01f;

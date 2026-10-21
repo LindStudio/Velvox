@@ -1,4 +1,5 @@
 #include "ModulePresets.h"
+#include "../DSP/Instances.h"
 #include "../Parameters/ParameterIDs.h"
 
 namespace velvox
@@ -130,11 +131,14 @@ namespace velvox
         }
     }
 
-    void applyModulePreset (const ModulePreset& preset, juce::AudioProcessorValueTreeState& apvts)
+    void applyModulePreset (const ModulePreset& preset, juce::AudioProcessorValueTreeState& apvts, int instance)
     {
         for (const auto& [id, value] : preset.values)
         {
-            if (auto* p = apvts.getParameter (id))
+            auto* p = apvts.getParameter (dsp::instanceParamId (id, instance));
+            if (p == nullptr)
+                p = apvts.getParameter (id);   // a parameter without a bank (global)
+            if (p != nullptr)
             {
                 const float normalised = p->convertTo0to1 (p->getNormalisableRange().snapToLegalValue (value));
                 p->beginChangeGesture();

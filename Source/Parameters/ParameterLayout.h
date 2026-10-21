@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ParameterIDs.h"
+#include "../DSP/Routing.h"
+#include <optional>
 
 namespace velvox
 {
@@ -26,8 +28,13 @@ namespace velvox
         float interval = 0.0f;    // > 0: values snap to this step (e.g. 1 semitone)
     };
 
+    // Every parameter: the original table (instance 1 of every module), followed by the
+    // generated banks of instances 2..n (see DSP/Instances.h)
     const std::vector<ParameterSpec>& getParameterSpecs();
     const ParameterSpec* findParameterSpec (const juce::String& id);
+
+    // Module a parameter belongs to (nullopt for global / output / macro parameters)
+    std::optional<dsp::ModuleId> moduleOfParameter (const ParameterSpec& spec);
 
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 

@@ -11,12 +11,13 @@ namespace velvox::ui
     // The visual stage at the top of every Pro panel: each module has its own
     // live picture (EQ curve with draggable bands, compressor history and
     // transfer curve, echo taps, reverb tail, stereo field ...).
-    class ModuleView : public juce::Component
+    class ModuleView : public juce::Component, public juce::SettableTooltipClient
     {
     public:
         // Once per frame while the panel is visible
         virtual void update (const LiveData&) = 0;
     };
 
-    std::unique_ptr<ModuleView> createModuleView (VelvoxAudioProcessor& p, int moduleIdOrOutput, const SpectrumSource* spectrum);
+    // `selection` = dsp::selectionCode (module, instance), or < 0 for the output stage
+    std::unique_ptr<ModuleView> createModuleView (VelvoxAudioProcessor& p, int selection, const SpectrumSource* spectrum);
 }

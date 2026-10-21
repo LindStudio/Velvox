@@ -188,7 +188,7 @@ public:
             h.set (pid::reverbDuckAmount, 12.0f);
             h.set (pid::reverbDuckThreshold, -40.0f);
             auto r = dsp::Routing::defaults();
-            r.reverbInsert = true;
+            r.setInsert (dsp::ModuleId::reverb, 0, true);
             h.proc.setRouting (r);
             const auto out = h.run (burstThenSilence (1.0, 1.5, 0.3f, 13));
             expect (allFinite (out));

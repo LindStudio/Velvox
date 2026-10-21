@@ -19,6 +19,56 @@ namespace velvox::dsp
             module.process (io, numChannels, numSamples);
             gate.mix (io, numChannels, numSamples);
         }
+
+        template <typename Array>
+        void prepareAll (Array& modules, double sampleRate, int bs)
+        {
+            for (auto& m : modules)
+                m.prepare (sampleRate, bs);
+        }
+
+        template <typename Array>
+        void resetAll (Array& modules)
+        {
+            for (auto& m : modules)
+                m.reset();
+        }
+    }
+
+    InstanceSettings ChainSettings::instance0() const noexcept
+    {
+        InstanceSettings b;
+        b.eqOn = eqOn;          b.eqMix = eqMix;        b.eq = eq;
+        b.compOn = compOn;      b.compMix = compMix;    b.comp = comp;
+        b.deessOn = deessOn;    b.deess = deess;
+        b.sat = sat;
+        b.doubler = doubler;
+        b.delayOn = delayOn;    b.delayMix = delayMix;  b.delay = delay;
+        b.delaySync = delaySync; b.delayDivision = delayDivision; b.delayTimeMs = delayTimeMs;
+        b.reverbOn = reverbOn;  b.reverbMix = reverbMix; b.reverb = reverb;
+        b.delayDuck = delayDuck; b.reverbDuck = reverbDuck;
+        b.smash = smash;
+        b.choir = choir;
+        b.smooth = smooth;
+        b.ride = ride;
+        return b;
+    }
+
+    void ChainSettings::setInstance0 (const InstanceSettings& b) noexcept
+    {
+        eqOn = b.eqOn;          eqMix = b.eqMix;        eq = b.eq;
+        compOn = b.compOn;      compMix = b.compMix;    comp = b.comp;
+        deessOn = b.deessOn;    deess = b.deess;
+        sat = b.sat;
+        doubler = b.doubler;
+        delayOn = b.delayOn;    delayMix = b.delayMix;  delay = b.delay;
+        delaySync = b.delaySync; delayDivision = b.delayDivision; delayTimeMs = b.delayTimeMs;
+        reverbOn = b.reverbOn;  reverbMix = b.reverbMix; reverb = b.reverb;
+        delayDuck = b.delayDuck; reverbDuck = b.reverbDuck;
+        smash = b.smash;
+        choir = b.choir;
+        smooth = b.smooth;
+        ride = b.ride;
     }
 
     float VocalChain::safetyClip (float x) noexcept
@@ -40,34 +90,48 @@ namespace velvox::dsp
 
         work.setSize (maxChannels, bs, false, true, false);
         dryForBypass.setSize (maxChannels, bs, false, true, false);
-        delayWet.setSize (maxChannels, bs, false, true, false);
-        reverbWet.setSize (maxChannels, bs, false, true, false);
         reverbIn.setSize (maxChannels, bs, false, true, false);
+        for (auto& b : delayWet)
+            b.setSize (maxChannels, bs, false, true, false);
+        for (auto& b : reverbWet)
+            b.setSize (maxChannels, bs, false, true, false);
 
-        eq.prepare (sampleRate, bs);
-        compressor.prepare (sampleRate, bs);
-        deesser.prepare (sampleRate, bs);
-        saturation.prepare (sampleRate, bs);
-        delay.prepare (sampleRate, bs);
-        reverb.prepare (sampleRate, bs);
-        doubler.prepare (sampleRate, bs);
-        delayDucker.prepare (sampleRate);
-        reverbDucker.prepare (sampleRate);
-        delayDuckGains.assign ((size_t) bs, 1.0f);
-        reverbDuckGains.assign ((size_t) bs, 1.0f);
+        prepareAll (eq, sampleRate, bs);
+        prepareAll (comp, sampleRate, bs);
+        prepareAll (deess, sampleRate, bs);
+        prepareAll (saturation, sampleRate, bs);
+        prepareAll (delay, sampleRate, bs);
+        prepareAll (reverb, sampleRate, bs);
+        prepareAll (doubler, sampleRate, bs);
+        prepareAll (smash, sampleRate, bs);
+        prepareAll (choir, sampleRate, bs);
+        prepareAll (smooth, sampleRate, bs);
+        prepareAll (ride, sampleRate, bs);
+        for (auto& d : delayDucker)
+            d.prepare (sampleRate);
+        for (auto& d : reverbDucker)
+            d.prepare (sampleRate);
+        for (auto& g : delayDuckGains)
+            g.assign ((size_t) bs, 1.0f);
+        for (auto& g : reverbDuckGains)
+            g.assign ((size_t) bs, 1.0f);
 
-        eqGate.prepare (sampleRate, bs);
-        compGate.prepare (sampleRate, bs);
-        deessGate.prepare (sampleRate, bs);
+        for (auto& g : eqGate)
+            g.prepare (sampleRate, bs);
+        for (auto& g : compGate)
+            g.prepare (sampleRate, bs);
+        for (auto& g : deessGate)
+            g.prepare (sampleRate, bs);
 
         pitch.prepare (sampleRate, bs);
         chop.prepare (sampleRate, bs);
         pulse.prepare (sampleRate, bs);
-        smash.prepare (sampleRate, bs);
-        choir.prepare (sampleRate, bs);
-        smooth.prepare (sampleRate, bs);
-        ride.prepare (sampleRate, bs);
-        bypassDelay.prepare (std::max (1, getLatencyFor (true)));
+
+        // Room for the largest possible latency: every saturation instance plus pitch
+        int maxLatency = pitch.getLatencySamples();
+        for (auto& sat : saturation)
+            maxLatency += sat.getLatencySamples();
+        bypassDelay.prepare (std::max (1, maxLatency));
         bypassDelay.setDelay (getLatencySamples());
 
         stereo.prepare (sampleRate, bs);
@@ -80,7 +144,11 @@ namespace velvox::dsp
             s->setCurrentAndTargetValue (1.0f);
         }
 
-        for (auto* s : { &delayReturn, &reverbReturn, &wetAmount, &delayIntoReverb })
+        for (auto& s : delayReturn)
+            s.reset (sampleRate, 0.03);
+        for (auto& s : reverbReturn)
+            s.reset (sampleRate, 0.03);
+        for (auto* s : { &wetAmount, &delayIntoReverb })
             s->reset (sampleRate, 0.03);
         inputGain.reset (sampleRate, 0.03);
         outputGain.reset (sampleRate, 0.03);
@@ -98,26 +166,108 @@ namespace velvox::dsp
 
     void VocalChain::reset()
     {
-        eq.reset();
-        compressor.reset();
-        deesser.reset();
-        saturation.reset();
-        delay.reset();
-        reverb.reset();
-        doubler.reset();
+        resetAll (eq);
+        resetAll (comp);
+        resetAll (deess);
+        resetAll (saturation);
+        resetAll (delay);
+        resetAll (reverb);
+        resetAll (doubler);
         chop.reset();
         pulse.reset();
-        smash.reset();
-        choir.reset();
-        smooth.reset();
-        ride.reset();
-        delayDucker.reset();
-        reverbDucker.reset();
+        resetAll (smash);
+        resetAll (choir);
+        resetAll (smooth);
+        resetAll (ride);
+        resetAll (delayDucker);
+        resetAll (reverbDucker);
         bypassDelay.reset();
         stereo.reset();
         matcher.reset();
         correlation.reset();
         outputLoudness.reset();
+    }
+
+    void VocalChain::resetInstance (const ChainSlot& slot) noexcept
+    {
+        const int k = slot.instance;
+        switch (slot.id)
+        {
+            case ModuleId::eq:      eq[(size_t) k].reset(); break;
+            case ModuleId::comp:    comp[(size_t) k].reset(); break;
+            case ModuleId::deess:   deess[(size_t) k].reset(); break;
+            case ModuleId::sat:     saturation[(size_t) k].reset(); break;
+            case ModuleId::doubler: doubler[(size_t) k].reset(); break;
+            case ModuleId::delay:   delay[(size_t) k].reset(); delayDucker[(size_t) k].reset(); break;
+            case ModuleId::reverb:  reverb[(size_t) k].reset(); reverbDucker[(size_t) k].reset(); break;
+            case ModuleId::smash:   smash[(size_t) k].reset(); break;
+            case ModuleId::choir:   choir[(size_t) k].reset(); break;
+            case ModuleId::smooth:  smooth[(size_t) k].reset(); break;
+            case ModuleId::ride:    ride[(size_t) k].reset(); break;
+            case ModuleId::chop:    chop.reset(); break;
+            case ModuleId::pulse:   pulse.reset(); break;
+            case ModuleId::pitch:
+            case ModuleId::check:   break;
+        }
+    }
+
+    void VocalChain::applyInstance (int k, const InstanceSettings& b, const ChainSettings& s) noexcept
+    {
+        const auto at = [k] (ModuleId id) { return k < maxInstances (id); };
+
+        if (at (ModuleId::eq))
+        {
+            eq[(size_t) k].setSettings (b.eq);
+            eqGate[(size_t) k].setTargets (b.eqOn, b.eqMix);
+        }
+        if (at (ModuleId::comp))
+        {
+            comp[(size_t) k].setSettings (b.comp);
+            compGate[(size_t) k].setTargets (b.compOn, b.compMix);
+        }
+        if (at (ModuleId::deess))
+        {
+            deess[(size_t) k].setSettings (b.deess);
+            // Listen mode must output the band alone, so it forces 100 % wet
+            deessGate[(size_t) k].setTargets (b.deessOn, 1.0f);
+        }
+        if (at (ModuleId::sat))      saturation[(size_t) k].setSettings (b.sat);
+        if (at (ModuleId::doubler))  doubler[(size_t) k].setSettings (b.doubler);
+        if (at (ModuleId::smash))    smash[(size_t) k].setSettings (b.smash);
+        if (at (ModuleId::choir))    choir[(size_t) k].setSettings (b.choir);
+        if (at (ModuleId::smooth))   smooth[(size_t) k].setSettings (b.smooth);
+        if (at (ModuleId::ride))     ride[(size_t) k].setSettings (b.ride);
+
+        if (at (ModuleId::delay))
+        {
+            delayDucker[(size_t) k].setSettings (b.delayDuck);
+            auto delaySettings = b.delay;
+            delaySettings.timeMs = b.delayTimeMs;
+            bool synced = false;
+            if (b.delaySync)
+            {
+                const float t = DelayModule::timeForTempo (s.hostBpm, b.delayDivision);
+                if (t > 0.0f)
+                {
+                    delaySettings.timeMs = t;
+                    synced = true;
+                }
+            }
+            if (k == 0)
+            {
+                meters.tempoSynced.store (synced, std::memory_order_relaxed);
+                meters.effectiveDelayMs.store (delaySettings.timeMs, std::memory_order_relaxed);
+            }
+            delay[(size_t) k].setSettings (delaySettings);
+            delayReturn[(size_t) k].setTargetValue (b.delayOn ? juce::jlimit (0.0f, 1.0f, b.delayMix) : 0.0f);
+        }
+
+        if (at (ModuleId::reverb))
+        {
+            reverbDucker[(size_t) k].setSettings (b.reverbDuck);
+            reverb[(size_t) k].setSettings (b.reverb);
+            reverbReturn[(size_t) k].setTargetValue (b.reverbOn ? juce::jlimit (0.0f, 1.0f, b.reverbMix) : 0.0f);
+        }
     }
 
     void VocalChain::applySettings (const ChainSettings& s) noexcept
@@ -126,61 +276,26 @@ namespace velvox::dsp
         outputGain.setTargetValue (dbToGain (s.outputGainDb));
         wetAmount.setTargetValue (s.bypass ? 0.0f : 1.0f);
 
-        eq.setSettings (s.eq);
-        eqGate.setTargets (s.eqOn, s.eqMix);
+        applyInstance (0, s.instance0(), s);
+        for (int k = 1; k <= maxExtraInstances; ++k)
+            applyInstance (k, s.extra[(size_t) k - 1], s);
 
-        compressor.setSettings (s.comp);
-        compGate.setTargets (s.compOn, s.compMix);
-
-        deesser.setSettings (s.deess);
-        // Listen mode must output the band alone, so it forces 100 % wet
-        deessGate.setTargets (s.deessOn, 1.0f);
-
-        saturation.setSettings (s.sat);
-        doubler.setSettings (s.doubler);
         pitch.setSettings (s.pitch);
         chop.setSettings (s.chop);
         chop.setTransport (s.hostBpm, s.hostPpq, s.hostPlaying);
         pulse.setSettings (s.pulse);
         pulse.setTransport (s.hostBpm, s.hostPpq, s.hostPlaying);
-        smash.setSettings (s.smash);
-        choir.setSettings (s.choir);
-        smooth.setSettings (s.smooth);
         check.setEnabled (s.checkOn);
-        ride.setSettings (s.ride);
-        pendingPitchOn = s.pitch.enabled;
-        delayDucker.setSettings (s.delayDuck);
-        reverbDucker.setSettings (s.reverbDuck);
-
-        auto delaySettings = s.delay;
-        delaySettings.timeMs = s.delayTimeMs;
-        bool synced = false;
-
-        if (s.delaySync)
-        {
-            const float t = DelayModule::timeForTempo (s.hostBpm, s.delayDivision);
-            if (t > 0.0f)
-            {
-                delaySettings.timeMs = t;
-                synced = true;
-            }
-        }
-
-        meters.tempoSynced.store (synced, std::memory_order_relaxed);
-        meters.effectiveDelayMs.store (delaySettings.timeMs, std::memory_order_relaxed);
-        delay.setSettings (delaySettings);
-        delayReturn.setTargetValue (s.delayOn ? juce::jlimit (0.0f, 1.0f, s.delayMix) : 0.0f);
-
-        reverb.setSettings (s.reverb);
-        reverbReturn.setTargetValue (s.reverbOn ? juce::jlimit (0.0f, 1.0f, s.reverbMix) : 0.0f);
         delayIntoReverb.setTargetValue (juce::jlimit (0.0f, 1.0f, s.delayIntoReverb));
 
         stereo.setSettings (s.stereo);
         matcher.setWindowSeconds (s.levelMatchWindowSeconds);
         matcher.setRangeDb (s.levelMatchRangeDb);
 
-        if (s.routing.isValidPermutation())
+        if (s.routing.isValid())
             pendingRouting = s.routing;
+        // The pitch shifter adds latency only while it is on AND in the chain
+        pendingPitchOn = s.pitch.enabled && pendingRouting.contains (ModuleId::pitch);
 
         if (adoptRoutingImmediately)
         {
@@ -283,9 +398,9 @@ namespace velvox::dsp
         if (structureChangePending())
             routeGain.setTargetValue (0.0f);
 
-        // 3) Serial modules in routing order
-        for (auto id : activeRouting.order)
-            processSerialModule (id, io, numChannels, n);
+        // 3) Serial module instances in routing order
+        for (const auto& slot : activeRouting)
+            processSerialModule (slot, io, numChannels, n);
 
         // 4) Parallel sends, fed from the end of the serial chain. They return
         //    wet only, so the dry signal is present exactly once.
@@ -375,30 +490,33 @@ namespace velvox::dsp
     }
 
     //==========================================================================
-    bool VocalChain::wakeIfNeeded (juce::SmoothedValue<float>& ret, bool& active, ModuleId id) noexcept
+    bool VocalChain::wakeIfNeeded (int k, bool isDelay) noexcept
     {
+        auto& ret = isDelay ? delayReturn[(size_t) k] : reverbReturn[(size_t) k];
+        bool& active = isDelay ? delayActive[(size_t) k] : reverbActive[(size_t) k];
         const bool needed = ret.getTargetValue() > 0.0f || ret.isSmoothing();
         if (needed && ! active)
         {
-            if (id == ModuleId::delay)
-                delay.reset();
+            if (isDelay)
+                delay[(size_t) k].reset();
             else
-                reverb.reset();
+                reverb[(size_t) k].reset();
         }
         active = needed;
         return needed;
     }
 
-    void VocalChain::processSerialModule (ModuleId id, float* const* io, int numChannels, int n) noexcept
+    void VocalChain::processSerialModule (const ChainSlot& slot, float* const* io, int numChannels, int n) noexcept
     {
-        switch (id)
+        const auto k = (size_t) slot.instance;
+        switch (slot.id)
         {
-            case ModuleId::eq:      runGated (eqGate, eq, io, numChannels, n); break;
-            case ModuleId::comp:    runGated (compGate, compressor, io, numChannels, n); break;
-            case ModuleId::deess:   runGated (deessGate, deesser, io, numChannels, n); break;
-            case ModuleId::sat:     saturation.process (io, numChannels, n); break; // own on/off + mix, constant latency
+            case ModuleId::eq:      runGated (eqGate[k], eq[k], io, numChannels, n); break;
+            case ModuleId::comp:    runGated (compGate[k], comp[k], io, numChannels, n); break;
+            case ModuleId::deess:   runGated (deessGate[k], deess[k], io, numChannels, n); break;
+            case ModuleId::sat:     saturation[k].process (io, numChannels, n); break; // own on/off + mix, constant latency
 
-            case ModuleId::doubler: doubler.process (io, numChannels, n); break; // own on/off, adds voices only
+            case ModuleId::doubler: doubler[k].process (io, numChannels, n); break; // own on/off, adds voices only
             case ModuleId::pitch:
                 if (activePitchOn)
                     pitch.process (io, numChannels, n);
@@ -408,36 +526,36 @@ namespace velvox::dsp
 
             // 0.3 modules: each has its own click-free on/off and does nothing at all while off
             case ModuleId::pulse:   pulse.process (io, numChannels, n); break;
-            case ModuleId::smash:   smash.process (io, numChannels, n); break;
-            case ModuleId::choir:   choir.process (io, numChannels, n); break;
-            case ModuleId::smooth:  smooth.process (io, numChannels, n); break;
+            case ModuleId::smash:   smash[k].process (io, numChannels, n); break;
+            case ModuleId::choir:   choir[k].process (io, numChannels, n); break;
+            case ModuleId::smooth:  smooth[k].process (io, numChannels, n); break;
             case ModuleId::check:   check.process (io, numChannels, n); break; // read only
-            case ModuleId::ride:    ride.process (io, numChannels, n); break;
+            case ModuleId::ride:    ride[k].process (io, numChannels, n); break;
 
             case ModuleId::delay:
             case ModuleId::reverb:
             {
-                if (! activeRouting.isInsert (id))
-                    break;
+                if (! slot.insert)
+                    break;   // send: runs in processSends
 
-                const bool isDelay = id == ModuleId::delay;
-                auto& ret = isDelay ? delayReturn : reverbReturn;
-                auto& wet = isDelay ? delayWet : reverbWet;
+                const bool isDelay = slot.id == ModuleId::delay;
+                auto& ret = isDelay ? delayReturn[k] : reverbReturn[k];
+                auto& wet = isDelay ? delayWet[k] : reverbWet[k];
 
-                if (! wakeIfNeeded (ret, isDelay ? delayActive : reverbActive, id))
+                if (! wakeIfNeeded ((int) k, isDelay))
                 {
                     ret.skip (n);
                     break;
                 }
 
                 // Ducking follows the module input (or the sidechain)
-                const float* duck = isDelay ? duckGains (delayDucker, delayDuckGains, io, numChannels, n)
-                                            : duckGains (reverbDucker, reverbDuckGains, io, numChannels, n);
+                const float* duck = isDelay ? duckGains (delayDucker[k], delayDuckGains[k], io, numChannels, n)
+                                            : duckGains (reverbDucker[k], reverbDuckGains[k], io, numChannels, n);
 
                 if (isDelay)
-                    delay.process (io, wet.getArrayOfWritePointers(), numChannels, n);
+                    delay[k].process (io, wet.getArrayOfWritePointers(), numChannels, n);
                 else
-                    reverb.process (io, wet.getArrayOfWritePointers(), numChannels, n);
+                    reverb[k].process (io, wet.getArrayOfWritePointers(), numChannels, n);
 
                 // Insert: out = in + wet * mix (same law as the send)
                 for (int i = 0; i < n; ++i)
@@ -453,67 +571,103 @@ namespace velvox::dsp
 
     void VocalChain::processSends (float* const* io, int numChannels, int n, const ChainSettings&) noexcept
     {
-        const bool delaySend = activeRouting.isSend (ModuleId::delay);
-        const bool reverbSend = activeRouting.isSend (ModuleId::reverb);
-
-        const bool delayNeeded = delaySend && wakeIfNeeded (delayReturn, delayActive, ModuleId::delay);
-        const bool reverbNeeded = reverbSend && wakeIfNeeded (reverbReturn, reverbActive, ModuleId::reverb);
-
-        // Duck gains are derived from the dry vocal at the send tap (or the sidechain)
-        const float* delayDuck = delayNeeded ? duckGains (delayDucker, delayDuckGains, io, numChannels, n) : nullptr;
-        const float* reverbDuck = reverbNeeded ? duckGains (reverbDucker, reverbDuckGains, io, numChannels, n) : nullptr;
-
-        if (delayNeeded)
-            delay.process (io, delayWet.getArrayOfWritePointers(), numChannels, n);
-
-        if (reverbNeeded)
+        // Which effect instances run as sends (and are audible)
+        std::array<bool, numDelays> delayNeeded {};
+        std::array<bool, numReverbs> reverbNeeded {};
+        std::array<bool, numDelays> delaySend {};
+        std::array<bool, numReverbs> reverbSend {};
+        for (const auto& slot : activeRouting)
         {
+            if (slot.insert)
+                continue;
+            if (slot.id == ModuleId::delay)
+                delaySend[slot.instance] = true;
+            else if (slot.id == ModuleId::reverb)
+                reverbSend[slot.instance] = true;
+        }
+
+        bool any = false;
+        std::array<const float*, numDelays> delayDuck {};
+        std::array<const float*, numReverbs> reverbDuck {};
+        for (int k = 0; k < numDelays; ++k)
+        {
+            delayNeeded[(size_t) k] = delaySend[(size_t) k] && wakeIfNeeded (k, true);
+            if (delayNeeded[(size_t) k])
+            {
+                // Duck gains are derived from the dry vocal at the send tap (or the sidechain)
+                delayDuck[(size_t) k] = duckGains (delayDucker[(size_t) k], delayDuckGains[(size_t) k], io, numChannels, n);
+                delay[(size_t) k].process (io, delayWet[(size_t) k].getArrayOfWritePointers(), numChannels, n);
+                any = true;
+            }
+        }
+
+        for (int k = 0; k < numReverbs; ++k)
+        {
+            reverbNeeded[(size_t) k] = reverbSend[(size_t) k] && wakeIfNeeded (k, false);
+            if (! reverbNeeded[(size_t) k])
+                continue;
+            any = true;
+            reverbDuck[(size_t) k] = duckGains (reverbDucker[(size_t) k], reverbDuckGains[(size_t) k], io, numChannels, n);
+
             const float* const* reverbSource = io;
 
-            // Delay -> reverb: the delay return (at its mix level) also feeds the reverb
-            const bool coupled = delayNeeded && (delayIntoReverb.getTargetValue() > 0.0f || delayIntoReverb.isSmoothing());
+            // Delay -> reverb (first instances): the delay return (at its mix level) also feeds the reverb
+            const bool coupled = k == 0 && delayNeeded[0] && (delayIntoReverb.getTargetValue() > 0.0f || delayIntoReverb.isSmoothing());
             if (coupled)
             {
-                const float delayLevel = delayReturn.getCurrentValue();
+                const float delayLevel = delayReturn[0].getCurrentValue();
                 for (int i = 0; i < n; ++i)
                 {
                     const float c = delayIntoReverb.getNextValue() * delayLevel;
                     for (int ch = 0; ch < numChannels; ++ch)
-                        reverbIn.setSample (ch, i, io[ch][i] + c * delayWet.getSample (ch, i));
+                        reverbIn.setSample (ch, i, io[ch][i] + c * delayWet[0].getSample (ch, i));
                 }
                 reverbSource = reverbIn.getArrayOfReadPointers();
             }
-            else
+            else if (k == 0)
             {
                 delayIntoReverb.skip (n);
             }
 
-            reverb.process (reverbSource, reverbWet.getArrayOfWritePointers(), numChannels, n);
+            reverb[(size_t) k].process (reverbSource, reverbWet[(size_t) k].getArrayOfWritePointers(), numChannels, n);
         }
 
-        if (delayNeeded || reverbNeeded)
+        if (any)
         {
             for (int i = 0; i < n; ++i)
             {
-                const float dg = delayNeeded ? delayReturn.getNextValue() * (delayDuck != nullptr ? delayDuck[i] : 1.0f) : 0.0f;
-                const float rg = reverbNeeded ? reverbReturn.getNextValue() * (reverbDuck != nullptr ? reverbDuck[i] : 1.0f) : 0.0f;
+                std::array<float, numDelays> dg {};
+                std::array<float, numReverbs> rg {};
+                for (int k = 0; k < numDelays; ++k)
+                    if (delayNeeded[(size_t) k])
+                        dg[(size_t) k] = delayReturn[(size_t) k].getNextValue() * (delayDuck[(size_t) k] != nullptr ? delayDuck[(size_t) k][i] : 1.0f);
+                for (int k = 0; k < numReverbs; ++k)
+                    if (reverbNeeded[(size_t) k])
+                        rg[(size_t) k] = reverbReturn[(size_t) k].getNextValue() * (reverbDuck[(size_t) k] != nullptr ? reverbDuck[(size_t) k][i] : 1.0f);
 
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
                     float add = 0.0f;
-                    if (delayNeeded)
-                        add += dg * delayWet.getSample (ch, i);
-                    if (reverbNeeded)
-                        add += rg * reverbWet.getSample (ch, i);
+                    for (int k = 0; k < numDelays; ++k)
+                        if (delayNeeded[(size_t) k])
+                            add += dg[(size_t) k] * delayWet[(size_t) k].getSample (ch, i);
+                    for (int k = 0; k < numReverbs; ++k)
+                        if (reverbNeeded[(size_t) k])
+                            add += rg[(size_t) k] * reverbWet[(size_t) k].getSample (ch, i);
                     io[ch][i] += add;
                 }
             }
         }
 
-        if (delaySend && ! delayNeeded)
-            delayReturn.skip (n);
-        if (reverbSend && ! reverbNeeded)
-            reverbReturn.skip (n);
+        // Returns that are not processed still follow their targets
+        for (int k = 0; k < numDelays; ++k)
+            if (! delayNeeded[(size_t) k] && ! activeRouting.isInsert (ModuleId::delay, k))
+                delayReturn[(size_t) k].skip (n);
+        for (int k = 0; k < numReverbs; ++k)
+            if (! reverbNeeded[(size_t) k] && ! activeRouting.isInsert (ModuleId::reverb, k))
+                reverbReturn[(size_t) k].skip (n);
+        if (! reverbNeeded[0])
+            delayIntoReverb.skip (n);
     }
 
     const float* VocalChain::duckGains (Ducker& ducker, std::vector<float>& gains, const float* const* internal,
@@ -558,20 +712,32 @@ namespace velvox::dsp
     {
         if (activeRouting != pendingRouting || activePitchOn != pendingPitchOn)
             meters.structureSwitches.fetch_add (1, std::memory_order_relaxed);
+
+        // Instances that join the chain start from a clean state (no stale tail or
+        // envelope from an earlier use)
+        for (const auto& slot : pendingRouting)
+            if (! activeRouting.contains (slot.id, slot.instance))
+                resetInstance (slot);
+
+        const int oldLatency = getLatencySamples();
         activeRouting = pendingRouting;
 
         const bool pitchChanged = pendingPitchOn != activePitchOn;
         activePitchOn = pendingPitchOn;
-        if (pitchChanged)
-        {
-            if (activePitchOn)
-                pitch.activate();
+        if (pitchChanged && activePitchOn)
+            pitch.activate();
+        if (pitchChanged || getLatencySamples() != oldLatency)
             bypassDelay.setDelay (getLatencySamples());
-        }
     }
 
-    int VocalChain::getLatencyFor (bool pitchOn) const noexcept
+    int VocalChain::getLatencyFor (const Routing& routing, bool pitchOn) const noexcept
     {
-        return saturation.getLatencySamples() + (pitchOn ? pitch.getLatencySamples() : 0);
+        int latency = 0;
+        for (const auto& slot : routing)
+            if (slot.id == ModuleId::sat)
+                latency += saturation[(size_t) slot.instance].getLatencySamples();
+        if (pitchOn && routing.contains (ModuleId::pitch))
+            latency += pitch.getLatencySamples();
+        return latency;
     }
 }

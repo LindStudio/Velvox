@@ -2,7 +2,7 @@
 
 #include "Widgets.h"
 #include "ModuleViews.h"
-#include "../DSP/Routing.h"
+#include "../DSP/Instances.h"
 
 class VelvoxAudioProcessor;
 
@@ -21,8 +21,12 @@ namespace velvox::ui
 
         void setVisual (std::unique_ptr<ModuleView> view);
         void setLiveData (const LiveData* data) { live = data; }
-        // Module identity: icon in the header and its module presets (if any)
-        void setModule (int moduleIdOrOutput);
+        // Module identity (selection code: module + instance): icon, title, module presets
+        void setModule (int selection);
+        int getInstance() const noexcept { return instance; }
+
+        // Instance the next constructed panel belongs to (set by createDetailPanel; message thread)
+        inline static int constructionInstance = 0;
 
         // Asks the editor to show another module (e.g. from a VOCAL CHECK finding)
         std::function<void (int moduleId)> onOpenModule;
@@ -33,7 +37,10 @@ namespace velvox::ui
     protected:
         virtual void layoutContent (juce::Rectangle<int> area) = 0;
 
-        // Knob bound to a parameter; shows the macro marker when relevant
+        // ID of a module parameter for this panel's instance ("lowGain" -> "lowGain_2")
+        juce::String pidFor (const char* baseId) const;
+
+        // Knob bound to a parameter (of this instance); shows the macro marker when relevant
         Knob& knob (const char* paramId, const juce::String& label);
         Toggle& toggle (const char* paramId, const juce::String& label);
         Choice& choice (const char* paramId, const juce::String& caption);
@@ -49,7 +56,8 @@ namespace velvox::ui
 
     private:
         juce::String title, subtitle;
-        const char* onParamId;
+        const int instance;
+        juce::String onParamId;   // empty: no power switch
         void showModulePresets();
 
         std::unique_ptr<PowerButton> power;

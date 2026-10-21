@@ -19,9 +19,29 @@
 #include "SmoothModule.h"
 #include "CheckModule.h"
 #include "RideModule.h"
+#include "Instances.h"
 
 namespace velvox::dsp
 {
+    // Settings of one additional instance (instance k >= 1) of every module that has
+    // repeated instances. Instance 0 lives directly in ChainSettings (the 0.1-0.3 fields).
+    struct InstanceSettings
+    {
+        bool eqOn = true;       float eqMix = 1.0f;     EqSettings eq;
+        bool compOn = true;     float compMix = 1.0f;   CompSettings comp;
+        bool deessOn = true;    DeEssSettings deess;
+        SatSettings sat;
+        DoublerSettings doubler;
+        bool delayOn = false;   float delayMix = 0.2f;  DelaySettings delay;
+        bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
+        bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
+        DuckSettings delayDuck, reverbDuck;
+        SmashSettings smash;
+        ChoirSettings choir;
+        SmoothSettings smooth;
+        RideSettings ride;
+    };
+
     // Plain value snapshot of every parameter for one processing block.
     // Filled by the processor from the APVTS atomics; no JUCE parameter types
     // leak into the DSP code, which keeps the chain testable on its own.
@@ -63,6 +83,19 @@ namespace velvox::dsp
         float levelMatchRangeDb = 12.0f;
 
         bool monoMonitor = false;   // listening aid, not a saved parameter
+
+        // Instances 2..n (extra[k - 1] = instance k); see DSP/Instances.h
+        std::array<InstanceSettings, maxExtraInstances> extra {};
+
+        // The instance-0 fields above in the per-instance layout
+        InstanceSettings instance0() const noexcept;
+        // Writes `b` into the instance-0 fields (views that show instance k reuse the instance-0 code)
+        void setInstance0 (const InstanceSettings& b) noexcept;
+        // Settings of instance k (0 = the fields above)
+        InstanceSettings instance (int k) const noexcept
+        {
+            return k <= 0 ? instance0() : extra[(size_t) juce::jlimit (0, maxExtraInstances - 1, k - 1)];
+        }
 
         double hostBpm = 0.0;   // <= 0 when unknown
         double hostPpq = -1.0;  // song position in quarter notes, < 0 when unknown
@@ -112,33 +145,39 @@ namespace velvox::dsp
                       const juce::AudioBuffer<float>* sidechain = nullptr) noexcept;
 
         // Latency of the currently active configuration
-        int getLatencySamples() const noexcept { return getLatencyFor (activePitchOn); }
-        // Latency the chain will have with the pitch module on / off (for host reporting)
-        int getLatencyFor (bool pitchOn) const noexcept;
+        int getLatencySamples() const noexcept { return getLatencyFor (activeRouting, activePitchOn); }
+        // Latency of a routing with the pitch module on / off (for host reporting):
+        // every saturation instance in the chain plus the pitch shifter while it is on
+        int getLatencyFor (const Routing& routing, bool pitchOn) const noexcept;
 
-        CompressorModule& getCompressor() noexcept { return compressor; }
-        DeEsserModule& getDeEsser() noexcept { return deesser; }
-        Ducker& getDelayDucker() noexcept { return delayDucker; }
-        Ducker& getReverbDucker() noexcept { return reverbDucker; }
+        // Module instances (instance 0 = the module of 0.1-0.3)
+        CompressorModule& getCompressor (int instance = 0) noexcept { return comp[(size_t) clampInstance (ModuleId::comp, instance)]; }
+        DeEsserModule& getDeEsser (int instance = 0) noexcept { return deess[(size_t) clampInstance (ModuleId::deess, instance)]; }
+        Ducker& getDelayDucker (int instance = 0) noexcept { return delayDucker[(size_t) clampInstance (ModuleId::delay, instance)]; }
+        Ducker& getReverbDucker (int instance = 0) noexcept { return reverbDucker[(size_t) clampInstance (ModuleId::reverb, instance)]; }
         int getChopStep() const noexcept { return chop.getDisplayStep(); }
         PulseModule& getPulse() noexcept { return pulse; }
-        SmashModule& getSmash() noexcept { return smash; }
-        ChoirModule& getChoir() noexcept { return choir; }
-        SmoothModule& getSmooth() noexcept { return smooth; }
+        SmashModule& getSmash (int instance = 0) noexcept { return smash[(size_t) clampInstance (ModuleId::smash, instance)]; }
+        ChoirModule& getChoir (int instance = 0) noexcept { return choir[(size_t) clampInstance (ModuleId::choir, instance)]; }
+        SmoothModule& getSmooth (int instance = 0) noexcept { return smooth[(size_t) clampInstance (ModuleId::smooth, instance)]; }
         CheckModule& getCheck() noexcept { return check; }
-        RideModule& getRide() noexcept { return ride; }
+        RideModule& getRide (int instance = 0) noexcept { return ride[(size_t) clampInstance (ModuleId::ride, instance)]; }
+        const Routing& getActiveRouting() const noexcept { return activeRouting; }   // audio thread / tests
         ChainMeters meters;
 
         // Exposed for tests: soft clip transfer curve
         static float safetyClip (float x) noexcept;
 
     private:
+        static int clampInstance (ModuleId id, int instance) noexcept { return juce::jlimit (0, maxInstances (id) - 1, instance); }
         void applySettings (const ChainSettings& s) noexcept;
+        void applyInstance (int k, const InstanceSettings& b, const ChainSettings& s) noexcept;
         void processChunk (float* const* io, int numChannels, int numSamples, const ChainSettings& s) noexcept;
-        void processSerialModule (ModuleId id, float* const* io, int numChannels, int n) noexcept;
+        void processSerialModule (const ChainSlot& slot, float* const* io, int numChannels, int n) noexcept;
         void processSends (float* const* io, int numChannels, int n, const ChainSettings& s) noexcept;
-        bool wakeIfNeeded (juce::SmoothedValue<float>& ret, bool& active, ModuleId id) noexcept;
+        bool wakeIfNeeded (int k, bool isDelay) noexcept;
         void applyRoutingFade (float* const* io, int numChannels, int n) noexcept;
+        void resetInstance (const ChainSlot& slot) noexcept;
         // Fills `gains` for one effect return; detector = sidechain or `internal`
         const float* duckGains (Ducker& ducker, std::vector<float>& gains, const float* const* internal,
                                 int numChannels, int n) noexcept;
@@ -146,25 +185,31 @@ namespace velvox::dsp
         double fs = 44100.0;
         bool prepared = false;
 
-        EqualizerModule eq;
-        CompressorModule compressor;
-        DeEsserModule deesser;
-        SaturationModule saturation;
-        DelayModule delay;
-        ReverbModule reverb;
-        DoublerModule doubler;
+        std::array<EqualizerModule, maxInstances (ModuleId::eq)> eq;
+        std::array<CompressorModule, maxInstances (ModuleId::comp)> comp;
+        std::array<DeEsserModule, maxInstances (ModuleId::deess)> deess;
+        std::array<SaturationModule, maxInstances (ModuleId::sat)> saturation;
+        std::array<DelayModule, maxInstances (ModuleId::delay)> delay;
+        std::array<ReverbModule, maxInstances (ModuleId::reverb)> reverb;
+        std::array<DoublerModule, maxInstances (ModuleId::doubler)> doubler;
         PitchModule pitch;
         ChopModule chop;
         PulseModule pulse;
-        SmashModule smash;
-        ChoirModule choir;
-        SmoothModule smooth;
+        std::array<SmashModule, maxInstances (ModuleId::smash)> smash;
+        std::array<ChoirModule, maxInstances (ModuleId::choir)> choir;
+        std::array<SmoothModule, maxInstances (ModuleId::smooth)> smooth;
         CheckModule check;
-        RideModule ride;
+        std::array<RideModule, maxInstances (ModuleId::ride)> ride;
 
-        ModuleGate eqGate, compGate, deessGate;
-        juce::SmoothedValue<float> delayReturn { 0.0f }, reverbReturn { 0.0f };
-        bool delayActive = false, reverbActive = false;
+        std::array<ModuleGate, maxInstances (ModuleId::eq)> eqGate;
+        std::array<ModuleGate, maxInstances (ModuleId::comp)> compGate;
+        std::array<ModuleGate, maxInstances (ModuleId::deess)> deessGate;
+
+        static constexpr int numDelays = maxInstances (ModuleId::delay), numReverbs = maxInstances (ModuleId::reverb);
+        std::array<juce::SmoothedValue<float>, numDelays> delayReturn;
+        std::array<juce::SmoothedValue<float>, numReverbs> reverbReturn;
+        std::array<bool, numDelays> delayActive {};
+        std::array<bool, numReverbs> reverbActive {};
 
         juce::SmoothedValue<float> inputGain { 1.0f }, outputGain { 1.0f }, wetAmount { 1.0f };
         juce::SmoothedValue<float> delayIntoReverb { 0.0f };
@@ -187,10 +232,14 @@ namespace velvox::dsp
         bool structureChangePending() const noexcept;
         void applyPendingStructure() noexcept;
 
-        juce::AudioBuffer<float> work, dryForBypass, delayWet, reverbWet, reverbIn;
+        juce::AudioBuffer<float> work, dryForBypass, reverbIn;
+        std::array<juce::AudioBuffer<float>, numDelays> delayWet;
+        std::array<juce::AudioBuffer<float>, numReverbs> reverbWet;
 
-        Ducker delayDucker, reverbDucker;
-        std::vector<float> delayDuckGains, reverbDuckGains;
+        std::array<Ducker, numDelays> delayDucker;
+        std::array<Ducker, numReverbs> reverbDucker;
+        std::array<std::vector<float>, numDelays> delayDuckGains;
+        std::array<std::vector<float>, numReverbs> reverbDuckGains;
         // Sidechain pointers for the chunk being processed (nullptr = internal)
         std::array<const float*, maxChannels> scChunk {};
         int scChannels = 0;

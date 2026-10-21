@@ -25,11 +25,13 @@ namespace velvox::ui
 
     //==========================================================================
     DetailPanel::DetailPanel (VelvoxAudioProcessor& p, juce::String t, juce::String s, const char* onId)
-        : proc (p), apvts (p.getState()), title (std::move (t)), subtitle (std::move (s)), onParamId (onId)
+        : proc (p), apvts (p.getState()), title (std::move (t)), subtitle (std::move (s)), instance (constructionInstance)
     {
-        if (onParamId != nullptr)
+        if (onId != nullptr)
+            onParamId = pidFor (onId);
+        if (onParamId.isNotEmpty())
         {
-            power = std::make_unique<PowerButton> (apvts, onParamId);
+            power = std::make_unique<PowerButton> (apvts, onParamId.toRawUTF8());
             addAndMakeVisible (*power);
         }
 
@@ -46,9 +48,24 @@ namespace velvox::ui
         resized();
     }
 
-    void DetailPanel::setModule (int id)
+    juce::String DetailPanel::pidFor (const char* baseId) const
     {
+        if (instance > 0)
+        {
+            const auto id = dsp::instanceParamId (baseId, instance);
+            if (apvts.getParameter (id) != nullptr)
+                return id;
+        }
+        return baseId;
+    }
+
+    void DetailPanel::setModule (int selection)
+    {
+        const int id = selection < 0 ? selection : (int) dsp::selectionModule (selection);
         moduleId = id;
+        // Several instances of this module in the chain: the title says which one
+        if (id >= 0 && (instance > 0 || proc.getRouting().countOf ((ModuleId) id) > 1))
+            title << " " << (instance + 1);
         if (id >= 0 && ! getModulePresets ((ModuleId) id).empty())
         {
             presetsButton.setTooltip ("Starting points for this module only - the rest of the chain stays as it is");
@@ -75,14 +92,16 @@ namespace velvox::ui
                                     return;
                                 const auto& list = getModulePresets ((ModuleId) safe->moduleId);
                                 if (result - 1 < (int) list.size())
-                                    applyModulePreset (list[(size_t) result - 1], safe->apvts);
+                                    applyModulePreset (list[(size_t) result - 1], safe->apvts, safe->instance);
                             });
     }
 
     Knob& DetailPanel::knob (const char* paramId, const juce::String& label)
     {
-        auto k = std::make_unique<Knob> (apvts, paramId, label);
-        if (proc.effectiveValueOf (paramId).has_value())
+        const auto mapped = pidFor (paramId);
+        auto k = std::make_unique<Knob> (apvts, mapped.toRawUTF8(), label);
+        // Macro markers belong to the first instance only (macros never move the others)
+        if (instance == 0 && proc.effectiveValueOf (paramId).has_value())
         {
             const juce::String id (paramId);
             auto* procPtr = &proc;
@@ -97,7 +116,7 @@ namespace velvox::ui
 
     Toggle& DetailPanel::toggle (const char* paramId, const juce::String& label)
     {
-        auto t = std::make_unique<Toggle> (apvts, paramId, label);
+        auto t = std::make_unique<Toggle> (apvts, pidFor (paramId).toRawUTF8(), label);
         auto& ref = *t;
         addAndMakeVisible (ref);
         owned.push_back (std::move (t));
@@ -106,7 +125,7 @@ namespace velvox::ui
 
     Choice& DetailPanel::choice (const char* paramId, const juce::String& caption)
     {
-        auto c = std::make_unique<Choice> (apvts, paramId, caption);
+        auto c = std::make_unique<Choice> (apvts, pidFor (paramId).toRawUTF8(), caption);
         auto& ref = *c;
         addAndMakeVisible (ref);
         owned.push_back (std::move (c));
@@ -136,7 +155,7 @@ namespace velvox::ui
     void DetailPanel::paint (juce::Graphics& g)
     {
         const auto r = getLocalBounds().toFloat();
-        const bool on = onParamId == nullptr || apvts.getRawParameterValue (onParamId)->load() > 0.5f;
+        const bool on = onParamId.isEmpty() || apvts.getRawParameterValue (onParamId)->load() > 0.5f;
 
         g.setColour (colours::panel);
         g.fillRoundedRectangle (r, 16.0f);
@@ -244,7 +263,7 @@ namespace velvox::ui
         if (visual != nullptr && live != nullptr)
             visual->update (*live);
 
-        const int on = onParamId == nullptr || apvts.getRawParameterValue (onParamId)->load() > 0.5f ? 1 : 0;
+        const int on = onParamId.isEmpty() || apvts.getRawParameterValue (onParamId)->load() > 0.5f ? 1 : 0;
         if (on != lastOn)
         {
             lastOn = on;
@@ -512,7 +531,10 @@ namespace velvox::ui
             void refresh() override
             {
                 DetailPanel::refresh();
-                const int latency = proc.getChain().getLatencyFor (true) - proc.getChain().getLatencyFor (false);
+                auto withPitch = proc.getRouting();
+                if (! withPitch.contains (dsp::ModuleId::pitch))
+                    withPitch.insertDefault (dsp::ModuleId::pitch, 0);
+                const int latency = proc.getChain().getLatencyFor (withPitch, true) - proc.getChain().getLatencyFor (withPitch, false);
                 const double ms = 1000.0 * latency / std::max (1.0, proc.getSampleRate());
                 const juce::String text = "While on, pitch adds " + juce::String (juce::roundToInt (ms)) + " ms latency. "
                                           "FL Studio compensates it automatically; avoid automating the on/off switch.";
@@ -601,7 +623,7 @@ namespace velvox::ui
             {
                 DetailPanel::refresh();
                 gr.push (grFrom (live, &LiveData::delayDuck));
-                const bool synced = apvts.getRawParameterValue (pid::delaySync)->load() > 0.5f;
+                const bool synced = apvts.getRawParameterValue (pidFor (pid::delaySync))->load() > 0.5f;
                 time->setVisible (! synced);
                 division->setVisible (synced);
 
@@ -1148,13 +1170,14 @@ namespace velvox::ui
     std::unique_ptr<DetailPanel> createDetailPanel (VelvoxAudioProcessor& p, int id, const SpectrumSource* spectrum, const LiveData* live)
     {
         std::unique_ptr<DetailPanel> panel;
+        DetailPanel::constructionInstance = id < 0 ? 0 : dsp::selectionInstance (id);
         if (id < 0)
         {
             panel = std::make_unique<OutputPanel> (p);
         }
         else
         {
-            switch ((ModuleId) id)
+            switch (dsp::selectionModule (id))
             {
                 case ModuleId::eq:      panel = std::make_unique<EqPanel> (p); break;
                 case ModuleId::comp:    panel = std::make_unique<CompPanel> (p); break;
@@ -1175,6 +1198,7 @@ namespace velvox::ui
             if (panel == nullptr)
                 panel = std::make_unique<OutputPanel> (p);
         }
+        DetailPanel::constructionInstance = 0;
         panel->setLiveData (live);
         panel->setVisual (createModuleView (p, id, spectrum));
         panel->setModule (id);

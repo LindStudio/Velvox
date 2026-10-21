@@ -213,6 +213,11 @@ namespace velvox::ui
         juce::Path curve;
     };
 
+    // Mouse wheel over an EQ band: new Q. Up (positive delta) narrows the band, down widens it;
+    // the step is multiplicative (a constant feel at any width), `fine` divides it by 5.
+    // Always inside [minQ, maxQ].
+    float eqWheelQ (float currentQ, float wheelDeltaY, bool fine, float minQ, float maxQ) noexcept;
+
     // What the automatic mix does with a parameter (German, empty = no role)
     juce::String autoMixRole (const juce::String& paramId);
 

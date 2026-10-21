@@ -19,5 +19,6 @@ namespace velvox
     const std::vector<ModulePreset>& getModulePresets (dsp::ModuleId module);
 
     // Applies with begin/endChangeGesture so hosts record it like a user edit
-    void applyModulePreset (const ModulePreset& preset, juce::AudioProcessorValueTreeState& apvts);
+    // Applies the preset to one instance of its module (0 = the original parameters)
+    void applyModulePreset (const ModulePreset& preset, juce::AudioProcessorValueTreeState& apvts, int instance = 0);
 }

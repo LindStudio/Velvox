@@ -22,8 +22,9 @@ namespace velvox
         void bind (const Lookup& lookup);
 
         // Thread-safe (relaxed atomic reads, no allocation). Routing and the mono
-        // monitor are not parameters and come from the caller.
-        dsp::ChainSettings read (std::uint64_t routingPacked, bool monoMonitor) const noexcept;
+        // monitor are not parameters and come from the caller. Every instance bank
+        // (instances 2..n) is read with the same mapping as instance 1.
+        dsp::ChainSettings read (const dsp::Routing& routing, bool monoMonitor) const noexcept;
         dsp::MacroValues readMacros() const noexcept;
 
         bool pitchOn() const noexcept   { return raw.pitchOn.on(); }
@@ -39,7 +40,7 @@ namespace velvox
         int index() const noexcept { return (int) std::lround (get()); }
     };
 
-    struct
+    struct Params
     {
         Raw inputGain, outputGain, bypass, safetyClip;
         Raw eqOn, eqMix, hpfOn, hpfFreq, hpfSlope, lowFreq, lowGain, midFreq, midGain, midQ, highFreq, highGain;
@@ -66,7 +67,12 @@ namespace velvox
         Raw rideOn, rideTarget, rideAmount, rideMaxBoost, rideMaxCut, rideResponse, ridePhrase, rideTransient, rideSilence;
         Raw reverbEarly, reverbDiffusion, reverbMod, reverbBass, reverbHighCut;
         Raw delaySpread, delayDrive, delayDiffusion, delayMod;
-    } raw;
+    };
+    Params raw;                                                  // instance 1 (and all global parameters)
+    std::array<Params, dsp::maxExtraInstances> extraRaw;         // instances 2..n: module fields bound to "<id>_<k>"
+
+    static void bindParams (Params& raw, const Lookup& lookup, int instance);
+    static dsp::ChainSettings readParams (const Params& raw) noexcept;
     };
 
     // A complete set of parameter values outside any APVTS (defaults for
@@ -79,7 +85,7 @@ namespace velvox
         void setAll (const std::map<juce::String, float>& values);
         float get (const juce::String& id) const;
 
-        dsp::ChainSettings read (const dsp::Routing& routing) const noexcept { return dsp::applyMacros (reader.read (routing.pack(), false), reader.readMacros()); }
+        dsp::ChainSettings read (const dsp::Routing& routing) const noexcept { return dsp::applyMacros (reader.read (routing, false), reader.readMacros()); }
 
     private:
         std::map<juce::String, std::unique_ptr<std::atomic<float>>> store;

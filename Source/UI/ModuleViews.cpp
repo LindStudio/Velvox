@@ -89,25 +89,48 @@ namespace velvox::ui
         }
 
         //======================================================================
-        // EQ: live spectrum, response curve and draggable band nodes
-        class EqView final : public ModuleView
+        // EQ: live spectrum, response curve and draggable band nodes.
+        // Drag a node for frequency / gain, turn the mouse wheel over a band node to change
+        // its Q (width), double-click to reset. Works on any EQ instance.
+        class EqView final : public ModuleView, private juce::Timer
         {
         public:
-            EqView (VelvoxAudioProcessor& p, const SpectrumSource* s) : proc (p), spectrum (s)
+            EqView (VelvoxAudioProcessor& p, const SpectrumSource* s, int eqInstance) : proc (p), instance (eqInstance), spectrum (s)
             {
                 addAndMakeVisible (spectrum);
                 addAndMakeVisible (curve);
                 spectrum.setRange (-90.0f, 0.0f);
                 spectrum.setIntensity (0.75f);
                 auto* procPtr = &p;
-                curve.provider = [procPtr] (dsp::EqSettings& es, bool& on, float& mix)
+                const int k = instance;
+                curve.provider = [procPtr, k] (dsp::EqSettings& es, bool& on, float& mix)
                 {
-                    const auto e = procPtr->readEffectiveSettings();
+                    const auto e = procPtr->readEffectiveSettings().instance (k);
                     es = e.eq;
                     on = e.eqOn;
                     mix = e.eqMix;
                 };
+
+                const auto id = [k] (const char* base) { return base == nullptr ? juce::String() : dsp::instanceParamId (base, k); };
+                const char* bases[5][4] { { pid::hpfFreq, nullptr, pid::hpfOn, nullptr },
+                                          { pid::lowFreq, pid::lowGain, nullptr, pid::lowQ },
+                                          { pid::midFreq, pid::midGain, nullptr, pid::midQ },
+                                          { pid::highFreq, pid::highGain, nullptr, pid::highQ },
+                                          { pid::lpfFreq, nullptr, pid::lpfOn, nullptr } };
+                const char* names[5] { "Low cut", "Low", "Mid", "High", "High cut" };
+                for (int i = 0; i < 5; ++i)
+                {
+                    auto& n = nodes[(size_t) i];
+                    n.freqId = id (bases[i][0]);
+                    n.gainId = id (bases[i][1]);
+                    n.onId = id (bases[i][2]);
+                    n.qId = id (bases[i][3]);
+                    n.name = names[i];
+                    n.t = (float) i * 0.25f;
+                }
             }
+
+            ~EqView() override { endWheelGesture(); }
 
             void resized() override
             {
@@ -122,8 +145,11 @@ namespace velvox::ui
                 bool moved = false;
                 for (int i = 0; i < (int) nodes.size(); ++i)
                 {
-                    nodes[(size_t) i].glow.target = (i == hovered || i == dragged) ? 1.0f : 0.0f;
-                    moved = nodes[(size_t) i].glow.tick (0.2f) || moved;
+                    auto& n = nodes[(size_t) i];
+                    n.glow.target = (i == hovered || i == dragged || i == wheelNode) ? 1.0f : 0.0f;
+                    moved = n.glow.tick (0.2f) || moved;
+                    moved = n.qFlash.tick (0.08f) || moved;
+                    n.qFlash.target = 0.0f;
                 }
                 if (moved || dragged >= 0)
                     repaint();
@@ -131,16 +157,30 @@ namespace velvox::ui
 
             void paintOverChildren (juce::Graphics& g) override
             {
-                label (g, "Drag the points  -  double-click resets", getLocalBounds().toFloat().reduced (14.0f, 10.0f),
-                       juce::Justification::topRight, colours::textFaint);
+                label (g, "Drag a point  -  mouse wheel over a band: width (Q)  -  double-click resets",
+                       getLocalBounds().toFloat().reduced (14.0f, 10.0f), juce::Justification::topRight, colours::textFaint);
 
+                const auto plot = EqCurve::plotArea (curve.getBounds().toFloat());
                 for (int i = 0; i < (int) nodes.size(); ++i)
                 {
                     const auto& n = nodes[(size_t) i];
                     const auto p = position (n);
-                    const bool on = n.onId == nullptr || raw (proc, n.onId) > 0.5f;
+                    const bool on = n.onId.isEmpty() || raw (n.onId) > 0.5f;
                     const float gl = n.glow.current;
                     const auto c = aurora (n.t);
+
+                    // Width of the band while its Q changes: a soft bar between the -3 dB points
+                    if (n.qId.isNotEmpty() && n.qFlash.current > 0.01f)
+                    {
+                        const float f = raw (n.freqId), q = std::max (0.1f, raw (n.qId));
+                        const float halfBw = std::asinh (1.0f / (2.0f * q)) / std::log (2.0f);   // octaves either side
+                        const float x0 = SpectrumView::xForFrequency (f / std::pow (2.0f, halfBw), plot);
+                        const float x1 = SpectrumView::xForFrequency (f * std::pow (2.0f, halfBw), plot);
+                        g.setColour (c.withAlpha (0.10f * n.qFlash.current));
+                        g.fillRoundedRectangle (juce::Rectangle<float> (x0, plot.getY(), std::max (2.0f, x1 - x0), plot.getHeight()), 6.0f);
+                        g.setColour (c.withAlpha (0.55f * n.qFlash.current));
+                        g.fillRect (juce::Rectangle<float> (x0, p.y - 0.75f, std::max (2.0f, x1 - x0), 1.5f));
+                    }
 
                     drawGlow (g, p, 14.0f + 12.0f * gl, (on ? 0.25f : 0.08f) + 0.35f * gl, c);
                     g.setColour (colours::background);
@@ -152,12 +192,14 @@ namespace velvox::ui
 
                     if (gl > 0.02f)
                     {
-                        juce::String text = juce::String (n.name).toUpperCase() + "   " + hz (raw (proc, n.freqId));
-                        if (n.gainId != nullptr)
+                        juce::String text = juce::String (n.name).toUpperCase() + "   " + hz (raw (n.freqId));
+                        if (n.gainId.isNotEmpty())
                         {
-                            const float gain = raw (proc, n.gainId);
+                            const float gain = raw (n.gainId);
                             text << "   " << (gain > 0.0f ? "+" : "") << juce::String (gain, 1) << " dB";
                         }
+                        if (n.qId.isNotEmpty())
+                            text << "   Q " << juce::String (raw (n.qId), 2);
                         g.setFont (medium (11.0f));
                         const float w = (float) juce::GlyphArrangement::getStringWidthInt (medium (11.0f), text) + 22.0f;
                         auto box = juce::Rectangle<float> (w, 24.0f).withCentre (p.translated (0.0f, -26.0f))
@@ -179,19 +221,54 @@ namespace velvox::ui
                 {
                     hovered = i;
                     setMouseCursor (i >= 0 ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+                    setTooltip (i >= 0 && nodes[(size_t) i].qId.isNotEmpty()
+                                    ? "Drag: frequency and gain. Mouse wheel: width (Q) - up = narrower, down = wider; hold Shift for fine steps."
+                                    : (i >= 0 ? "Drag: frequency. Double-click: switch the filter on or off." : juce::String()));
                 }
             }
 
             void mouseExit (const juce::MouseEvent&) override { hovered = -1; }
 
+            // Mouse wheel over a band node: that band's Q. Anywhere else (and for horizontal
+            // scrolling) the wheel goes to the parent as usual.
+            void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override
+            {
+                const int i = nodeAt (e.position);
+                if (i < 0 || nodes[(size_t) i].qId.isEmpty() || std::abs (wheel.deltaX) > std::abs (wheel.deltaY) || wheel.deltaY == 0.0f)
+                {
+                    endWheelGesture();
+                    ModuleView::mouseWheelMove (e, wheel);
+                    return;
+                }
+
+                auto& n = nodes[(size_t) i];
+                auto* prm = dynamic_cast<juce::RangedAudioParameter*> (proc.getState().getParameter (n.qId));
+                if (prm == nullptr)
+                    return;
+                if (wheelNode != i)
+                {
+                    endWheelGesture();
+                    wheelNode = i;
+                    prm->beginChangeGesture();
+                }
+                const auto range = prm->getNormalisableRange();
+                const float q = eqWheelQ (raw (n.qId), wheel.deltaY * (wheel.isReversed ? -1.0f : 1.0f), e.mods.isShiftDown(),
+                                          range.start, range.end);
+                prm->setValueNotifyingHost (prm->convertTo0to1 (q));
+                n.qFlash.current = n.qFlash.target = 1.0f;
+                startTimer (450);   // the gesture ends when the wheel rests
+                repaint();
+            }
+
             void mouseDown (const juce::MouseEvent& e) override
             {
+                endWheelGesture();
                 dragged = nodeAt (e.position);
                 if (dragged < 0)
                     return;
-                for (auto* id : { nodes[(size_t) dragged].freqId, nodes[(size_t) dragged].gainId })
-                    if (id != nullptr)
-                        if (auto* prm = proc.getState().getParameter (id))
+                for (auto* id : { &nodes[(size_t) dragged].freqId, &nodes[(size_t) dragged].gainId })
+                    if (id->isNotEmpty())
+                        if (auto* prm = proc.getState().getParameter (*id))
                             prm->beginChangeGesture();
             }
 
@@ -202,18 +279,18 @@ namespace velvox::ui
                 const auto& n = nodes[(size_t) dragged];
                 const auto plot = EqCurve::plotArea (curve.getBounds().toFloat());
                 const float t = juce::jlimit (0.0f, 1.0f, (e.position.x - plot.getX()) / plot.getWidth());
-                setParam (proc, n.freqId, SpectrumSource::minHz * std::pow (SpectrumSource::maxHz / SpectrumSource::minHz, t));
-                if (n.gainId != nullptr)
-                    setParam (proc, n.gainId, juce::jmap (e.position.y, plot.getBottom(), plot.getY(), -EqCurve::rangeDb, EqCurve::rangeDb));
+                set (n.freqId, SpectrumSource::minHz * std::pow (SpectrumSource::maxHz / SpectrumSource::minHz, t));
+                if (n.gainId.isNotEmpty())
+                    set (n.gainId, juce::jmap (e.position.y, plot.getBottom(), plot.getY(), -EqCurve::rangeDb, EqCurve::rangeDb));
             }
 
             void mouseUp (const juce::MouseEvent&) override
             {
                 if (dragged < 0)
                     return;
-                for (auto* id : { nodes[(size_t) dragged].freqId, nodes[(size_t) dragged].gainId })
-                    if (id != nullptr)
-                        if (auto* prm = proc.getState().getParameter (id))
+                for (auto* id : { &nodes[(size_t) dragged].freqId, &nodes[(size_t) dragged].gainId })
+                    if (id->isNotEmpty())
+                        if (auto* prm = proc.getState().getParameter (*id))
                             prm->endChangeGesture();
                 dragged = -1;
             }
@@ -224,32 +301,65 @@ namespace velvox::ui
                 if (i < 0)
                     return;
                 const auto& n = nodes[(size_t) i];
-                // Gain bands reset to 0 dB; the cut filters switch on / off
-                const char* id = n.gainId != nullptr ? n.gainId : n.onId;
-                if (auto* prm = proc.getState().getParameter (id))
+                // Gain bands reset to 0 dB (and their default width); the cut filters switch on / off
+                if (n.gainId.isNotEmpty())
+                {
+                    for (auto* id : { &n.gainId, &n.qId })
+                        if (auto* prm = proc.getState().getParameter (*id))
+                        {
+                            prm->beginChangeGesture();
+                            prm->setValueNotifyingHost (prm->getDefaultValue());
+                            prm->endChangeGesture();
+                        }
+                }
+                else if (auto* prm = proc.getState().getParameter (n.onId))
                 {
                     prm->beginChangeGesture();
-                    prm->setValueNotifyingHost (n.gainId != nullptr ? prm->getDefaultValue() : (prm->getValue() > 0.5f ? 0.0f : 1.0f));
+                    prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
                     prm->endChangeGesture();
                 }
             }
 
+            // For tests: screen position of a band node
+            juce::Point<float> nodePosition (int i) const { return position (nodes[(size_t) juce::jlimit (0, 4, i)]); }
+
         private:
             struct Node
             {
-                const char* freqId;
-                const char* gainId;
-                const char* onId;
-                const char* name;
-                float t;
-                Smoothed glow {};
+                juce::String freqId, gainId, onId, qId;
+                const char* name = "";
+                float t = 0.0f;
+                Smoothed glow {}, qFlash {};
             };
+
+            float raw (const juce::String& id) const
+            {
+                auto* v = proc.getState().getRawParameterValue (id);
+                return v != nullptr ? v->load() : 0.0f;
+            }
+
+            void set (const juce::String& id, float value)
+            {
+                if (auto* prm = proc.getState().getParameter (id))
+                    prm->setValueNotifyingHost (prm->convertTo0to1 (value));
+            }
+
+            void timerCallback() override { endWheelGesture(); }
+
+            void endWheelGesture()
+            {
+                stopTimer();
+                if (wheelNode >= 0)
+                    if (auto* prm = proc.getState().getParameter (nodes[(size_t) wheelNode].qId))
+                        prm->endChangeGesture();
+                wheelNode = -1;
+            }
 
             juce::Point<float> position (const Node& n) const
             {
                 const auto plot = EqCurve::plotArea (curve.getBounds().toFloat());
-                const float x = SpectrumView::xForFrequency (raw (proc, n.freqId), plot);
-                const float y = yFor (n.gainId != nullptr ? raw (proc, n.gainId) : 0.0f, -EqCurve::rangeDb, EqCurve::rangeDb, plot);
+                const float x = SpectrumView::xForFrequency (raw (n.freqId), plot);
+                const float y = yFor (n.gainId.isNotEmpty() ? raw (n.gainId) : 0.0f, -EqCurve::rangeDb, EqCurve::rangeDb, plot);
                 return { x, y };
             }
 
@@ -270,14 +380,11 @@ namespace velvox::ui
             }
 
             VelvoxAudioProcessor& proc;
+            const int instance;
             SpectrumView spectrum;
             EqCurve curve;
-            std::array<Node, 5> nodes { { { pid::hpfFreq, nullptr, pid::hpfOn, "Low cut", 0.0f },
-                                          { pid::lowFreq, pid::lowGain, nullptr, "Low", 0.25f },
-                                          { pid::midFreq, pid::midGain, nullptr, "Mid", 0.5f },
-                                          { pid::highFreq, pid::highGain, nullptr, "High", 0.75f },
-                                          { pid::lpfFreq, nullptr, pid::lpfOn, "High cut", 1.0f } } };
-            int hovered = -1, dragged = -1;
+            std::array<Node, 5> nodes;
+            int hovered = -1, dragged = -1, wheelNode = -1;
         };
 
         //======================================================================
@@ -1360,7 +1467,7 @@ namespace velvox::ui
         class SmashView final : public ModuleView
         {
         public:
-            explicit SmashView (VelvoxAudioProcessor& p) : proc (p) {}
+            SmashView (VelvoxAudioProcessor& p, int k) : proc (p), instance (k) {}
 
             void update (const LiveData& d) override
             {
@@ -1368,7 +1475,7 @@ namespace velvox::ui
                 s = d.settings.smash;
                 level.target = d.inputDb.ago (0);
                 level.tick (0.35f);
-                added.target = proc.getChain().getSmash().blendLevelDb.load();
+                added.target = proc.getChain().getSmash (instance).blendLevelDb.load();
                 added.tick (0.3f);
                 repaint();
             }
@@ -1434,6 +1541,7 @@ namespace velvox::ui
 
         private:
             VelvoxAudioProcessor& proc;
+            const int instance;
             const LiveData* live = nullptr;
             dsp::SmashSettings s;
             Smoothed level, added { -100.0f, -100.0f };
@@ -1444,7 +1552,7 @@ namespace velvox::ui
         class ChoirView final : public ModuleView
         {
         public:
-            explicit ChoirView (VelvoxAudioProcessor& p) : proc (p) {}
+            ChoirView (VelvoxAudioProcessor& p, int k) : proc (p), instance (k) {}
 
             void update (const LiveData& d) override
             {
@@ -1454,7 +1562,7 @@ namespace velvox::ui
                 level.tick (0.15f);
                 spread.target = s.width;
                 spread.tick (0.12f);
-                auto& m = proc.getChain().getChoir();
+                auto& m = proc.getChain().getChoir (instance);
                 corr.target = s.enabled ? m.outputCorrelation.load() : 1.0f;
                 corr.tick (0.1f);
                 for (int i = 0; i < dsp::ChoirModule::maxVoices; ++i)
@@ -1524,6 +1632,7 @@ namespace velvox::ui
 
         private:
             VelvoxAudioProcessor& proc;
+            const int instance;
             dsp::ChoirSettings s;
             double time = 0.0;
             Smoothed level, spread, corr { 1.0f, 1.0f };
@@ -1535,7 +1644,7 @@ namespace velvox::ui
         class SmoothView final : public ModuleView
         {
         public:
-            SmoothView (VelvoxAudioProcessor& p, const SpectrumSource* src) : proc (p), spectrum (src)
+            SmoothView (VelvoxAudioProcessor& p, const SpectrumSource* src, int k) : proc (p), instance (k), spectrum (src)
             {
                 addAndMakeVisible (spectrum);
                 spectrum.setRange (-90.0f, 0.0f);
@@ -1547,7 +1656,7 @@ namespace velvox::ui
             void update (const LiveData& d) override
             {
                 s = d.settings.smooth;
-                auto& m = proc.getChain().getSmooth();
+                auto& m = proc.getChain().getSmooth (instance);
                 for (int b = 0; b < dsp::SmoothModule::numBands; ++b)
                 {
                     cut[(size_t) b].target = m.bandCutDb[(size_t) b].load();
@@ -1598,6 +1707,7 @@ namespace velvox::ui
 
         private:
             VelvoxAudioProcessor& proc;
+            const int instance;
             SpectrumView spectrum;
             dsp::SmoothSettings s;
             std::array<Smoothed, dsp::SmoothModule::numBands> cut {};
@@ -1788,13 +1898,14 @@ namespace velvox::ui
         };
     }
 
-    std::unique_ptr<ModuleView> createModuleView (VelvoxAudioProcessor& p, int id, const SpectrumSource* spectrum)
+    std::unique_ptr<ModuleView> createModuleView (VelvoxAudioProcessor& p, int code, const SpectrumSource* spectrum)
     {
-        if (id < 0)
+        if (code < 0)
             return std::make_unique<OutputView>();
-        switch ((ModuleId) id)
+        const int instance = dsp::selectionInstance (code);
+        switch (dsp::selectionModule (code))
         {
-            case ModuleId::eq:      return std::make_unique<EqView> (p, spectrum);
+            case ModuleId::eq:      return std::make_unique<EqView> (p, spectrum, instance);
             case ModuleId::comp:    return std::make_unique<CompView>();
             case ModuleId::deess:   return std::make_unique<DeEssView> (spectrum);
             case ModuleId::sat:     return std::make_unique<SatView>();
@@ -1804,9 +1915,9 @@ namespace velvox::ui
             case ModuleId::delay:   return std::make_unique<DelayView>();
             case ModuleId::reverb:  return std::make_unique<ReverbView>();
             case ModuleId::pulse:   return std::make_unique<PulseView> (p);
-            case ModuleId::smash:   return std::make_unique<SmashView> (p);
-            case ModuleId::choir:   return std::make_unique<ChoirView> (p);
-            case ModuleId::smooth:  return std::make_unique<SmoothView> (p, spectrum);
+            case ModuleId::smash:   return std::make_unique<SmashView> (p, instance);
+            case ModuleId::choir:   return std::make_unique<ChoirView> (p, instance);
+            case ModuleId::smooth:  return std::make_unique<SmoothView> (p, spectrum, instance);
             case ModuleId::check:   return std::make_unique<CheckView> (p);
             case ModuleId::ride:    return std::make_unique<RideView>();
         }

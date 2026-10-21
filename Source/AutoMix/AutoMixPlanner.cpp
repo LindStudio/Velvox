@@ -1,5 +1,7 @@
 #include "AutoMixPlanner.h"
 #include "../Parameters/ParameterLayout.h"
+#include "../Parameters/SettingsReader.h"
+#include "../Parameters/RoutingMigration.h"
 
 namespace velvox::automix
 {
@@ -85,10 +87,7 @@ namespace velvox::automix
         // EQ (clean-up) -> Ride -> Comp -> Smash -> De-esser -> Smooth -> Sat ->
         // Doubler, with delay and reverb as parallel sends. This is the default
         // order of the plugin, which keeps the visible chain familiar.
-        auto r = dsp::Routing::defaults();
-        r.delayInsert = false;
-        r.reverbInsert = false;
-        return r;
+        return dsp::Routing::legacyFull();
     }
 
     //==========================================================================
@@ -493,6 +492,11 @@ namespace velvox::automix
         if (cur (pid::levelMatchMode) < 0.5f)
             plan.set (pid::levelMatchMode, 1.0f);
 
+        // The chain holds exactly what the plan uses (in the usual order)
+        OfflineParameters params;
+        params.setAll (current);
+        params.setAll (plan.values);
+        plan.routing = pruneInaudible (plan.routing, params.read (plan.routing));
         return plan;
     }
 }

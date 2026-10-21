@@ -2,6 +2,7 @@
 #include "../Parameters/ParameterLayout.h"
 #include "../DSP/Routing.h"
 #include "../StateKeys.h"
+#include "../Parameters/RoutingMigration.h"
 
 namespace velvox
 {
@@ -65,10 +66,10 @@ namespace velvox
             rp->endChangeGesture();
         }
 
-        if (routing.isNotEmpty())
-            apvts.state.setProperty (statekeys::routing, dsp::Routing::fromString (routing).toString(), nullptr);
-        else if (resetMissingToDefault)
-            apvts.state.setProperty (statekeys::routing, dsp::Routing::defaults().toString(), nullptr);
+        // 0.1 - 0.3 snapshots list every module (or none): migrated against the values just set
+        if (routing.isNotEmpty() || resetMissingToDefault)
+            apvts.state.setProperty (statekeys::routing,
+                                     dsp::Routing::fromString (migrateRoutingString (routing, apvts)).toString(), nullptr);
     }
 
     bool ParameterSnapshot::differsFrom (juce::AudioProcessorValueTreeState& apvts) const
@@ -87,7 +88,7 @@ namespace velvox
                 return true;
         }
 
-        const auto expectedRouting = routing.isNotEmpty() ? dsp::Routing::fromString (routing) : dsp::Routing::defaults();
+        const auto expectedRouting = dsp::Routing::fromString (migrateRoutingString (routing, apvts));
         const auto current = dsp::Routing::fromString (apvts.state.getProperty (statekeys::routing).toString());
         return expectedRouting != current;
     }

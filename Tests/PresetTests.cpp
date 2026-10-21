@@ -116,7 +116,7 @@ public:
 
             PresetManager pm (h.proc.getState(), dir);
             auto r = dsp::Routing::defaults();
-            r.move (dsp::ModuleId::sat, 0);
+            r.insertAt (0, dsp::ModuleId::sat, 0);
             h.proc.setRouting (r);
             h.set (pid::doublerOn, 1.0f);   // a v0.2 module the old file does not know
 

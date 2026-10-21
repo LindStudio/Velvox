@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 #include "ProductInfo.h"
 #include "StateKeys.h"
+#include "Parameters/RoutingMigration.h"
 
 using namespace velvox;
 
@@ -25,7 +26,16 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
     apvts.state.addListener (this);
     syncRoutingFromState();
 
-    apvts.addParameterListener (pid::pitchOn, this);
+    // On-switches of every module instance and the macros can change which instances
+    // must be in the chain (and the latency): watched, handled on the message thread
+    for (const auto& spec : getParameterSpecs())
+    {
+        const auto base = dsp::splitInstanceParamId (spec.id).first;
+        if (base.endsWith ("On") || juce::String (spec.module) == "Macros")
+            structureParams.add (spec.id);
+    }
+    for (auto& id : structureParams)
+        apvts.addParameterListener (id, this);
     analyzerTimer.startTimerHz (15);
 }
 
@@ -33,20 +43,65 @@ VelvoxAudioProcessor::~VelvoxAudioProcessor()
 {
     analyzerTimer.stopTimer();
     cancelPendingUpdate();
-    apvts.removeParameterListener (pid::pitchOn, this);
+    for (auto& id : structureParams)
+        apvts.removeParameterListener (id, this);
     apvts.state.removeListener (this);
 }
 
 //==============================================================================
 void VelvoxAudioProcessor::parameterChanged (const juce::String&, float)
 {
+    // Changes made on the message thread (UI, presets, tests) take effect at once;
+    // automation arrives on the audio thread and is handled asynchronously
+    if (juce::MessageManager::existsAndIsCurrentThread())
+    {
+        cancelPendingUpdate();
+        handleAsyncUpdate();
+        return;
+    }
     // May arrive on the audio thread (automation): report on the message thread
     triggerAsyncUpdate();
 }
 
 void VelvoxAudioProcessor::handleAsyncUpdate()
 {
+    insertEngagedInstances();
     updateHostLatency();
+}
+
+void VelvoxAudioProcessor::insertEngagedInstances()
+{
+    auto routing = getRouting();
+    const auto e = readEffectiveSettings();
+    bool changed = false;
+
+    for (int k = 0; k <= dsp::maxExtraInstances; ++k)
+    {
+        const auto b = e.instance (k);
+        const auto engage = [&] (dsp::ModuleId id, bool on)
+        {
+            if (on && k < dsp::maxInstances (id) && ! routing.contains (id, k))
+                changed = routing.insertDefault (id, k) || changed;
+        };
+        engage (dsp::ModuleId::sat, b.sat.enabled && b.sat.mix > 0.0f);
+        engage (dsp::ModuleId::doubler, b.doubler.enabled && b.doubler.mix > 0.0f);
+        engage (dsp::ModuleId::smash, b.smash.enabled);
+        engage (dsp::ModuleId::choir, b.choir.enabled);
+        engage (dsp::ModuleId::smooth, b.smooth.enabled);
+        engage (dsp::ModuleId::ride, b.ride.enabled);
+        engage (dsp::ModuleId::delay, b.delayOn && b.delayMix > 0.0f);
+        engage (dsp::ModuleId::reverb, b.reverbOn && b.reverbMix > 0.0f);
+        if (k == 0)
+        {
+            engage (dsp::ModuleId::pitch, e.pitch.enabled);
+            engage (dsp::ModuleId::chop, e.chop.enabled);
+            engage (dsp::ModuleId::pulse, e.pulse.enabled);
+            engage (dsp::ModuleId::check, e.checkOn);
+        }
+    }
+
+    if (changed)
+        setRouting (routing);
 }
 
 void VelvoxAudioProcessor::pumpAnalyzer()
@@ -64,7 +119,7 @@ void VelvoxAudioProcessor::pumpAnalyzer()
 
 void VelvoxAudioProcessor::updateHostLatency()
 {
-    const int latency = chain.getLatencyFor (reader.pitchOn());
+    const int latency = chain.getLatencyFor (getRouting(), reader.pitchOn());
     if (latency != getLatencySamples())
         setLatencySamples (latency);
 }
@@ -81,7 +136,7 @@ void VelvoxAudioProcessor::cacheParameterPointers()
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
 {
-    return reader.read (routingPacked.load (std::memory_order_acquire), monoMonitor.load (std::memory_order_relaxed));
+    return reader.read (getRouting(), monoMonitor.load (std::memory_order_relaxed));
 }
 
 std::optional<float> VelvoxAudioProcessor::effectiveValueOf (const juce::String& id) const
@@ -113,7 +168,7 @@ dsp::MacroValues VelvoxAudioProcessor::readMacros() const noexcept
 //==============================================================================
 dsp::Routing VelvoxAudioProcessor::getRouting() const noexcept
 {
-    return dsp::Routing::unpack (routingPacked.load (std::memory_order_acquire));
+    return routingShared.load();
 }
 
 void VelvoxAudioProcessor::setRouting (const dsp::Routing& routing)
@@ -126,7 +181,9 @@ void VelvoxAudioProcessor::syncRoutingFromState()
 {
     const auto text = apvts.state.getProperty (statekeys::routing).toString();
     const auto routing = text.isEmpty() ? dsp::Routing::defaults() : dsp::Routing::fromString (text);
-    routingPacked.store (routing.pack(), std::memory_order_release);
+    routingShared.store (routing);
+    if (juce::MessageManager::existsAndIsCurrentThread())
+        triggerAsyncUpdate();   // latency follows the saturation / pitch instances in the chain
 }
 
 void VelvoxAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& property)
@@ -144,7 +201,8 @@ void VelvoxAudioProcessor::valueTreeRedirected (juce::ValueTree&)
 void VelvoxAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     chain.prepare (sampleRate, samplesPerBlock);
-    setLatencySamples (chain.getLatencyFor (reader.pitchOn()));
+    audioRouting = getRouting();
+    setLatencySamples (chain.getLatencyFor (audioRouting, reader.pitchOn()));
 }
 
 void VelvoxAudioProcessor::releaseResources()
@@ -199,7 +257,9 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         }
     } loadMeter { callbackLoad, startTicks, buffer.getNumSamples(), getSampleRate() };
 
-    auto settings = readEffectiveSettings();
+    // Routing: lock-free copy; while the message thread is writing it, the previous one stays
+    routingShared.tryLoad (audioRouting);
+    auto settings = dsp::applyMacros (reader.read (audioRouting, monoMonitor.load (std::memory_order_relaxed)), reader.readMacros());
 
     if (auto* hostPlayHead = getPlayHead())
         if (const auto position = hostPlayHead->getPosition())
@@ -368,8 +428,8 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
         if (child.hasProperty ("id"))
             savedIds.add (child.getProperty ("id").toString());
 
-    if (! tree.hasProperty (statekeys::routing))
-        tree.setProperty (statekeys::routing, dsp::Routing::defaults().toString(), nullptr);
+    // v0.1 projects have no routing: every module in the default order (migrated below)
+    const auto savedRouting = tree.getProperty (statekeys::routing).toString();
 
     tree.setProperty (statekeys::stateVersion, statekeys::currentStateVersion, nullptr);
     apvts.replaceState (tree);
@@ -378,6 +438,9 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
         if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
             if (! savedIds.contains (rp->getParameterID()))
                 rp->setValueNotifyingHost (rp->getDefaultValue());
+
+    // 0.1 - 0.3 routings list every module: keep only what can be heard (sound unchanged)
+    apvts.state.setProperty (statekeys::routing, migrateRoutingString (savedRouting, apvts), nullptr);
 
     syncRoutingFromState();
     autoMix.readState (autoMixHolder, savedVersion < 3);

@@ -128,6 +128,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
       spectrum (p.getChain().meters.inputTap, p.getChain().meters.outputTap),
       scopeL ((size_t) dsp::StereoTap::capacity), scopeR ((size_t) dsp::StereoTap::capacity),
       topBar (p, dialog),
+      browser (p),
       chainView (p),
       mixView (p),
       analysis (p.getAutoMix()),
@@ -147,6 +148,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     canvas.addChildComponent (dialog);
     canvas.addChildComponent (help);
     canvas.addChildComponent (tutorial);
+    canvas.addChildComponent (browser);
 
     chainView.setLiveData (&live);
 
@@ -166,7 +168,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     topBar.onAnalyse = [this] { startAnalysis(); };
     topBar.onHelp = [this]
     {
-        showHelp (detail != nullptr && proMode ? help::keyForModule (selected) : juce::String ("start"));
+        showHelp (detail != nullptr && proMode ? help::keyForModule (selected < 0 ? selected : (int) dsp::selectionModule (selected)) : juce::String ("start"));
     };
     mixView.onAnalyse = [this] { startAnalysis(); };
     mixView.onOpenModule = [this] (int id) { openModule (id); };
@@ -180,7 +182,18 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
         else
             select (id);
     };
-    chainView.onHelp = [this] (int id) { showHelp (help::keyForModule (id)); };
+    chainView.onHelp = [this] (int code) { showHelp (help::keyForModule (code < 0 ? code : (int) dsp::selectionModule (code))); };
+    chainView.onAddModule = [this] (int insertIndex, bool atEnd)
+    {
+        help.close();
+        browser.open (insertIndex, atEnd);
+        raiseOverlays();
+    };
+    browser.onChoose = [this] (dsp::ModuleId id, int insertIndex, bool atEnd)
+    {
+        // Added behind the chain, delay and reverb start as parallel sends (the usual vocal setup)
+        chainView.insertModule (id, atEnd ? -1 : insertIndex, atEnd && dsp::Routing::canBeSend (id));
+    };
     help.onStartTutorial = [this] { startTutorial (false); };
     tutorial.targetFor = [this] (const juce::String& key) { return tutorialTarget (key); };
     tutorial.onClose = [] (TutorialOverlay::Outcome outcome)
@@ -211,7 +224,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     right.removeFromBottom (14);
     outputMeter.setBounds (right);
 
-    for (auto* overlay : std::initializer_list<juce::Component*> { &analysis, &dialog, &help, &tutorial })
+    for (auto* overlay : std::initializer_list<juce::Component*> { &analysis, &dialog, &help, &tutorial, &browser })
         overlay->setBounds (0, 0, baseWidth, baseHeight);
 
     // ---- View state (stored with the project, never affects audio)
@@ -315,6 +328,9 @@ void VelvoxAudioProcessorEditor::setProMode (bool pro)
 
 void VelvoxAudioProcessorEditor::select (int id)
 {
+    // A selection that is no longer in the chain (removed, older project): the output stage
+    if (id >= 0 && ! proc.getRouting().contains (dsp::selectionModule (id), dsp::selectionInstance (id)))
+        id = ChainView::outputTile;
     const bool changed = id != selected || detail == nullptr;
     selected = id;
     proc.getState().state.setProperty (uiSelectionProperty, id, nullptr);
@@ -330,13 +346,13 @@ void VelvoxAudioProcessorEditor::select (int id)
 
     if (proMode)
     {
-        detail = createDetailPanel (proc, id, &spectrum, &live);
+        detail = createDetailPanel (proc, id, &spectrum, id >= 0 && dsp::selectionInstance (id) > 0 ? &panelLive : &live);
         // Open another module (e.g. from a VOCAL CHECK finding) after the current click has finished
         detail->onOpenModule = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)] (int moduleId)
         {
             juce::MessageManager::callAsync ([safe, moduleId] { if (safe != nullptr) safe->select (moduleId); });
         };
-        detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };
+        detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };   // module number (help is per module)
         canvas.addAndMakeVisible (*detail);
         detail->setBounds (bodyArea());
         detail->refresh();
@@ -350,6 +366,7 @@ void VelvoxAudioProcessorEditor::select (int id)
 void VelvoxAudioProcessorEditor::raiseOverlays()
 {
     canvas.info.toFront (false);
+    browser.toFront (false);
     analysis.toFront (false);
     dialog.toFront (false);
     help.toFront (false);
@@ -410,13 +427,52 @@ void VelvoxAudioProcessorEditor::updateLiveData()
 
     live.inputDb.push (juce::Decibels::gainToDecibels (std::max (inL, inR), -100.0f));
     live.outputDb.push (juce::Decibels::gainToDecibels (std::max (outL, outR), -100.0f));
-    live.compGr.push (chain.getCompressor().gainReductionDb.pull());
-    live.deessGr.push (chain.getDeEsser().gainReductionDb.pull());
-    live.delayDuck.push (chain.getDelayDucker().gainReductionDb.pull());
-    live.reverbDuck.push (chain.getReverbDucker().gainReductionDb.pull());
-    live.smashGr.push (chain.getSmash().gainReductionDb.pull());
-    live.rideGain.push (chain.getRide().currentGainDb.load());
-    live.rideLevel.push (chain.getRide().detectedLevelDb.load());
+    // Gain reduction / movement of every instance, pulled once per frame. Instance 1 feeds the
+    // shared histories; the selected other instance feeds panelLive.
+    const int selInstance = selected >= 0 ? dsp::selectionInstance (selected) : 0;
+    const auto selModule = selected >= 0 ? dsp::selectionModule (selected) : dsp::ModuleId::eq;
+    for (int k = 0; k <= dsp::maxExtraInstances; ++k)
+    {
+        using M = dsp::ModuleId;
+        const auto has = [k] (M id) { return k < dsp::maxInstances (id); };
+        const float comp = has (M::comp) ? chain.getCompressor (k).gainReductionDb.pull() : 0.0f;
+        const float deess = has (M::deess) ? chain.getDeEsser (k).gainReductionDb.pull() : 0.0f;
+        const float dduck = has (M::delay) ? chain.getDelayDucker (k).gainReductionDb.pull() : 0.0f;
+        const float rduck = has (M::reverb) ? chain.getReverbDucker (k).gainReductionDb.pull() : 0.0f;
+        const float smashGr = has (M::smash) ? chain.getSmash (k).gainReductionDb.pull() : 0.0f;
+        const float rideGain = has (M::ride) ? chain.getRide (k).currentGainDb.load() : 0.0f;
+        const float rideLevel = has (M::ride) ? chain.getRide (k).detectedLevelDb.load() : -100.0f;
+        auto& act = live.activity;
+        act[(size_t) M::comp][(size_t) k] = juce::jlimit (0.0f, 1.0f, comp / 12.0f);
+        act[(size_t) M::deess][(size_t) k] = juce::jlimit (0.0f, 1.0f, deess / 8.0f);
+        act[(size_t) M::delay][(size_t) k] = juce::jlimit (0.0f, 1.0f, dduck / 12.0f);
+        act[(size_t) M::reverb][(size_t) k] = juce::jlimit (0.0f, 1.0f, rduck / 12.0f);
+        act[(size_t) M::smash][(size_t) k] = juce::jlimit (0.0f, 1.0f, smashGr / 15.0f);
+        act[(size_t) M::ride][(size_t) k] = juce::jlimit (0.0f, 1.0f, std::abs (rideGain) / 8.0f);
+        if (has (M::smooth))
+            act[(size_t) M::smooth][(size_t) k] = juce::jlimit (0.0f, 1.0f, chain.getSmooth (k).getMaxCutDb() / 8.0f);
+        if (k == 0)
+        {
+            act[(size_t) M::pulse][0] = juce::jlimit (0.0f, 1.0f, 1.0f - chain.getPulse().displayGain.load());
+            live.compGr.push (comp);
+            live.deessGr.push (deess);
+            live.delayDuck.push (dduck);
+            live.reverbDuck.push (rduck);
+            live.smashGr.push (smashGr);
+            live.rideGain.push (rideGain);
+            live.rideLevel.push (rideLevel);
+        }
+        else if (k == selInstance && selected >= 0)
+        {
+            panelLive.compGr.push (selModule == M::comp ? comp : 0.0f);
+            panelLive.deessGr.push (selModule == M::deess ? deess : 0.0f);
+            panelLive.delayDuck.push (dduck);
+            panelLive.reverbDuck.push (rduck);
+            panelLive.smashGr.push (smashGr);
+            panelLive.rideGain.push (rideGain);
+            panelLive.rideLevel.push (rideLevel);
+        }
+    }
     live.inputLufs.push (m.inputLufs.load());
     live.outputLufs.push (m.outputLufs.load());
 
@@ -438,6 +494,25 @@ void VelvoxAudioProcessorEditor::updateLiveData()
     live.effectiveDelayMs = m.effectiveDelayMs.load();
     live.chopStep = chain.getChopStep();
     live.hasSignal = m.inputLufs.load() > -70.0f;
+
+    // The selected instance k > 0: its views read instance k through the instance-0 fields
+    if (selInstance > 0)
+    {
+        panelLive.inputDb = live.inputDb;
+        panelLive.outputDb = live.outputDb;
+        panelLive.inputLufs = live.inputLufs;
+        panelLive.outputLufs = live.outputLufs;
+        panelLive.scopeL = live.scopeL;
+        panelLive.scopeR = live.scopeR;
+        panelLive.activity = live.activity;
+        panelLive.settings = live.settings;
+        panelLive.settings.setInstance0 (live.settings.instance (selInstance));
+        panelLive.time = live.time;
+        panelLive.sampleRate = live.sampleRate;
+        panelLive.effectiveDelayMs = live.effectiveDelayMs;
+        panelLive.chopStep = live.chopStep;
+        panelLive.hasSignal = live.hasSignal;
+    }
 
     spectrum.update (live.sampleRate);
     correlation.push (m.correlation.load());

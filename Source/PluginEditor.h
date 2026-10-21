@@ -11,6 +11,7 @@
 #include "UI/LiveData.h"
 #include "UI/HelpOverlay.h"
 #include "UI/TutorialOverlay.h"
+#include "UI/ModuleBrowser.h"
 
 // The whole UI is laid out on a fixed design canvas (ui::baseWidth x
 // ui::baseHeight) that is scaled uniformly to the window size, so every
@@ -44,6 +45,7 @@ public:
     velvox::ui::ChainView& getChainView() noexcept { return chainView; }
     velvox::ui::TopBar& getTopBar() noexcept { return topBar; }
     velvox::ui::AutoMixView& getAutoMixView() noexcept { return mixView; }
+    velvox::ui::ModuleBrowser& getBrowser() noexcept { return browser; }
     velvox::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return analysis; }
     velvox::ui::DetailPanel* getDetail() noexcept { return detail.get(); }
     bool isProMode() const noexcept { return proMode; }
@@ -84,12 +86,14 @@ private:
     velvox::ui::VelvoxLookAndFeel lookAndFeel;
     velvox::ui::SpectrumSource spectrum;
     velvox::ui::LiveData live;
+    velvox::ui::LiveData panelLive;   // live data of the selected instance when it is not the first one
     std::vector<float> scopeL, scopeR;
 
     Canvas canvas;
     velvox::ui::DialogOverlay dialog;
     velvox::ui::HelpOverlay help;
     velvox::ui::TutorialOverlay tutorial;
+    velvox::ui::ModuleBrowser browser;
     velvox::ui::TopBar topBar;
     velvox::ui::ChainView chainView;
     velvox::ui::AutoMixView mixView;

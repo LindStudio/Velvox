@@ -158,7 +158,7 @@ public:
                 return std::make_pair (in, h.run (in));
             };
 
-            const int L = 3, from = 4800;
+            const int L = Harness().proc.getLatencySamples(), from = 4800;   // no latent module in the default chain
             {
                 const auto [in, out] = runWidth (0.0f);
                 double diff = 0.0;

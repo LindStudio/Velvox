@@ -723,4 +723,14 @@ namespace velvox::ui
         auto it = roles.find (id);
         return it != roles.end() ? juce::String::fromUTF8 (it->second) : juce::String();
     }
+
+    float eqWheelQ (float currentQ, float wheelDeltaY, bool fine, float minQ, float maxQ) noexcept
+    {
+        if (! std::isfinite (currentQ) || ! std::isfinite (wheelDeltaY))
+            return juce::jlimit (minQ, maxQ, std::isfinite (currentQ) ? currentQ : minQ);
+        // One wheel notch is a delta of about 0.11: x 1.25 per notch (about 1/3 octave of Q),
+        // x 1.045 with `fine`
+        const float exponent = juce::jlimit (-2.0f, 2.0f, wheelDeltaY) * (fine ? 0.58f : 2.9f);
+        return juce::jlimit (minQ, maxQ, currentQ * std::pow (2.0f, exponent));
+    }
 }

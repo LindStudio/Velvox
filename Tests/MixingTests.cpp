@@ -2,6 +2,7 @@
 // parameter schema completeness.
 
 #include "TestHelpers.h"
+#include "Parameters/RoutingMigration.h"
 #include "Mixing/ProposalSession.h"
 #include "Mixing/MixingEngine.h"
 
@@ -27,7 +28,7 @@ public:
             Harness h;
             h.set (pid::compRatio, 2.0f);
             auto r = dsp::Routing::defaults();
-            r.move (dsp::ModuleId::sat, 0);
+            r.insertAt (0, dsp::ModuleId::sat, 0);
             h.proc.setRouting (r);
             const auto before = ParameterSnapshot::capture (h.proc.getState());
 
@@ -35,7 +36,10 @@ public:
             session.begin (proposal);
             expect (session.isActive() && session.isShowingProposal());
             expectWithinAbsoluteError (h.get (pid::compRatio), 3.5f, 0.01f);
-            expect (h.proc.getRouting() == dsp::Routing::defaults(), "proposal routing applied");
+            // The factory preset has no 0.4 routing: every module it uses, in the usual order
+            expect (h.proc.getRouting() == dsp::Routing::fromString (migrateRoutingString (proposal.routing, h.proc.getState())),
+                    "proposal routing applied: " + h.proc.getRouting().toString());
+            expect (h.proc.getRouting().contains (dsp::ModuleId::doubler), "the proposal's doubler is in the chain");
 
             session.showOriginal();
             expectWithinAbsoluteError (h.get (pid::compRatio), 2.0f, 0.01f);
