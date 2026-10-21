@@ -74,15 +74,19 @@ namespace velvox::dsp
     private:
         struct DelayLine
         {
-            std::vector<float> buffer;
+            std::vector<float> storage;
+            float* buffer = nullptr;   // inside `storage`, at a staggered cache position
             int writePos = 0;
             int mask = 0;   // size is a power of two
 
-            void allocate (int minSize);
+            // `stagger` gives every line a different cache-set offset: all lines are written
+            // at the same index each sample, and power-of-two buffers that happen to start at
+            // addresses congruent modulo 4 kB would all compete for the same L1 set
+            void allocate (int minSize, int stagger);
             void clear() noexcept;
             void write (float v) noexcept
             {
-                buffer[(size_t) writePos] = v;
+                buffer[writePos] = v;
                 writePos = (writePos + 1) & mask;
             }
             // `delay` samples behind the newest sample (clamped to the buffer)

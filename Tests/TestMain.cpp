@@ -329,6 +329,16 @@ int main (int argc, char* argv[])
                 runner.runTests (one);
             }
     }
+    else if (argc >= 3 && juce::String (argv[1]) == "--seq")
+    {
+        // Suites in the given order, names separated by '|' (exact names; for order effects)
+        juce::Array<juce::UnitTest*> tests;
+        for (auto& name : juce::StringArray::fromTokens (juce::String (argv[2]), "|", ""))
+            for (auto* t : juce::UnitTest::getAllTests())
+                if (t->getName() == name.trim())
+                    tests.add (t);
+        runner.runTests (tests);
+    }
     else if (argc >= 3 && juce::String (argv[1]) == "--from")
     {
         // All suites starting with the first whose name contains the text (for isolating order effects)

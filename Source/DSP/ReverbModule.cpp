@@ -82,17 +82,33 @@ namespace velvox::dsp
     }
 
     //==========================================================================
-    void ReverbModule::DelayLine::allocate (int minSize)
+    void ReverbModule::DelayLine::allocate (int minSize, int stagger)
     {
         const int size = nextPowerOfTwo (std::max (8, minSize));
-        buffer.assign ((size_t) size, 0.0f);
+        constexpr int slack = 1024;   // floats: room to reach any of the 64 cache-set offsets
+        storage.assign ((size_t) (size + slack), 0.0f);
+
+        // Start where the address is 64-byte aligned and sits in cache set (stagger * 5) mod 64
+        const auto base = reinterpret_cast<std::uintptr_t> (storage.data());
+        const std::uintptr_t wantedSet = (std::uintptr_t) ((stagger * 5) & 63);
+        int offset = 0;
+        for (int k = 0; k < slack; ++k)
+        {
+            const auto addr = base + (std::uintptr_t) k * sizeof (float);
+            if (addr % 64 == 0 && (addr / 64) % 64 == wantedSet)
+            {
+                offset = k;
+                break;
+            }
+        }
+        buffer = storage.data() + offset;
         mask = size - 1;
         writePos = 0;
     }
 
     void ReverbModule::DelayLine::clear() noexcept
     {
-        std::fill (buffer.begin(), buffer.end(), 0.0f);
+        std::fill (storage.begin(), storage.end(), 0.0f);
         writePos = 0;
     }
 
@@ -101,8 +117,8 @@ namespace velvox::dsp
         const float d = juce::jlimit (0.0f, (float) (mask - 2), delay);
         const int i = (int) d;
         const float f = d - (float) i;
-        const float a = buffer[(size_t) ((writePos - 1 - i) & mask)];
-        const float b = buffer[(size_t) ((writePos - 2 - i) & mask)];
+        const float a = buffer[(writePos - 1 - i) & mask];
+        const float b = buffer[(writePos - 2 - i) & mask];
         return a + f * (b - a);
     }
 
@@ -112,10 +128,10 @@ namespace velvox::dsp
         const int i = (int) d;
         const float f = d - (float) i;
         const int newest = writePos - 1;
-        const float ym1 = buffer[(size_t) ((newest - i + 1) & mask)];
-        const float y0  = buffer[(size_t) ((newest - i) & mask)];
-        const float y1  = buffer[(size_t) ((newest - i - 1) & mask)];
-        const float y2  = buffer[(size_t) ((newest - i - 2) & mask)];
+        const float ym1 = buffer[(newest - i + 1) & mask];
+        const float y0  = buffer[(newest - i) & mask];
+        const float y1  = buffer[(newest - i - 1) & mask];
+        const float y2  = buffer[(newest - i - 2) & mask];
         const float c1 = 0.5f * (y1 - ym1);
         const float c2 = ym1 - 2.5f * y0 + 2.0f * y1 - 0.5f * y2;
         const float c3 = 0.5f * (y2 - ym1) + 1.5f * (y0 - y1);
@@ -149,10 +165,10 @@ namespace velvox::dsp
             longestModMs = std::max (longestModMs, v.modDepthMs);
         }
 
-        for (auto& p : preDelay)
-            p.allocate (msToSamples (maxPreDelayMs + maxEarlySpanMs * maxScale) + 8);
-        for (auto& l : lines)
-            l.allocate (msToSamples (longestLine * maxScale + 2.0f * longestModMs) + 8);
+        for (int ch = 0; ch < maxChannels; ++ch)
+            preDelay[(size_t) ch].allocate (msToSamples (maxPreDelayMs + maxEarlySpanMs * maxScale) + 8, numLines + ch);
+        for (int l = 0; l < numLines; ++l)
+            lines[(size_t) l].allocate (msToSamples (longestLine * maxScale + 2.0f * longestModMs) + 8, l);
         for (auto& d : density)
             d.allocate (msToSamples (longestDensity) + 2);
         for (int ch = 0; ch < maxChannels; ++ch)
