@@ -44,6 +44,53 @@ namespace velvox::automix
             m.topDb = prof.topDb;
             m.presenceDb = prof.presenceDb;
             m.bodyDb = prof.bodyDb;
+            m.lowMidDb = prof.lowMidDb;
+            m.airDb = prof.airDb;
+            m.dynamicsDb = prof.dynamicsDb;
+            m.dynamicsValid = prof.dynamicsValid;
+            m.crestDb = prof.crestDb;
+            m.clipRuns = prof.clipRuns;
+
+            // Effects in the gaps: 20 ms frames of the mid signal; words = loud frames, gaps =
+            // quiet frames within 400 ms after a word. Median gap level relative to the words.
+            {
+                const int frame = std::max (1, (int) (0.02 * a.sampleRate));
+                std::vector<float> levels;
+                for (int start = 0; start + frame <= n; start += frame)
+                {
+                    double sum = 0.0;
+                    for (int i = start; i < start + frame; ++i)
+                    {
+                        float x = 0.0f;
+                        for (auto& c : a.vocal)
+                            x += c[(size_t) i];
+                        x /= (float) a.vocal.size();
+                        sum += (double) x * x;
+                    }
+                    levels.push_back ((float) (10.0 * std::log10 (std::max (1.0e-12, sum / frame))));   // floor -120 dB
+                }
+                if (levels.size() > 50)
+                {
+                    const float loud = percentile (levels, 0.95f);
+                    std::vector<float> words, gaps;
+                    int sinceWord = 1000;
+                    for (float l : levels)
+                    {
+                        if (l > loud - 20.0f)
+                        {
+                            words.push_back (l);
+                            sinceWord = 0;
+                        }
+                        else if (++sinceWord <= 20 && l < loud - 30.0f)
+                            gaps.push_back (l);
+                    }
+                    if (words.size() > 20 && gaps.size() > 20)
+                    {
+                        m.gapDb = percentile (gaps, 0.5f) - percentile (words, 0.5f);
+                        m.gapValid = true;
+                    }
+                }
+            }
 
             if (a.channels > 1)
             {
@@ -155,10 +202,203 @@ namespace velvox::automix
     }
 
     //==========================================================================
+    std::vector<std::pair<juce::String, MixPlan>> AutoMixEngine::candidatesFor (const MixPlan& base, const VocalProfile& profile)
+    {
+        using M = dsp::ModuleId;
+        std::vector<std::pair<juce::String, MixPlan>> out;
+        out.push_back ({ de ("Basisplan"), base });
+        const auto add = [&out, &base] (const juce::String& name, const std::function<bool (MixPlan&)>& modify)
+        {
+            MixPlan c = base;
+            if (modify (c))
+                out.push_back ({ name, std::move (c) });
+        };
+        const auto k2 = [] (const char* id) { return dsp::instanceParamId (id, 1); };
+        const auto style = styleOf (profile);
+
+        // Dynamics: lighter
+        add (de ("Dynamik leichter"), [&] (MixPlan& c)
+        {
+            if (! c.on (pid::compOn))
+                return false;
+            c.set (pid::compRatio, std::max (1.5f, c.get (pid::compRatio) * 0.7f));
+            c.set (pid::compThreshold, c.get (pid::compThreshold) + 2.0f);
+            c.set (pid::compMakeup, std::max (0.0f, c.get (pid::compMakeup) - 1.0f));
+            if (c.on (pid::smashOn))
+                c.set (pid::smashOn, 0.0f);
+            return true;
+        });
+
+        // Dynamics: denser (never on an already squashed take)
+        add (de ("Dynamik dichter"), [&] (MixPlan& c)
+        {
+            if (! c.on (pid::compOn) || profile.heavilyCompressed)
+                return false;
+            c.set (pid::compRatio, std::min (6.0f, c.get (pid::compRatio) * 1.35f));
+            c.set (pid::compThreshold, c.get (pid::compThreshold) - 2.0f);
+            c.set (pid::compMakeup, std::min (8.0f, c.get (pid::compMakeup) + 1.0f));
+            if (! c.on (pid::smashOn) && ! profile.distortionLikely)
+            {
+                c.set (pid::smashOn, 1.0f);
+                c.set (pid::smashAmount, 40.0f);
+                c.set (pid::smashBlend, 18.0f);
+                c.set (pid::smashAttack, 2.0f);
+                c.set (pid::smashRelease, 90.0f);
+                c.set (pid::smashTone, 10.0f);
+                c.set (pid::smashOutput, 0.0f);
+            }
+            return true;
+        });
+
+        // Saturation: the other way round
+        add (base.on (pid::satOn) ? de ("Ohne Sättigung") : de ("Mit Sättigung"), [&] (MixPlan& c)
+        {
+            if (c.on (pid::satOn))
+            {
+                c.set (pid::satOn, 0.0f);
+                return true;
+            }
+            if (profile.distortionLikely)
+                return false;
+            c.set (pid::satOn, 1.0f);
+            c.set (pid::satCharacter, 1.0f);
+            c.set (pid::satDrive, 4.0f);
+            c.set (pid::satMix, 25.0f);
+            c.set (pid::satOutput, 0.0f);
+            return true;
+        });
+
+        // Tone after the dynamics: the high shelf (and a presence boost) moves into a second
+        // EQ instance behind compressor, de-esser and resonance control. A boost before the
+        // compressor makes it react to the highs and lifts the S sounds into the de-esser.
+        add (de ("Höhen nach der Dynamik (EQ 2)"), [&] (MixPlan& c)
+        {
+            const float high = c.get (pid::highGain);
+            const bool presenceBoost = c.get (pid::midGain) > 0.2f && c.get (pid::midFreq) >= 1800.0f;
+            if (high <= 0.2f && ! presenceBoost)
+                return false;
+            c.set (k2 (pid::eqOn), 1.0f);
+            c.set (k2 (pid::eqMix), 100.0f);
+            c.set (k2 (pid::hpfOn), 0.0f);
+            c.set (k2 (pid::lpfOn), 0.0f);
+            c.set (k2 (pid::lowGain), 0.0f);
+            c.set (k2 (pid::midGain), 0.0f);
+            c.set (k2 (pid::highGain), 0.0f);
+            if (high > 0.2f)
+            {
+                c.set (k2 (pid::highType), c.get (pid::highType));
+                c.set (k2 (pid::highFreq), c.get (pid::highFreq, 10000.0f));
+                c.set (k2 (pid::highQ), c.get (pid::highQ, 0.7071f));
+                c.set (k2 (pid::highGain), high);
+                c.set (pid::highGain, 0.0f);
+            }
+            if (presenceBoost)
+            {
+                c.set (k2 (pid::midFreq), c.get (pid::midFreq));
+                c.set (k2 (pid::midQ), c.get (pid::midQ, 1.0f));
+                c.set (k2 (pid::midGain), c.get (pid::midGain));
+                c.set (pid::midGain, 0.0f);
+            }
+            int after = -1;
+            for (auto m : { M::comp, M::smash, M::deess, M::smooth })
+                after = std::max (after, c.routing.indexOf (m));
+            c.routing.insertAt (after + 1, M::eq, 1);
+            return c.routing.contains (M::eq, 1);
+        });
+
+        // Effects drier / wetter
+        add (de ("Effekte trockener"), [&] (MixPlan& c)
+        {
+            if (! c.on (pid::reverbOn) && ! c.on (pid::delayOn))
+                return false;
+            c.set (pid::reverbMix, c.get (pid::reverbMix) * 0.65f);
+            c.set (pid::delayMix, c.get (pid::delayMix) * 0.65f);
+            return true;
+        });
+        add (style == VocalStyle::sustained ? de ("Mehr Raum (Large Hall)") : de ("Mehr Raum"), [&] (MixPlan& c)
+        {
+            if (! c.on (pid::reverbOn) || style == VocalStyle::spoken || profile.reverberant)
+                return false;
+            c.set (pid::reverbMix, std::min (28.0f, c.get (pid::reverbMix) * 1.35f));
+            if (style == VocalStyle::sustained)
+            {
+                c.set (pid::reverbType, 3.0f);      // Large Hall
+                c.set (pid::reverbDecay, 2.6f);
+                c.set (pid::reverbPreDelay, 40.0f);
+                c.set (pid::reverbBass, 0.8f);
+            }
+            return true;
+        });
+
+        // De-esser stronger (when S sounds were an issue)
+        add (de ("De-Esser stärker"), [&] (MixPlan& c)
+        {
+            if (! c.on (pid::deessOn) || ! profile.sibilanceValid || profile.sibilanceVsVowelDb < -8.0f)
+                return false;
+            c.set (pid::deessThreshold, c.get (pid::deessThreshold) - 3.0f);
+            c.set (pid::deessRange, std::min (12.0f, c.get (pid::deessRange) + 2.0f));
+            return true;
+        });
+
+        return out;
+    }
+
+    namespace
+    {
+        // Keeps the explanations true to the chosen candidate: titles that carry values are
+        // rebuilt, decisions of modules the candidate switched off are removed
+        void syncDecisions (MixPlan& plan, const juce::String& candidateName, const ObjectiveBreakdown& before,
+                            const ObjectiveBreakdown& after)
+        {
+            using M = dsp::ModuleId;
+            plan.decisions.erase (std::remove_if (plan.decisions.begin(), plan.decisions.end(), [&plan] (const Decision& d)
+            {
+                if (d.outputStage)
+                    return false;
+                switch (d.module)
+                {
+                    case M::smash: return ! plan.on (pid::smashOn);
+                    case M::sat:   return ! plan.on (pid::satOn);
+                    default:       return false;
+                }
+            }), plan.decisions.end());
+
+            if (auto* d = plan.find (M::comp))
+                d->title = de ("Kompressor ") + juce::String (plan.get (pid::compRatio), 1) + de (":1, Schwelle ") + db (plan.get (pid::compThreshold));
+            if (auto* d = plan.find (M::reverb))
+            {
+                static const char* types[] { "Room", "Plate", "Hall", "Large Hall", "Ambience", "Atmosphere", "Cinematic", "Ethereal" };
+                d->title = juce::String (types[juce::jlimit (0, 7, (int) plan.get (pid::reverbType))]) + "-Hall "
+                         + juce::String (juce::roundToInt (plan.get (pid::reverbMix))) + " %, "
+                         + juce::String (plan.get (pid::reverbDecay), 1).replaceCharacter ('.', ',') + de (" s, geduckt");
+            }
+            if (plan.on (pid::smashOn) && plan.find (M::smash) == nullptr)
+                plan.decisions.push_back ({ M::smash, false, de ("Parallelkompression ") + juce::String (juce::roundToInt (plan.get (pid::smashBlend))) + " % Blend",
+                                            de ("Die Variante mit mehr Dichte schnitt in der Messung besser ab."), true });
+            if (plan.on (pid::satOn) && plan.find (M::sat) == nullptr)
+                plan.decisions.push_back ({ M::sat, false, de ("Sättigung Tape, ") + juce::String (juce::roundToInt (plan.get (pid::satMix))) + " %",
+                                            de ("Leichte Obertöne - die Variante mit Sättigung schnitt in der Messung besser ab."), true });
+            if (plan.routing.contains (M::eq, 1))
+            {
+                const float g = plan.get (dsp::instanceParamId (pid::highGain, 1));
+                juce::String title = de ("EQ 2 nach der Dynamik");
+                if (g > 0.0f)
+                    title << de (": Höhen ") << db (g);
+                plan.decisions.push_back ({ M::eq, false, title,
+                                            de ("Die Höhenanhebung sitzt hinter Kompressor und De-Esser: Der Kompressor reagiert nicht mehr auf die Höhen, "
+                                                "und die S-Laute werden vor der Anhebung kontrolliert."), true });
+            }
+            plan.notes.push_back (de ("Variante \"") + candidateName + de ("\" gewählt: Bewertung ") + juce::String (before.total(), 2)
+                                  + " -> " + juce::String (after.total(), 2) + " (" + after.describe() + ").");
+        }
+    }
+
+    //==========================================================================
     AutoMixResult AutoMixEngine::run (const CapturedAudio& audio, const std::map<juce::String, float>& current,
                                       const std::function<bool()>& shouldStop, const Progress& progress)
     {
         AutoMixResult r;
+        const auto startMs = juce::Time::getMillisecondCounterHiRes();
         const auto stop = [&shouldStop] { return shouldStop && shouldStop(); };
         const auto report = [&progress] (float f, const char* stage) { if (progress) progress (f, juce::String::fromUTF8 (stage)); };
 
@@ -288,9 +528,69 @@ namespace velvox::automix
         if (plan.on (pid::compOn))
             plan.set (pid::compMakeup, juce::jlimit (0.0f, 8.0f, std::round (m.compGrMedianDb * 0.8f * 2.0f) / 2.0f));
 
+        // ---- Candidate search: interacting decisions, each rendered and scored at the same
+        //      target loudness (AutoMixObjective). A variant must beat the base plan.
+        const float target = targetLufs (r.original.lufs);
+        {
+            auto variants = candidatesFor (plan, r.profile);
+            const auto score = [&] (const juce::String& name, const MixPlan& cand, bool isBase)
+            {
+                CandidateResult c;
+                c.name = name;
+                c.metrics = renderChecked (audio, current, cand, r.profile);
+                c.routing = cand.routing;
+                c.score = evaluate (c.metrics, r.original, r.profile, target, isBase, cand.on (pid::reverbOn) || cand.on (pid::delayOn));
+                ++r.iterations;
+                return c;
+            };
+            for (size_t i = 0; i < variants.size(); ++i)
+            {
+                if (stop())
+                {
+                    r.error = de ("Abgebrochen.");
+                    return r;
+                }
+                report (0.55f + 0.25f * (float) i / (float) variants.size(), "Varianten werden verglichen");
+                r.candidates.push_back (score (variants[i].first, variants[i].second, i == 0));
+            }
+
+            // The two best single changes together (when both beat the base plan and touch
+            // different decisions)
+            std::vector<size_t> order;
+            for (size_t i = 1; i < r.candidates.size(); ++i)
+                if (r.candidates[i].score.total() < r.candidates[0].score.total())
+                    order.push_back (i);
+            std::sort (order.begin(), order.end(), [&] (size_t a, size_t b) { return r.candidates[a].score.total() < r.candidates[b].score.total(); });
+            if (order.size() >= 2 && ! stop())
+            {
+                MixPlan combined = variants[order[0]].second;
+                const auto& second = variants[order[1]].second;
+                for (const auto& [id, v] : second.values)
+                    if (std::abs (v - plan.get (id, v)) > 1.0e-4f)
+                        combined.set (id, v);
+                for (const auto& slot : second.routing)
+                    if (! combined.routing.contains (slot.id, slot.instance))
+                        combined.routing.insertAt (std::min (combined.routing.size(), second.routing.indexOf (slot.id, slot.instance)), slot.id, slot.instance, slot.insert);
+                const auto name = variants[order[0]].first + " + " + variants[order[1]].first;
+                variants.push_back ({ name, combined });
+                r.candidates.push_back (score (name, combined, false));
+            }
+
+            size_t best = 0;
+            for (size_t i = 1; i < r.candidates.size(); ++i)
+                if (r.candidates[i].score.total() < r.candidates[best].score.total())
+                    best = i;
+            r.chosenCandidate = (int) best;
+            if (best != 0)
+            {
+                plan = variants[best].second;
+                syncDecisions (plan, variants[best].first, r.candidates[0].score, r.candidates[best].score);
+                r.adjustments.push_back (de ("Variante gewählt: ") + variants[best].first);
+            }
+        }
+
         // ---- Output level: match the target loudness, then keep peaks below -1 dBFS
         report (0.85f, "Pegel wird angepasst");
-        const float target = targetLufs (r.original.lufs);
         m = renderChecked (audio, current, plan, r.profile);
         ++r.iterations;
         float out = plan.get (pid::outputGain) + (target - m.lufs);
@@ -319,6 +619,7 @@ namespace velvox::automix
         plan.decisions.push_back (outDecision);
 
         report (1.0f, "Fertig");
+        r.seconds = (juce::Time::getMillisecondCounterHiRes() - startMs) * 0.001;
         r.ok = true;
         return r;
     }

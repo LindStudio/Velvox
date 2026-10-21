@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AutoMixPlanner.h"
+#include "AutoMixObjective.h"
 
 namespace velvox::automix
 {
@@ -18,6 +19,24 @@ namespace velvox::automix
         bool sibilanceValid = false;
         float correlation = 1.0f;          // left / right of the output
         float monoLossDb = 0.0f;           // loudness of the mono sum minus stereo loudness
+
+        // 0.4: what the candidate search compares
+        float lowMidDb = -60.0f, airDb = -60.0f;
+        float dynamicsDb = 0.0f;           // phrase-level variation (VocalProfiler)
+        bool dynamicsValid = false;
+        float crestDb = 0.0f;
+        float gapDb = -100.0f;             // level in the gaps right after words, relative to the words
+        bool gapValid = false;
+        int clipRuns = 0;                  // runs at full scale before the clip guard
+    };
+
+    // One chain the automatic mix rendered and scored
+    struct CandidateResult
+    {
+        juce::String name;                 // what differs from the base plan (German, for the report)
+        ObjectiveBreakdown score;
+        RenderMetrics metrics;
+        dsp::Routing routing;
     };
 
     struct AutoMixResult
@@ -30,6 +49,9 @@ namespace velvox::automix
         RenderMetrics processed;           // the final plan
         int iterations = 0;
         std::vector<juce::String> adjustments;   // what the verification changed
+        std::vector<CandidateResult> candidates; // every candidate of the search (index 0 = base plan)
+        int chosenCandidate = 0;
+        double seconds = 0.0;                    // analysis + all renders
     };
 
     // analyse -> plan -> render -> measure -> adjust (max. 4 rounds) -> set the
@@ -59,5 +81,10 @@ namespace velvox::automix
         // sensible working range. Loudness is matched, not maximised - the
         // comparison with the original stays fair.
         static float targetLufs (float inputLufs) noexcept { return juce::jlimit (-24.0f, -14.0f, inputLufs); }
+
+        // Candidate chains derived from a plan: each changes one interacting decision
+        // (dynamics lighter / denser, saturation, tonal EQ after the dynamics as a second EQ
+        // instance, effects drier / wetter, de-esser stronger). Bounded, deterministic.
+        static std::vector<std::pair<juce::String, MixPlan>> candidatesFor (const MixPlan& base, const VocalProfile& profile);
     };
 }

@@ -78,6 +78,7 @@ set(VELVOX_SOURCES
     Source/AutoMix/VocalProfiler.cpp
     Source/AutoMix/AutoMixPlanner.cpp
     Source/AutoMix/AutoMixEngine.cpp
+    Source/AutoMix/AutoMixObjective.cpp
     Source/AutoMix/AutoMixController.cpp
     Source/UI/UserSettings.cpp
     Source/UI/HelpContent.cpp
