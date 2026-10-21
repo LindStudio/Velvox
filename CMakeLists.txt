@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Velvox VERSION 0.3.0 LANGUAGES C CXX)
+project(Velvox VERSION 0.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -97,6 +97,7 @@ set(VELVOX_THIRD_PARTY_INCLUDES
 )
 
 # Embedded UI typefaces: Inter 4.1 (SIL OFL 1.1, see Resources/Fonts/Inter-LICENSE.txt)
+# and the HEADLINER logo (icon, word mark, full logo; transparent PNGs)
 juce_add_binary_data(VelvoxAssets
     HEADER_NAME VelvoxBinaryData.h
     NAMESPACE VelvoxBinaryData
@@ -104,7 +105,10 @@ juce_add_binary_data(VelvoxAssets
         Resources/Fonts/Inter-Regular.ttf
         Resources/Fonts/Inter-Medium.ttf
         Resources/Fonts/Inter-SemiBold.ttf
-        Resources/Fonts/InterDisplay-Light.ttf)
+        Resources/Fonts/InterDisplay-Light.ttf
+        Resources/Images/HeadlinerIcon.png
+        Resources/Images/HeadlinerWordmark.png
+        Resources/Images/HeadlinerLogo.png)
 
 set(VELVOX_COMMON_LIBS
     VelvoxAssets
@@ -118,11 +122,11 @@ set(VELVOX_COMMON_LIBS
 juce_add_plugin(Velvox
     COMPANY_NAME                "Lind Audio"
     COMPANY_WEBSITE             ""
-    BUNDLE_ID                   "com.lindaudio.velvox"
+    BUNDLE_ID                   "com.lindaudio.velvox"   # unchanged: host identity
     PLUGIN_MANUFACTURER_CODE    Lnda
     PLUGIN_CODE                 Vlvx
     FORMATS                     VST3 Standalone
-    PRODUCT_NAME                "Velvox"
+    PRODUCT_NAME                "Headliner"
     DESCRIPTION                 "Automatic vocal mixer: analysis, EQ, dynamics, de-essing, resonance control, effects"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE

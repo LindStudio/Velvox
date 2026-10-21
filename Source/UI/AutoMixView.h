@@ -46,7 +46,7 @@ namespace velvox::ui
         VelvoxAudioProcessor& proc;
         automix::AutoMixController& autoMix;
 
-        juce::TextButton analyse, previous { "Vorher" }, mix { "Velvox Mix" }, original { "Original" }, restore;
+        juce::TextButton analyse, previous { "Vorher" }, mix { "Headliner Mix" }, original { "Original" }, restore;
         std::unique_ptr<StepList> steps;
         juce::Viewport stepView;
         std::array<std::unique_ptr<Knob>, 6> macros;

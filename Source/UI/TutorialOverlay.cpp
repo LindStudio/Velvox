@@ -76,7 +76,7 @@ namespace velvox::ui
 
         startButton.setTooltip ("A short tour of the interface (about one minute)");
         pluginButton.setTooltip ("Close and do not show this again - you can start it from Help any time");
-        laterButton.setTooltip ("Close for now and show it again the next time Velvox opens");
+        laterButton.setTooltip ("Close for now and show it again the next time Headliner opens");
         skipButton.setTooltip ("End the tour - you can start it again from Help");
     }
 
@@ -231,13 +231,11 @@ namespace velvox::ui
 
             auto r = card.reduced ((float) space::xxl, (float) space::xl);
             drawCaption (g, "Welcome", r.removeFromTop (20.0f), juce::Justification::centredLeft, colours::teal, typesize::caption);
-            g.setColour (colours::text);
-            g.setFont (display (typesize::hero + 4.0f, true));
-            g.drawText ("Velvox", r.removeFromTop (40.0f), juce::Justification::centredLeft, false);
+            drawBrand (g, Brand::wordmark, r.removeFromTop (40.0f), juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid);
             g.setGradientFill (auroraGradient (r.getTopLeft(), r.getTopLeft().translated (48.0f, 0.0f)));
             g.fillRoundedRectangle (r.getX(), r.getY() + 6.0f, 48.0f, 2.0f, 1.0f);
             r.removeFromTop (22.0f);
-            layoutBody ("Velvox is your vocal processing system for modern EDM, hypertechno and hard dance vocals. "
+            layoutBody ("Headliner is your vocal processing system for modern EDM, hypertechno and hard dance vocals. "
                         "Shape your voice with individual modules, or find the sound you are looking for in seconds.\n\n"
                         "Would you like a one-minute tour of the interface?",
                         r.getWidth(), typesize::lead).draw (g, r.withTrimmedBottom (52.0f));

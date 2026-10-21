@@ -92,7 +92,7 @@ namespace velvox::automix
     {
     public:
         Worker (CapturedAudio a, std::map<juce::String, float> values)
-            : juce::Thread ("Velvox auto mix"), audio (std::move (a)), current (std::move (values)) {}
+            : juce::Thread ("Headliner auto mix"), audio (std::move (a)), current (std::move (values)) {}
 
         ~Worker() override { stopThread (10000); }
 
@@ -290,7 +290,7 @@ namespace velvox::automix
             }
         apvts.state.setProperty (statekeys::routing, result.plan.routing.toString(), nullptr);
 
-        mixSnapshot = ParameterSnapshot::capture (apvts, de ("Velvox Auto-Mix"));
+        mixSnapshot = ParameterSnapshot::capture (apvts, de ("Headliner Auto-Mix"));
 
         // Report for the UI (only what was really set up)
         MixReport r;

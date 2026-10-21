@@ -756,7 +756,7 @@ namespace velvox::automix
 
         if (p.clipRuns > 0)
             add ("clipping", C::measured, de ("Übersteuerung im Eingang"),
-                 juce::String (p.clipRuns) + de (" Stelle(n) mit Samples auf Vollaussteuerung. Velvox kann Verzerrung nicht rückgängig machen - Aufnahme- oder Spurpegel senken."), 100.0f);
+                 juce::String (p.clipRuns) + de (" Stelle(n) mit Samples auf Vollaussteuerung. Headliner kann Verzerrung nicht rückgängig machen - Aufnahme- oder Spurpegel senken."), 100.0f);
         else if (p.peakDb > -0.5f)
             add ("hotInput", C::measured, de ("Sehr hoher Eingangspegel"),
                  de ("Spitzenpegel ") + db (p.peakDb) + de (" dBFS - kaum Reserve."), 50.0f);

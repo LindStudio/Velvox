@@ -144,7 +144,7 @@ namespace velvox::automix
         plan.set (pid::stereoWidth, 100.0f);
 
         if (plan.conservative)
-            plan.notes.push_back (de ("Es wurde wenig Gesang erfasst - Velvox verwendet deshalb nur vorsichtige Einstellungen."));
+            plan.notes.push_back (de ("Es wurde wenig Gesang erfasst - Headliner verwendet deshalb nur vorsichtige Einstellungen."));
 
         // ================= EQ: clean-up, not colour =================
         plan.set (pid::eqOn, 1.0f);

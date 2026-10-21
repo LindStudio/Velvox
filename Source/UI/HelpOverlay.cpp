@@ -242,7 +242,7 @@ namespace velvox::ui
         g.drawText ("Help", header.removeFromTop (headerH / 2 + 8).withTrimmedTop (14), juce::Justification::bottomLeft, false);
         g.setColour (colours::textDim);
         g.setFont (font (typesize::body));
-        g.drawText ("How Velvox works, every module explained. Works completely offline.", header.withTrimmedBottom (12),
+        g.drawText ("How Headliner works, every module explained. Works completely offline.", header.withTrimmedBottom (12),
                     juce::Justification::centredLeft, true);
 
         // Hairlines: under the header and between navigation and page

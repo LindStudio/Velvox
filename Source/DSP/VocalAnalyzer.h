@@ -15,7 +15,7 @@ namespace velvox::dsp
         Certainty certainty = Certainty::possible;
         juce::String title;          // short statement
         juce::String detail;         // what was measured
-        juce::String advice;         // what to do, naming the Velvox module
+        juce::String advice;         // what to do, naming the Headliner module
         std::optional<ModuleId> module;
         float severity = 0.0f;       // for sorting (larger = more important)
     };

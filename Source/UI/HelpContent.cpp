@@ -5,7 +5,7 @@ namespace velvox::ui::help
     namespace
     {
         const char* const gStart = "Getting started";
-        const char* const gWork = "Working with Velvox";
+        const char* const gWork = "Working with Headliner";
         const char* const gModules = "Modules";
 
         // Builds a module page from its seven answers
@@ -25,13 +25,13 @@ namespace velvox::ui::help
             std::vector<Page> p;
 
             //==================================================================
-            p.push_back ({ "start", "Welcome to Velvox", gStart, R"(Velvox is an automatic vocal mixer for EDM, hypertechno, hard dance, party and pop vocals. It listens to a section of your vocal, measures it, and sets up its modules - cleaning, dynamics, S sounds, tone, width and space - for a finished-sounding vocal. Every module stays fully editable afterwards.
+            p.push_back ({ "start", "Welcome to Headliner", gStart, R"(Headliner is an automatic vocal mixer for EDM, hypertechno, hard dance, party and pop vocals. It listens to a section of your vocal, measures it, and sets up its modules - cleaning, dynamics, S sounds, tone, width and space - for a finished-sounding vocal. Every module stays fully editable afterwards.
 
 ## Your first minute
-- Load Velvox on the mixer track of your vocal. A new instance asks: "Let's mix your vocal."
-- Click "Audio analysieren" and start playback of the vocal in your DAW. Velvox captures a limited section (pauses are skipped) and stops by itself.
+- Load Headliner on the mixer track of your vocal. A new instance asks: "Let's mix your vocal."
+- Click "Audio analysieren" and start playback of the vocal in your DAW. Headliner captures a limited section (pauses are skipped) and stops by itself.
 - The analysis and the mix run in the background; the playback is never interrupted. When it is done, the Auto Mix view shows what was set up and why.
-- Use "Vorher / Velvox Mix" and "Original" to compare at equal loudness, and the Feinschliff controls to fine-tune.
+- Use "Vorher / Headliner Mix" and "Original" to compare at equal loudness, and the Feinschliff controls to fine-tune.
 
 ## Two views
 - Auto Mix: status of the analysis, the processing that was set up, comparison and six fine-tuning controls.
@@ -96,7 +96,7 @@ The order and hidden modules of each instance are also saved with your project a
 - Hover over any switch or button to see a short tooltip.
 
 ## Automation
-Every knob, switch and menu is a real plugin parameter: your DAW can automate it, and presets and A/B store it. Velvox reports changes to the host as proper gestures, so recorded automation is clean.)" });
+Every knob, switch and menu is a real plugin parameter: your DAW can automate it, and presets and A/B store it. Headliner reports changes to the host as proper gestures, so recorded automation is clean.)" });
 
             p.push_back ({ "modes", "Auto Mix and Module views", gWork, R"(## Auto Mix
 The overview after an analysis:
@@ -112,21 +112,21 @@ Every module with all its parameters. When a Feinschliff control moves a paramet
 Both views show the same settings. Switching never changes the sound or resets anything.)" });
 
             p.push_back ({ "automix", "Automatic mix", gWork, R"(## What it does
-Velvox records a limited section of the vocal while your DAW plays it (about 14 seconds of singing, at most 24 seconds including short gaps), analyses it and sets up the modules. Everything runs inside the plugin: no internet, no cloud, no AI service. A plugin only hears what the DAW plays through it - Velvox never reads the audio file itself, so only the captured section is analysed.
+Headliner records a limited section of the vocal while your DAW plays it (about 14 seconds of singing, at most 24 seconds including short gaps), analyses it and sets up the modules. Everything runs inside the plugin: no internet, no cloud, no AI service. A plugin only hears what the DAW plays through it - Headliner never reads the audio file itself, so only the captured section is analysed.
 
 ## What is measured
 - Loudness (ITU-R BS.1770), peaks, clipping, the level difference between loud and quiet words, crest factor and noise floor (when there are pauses).
 - Pitch range of the voice, the long-term spectrum (rumble, body, low mids, presence, S range, air), S sounds against vowels, narrow resonances (partials of the sung notes are excluded), room or effect tails, and stereo width.
-- With a beat on the sidechain: its level and how much it overlaps the voice's presence range. This is only a hint, never proof of masking - the beat is never heard through Velvox.
+- With a beat on the sidechain: its level and how much it overlaps the voice's presence range. This is only a hint, never proof of masking - the beat is never heard through Headliner.
 
 ## What is set up
 The decisions follow the measurements: the low cut sits well below the lowest sung notes, highs are only raised on dark recordings, the de-esser threshold sits between vowel and S level, resonance control only runs when something sticks out, reverb and delay are reduced or left off on roomy recordings. Creative effects (Pitch, Chop, Pulse, Choir) stay off.
 
 ## Checked before it is applied
-Velvox renders the captured section through the complete chain, measures the result and corrects it where the measurement is reliable: compression that is too strong or too weak, S sounds that the chain made louder, lost body or too much brightness, mono compatibility. Finally the output is matched to the loudness of the original (so the comparison is fair) with 1 dB of headroom.
+Headliner renders the captured section through the complete chain, measures the result and corrects it where the measurement is reliable: compression that is too strong or too weak, S sounds that the chain made louder, lost body or too much brightness, mono compatibility. Finally the output is matched to the loudness of the original (so the comparison is fair) with 1 dB of headroom.
 
 ## Compare and undo
-- Vorher / Velvox Mix switches the real parameters between the state before the analysis and the mix (including your changes to it).
+- Vorher / Headliner Mix switches the real parameters between the state before the analysis and the mix (including your changes to it).
 - Original plays the unprocessed vocal; with Fair compare = Bypass match at the same loudness.
 - "Vorherigen Zustand wiederherstellen" discards the mix.
 - Neu analysieren is always available; the current state is kept as the new "Vorher".
@@ -143,7 +143,7 @@ As soon as you change a setting, the preset field shows "edited". Load the prese
 ## Your own presets
 - Save stores every setting and the module order as a user preset. Factory presets are never overwritten.
 - Delete removes the selected user preset file (factory presets cannot be deleted).
-- User presets are files in your Documents folder (Lind Audio/Velvox/Presets), so you can back them up or share them.
+- User presets are files in your Documents folder (Lind Audio/Headliner/Presets), so you can back them up or share them.
 
 ## Module presets
 The Presets button inside a module loads starting points for that module only; the rest of the chain stays as it is.
@@ -152,10 +152,10 @@ The Presets button inside a module loads starting points for that module only; t
 Input gain, Bypass and the Fair compare / Level match settings belong to your recording and monitoring, so presets and A/B never change them.
 
 ## Projects
-Your DAW project stores the complete state of every Velvox instance: all parameters, the module order, the hidden modules, the view mode, the window size, the automatic-mix report and the state before it.)" });
+Your DAW project stores the complete state of every Headliner instance: all parameters, the module order, the hidden modules, the view mode, the window size, the automatic-mix report and the state before it.)" });
 
             p.push_back ({ "compare", "Compare: Bypass and A/B", gWork, R"(## Bypass
-Bypass (top right) plays the unprocessed vocal, delay-compensated so it stays in time. While bypass is on, Velvox shows an amber frame and a BYPASSED label so you never forget it. It is also the host's bypass parameter.
+Bypass (top right) plays the unprocessed vocal, delay-compensated so it stays in time. While bypass is on, Headliner shows an amber frame and a BYPASSED label so you never forget it. It is also the host's bypass parameter.
 
 ## Fair comparison
 A louder sound almost always seems better. Set Fair compare (Auto Mix view) or Level match (Output module) to:

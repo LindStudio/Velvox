@@ -1,5 +1,5 @@
 <#
-  Configures and builds Velvox (VST3 + Standalone + test runner) and runs the tests.
+  Configures and builds Headliner (CMake target "Velvox") (VST3 + Standalone + test runner) and runs the tests.
 
   Usage (PowerShell):
     .\scripts\build.ps1                       # Release build + tests
@@ -47,7 +47,7 @@ if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 & $cmake --build $BuildDir --config $Config --parallel
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
-$vst3 = Join-Path $BuildDir "Velvox_artefacts\$Config\VST3\Velvox.vst3"
+$vst3 = Join-Path $BuildDir "Velvox_artefacts\$Config\VST3\Headliner.vst3"
 Write-Host "`nVST3 bundle: $vst3"
 
 if (-not $SkipTests) {

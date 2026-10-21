@@ -143,6 +143,13 @@ namespace velvox::ui
     // Small captions (semibold, light tracking)
     juce::Font caps (float height);
 
+    // HEADLINER brand artwork (transparent PNGs, cached by juce::ImageCache)
+    enum class Brand { icon, wordmark, logo };
+    juce::Image brandImage (Brand which);
+    // Draws the artwork fitted into `area` (keeps the aspect ratio)
+    void drawBrand (juce::Graphics& g, Brand which, juce::Rectangle<float> area,
+                    juce::RectanglePlacement placement = juce::RectanglePlacement::centred, float alpha = 1.0f);
+
     //==========================================================================
     // Soft radial light - the one decorative gesture of the design
     inline void drawGlow (juce::Graphics& g, juce::Point<float> centre, float radius, float alpha,

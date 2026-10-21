@@ -178,7 +178,7 @@ namespace velvox::ui
                 newStatus = de ("Warte auf Signal am Eingang …");
                 const double waited = (now - viewStartMs) * 0.001;
                 if (level > -60.0f && level <= -50.0f)
-                    newWarning = de ("Signal ist sehr leise. Velvox beginnt ab etwa -50 dBFS - Spurpegel oder Input-Gain anheben.");
+                    newWarning = de ("Signal ist sehr leise. Headliner beginnt ab etwa -50 dBFS - Spurpegel oder Input-Gain anheben.");
                 else if (waited > 6.0 && level <= -60.0f)
                     newWarning = de ("Kein Signal erkannt. Läuft die Wiedergabe, und ist die Vocal-Spur auf diesen Mixer-Kanal geroutet?");
                 break;
@@ -191,11 +191,11 @@ namespace velvox::ui
                 newStatus = seconds (c.voicedSeconds) + de (" von ") + seconds (c.targetSeconds) + de (" s Gesang erfasst");
                 if (c.clipSamples > 0)
                     newWarning = de ("Übersteuerung im Eingang erkannt (") + juce::String (c.clipSamples)
-                               + de (" Samples). Velvox kann Verzerrung nicht entfernen - besser den Pegel senken und neu starten.");
+                               + de (" Samples). Headliner kann Verzerrung nicht entfernen - besser den Pegel senken und neu starten.");
                 else if (c.transportStopped && level < -60.0f)
                     newWarning = c.enough() ? de ("Wiedergabe gestoppt. Starte sie erneut, um weiter zu erfassen - oder analysiere die bisherigen ")
                                                   + seconds (c.voicedSeconds) + " s."
-                                            : de ("Wiedergabe gestoppt - bisher zu wenig Gesang. Starte die Wiedergabe erneut, Velvox erfasst weiter.");
+                                            : de ("Wiedergabe gestoppt - bisher zu wenig Gesang. Starte die Wiedergabe erneut, Headliner erfasst weiter.");
                 else if (level < -60.0f && (now - viewStartMs) > 3000.0)
                     newWarning = de ("Gerade kein Signal - Pausen werden übersprungen.");
                 primary.setEnabled (c.enough());
@@ -214,7 +214,7 @@ namespace velvox::ui
                 newStatus = juce::String ((int) r.changedModules.size()) + de (" Module eingestellt - ") + seconds (r.voicedSeconds)
                           + de (" s Gesang analysiert.");
                 if (r.conservative)
-                    newWarning = de ("Wenig Material: Velvox hat nur vorsichtige Einstellungen verwendet.");
+                    newWarning = de ("Wenig Material: Headliner hat nur vorsichtige Einstellungen verwendet.");
                 if (now - doneAtMs > 2600.0)
                 {
                     close();
@@ -334,15 +334,15 @@ namespace velvox::ui
         {
             case View::intro:
                 title = "Let's mix your vocal.";
-                body = de ("Velvox analysiert zuerst deine Vocal und erstellt daraus eine passende Bearbeitung - Klang, Dynamik, S-Laute und Raum. "
-                           "Starte die Wiedergabe deiner Vocal in der DAW. Velvox analysiert einen begrenzten Abschnitt und erstellt anschließend automatisch deinen Vocal-Mix.");
+                body = de ("Headliner analysiert zuerst deine Vocal und erstellt daraus eine passende Bearbeitung - Klang, Dynamik, S-Laute und Raum. "
+                           "Starte die Wiedergabe deiner Vocal in der DAW. Headliner analysiert einen begrenzten Abschnitt und erstellt anschließend automatisch deinen Vocal-Mix.");
                 break;
             case View::listening:
                 title = de ("Spiel deine Vocal ab");
-                body = de ("Starte jetzt die Wiedergabe in FL Studio. Velvox hört nur zu - der Klang wird erst nach der Analyse verändert.");
+                body = de ("Starte jetzt die Wiedergabe in FL Studio. Headliner hört nur zu - der Klang wird erst nach der Analyse verändert.");
                 break;
             case View::capturing:
-                title = de ("Velvox hört zu");
+                title = de ("Headliner hört zu");
                 body = de ("Ein begrenzter Abschnitt wird erfasst; Pausen werden übersprungen. Die Erfassung stoppt automatisch, sobald genug Gesang da ist.");
                 break;
             case View::analysing:

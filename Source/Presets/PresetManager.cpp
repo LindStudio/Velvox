@@ -12,10 +12,14 @@ namespace velvox
 
     juce::File PresetManager::getDefaultUserPresetDirectory()
     {
-        return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-            .getChildFile (product::companyName)
-            .getChildFile (product::name)
-            .getChildFile ("Presets");
+        const auto company = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile (product::companyName);
+        const auto dir = company.getChildFile (product::name).getChildFile ("Presets");
+
+        // Renamed product: take the user presets saved under the old name along (copy, never move)
+        const auto legacy = company.getChildFile (product::legacyName).getChildFile ("Presets");
+        if (! dir.isDirectory() && legacy.isDirectory())
+            legacy.copyDirectoryTo (dir);
+        return dir;
     }
 
     void PresetManager::refresh()

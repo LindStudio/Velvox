@@ -172,7 +172,7 @@ namespace velvox::ui
         bypass.setTooltip ("Hear the unprocessed vocal (latency compensated). For a fair comparison set Level match to Bypass match.");
         bypass.getProperties().set ("danger", true);   // drawn in the bypass colour while on
 
-        help.setTooltip ("Help: how Velvox works and every module explained (offline)");
+        help.setTooltip ("Help: how Headliner works and every module explained (offline)");
         help.onClick = [this] { if (onHelp) onHelp(); };
         refresh();
     }
@@ -340,22 +340,14 @@ namespace velvox::ui
         g.setGradientFill (line);
         g.fillRect (r.withTop (r.getBottom() - 1.0f));
 
-        // Brand: a lit orb and the word mark
-        auto brand = getLocalBounds().reduced (24, 0).removeFromLeft (220).toFloat();
-        const auto orb = juce::Point<float> (brand.getX() + 9.0f, brand.getCentreY());
-        drawGlow (g, orb, 18.0f, 0.35f, colours::cyan);
-        g.setGradientFill (auroraGradient (orb.translated (-6.0f, -6.0f), orb.translated (6.0f, 6.0f)));
-        g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre (orb));
-        g.setColour (juce::Colours::white.withAlpha (0.8f));
-        g.fillEllipse (juce::Rectangle<float> (4.5f, 4.5f).withCentre (orb.translated (-1.2f, -1.2f)));
-        brand.removeFromLeft (28.0f);
-
-        g.setColour (colours::text);
-        g.setFont (font (23.0f, true).withExtraKerningFactor (0.01f));
-        const auto nameText = juce::String (product::name).toLowerCase();
-        g.drawText (nameText, brand.withY (brand.getCentreY() - 22.0f).withHeight (28.0f), juce::Justification::centredLeft, false);
-        drawCaption (g, "Auto vocal mixer " + juce::String (product::versionString), brand.withY (brand.getCentreY() + 6.0f).withHeight (16.0f),
-                     juce::Justification::centredLeft, colours::textDim, 9.5f);
+        // Brand: HEADLINER icon and word mark (by Lind Audio)
+        auto brand = getLocalBounds().reduced (20, 0).removeFromLeft (230).toFloat();
+        const auto iconArea = brand.removeFromLeft (brand.getHeight() * 0.62f).withSizeKeepingCentre (brand.getHeight() * 0.62f, brand.getHeight() * 0.62f);
+        drawGlow (g, iconArea.getCentre(), 26.0f, 0.22f, colours::blue);
+        drawBrand (g, Brand::icon, iconArea);
+        brand.removeFromLeft (10.0f);
+        drawBrand (g, Brand::wordmark, brand.withSizeKeepingCentre (brand.getWidth(), std::min (brand.getHeight() * 0.62f, 34.0f)),
+                   juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid);
     }
 
     void TopBar::paintOverChildren (juce::Graphics& g)

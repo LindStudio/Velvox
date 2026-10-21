@@ -183,7 +183,13 @@ namespace velvox::test
         // A pop: output curvature far above the output's local median (+-10 ms) AND far above
         // anything in the input nearby (+-3 ms). Processing (EQ, saturation, delays) scales
         // curvature by a bounded factor; a discontinuity creates a single-sample spike.
+        // Echoes repeat the input's own curvature later: when the delay is on, the input
+        // is also referenced around every repeat (k * delay time), otherwise an echo of a
+        // consonant in a pause would count as a discontinuity.
         const int localHalf = (int) (0.01 * fs), inHalf = (int) (0.003 * fs) + 4;
+        const bool delayHeard = proc->readEffectiveSettings().delayOn;
+        const int echoLag = delayHeard ? (int) std::lround (proc->getChain().meters.effectiveDelayMs.load() * 0.001 * fs) : 0;
+        const int echoRepeats = delayHeard ? 8 : 0;
         int lastEvent = -1000000;
         std::vector<float> win;
         for (int s = std::max (settle, localHalf); s + localHalf < (int) outputD2.size(); ++s)
@@ -192,8 +198,12 @@ namespace velvox::test
             if (d < 2.0e-3f)
                 continue;
             float inMax = 0.0f;
-            for (int k = s - inHalf; k <= s + inHalf; ++k)
-                inMax = std::max (inMax, inputD2[(size_t) k]);
+            for (int rep = 0; rep <= echoRepeats; ++rep)
+            {
+                const int c = s - rep * echoLag;
+                for (int k = std::max (0, c - inHalf); k <= c + inHalf && k < (int) inputD2.size(); ++k)
+                    inMax = std::max (inMax, inputD2[(size_t) k]);
+            }
             if (d < 10.0f * inMax)
                 continue;
             win.assign (outputD2.begin() + (s - localHalf), outputD2.begin() + (s + localHalf));
@@ -237,6 +247,15 @@ namespace velvox::test
                 const double ratio = us / (n * 1.0e6 / fs);
                 if (n >= 64 && ratio > worstRatio) { worstRatio = ratio; worstAt = blockTimes[i].first; worstN = n; worstUs = us; }
             }
+            // VELVOX_POPSCAN_SLOW=<ratio>: list every callback above that share of its budget (periodic spikes?)
+            if (const auto slow = juce::SystemStats::getEnvironmentVariable ("VELVOX_POPSCAN_SLOW", {}); slow.isNotEmpty())
+                for (size_t i = 0; i < blockTimes.size(); ++i)
+                {
+                    const double ratio = blockTimes[i].second / (blockSizes[i] * 1.0e6 / fs);
+                    if (blockSizes[i] >= 64 && ratio > slow.getDoubleValue())
+                        res.log.add ("  slow callback t=" + juce::String (blockTimes[i].first / fs, 3) + " s  " + juce::String (blockTimes[i].second, 0)
+                                     + " us for " + juce::String (blockSizes[i]) + " samples = " + juce::String (100.0 * ratio, 1) + " %");
+                }
             res.log.add ("  CPU: average " + juce::String (100.0 * totalUs / (seconds * 1.0e6), 2) + " % of one core; fixed cost per tiny block (<= 8 samples) "
                          + juce::String (small / std::max (1.0, smallCount), 1) + " us; worst block >= 64 samples: "
                          + juce::String (worstUs, 0) + " us for " + juce::String (worstN) + " samples at t=" + juce::String (worstAt / fs, 2)

@@ -182,7 +182,7 @@ namespace velvox::ui
         addAndMakeVisible (stepView);
 
         analyse.getProperties().set ("primary", true);
-        analyse.setTooltip (de ("Velvox erfasst einen Abschnitt deiner Vocal während der Wiedergabe und erstellt daraus den Mix. Der bisherige Zustand bleibt wiederherstellbar."));
+        analyse.setTooltip (de ("Headliner erfasst einen Abschnitt deiner Vocal während der Wiedergabe und erstellt daraus den Mix. Der bisherige Zustand bleibt wiederherstellbar."));
         analyse.onClick = [this] { if (onAnalyse) onAnalyse(); };
 
         previous.setConnectedEdges (juce::Button::ConnectedOnRight);
@@ -436,7 +436,7 @@ namespace velvox::ui
                 g.setColour (colours::textDim);
                 g.setFont (font (14.5f));
                 g.drawFittedText (de ("Starte die Wiedergabe deiner Vocal in der DAW und klicke auf „Audio analysieren“. "
-                                      "Velvox analysiert einen begrenzten Abschnitt, wählt die passenden Module und stellt sie ein - "
+                                      "Headliner analysiert einen begrenzten Abschnitt, wählt die passenden Module und stellt sie ein - "
                                       "danach bleibt alles frei veränderbar."),
                                   a.removeFromTop (70).reduced (30, 0), juce::Justification::centredTop, 3);
             }
