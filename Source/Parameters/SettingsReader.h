@@ -64,6 +64,8 @@ namespace velvox
         Raw smoothOn, smoothAmount, smoothSensitivity, smoothLow, smoothHigh, smoothAttack, smoothRelease, smoothMode, smoothOutput, smoothDelta;
         Raw checkOn, checkMode;
         Raw rideOn, rideTarget, rideAmount, rideMaxBoost, rideMaxCut, rideResponse, ridePhrase, rideTransient, rideSilence;
+        Raw reverbEarly, reverbDiffusion, reverbMod, reverbBass, reverbHighCut;
+        Raw delaySpread, delayDrive, delayDiffusion, delayMod;
     } raw;
     };
 

@@ -202,4 +202,19 @@ namespace velvox::pid
     inline constexpr const char* ridePhrase    = "ridePhrase";
     inline constexpr const char* rideTransient = "rideTransient";
     inline constexpr const char* rideSilence   = "rideSilence";
+
+    // ---- added in 0.4 (neutral defaults; the reverb engine itself is new) ----
+
+    // Reverb engine 0.4
+    inline constexpr const char* reverbEarly     = "reverbEarly";
+    inline constexpr const char* reverbDiffusion = "reverbDiffusion";
+    inline constexpr const char* reverbMod       = "reverbMod";
+    inline constexpr const char* reverbBass      = "reverbBass";
+    inline constexpr const char* reverbHighCut   = "reverbHighCut";
+
+    // Delay 0.4
+    inline constexpr const char* delaySpread    = "delaySpread";
+    inline constexpr const char* delayDrive     = "delayDrive";
+    inline constexpr const char* delayDiffusion = "delayDiffusion";
+    inline constexpr const char* delayMod       = "delayMod";
 }

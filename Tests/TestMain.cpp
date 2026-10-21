@@ -5,6 +5,7 @@
 #include "AutoMix/AutoMixEngine.h"
 #include "SyntheticVocal.h"
 #include "PopScan.h"
+#include "FxLab.h"
 
 struct StdoutLogger final : juce::Logger
 {
@@ -267,6 +268,11 @@ int main (int argc, char* argv[])
                      r.maxSilentDb, r.discontinuities, r.log.joinIntoString ("\n").toRawUTF8());
         return 0;
     }
+
+    // VelvoxTests --fxrender outDir [vocal.wav]: reverb / delay impulse responses and examples
+    if (argc >= 3 && juce::String (argv[1]) == "--fxrender")
+        return velvox::test::runFxRender (juce::File (juce::String::fromUTF8 (argv[2])),
+                                          argc >= 4 ? juce::File (juce::String::fromUTF8 (argv[3])) : juce::File());
 
     if (argc >= 4 && juce::String (argv[1]) == "--automix")
         return runAutoMixOnFile (juce::File (juce::String::fromUTF8 (argv[2])), juce::File (juce::String::fromUTF8 (argv[3])));

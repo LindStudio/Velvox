@@ -100,6 +100,11 @@ namespace velvox
     bind (raw.rideMaxCut, pid::rideMaxCut);     bind (raw.rideResponse, pid::rideResponse);
     bind (raw.ridePhrase, pid::ridePhrase);     bind (raw.rideTransient, pid::rideTransient);
     bind (raw.rideSilence, pid::rideSilence);
+    bind (raw.reverbEarly, pid::reverbEarly);   bind (raw.reverbDiffusion, pid::reverbDiffusion);
+    bind (raw.reverbMod, pid::reverbMod);       bind (raw.reverbBass, pid::reverbBass);
+    bind (raw.reverbHighCut, pid::reverbHighCut);
+    bind (raw.delaySpread, pid::delaySpread);   bind (raw.delayDrive, pid::delayDrive);
+    bind (raw.delayDiffusion, pid::delayDiffusion); bind (raw.delayMod, pid::delayMod);
     }
 
     dsp::ChainSettings SettingsReader::read (std::uint64_t routingPacked, bool monoMonitor) const noexcept
@@ -153,6 +158,10 @@ namespace velvox
     s.delay.lowCutHz = raw.delayLowCut.get();
     s.delay.highCutHz = raw.delayHighCut.get();
     s.delay.pingPong = raw.delayPingPong.on();
+    s.delay.spreadMs = raw.delaySpread.get();
+    s.delay.drive = raw.delayDrive.get() * 0.01f;
+    s.delay.diffusion = raw.delayDiffusion.get() * 0.01f;
+    s.delay.modulation = raw.delayMod.get() * 0.01f;
 
     s.reverbOn = raw.reverbOn.on();
     s.reverbMix = raw.reverbMix.get() * 0.01f;
@@ -163,6 +172,11 @@ namespace velvox
     s.reverb.dampingHz = raw.reverbDamping.get();
     s.reverb.lowCutHz = raw.reverbLowCut.get();
     s.reverb.width = raw.reverbWidth.get() * 0.01f;
+    s.reverb.early = raw.reverbEarly.get() * 0.01f;
+    s.reverb.diffusion = raw.reverbDiffusion.get() * 0.01f;
+    s.reverb.modulation = raw.reverbMod.get() * 0.01f;
+    s.reverb.bassMultiplier = raw.reverbBass.get();
+    s.reverb.highCutHz = raw.reverbHighCut.get();
 
     s.delayIntoReverb = raw.delayToReverb.get() * 0.01f;
     s.routing = dsp::Routing::unpack (routingPacked);

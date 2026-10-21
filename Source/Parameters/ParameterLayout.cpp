@@ -66,9 +66,12 @@ namespace velvox
 
             // ---------------- Reverb ----------------
             { pid::reverbOn,       "Reverb On",        "Reverb", T::Bool, 0, 1, 0, 0, "", {}, "Enables the reverb (parallel send)." },
-            { pid::reverbType,     "Reverb Type",      "Reverb", T::Choice, 0, 1, 1, 0, "", { "Room", "Plate" }, "Room = natural, sparser; Plate = dense, bright." },
+            { pid::reverbType,     "Reverb Type",      "Reverb", T::Choice, 0, 7, 1, 0, "",
+              { "Room", "Plate", "Hall", "Large Hall", "Ambience", "Atmosphere", "Cinematic", "Ethereal" },
+              "Character of the space: Room = natural and close, Plate = dense and bright, Hall / Large Hall = concert spaces, "
+              "Ambience = short studio air, Atmosphere = huge lush EDM space, Cinematic = dark and deep, Ethereal = bright, wide and floating." },
             { pid::reverbMix,      "Reverb Mix",       "Reverb", T::Float, 0.0f, 100.0f, 18.0f, 0.0f, "%", {}, "Level of the reverb return added to the dry signal." },
-            { pid::reverbDecay,    "Reverb Decay",     "Reverb", T::Float, 0.2f, 10.0f, 1.8f, 2.0f, "s", {}, "Reverb time (RT60)." },
+            { pid::reverbDecay,    "Reverb Decay",     "Reverb", T::Float, 0.2f, 20.0f, 1.8f, 2.5f, "s", {}, "Reverb time (RT60) in the mid range." },
             { pid::reverbPreDelay, "Reverb Pre-Delay", "Reverb", T::Float, 0.0f, 250.0f, 20.0f, 60.0f, "ms", {}, "Gap before the reverb starts." },
             { pid::reverbSize,     "Reverb Size",      "Reverb", T::Float, 0.0f, 100.0f, 60.0f, 0.0f, "%", {}, "Virtual room / plate size." },
             { pid::reverbDamping,  "Reverb Tone",      "Reverb", T::Float, 1000.0f, 20000.0f, 7000.0f, 6000.0f, "Hz", {}, "High-frequency damping inside the tail." },
@@ -245,6 +248,28 @@ namespace velvox
               "Ignores short peaks (consonants, plosives) so they are neither ducked nor pumped." },
             { pid::rideSilence,   "Ride Ignore Below", "Ride", T::Float, -80.0f, -30.0f, -50.0f, 0.0f, "dB", {},
               "Below this level the rider treats the signal as a pause and never boosts breaths or room noise." },
+
+            // ---------------- Reverb engine (0.4) ----------------
+            { pid::reverbEarly,     "Reverb Early",     "Reverb", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {},
+              "Level of the early reflections - the first, distinct echoes that tell the ear how big and close the space is." },
+            { pid::reverbDiffusion, "Reverb Diffusion", "Reverb", T::Float, 0.0f, 100.0f, 70.0f, 0.0f, "%", {},
+              "How quickly the echoes melt into a smooth tail. Low = grainy, distinct; high = dense and silky." },
+            { pid::reverbMod,       "Reverb Movement",  "Reverb", T::Float, 0.0f, 100.0f, 30.0f, 0.0f, "%", {},
+              "Slow movement inside the tail. Makes long spaces lush and avoids metallic ringing; 0 = static." },
+            { pid::reverbBass,      "Reverb Bass Decay","Reverb", T::Float, 0.5f, 2.0f, 1.0f, 1.0f, "x", {},
+              "Decay of the low frequencies relative to the mids. Below 1 keeps long tails from getting muddy." },
+            { pid::reverbHighCut,   "Reverb High Cut",  "Reverb", T::Float, 1000.0f, 20000.0f, 12000.0f, 6000.0f, "Hz", {},
+              "Low-pass on the reverb return: lower = darker, further back." },
+
+            // ---------------- Delay (0.4) ----------------
+            { pid::delaySpread,    "Delay Spread",    "Delay", T::Float, 0.0f, 50.0f, 0.0f, 12.0f, "ms", {},
+              "The right side repeats this much later than the left - wide, independent stereo echoes." },
+            { pid::delayDrive,     "Delay Drive",     "Delay", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+              "Tape-like saturation of the repeats: warmer, each echo a little rounder." },
+            { pid::delayDiffusion, "Delay Diffusion", "Delay", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+              "Smears the repeats into a soft wash - from clear echoes to ambient clouds." },
+            { pid::delayMod,       "Delay Modulation","Delay", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+              "Slow wow and flutter on the repeats, like a tape echo." },
         };
 
         return specs;
@@ -304,6 +329,8 @@ namespace velvox
             return (value > 0.05f ? "+" : "") + juce::String (value, std::abs (value - std::round (value)) < 0.05f ? 0 : 1) + " st";
         if (unit == "BPM")
             return juce::String (value, 1) + " BPM";
+        if (unit == "x")
+            return juce::String (value, 2) + "x";
         if (unit == ":1")
             return juce::String (value, value < 10.0f ? 1 : 0) + ":1";
 
