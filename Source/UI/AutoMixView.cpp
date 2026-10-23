@@ -320,8 +320,8 @@ namespace velvox::ui
         {
             auto h = headerArea.toFloat();
             g.setColour (colours::text);
-            g.setFont (font (typesize::hero, true));
-            g.drawText ("Auto Mix", h.removeFromLeft (150.0f), juce::Justification::centredLeft, false);
+            g.setFont (display (typesize::hero - 2.0f, true).withExtraKerningFactor (0.04f));
+            g.drawText ("AUTO MIX", h.removeFromLeft (150.0f), juce::Justification::centredLeft, false);
 
             // Status chip
             const juce::String chipText = r.valid ? (autoMix.isShowingPrevious() ? de ("Vorher-Zustand aktiv") : de ("Analyse abgeschlossen"))
@@ -346,8 +346,8 @@ namespace velvox::ui
         {
             auto a = statusArea.reduced (20, 16);
             g.setColour (colours::text);
-            g.setFont (font (17.0f, true));
-            g.drawText ("Vocal-Status", a.removeFromTop (26), juce::Justification::centredLeft, false);
+            g.setFont (caps (16.0f));
+            g.drawText ("VOCAL-STATUS", a.removeFromTop (26), juce::Justification::centredLeft, false);
             a.removeFromTop (6);
 
             const auto line = [&g, &a] (const juce::String& label, const juce::String& value, juce::Colour c)
@@ -419,8 +419,8 @@ namespace velvox::ui
             auto a = stepsArea.reduced (20, 16);
             auto head = a.removeFromTop (26);
             g.setColour (colours::text);
-            g.setFont (font (17.0f, true));
-            g.drawText ("Automatisch erstellter Mix", head, juce::Justification::centredLeft, false);
+            g.setFont (caps (16.0f));
+            g.drawText ("AUTOMATISCH ERSTELLTER MIX", head, juce::Justification::centredLeft, false);
             if (r.valid)
             {
                 g.setColour (colours::textFaint);
@@ -447,8 +447,8 @@ namespace velvox::ui
         {
             auto head = macroArea.reduced (20, 14).removeFromTop (24);
             g.setColour (colours::text);
-            g.setFont (font (17.0f, true));
-            g.drawText ("Feinschliff", head, juce::Justification::centredLeft, false);
+            g.setFont (caps (16.0f));
+            g.drawText ("FEINSCHLIFF", head, juce::Justification::centredLeft, false);
             g.setColour (colours::textFaint);
             g.setFont (font (12.5f));
             g.drawText (de ("Makros wirken auf die echten Modulparameter - zusätzlich zum Auto-Mix"),

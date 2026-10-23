@@ -53,11 +53,14 @@ namespace velvox::ui
 
         void drawCornerResizer (juce::Graphics&, int w, int h, bool isMouseOver, bool isMouseDragging) override;
 
+        // Lit "active" body used by toggled buttons and pills
+        static void drawNeonFill (juce::Graphics&, const juce::Path& shape, juce::Rectangle<float> bounds, float strength);
+
     private:
-        // Brushed-metal knob body for a dial radius (design units) at a physical pixel scale
-        const juce::Image& metalBody (float radius, float physicalScale);
+        // Matte knob body for a dial radius (design units) at a physical pixel scale
+        const juce::Image& dialBody (float radius, float physicalScale);
 
         juce::SharedResourcePointer<EmbeddedFonts> fonts;
-        std::map<int, juce::Image> metalCache;   // key: diameter in physical pixels
+        std::map<int, juce::Image> bodyCache;     // key: diameter in physical pixels
     };
 }

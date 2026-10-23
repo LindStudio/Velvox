@@ -3,37 +3,39 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "../DSP/Routing.h"
 
-// Visual tokens (v0.4 "anthracite" identity).
-// Dark anthracite canvas, raised panels that separate clearly from it, glass
-// edges made of faint white and a restrained cyan accent for selection and
-// pointers. Red is reserved for real problems (clipping, phase cancellation).
+// Visual tokens (v0.5 "headliner" identity, see docs/STYLEGUIDE.md).
+// Deep navy canvas, matte cards with a thin slate border, and one light source:
+// the neon spectrum cyan -> blue -> violet -> pink. Every module owns a hue on
+// that spectrum (its icon, power light and dial ring glow in it). Red is
+// reserved for real problems (clipping, phase cancellation).
 namespace velvox::ui
 {
     namespace colours
     {
-        // Deep navy base: neutral enough for long sessions, dark enough that the
-        // coloured light behind the glass reads as depth, not decoration
-        inline const juce::Colour background { 0xff090c15 };
-        inline const juce::Colour panel      { 0xff121726 };   // main panels (opaque equivalent)
-        inline const juce::Colour raised     { 0xff1a2031 };   // controls, cards
-        inline const juce::Colour raisedHi   { 0xff22293d };
-        inline const juce::Colour line       { 0xff2c344a };   // hairlines
-        inline const juce::Colour lineSoft   { 0xff21283a };
-        inline const juce::Colour text       { 0xfff4f6fb };
-        inline const juce::Colour textDim    { 0xffb0b7ca };   // secondary labels: dimmer, still clearly legible
-        inline const juce::Colour textFaint  { 0xff7f879d };   // scales, units, tertiary hints
+        // Style guide palette: Dark BG #0B1020, Panel BG #111827, Card BG #1F2937,
+        // Border #334155, Text #E5E7EB
+        inline const juce::Colour background { 0xff0b1020 };
+        inline const juce::Colour panel      { 0xff111827 };   // main panels (opaque equivalent)
+        inline const juce::Colour raised     { 0xff18202f };   // controls, recessed fields
+        inline const juce::Colour raisedHi   { 0xff1f2937 };   // cards
+        inline const juce::Colour line       { 0xff334155 };   // borders
+        inline const juce::Colour lineSoft   { 0xff243042 };
+        inline const juce::Colour text       { 0xffeef0f5 };
+        inline const juce::Colour textDim    { 0xffaab3c5 };   // secondary labels: dimmer, still clearly legible
+        inline const juce::Colour textFaint  { 0xff76819a };   // scales, units, tertiary hints
         inline const juce::Colour accent     { 0xffffffff };
         inline const juce::Colour warning    { 0xffff5c6c };
         inline const juce::Colour ok         { 0xff4be3a6 };
         inline const juce::Colour io         { 0xffc9cfdc };
 
-        // Light of the glass: cyan -> blue -> violet ("aurora")
-        inline const juce::Colour teal       { 0xff3ddcf5 };   // cyan end
-        inline const juce::Colour blue       { 0xff5b7dff };
-        inline const juce::Colour violet     { 0xff9a72ff };
+        // The neon spectrum: Cyan Primary, Blue Primary, Violet Primary, Pink Accent
+        inline const juce::Colour teal       { 0xff00d1ff };   // cyan end
+        inline const juce::Colour blue       { 0xff6366ff };
+        inline const juce::Colour violet     { 0xffa855f7 };
+        inline const juce::Colour pink       { 0xfff472b6 };
 
         // Interaction accent: selection, knob pointers, active states
-        inline const juce::Colour cyan       { 0xff4fd6ff };
+        inline const juce::Colour cyan       { 0xff22d3ff };
     }
 
     // Layout tokens (design units on the 1440 x 900 canvas). New components use
@@ -101,8 +103,42 @@ namespace velvox::ui
         return g;
     }
 
-    // Every module shares the white accent; the chain position is shown by layout
-    inline juce::Colour moduleColour (dsp::ModuleId) { return colours::accent; }
+    // Position on the full neon spectrum (0 = cyan, 1/3 = blue, 2/3 = violet, 1 = pink)
+    inline juce::Colour neon (float t, float alpha = 1.0f)
+    {
+        t = juce::jlimit (0.0f, 1.0f, t) * 3.0f;
+        const juce::Colour stops[] { colours::teal, colours::blue, colours::violet, colours::pink };
+        const int i = std::min (2, (int) t);
+        return stops[i].interpolatedWith (stops[i + 1], t - (float) i).withAlpha (alpha);
+    }
+
+    // Each module glows in its own hue (Voxity-style columns): cleaning tools in
+    // cyan, dynamics in blue, space and voices in violet, colour and drive in pink
+    inline float moduleHue (dsp::ModuleId id)
+    {
+        using M = dsp::ModuleId;
+        switch (id)
+        {
+            case M::eq:      return 0.00f;
+            case M::check:   return 0.06f;
+            case M::deess:   return 0.12f;
+            case M::smooth:  return 0.20f;
+            case M::comp:    return 0.32f;
+            case M::ride:    return 0.40f;
+            case M::smash:   return 0.47f;
+            case M::doubler: return 0.56f;
+            case M::choir:   return 0.62f;
+            case M::pitch:   return 0.68f;
+            case M::delay:   return 0.74f;
+            case M::reverb:  return 0.80f;
+            case M::chop:    return 0.88f;
+            case M::pulse:   return 0.94f;
+            case M::sat:     return 1.00f;
+        }
+        return 0.0f;
+    }
+
+    inline juce::Colour moduleColour (dsp::ModuleId id, float alpha = 1.0f) { return neon (moduleHue (id), alpha); }
 
     // Exponential approach used by every animation (called once per frame)
     struct Smoothed
@@ -126,19 +162,19 @@ namespace velvox::ui
     };
 
     //==========================================================================
-    // Embedded typefaces (Inter, SIL OFL 1.1). Held alive by a
+    // Embedded typefaces (Montserrat, SIL OFL 1.1). Held alive by a
     // SharedResourcePointer in the editor so they are created once per session.
     struct EmbeddedFonts
     {
         EmbeddedFonts();
-        juce::Typeface::Ptr regular, medium, semibold, light;
+        juce::Typeface::Ptr regular, medium, semibold, light, bold;
     };
 
-    // Body text (Inter Regular / SemiBold)
+    // Body text (Montserrat Regular / SemiBold)
     juce::Font font (float height, bool bold = false);
-    // UI labels and buttons (Inter Medium)
+    // UI labels and buttons (Montserrat Medium)
     juce::Font medium (float height);
-    // Large numbers and read-outs (Inter Display Light / SemiBold)
+    // Large numbers and read-outs (Montserrat Medium / Bold)
     juce::Font display (float height, bool bold = false);
     // Small captions (semibold, light tracking)
     juce::Font caps (float height);

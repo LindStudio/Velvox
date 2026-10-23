@@ -63,6 +63,8 @@ namespace velvox::ui
     {
         const int id = selection < 0 ? selection : (int) dsp::selectionModule (selection);
         moduleId = id;
+        if (power != nullptr && id >= 0)
+            power->setHue (moduleColour ((ModuleId) id));
         // Several instances of this module in the chain: the title says which one
         if (id >= 0 && (instance > 0 || proc.getRouting().countOf ((ModuleId) id) > 1))
             title << " " << (instance + 1);
@@ -156,6 +158,7 @@ namespace velvox::ui
     {
         const auto r = getLocalBounds().toFloat();
         const bool on = onParamId.isEmpty() || apvts.getRawParameterValue (onParamId)->load() > 0.5f;
+        const auto hue = moduleId >= 0 && moduleId < dsp::numModules ? moduleColour ((ModuleId) moduleId) : colours::teal;
 
         g.setColour (colours::panel);
         g.fillRoundedRectangle (r, 16.0f);
@@ -165,8 +168,8 @@ namespace velvox::ui
             juce::Path clip;
             clip.addRoundedRectangle (r, 16.0f);
             g.reduceClipRegion (clip);
-            drawGlow (g, { r.getX() + 80.0f, r.getY() }, 300.0f, 0.06f, colours::teal);
-            drawGlow (g, { r.getRight() - 120.0f, r.getY() }, 280.0f, 0.045f, colours::blue);
+            drawGlow (g, { r.getX() + 80.0f, r.getY() }, 300.0f, 0.06f, hue);
+            drawGlow (g, { r.getRight() - 120.0f, r.getY() }, 280.0f, 0.045f, hue.interpolatedWith (colours::blue, 0.5f));
         }
         drawGlass (g, r, 16.0f, 0.012f);
 
@@ -176,16 +179,20 @@ namespace velvox::ui
         if (moduleId != -2)
         {
             const auto icon = header.removeFromLeft (26).toFloat().withSizeKeepingCentre (24.0f, 24.0f);
-            drawModuleIcon (g, moduleId, icon, on ? colours::cyan.interpolatedWith (colours::text, 0.2f) : colours::textDim);
+            if (on)
+                drawGlow (g, icon.getCentre(), 22.0f, 0.4f, hue);
+            drawModuleIcon (g, moduleId, icon, on ? hue.interpolatedWith (colours::text, 0.15f) : colours::textDim);
             header.removeFromLeft (12);
         }
         header.removeFromRight (helpButton.getWidth() + 10);
         if (presetsButton.isVisible())
             header.removeFromRight (presetsButton.getWidth() + 12);
         g.setColour (on ? colours::text : colours::textDim);
-        g.setFont (font (typesize::title, true));
-        const int titleW = juce::GlyphArrangement::getStringWidthInt (font (typesize::title, true), title) + 18;
-        g.drawText (title, header.removeFromLeft (titleW), juce::Justification::centredLeft, false);
+        const auto shownTitle = title.toUpperCase();
+        const auto titleFont = display (typesize::title - 2.0f, true).withExtraKerningFactor (0.04f);
+        g.setFont (titleFont);
+        const int titleW = juce::GlyphArrangement::getStringWidthInt (titleFont, shownTitle) + 18;
+        g.drawText (shownTitle, header.removeFromLeft (titleW), juce::Justification::centredLeft, false);
         if (! on)
         {
             // Plain-language state next to the name
@@ -209,7 +216,7 @@ namespace velvox::ui
             g.fillRoundedRectangle (v, 12.0f);
             g.setColour (colours::lineSoft);
             g.drawRoundedRectangle (v.reduced (0.5f), 12.0f, 1.0f);
-            g.setColour (colours::cyan.withAlpha (on ? 0.35f : 0.1f));
+            g.setColour (hue.withAlpha (on ? 0.35f : 0.1f));
             g.fillRect (v.reduced (24.0f, 0.0f).withHeight (1.0f));
         }
 
@@ -222,11 +229,12 @@ namespace velvox::ui
             g.setColour (colours::lineSoft);
             g.drawRoundedRectangle (a.reduced (0.5f), radius::card, 1.0f);
             auto cap = a.reduced (16.0f, 0.0f).withHeight ((float) captionH).withTrimmedTop (2.0f);
-            const auto headingFont = font (typesize::heading, true);
-            const float w = (float) juce::GlyphArrangement::getStringWidthInt (headingFont, s.caption) + 12.0f;
+            const auto headingFont = caps (typesize::heading - 1.0f);
+            const auto heading = s.caption.toUpperCase();
+            const float w = (float) juce::GlyphArrangement::getStringWidthInt (headingFont, heading) + 12.0f;
             g.setColour (colours::text.withAlpha (0.86f));
             g.setFont (headingFont);
-            g.drawText (s.caption, cap, juce::Justification::centredLeft, false);
+            g.drawText (heading, cap, juce::Justification::centredLeft, false);
             g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.10f), cap.getX() + w, 0.0f,
                                                      colours::accent.withAlpha (0.0f), cap.getRight(), 0.0f, false));
             g.fillRect (juce::Rectangle<float> (cap.getX() + w, cap.getCentreY(), cap.getWidth() - w, 1.0f));

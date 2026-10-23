@@ -49,10 +49,11 @@ namespace
     VelvoxAudioProcessorEditor& asVelvox (juce::AudioProcessorEditor& e) { return dynamic_cast<VelvoxAudioProcessorEditor&> (e); }
 
     // Button clicks are delivered asynchronously: click and let the message loop run
+    // long enough that a busy loop (editor animations, first paints) still delivers it
     void click (juce::Button& b)
     {
         b.triggerClick();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (150);
     }
 
     // Feeds the processor with audio until the capture is complete, then waits for the worker
@@ -103,6 +104,7 @@ public:
         profilerTests();
         plannerTests();
         engineTests();
+        optimizerTests();
         workflowTests();
         editorTests();
     }
@@ -510,6 +512,158 @@ public:
     }
 
     //==========================================================================
+    // The candidate search of 0.4 (docs/AUTOMIX_OBJECTIVE.md)
+    void optimizerTests()
+    {
+        const auto profileFor = [] (const VocalSpec& s) { return VocalProfiler::analyse (makeVocal (s)); };
+
+        beginTest ("Optimizer: every candidate is a legal, bounded and deterministic chain");
+        {
+            std::vector<VocalSpec> specs;
+            { VocalSpec s; s.seconds = 12.0; specs.push_back (s); }
+            { VocalSpec s; s.seconds = 12.0; s.tiltDb = -5.0f; s.f0 = 120.0f; specs.push_back (s); }
+            { VocalSpec s; s.seconds = 12.0; s.tiltDb = 4.0f; s.sibilance = 1.6f; s.f0 = 300.0f; specs.push_back (s); }
+            { VocalSpec s; s.seconds = 12.0; s.compress = 1.0f; s.phraseRangeDb = 0.0f; specs.push_back (s); }
+
+            for (auto& s : specs)
+            {
+                const auto profile = profileFor (s);
+                const auto base = AutoMixPlanner::plan (profile, defaults());
+                const auto cands = AutoMixEngine::candidatesFor (base, profile);
+
+                expect (! cands.empty() && cands.front().second.values == base.values, "index 0 is the base plan");
+                expect (cands.size() <= 9, "bounded: " + juce::String ((int) cands.size()) + " candidates");
+
+                juce::StringArray names;
+                for (auto& [name, plan] : cands)
+                {
+                    expect (! names.contains (name), "unique name " + name);
+                    names.add (name);
+                    expect (plan.routing.isValid(), "valid routing: " + name);
+                    for (auto& [id, v] : plan.values)
+                    {
+                        const auto* spec = findParameterSpec (dsp::splitInstanceParamId (id).first);
+                        expect (spec != nullptr, "known id " + id);
+                        if (spec != nullptr)
+                            expect (v >= spec->minValue - 1.0e-4f && v <= spec->maxValue + 1.0e-4f, name + ": " + id + " in range");
+                    }
+                    // Creative effects stay off in every variant, as in the base plan
+                    for (auto* id : { pid::pitchOn, pid::chopOn, pid::pulseOn, pid::choirOn })
+                        expectEquals (plan.get (id, 0.0f), 0.0f, name + ": " + id);
+                }
+
+                const auto again = AutoMixEngine::candidatesFor (base, profile);
+                bool same = again.size() == cands.size();
+                for (size_t i = 0; same && i < cands.size(); ++i)
+                    same = again[i].first == cands[i].first && again[i].second.values == cands[i].second.values
+                        && again[i].second.routing == cands[i].second.routing;
+                expect (same, "deterministic");
+            }
+        }
+
+        beginTest ("Optimizer: a variant has to earn the change; problems cost");
+        {
+            VocalSpec s; s.seconds = 12.0;
+            const auto profile = profileFor (s);
+            RenderMetrics m;
+            m.valid = true;
+            m.lufs = -18.0f; m.peakDb = -6.0f;
+            m.bodyDb = -4.0f; m.lowMidDb = -3.0f; m.topDb = -11.0f; m.airDb = -24.0f; m.presenceDb = -8.0f;
+            m.dynamicsDb = 6.0f; m.dynamicsValid = true; m.crestDb = 12.0f;
+            m.correlation = 0.95f; m.monoLossDb = 0.0f;
+            const auto original = m;
+
+            const auto base = evaluate (m, original, profile, -18.0f, true, false);
+            const auto variant = evaluate (m, original, profile, -18.0f, false, false);
+            expect (base.total() < 0.01f, "a balanced render costs nothing: " + base.describe());
+            expect (variant.total() > base.total(), "the same result is not worth a change");
+
+            auto squashed = m;
+            squashed.crestDb = 4.0f;
+            expect (evaluate (squashed, original, profile, -18.0f, true, false).dynamics > 1.0f, "over-compression costs");
+
+            auto harsh = m;
+            harsh.presenceDb = 0.0f;
+            expect (evaluate (harsh, original, profile, -18.0f, true, false).harshness > 1.0f, "harshness costs");
+
+            auto clipped = m;
+            clipped.clipRuns = 2;
+            expect (evaluate (clipped, original, profile, -18.0f, true, false).artifacts >= 8.0f, "clipping costs");
+
+            auto louder = m;
+            louder.lufs = -12.0f;
+            louder.peakDb = -6.0f + 6.0f;
+            expect (std::abs (evaluate (louder, original, profile, -18.0f, true, false).total()
+                              - evaluate (m, original, profile, -18.0f, true, false).total()) < 1.0e-4f,
+                    "loudness alone is never rewarded");
+
+            RenderMetrics invalid;
+            expect (evaluate (invalid, original, profile, -18.0f, true, false).total() > 1000.0f, "a failed render never wins");
+        }
+
+        beginTest ("Optimizer: the EQ 2 variant moves the highs behind the dynamics");
+        {
+            VocalSpec s; s.seconds = 12.0;
+            const auto profile = profileFor (s);
+            auto base = AutoMixPlanner::plan (profile, defaults());
+            base.set (pid::eqOn, 1.0f);
+            base.set (pid::compOn, 1.0f);
+            base.set (pid::highGain, 3.0f);
+            base.set (pid::highFreq, 9000.0f);
+            if (! base.routing.contains (ModuleId::comp))
+                base.routing.insertAt (base.routing.size(), ModuleId::comp, 0);
+
+            const auto cands = AutoMixEngine::candidatesFor (base, profile);
+            const auto it = std::find_if (cands.begin(), cands.end(), [] (auto& c) { return c.second.routing.contains (ModuleId::eq, 1); });
+            expect (it != cands.end(), "an EQ 2 variant exists when the plan boosts the highs");
+            if (it != cands.end())
+            {
+                const auto& c = it->second;
+                const auto k2 = [] (const char* id) { return dsp::instanceParamId (id, 1); };
+                expect (c.on (k2 (pid::eqOn).toRawUTF8()), "EQ 2 is switched on");
+                expectWithinAbsoluteError (c.get (k2 (pid::highGain)), 3.0f, 1.0e-4f, "the boost moved to EQ 2");
+                expectWithinAbsoluteError (c.get (k2 (pid::highFreq)), 9000.0f, 1.0e-2f, "at the same frequency");
+                expectWithinAbsoluteError (c.get (pid::highGain), 0.0f, 1.0e-4f, "and left EQ 1");
+                for (auto m : { ModuleId::comp, ModuleId::smash, ModuleId::deess, ModuleId::smooth })
+                    if (c.routing.contains (m))
+                        expect (c.routing.indexOf (ModuleId::eq, 1) > c.routing.indexOf (m), "EQ 2 after the dynamics");
+            }
+
+            // No highs boosted, no presence boost: no EQ 2 variant
+            auto flat = base;
+            flat.set (pid::highGain, 0.0f);
+            flat.set (pid::midGain, 0.0f);
+            const auto none = AutoMixEngine::candidatesFor (flat, profile);
+            expect (std::none_of (none.begin(), none.end(), [] (auto& c) { return c.second.routing.contains (ModuleId::eq, 1); }),
+                    "no EQ 2 without a boost to move");
+        }
+
+        beginTest ("Optimizer: the run reports every candidate and never picks a worse one");
+        {
+            VocalSpec s; s.seconds = 12.0; s.tiltDb = 4.0f; s.sibilance = 1.6f;
+            const auto r = AutoMixEngine::run (makeVocal (s), defaults());
+            expect (r.ok, r.error);
+            if (r.ok)
+            {
+                expect (r.candidates.size() >= 2, "candidates were compared: " + juce::String ((int) r.candidates.size()));
+                expect (r.chosenCandidate >= 0 && r.chosenCandidate < (int) r.candidates.size());
+                for (auto& c : r.candidates)
+                    logMessage ("    " + c.name + ": " + juce::String (c.score.total(), 2) + " (" + c.score.describe() + ")");
+                if (! r.candidates.empty())
+                {
+                    const auto& chosen = r.candidates[(size_t) r.chosenCandidate];
+                    for (auto& c : r.candidates)
+                        expect (chosen.score.total() <= c.score.total() + 1.0e-4f, "chosen is the best: " + c.name);
+                    expect (r.plan.routing.isValid());
+                    if (r.chosenCandidate > 0)
+                        expect (std::any_of (r.adjustments.begin(), r.adjustments.end(), [&] (auto& a) { return a.contains (chosen.name); }),
+                                "the report names the chosen variant");
+                }
+            }
+        }
+    }
+
+    //==========================================================================
     void workflowTests()
     {
         beginTest ("Workflow: capture during playback, analysis in the background, applied to the real parameters");
@@ -724,13 +878,13 @@ public:
             h.proc.getAutoMix().dismissPrompt();
             VocalSpec s; s.seconds = 14.0;
             const auto result = h.proc.getAutoMix().runSynchronously (makeVocal (s));
-            expect (result.ok);
+            expect (result.ok, "ok");
             h.proc.getAutoMix().applyResult (result);
 
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = asVelvox (*e);
-            expect (! ed.getAnalysisOverlay().isOpen());
-            expect (! ed.isProMode());
+            expect (! ed.getAnalysisOverlay().isOpen(), "overlay closed");
+            expect (! ed.isProMode(), "beginner");
             const auto& report = h.proc.getAutoMix().getReport();
             expectEquals (ed.getAutoMixView().getNumStepRows(),
                           (int) (report.steps.size() + (size_t) report.notes.size() + (size_t) report.adjustments.size()));
@@ -741,15 +895,15 @@ public:
 
             // Compare buttons switch the real parameters
             click (ed.getAutoMixView().getPreviousButton());
-            expect (h.proc.getAutoMix().isShowingPrevious());
+            expect (h.proc.getAutoMix().isShowingPrevious(), "previous");
             click (ed.getAutoMixView().getMixButton());
-            expect (! h.proc.getAutoMix().isShowingPrevious());
+            expect (! h.proc.getAutoMix().isShowingPrevious(), "mix");
 
             // "Original" is the latency-compensated, level-matched bypass
             click (ed.getAutoMixView().getOriginalButton());
-            expect (h.get (pid::bypass) > 0.5f);
+            expect (h.get (pid::bypass) > 0.5f, "original on");
             click (ed.getAutoMixView().getOriginalButton());
-            expect (h.get (pid::bypass) < 0.5f);
+            expect (h.get (pid::bypass) < 0.5f, "original off");
 
             ed.getChainView().onSelect ((int) ModuleId::comp);
             expect (ed.isProMode() && ed.getDetail() != nullptr, "module card opens the module");

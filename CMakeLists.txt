@@ -99,16 +99,17 @@ set(VELVOX_THIRD_PARTY_INCLUDES
     third_party/signalsmith-linear/include
 )
 
-# Embedded UI typefaces: Inter 4.1 (SIL OFL 1.1, see Resources/Fonts/Inter-LICENSE.txt)
+# Embedded UI typefaces: Montserrat (SIL OFL 1.1, see Resources/Fonts/Montserrat-LICENSE.txt)
 # and the HEADLINER logo (icon, word mark, full logo; transparent PNGs)
 juce_add_binary_data(VelvoxAssets
     HEADER_NAME VelvoxBinaryData.h
     NAMESPACE VelvoxBinaryData
     SOURCES
-        Resources/Fonts/Inter-Regular.ttf
-        Resources/Fonts/Inter-Medium.ttf
-        Resources/Fonts/Inter-SemiBold.ttf
-        Resources/Fonts/InterDisplay-Light.ttf
+        Resources/Fonts/Montserrat-Light.ttf
+        Resources/Fonts/Montserrat-Regular.ttf
+        Resources/Fonts/Montserrat-Medium.ttf
+        Resources/Fonts/Montserrat-SemiBold.ttf
+        Resources/Fonts/Montserrat-Bold.ttf
         Resources/Images/HeadlinerIcon.png
         Resources/Images/HeadlinerWordmark.png
         Resources/Images/HeadlinerLogo.png)

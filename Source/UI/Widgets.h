@@ -139,9 +139,11 @@ namespace velvox::ui
     public:
         PowerButton (APVTS& state, const char* paramId, juce::Colour accent = colours::accent);
         void paintButton (juce::Graphics&, bool highlighted, bool down) override;
+        void setHue (juce::Colour c) { hue = c; repaint(); }
 
     private:
         std::unique_ptr<APVTS::ButtonAttachment> attachment;
+        juce::Colour hue = colours::teal;
     };
 
     // Stereo peak meter with hold, clip lamp and an optional LUFS read-out

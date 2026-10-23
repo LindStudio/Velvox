@@ -19,13 +19,13 @@ namespace velvox::ui
 
         bool canBeSend (ModuleId id) { return dsp::Routing::canBeSend (id); }
 
-        void drawPowerGlyph (juce::Graphics& g, juce::Rectangle<float> r, bool on, float hover)
+        void drawPowerGlyph (juce::Graphics& g, juce::Rectangle<float> r, bool on, float hover, juce::Colour hue = colours::cyan)
         {
             const float size = std::min (r.getWidth(), r.getHeight());
             r = r.withSizeKeepingCentre (size, size);
             g.setColour (colours::background.withAlpha (0.9f));
             g.fillEllipse (r);
-            g.setColour (on ? colours::cyan.withAlpha (0.65f) : colours::line.brighter (0.35f + 0.4f * hover));
+            g.setColour (on ? hue.withAlpha (0.75f) : colours::line.brighter (0.35f + 0.4f * hover));
             g.drawEllipse (r.reduced (0.6f), 1.2f);
 
             const auto c = r.getCentre();
@@ -34,7 +34,7 @@ namespace velvox::ui
             p.addCentredArc (c.x, c.y, rad, rad, 0.0f, 0.7f, juce::MathConstants<float>::twoPi - 0.7f, true);
             p.startNewSubPath (c.x, c.y - rad * 1.3f);
             p.lineTo (c.x, c.y - rad * 0.2f);
-            g.setColour (on ? colours::cyan : colours::textFaint.brighter (0.3f * hover));
+            g.setColour (on ? hue : colours::textFaint.brighter (0.3f * hover));
             g.strokePath (p, juce::PathStrokeType (1.7f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
@@ -611,8 +611,8 @@ namespace velvox::ui
         g.strokePath (arrow, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
         g.setColour (isSel ? colours::text : colours::textDim);
-        g.setFont (medium (14.0f));
-        g.drawText (isOutput ? "Output" : "Input", box.withTrimmedTop (44.0f).withHeight (20.0f), juce::Justification::centred, false);
+        g.setFont (caps (13.0f));
+        g.drawText (isOutput ? "OUTPUT" : "INPUT", box.withTrimmedTop (44.0f).withHeight (20.0f), juce::Justification::centred, false);
     }
 
     void ChainView::drawAddCard (juce::Graphics& g, juce::Rectangle<float> r) const
@@ -647,6 +647,7 @@ namespace velvox::ui
         const auto glowIt = hoverGlow.find (code);
         const float hov = ghost ? 0.0f : (glowIt != hoverGlow.end() ? glowIt->second.current : 0.0f);
         const bool repeated = routing.countOf (t.id) > 1;
+        const auto hue = moduleColour (t.id);
 
         // Card body: raised when on, flat and darker when off
         if (ghost)
@@ -655,10 +656,9 @@ namespace velvox::ui
         g.fillRoundedRectangle (r, corner);
         if (on)
         {
-            // Lit glass: a white sheen plus a hint of the aurora colour for its place in the chain
-            const float place = juce::jlimit (0.0f, 1.0f, (float) (t.position - 1) / (float) std::max (1, numSerial - 1));
-            g.setGradientFill (juce::ColourGradient (aurora (place, 0.10f), r.getX(), r.getY(),
-                                                     aurora (place, 0.0f), r.getRight(), r.getBottom(), false));
+            // Lit card: a wash of the module's own neon hue from the top left
+            g.setGradientFill (juce::ColourGradient (hue.withAlpha (0.16f), r.getX(), r.getY(),
+                                                     hue.withAlpha (0.0f), r.getRight(), r.getBottom(), false));
             g.fillRoundedRectangle (r, corner);
             g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.05f), r.getX(), r.getY(),
                                                      colours::accent.withAlpha (0.0f), r.getX(), r.getBottom(), false));
@@ -666,7 +666,7 @@ namespace velvox::ui
         }
         if (isSelected)
         {
-            g.setColour (colours::cyan.withAlpha (0.075f));
+            g.setColour (hue.withAlpha (0.08f));
             g.fillRoundedRectangle (r, corner);
         }
         if (hov > 0.01f)
@@ -675,35 +675,35 @@ namespace velvox::ui
             g.fillRoundedRectangle (r, corner);
         }
 
-        // Frame: cyan when selected, brighter when on
+        // Frame: module hue when selected, brighter when on
         if (isSelected)
         {
-            g.setColour (colours::cyan.withAlpha (0.9f));
+            g.setColour (hue.withAlpha (0.9f));
             g.drawRoundedRectangle (r.reduced (0.8f), corner, 1.6f);
             g.fillRoundedRectangle (r.getX() + 16.0f, r.getY() + 1.5f, r.getWidth() - 32.0f, 2.5f, 1.25f);
         }
         else
         {
-            g.setColour (ghost ? colours::cyan.withAlpha (0.6f)
+            g.setColour (ghost ? hue.withAlpha (0.6f)
                                : (on ? colours::line.brighter (0.45f + 0.4f * hov) : colours::line.brighter (0.1f + 0.4f * hov)));
             g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
         }
 
         Tile shifted = t;
         shifted.bounds = r;
-        drawPowerGlyph (g, dotBounds (shifted), switchedOn, hov);
+        drawPowerGlyph (g, dotBounds (shifted), switchedOn, hov, hue);
 
         const auto nameColour = on ? colours::text : colours::textDim;
-        const juce::String baseName (dsp::moduleDisplayName (t.id));
+        const auto baseName = juce::String (dsp::moduleDisplayName (t.id)).toUpperCase();
 
         // Instance number chip ("2") after the name of a repeated module: two EQs are
         // visibly two separate instances, not one module shown twice
         const auto drawInstanceChip = [&] (float x, float centreY)
         {
             const auto chip = juce::Rectangle<float> (20.0f, 18.0f).withPosition (x, centreY - 9.0f);
-            g.setColour (colours::cyan.withAlpha (on ? 0.16f : 0.08f));
+            g.setColour (hue.withAlpha (on ? 0.16f : 0.08f));
             g.fillRoundedRectangle (chip, 5.0f);
-            g.setColour (colours::cyan.withAlpha (on ? 0.7f : 0.35f));
+            g.setColour (hue.withAlpha (on ? 0.7f : 0.35f));
             g.drawRoundedRectangle (chip.reduced (0.5f), 5.0f, 1.0f);
             g.setColour (on ? colours::text : colours::textDim);
             g.setFont (medium (11.5f));
@@ -742,7 +742,9 @@ namespace velvox::ui
 
             // Status line with the module icon
             const auto iconArea = juce::Rectangle<float> (r.getX() + 16.0f, r.getY() + 46.0f, 20.0f, 20.0f);
-            drawModuleIcon (g, (int) t.id, iconArea, on ? colours::cyan.interpolatedWith (colours::text, 0.25f) : colours::textFaint);
+            if (on)
+                drawGlow (g, iconArea.getCentre(), 18.0f, 0.35f, hue);
+            drawModuleIcon (g, (int) t.id, iconArea, on ? hue.interpolatedWith (colours::text, 0.15f) : colours::textFaint);
             juce::String status = switchedOn ? (globalBypass ? "Bypass" : "On") : (engagedOnly ? "On via macro" : "Off");
             g.setColour (switchedOn && globalBypass ? colours::bypass : (on ? colours::text.withAlpha (0.82f) : colours::textFaint));
             g.setFont (medium (13.0f));
@@ -776,7 +778,7 @@ namespace velvox::ui
             if (switchedOn && act > 0.01f)
             {
                 const auto bar = juce::Rectangle<float> (r.getX() + 14.0f, r.getBottom() - 6.0f, r.getWidth() - 28.0f, 2.5f);
-                g.setColour (colours::cyan.withAlpha (0.85f));
+                g.setColour (hue.withAlpha (0.9f));
                 g.fillRoundedRectangle (bar.withWidth (std::max (3.0f, bar.getWidth() * act)), 1.25f);
             }
 

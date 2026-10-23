@@ -14,14 +14,15 @@ namespace velvox::ui
 
         juce::Label& styleCaption (juce::Label& l, float size = typesize::label)
         {
-            l.setFont (medium (size));
+            // Style guide: control names in tracked capitals
+            l.setFont (caps (size - 1.5f));
             l.setJustificationType (juce::Justification::centred);
             l.setColour (juce::Label::textColourId, colours::textDim);
             l.setInterceptsMouseClicks (false, false);
             return l;
         }
 
-        constexpr int knobLabelH = 18, knobValueH = 20, knobGap = 5;
+        constexpr int knobLabelH = 18, knobValueH = 22, knobGap = 5;
         constexpr int popupWidth = 290;
 
         juce::TextLayout layoutText (const juce::String& text, float width)
@@ -159,7 +160,7 @@ namespace velvox::ui
         slider.addMouseListener (this, true);
         addAndMakeVisible (slider);
 
-        name.setText (label, juce::dontSendNotification);
+        name.setText (label.toUpperCase(), juce::dontSendNotification);
         addAndMakeVisible (styleCaption (name));
 
         attachment = std::make_unique<APVTS::SliderAttachment> (state, paramId, slider);
@@ -369,7 +370,7 @@ namespace velvox::ui
         box.setRepaintsOnMouseActivity (true);
         addAndMakeVisible (box);
 
-        caption.setText (captionText, juce::dontSendNotification);
+        caption.setText (captionText.toUpperCase(), juce::dontSendNotification);
         addAndMakeVisible (styleCaption (caption));
         caption.setVisible (captionText.isNotEmpty());
     }
@@ -405,11 +406,11 @@ namespace velvox::ui
         r = r.withSizeKeepingCentre (size, size);
 
         if (on)
-            drawGlow (g, r.getCentre(), size * 1.0f, 0.30f, colours::teal);
+            drawGlow (g, r.getCentre(), size * 1.1f, 0.4f, hue);
         g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2a2d34), r.getCentreX(), r.getY(),
                                                  juce::Colour (0xff121317), r.getCentreX(), r.getBottom(), false));
         g.fillEllipse (r);
-        g.setColour (on ? aurora (0.2f, 0.7f) : (highlighted ? colours::line.brighter (0.6f) : colours::line.brighter (0.25f)));
+        g.setColour (on ? hue.withAlpha (0.8f) : (highlighted ? colours::line.brighter (0.6f) : colours::line.brighter (0.25f)));
         g.drawEllipse (r.reduced (0.5f), 1.0f);
 
         const auto c = r.getCentre();
@@ -418,7 +419,7 @@ namespace velvox::ui
         p.addCentredArc (c.x, c.y, rad, rad, 0.0f, 0.7f, juce::MathConstants<float>::twoPi - 0.7f, true);
         p.startNewSubPath (c.x, c.y - rad * 1.3f);
         p.lineTo (c.x, c.y - rad * 0.25f);
-        g.setColour (on ? colours::teal : colours::textDim);
+        g.setColour (on ? hue : colours::textDim);
         g.strokePath (p, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 

@@ -1,31 +1,39 @@
-# HEADLINER – Übergabe (Stand 2026-10-21, Branch `feature/automix`)
+# HEADLINER – Übergabe (Stand 2026-10-23, Branch `feature/automix`)
 
-## Erledigt (committed, getestet)
-- **Umbenennung** zu HEADLINER by Lind Audio, Logo freigestellt (`Resources/Images`), Plugin-Codes/State-IDs unverändert → alte Velvox-Projekte laden. Bundle `Headliner.vst3`; `install-vst3.ps1` entfernt alte `Velvox.vst3`.
-- **Pops:** Ursache war der Out-of-bounds-Read in Reverb/Doubler-Delaylines (Fix 76156cb vom 19.10.). Die in FL installierte Version stammte von *vor* dem Fix. Popscan (300 s Ton/Vocal/Stille/Rauschen, Realtime mit Editor): 0 Ereignisse. Detektor kennt jetzt Delay-Echos.
-- **Reverb 0.4:** 16-Line-FDN, 8 Charaktere (Room, Plate, Hall, Large Hall, Ambience, Atmosphere, Cinematic, Ethereal), bis 20 s, Early/Diffusion/Movement/Bass/HighCut. Cache-Set-Staffelung der Linien (sonst je nach Heap bis 2× CPU).
-- **Delay 0.4:** Zeit-Crossfade, Spread, Drive, Diffusion, Wow.
-- **Multi-Instanz-Kette:** EQ×4, Comp/DeEss/Sat×3, Delay/Reverb/Smooth/Smash/Ride/Doubler/Choir×2 (IDs `<id>_<k>`), Routing v2 (`v2,eq,comp,eq#2,…`), Seqlock-Übergabe, Migration alter Projekte.
-- **Chain-Editor + Modul-Browser** (Kategorien, Suche, +-Einfügepunkte, Duplizieren, Entfernen, Undo/Redo), Panels pro Instanz.
-- **EQ Mausrad-Q** über Band-Punkten (`eqWheelQ`, Shift = fein).
-- **Vocal Check:** Belege, „Warum wichtig“, Vorschlag, Konfidenz, Status (danach/davor/Auto-Mix), Rauschboden, Messwert-Chips.
-- **A/B:** echte Slots, A = B-Anzeige, Auto-Mix füllt A = vorher / B = Mix, klickfrei gemessen.
-- **Tests:** 4453 Checks, 0 Fehler (Stand Commit 115bf8b). pluginval für 0.4 **noch nicht** gelaufen.
+## Wo der Code liegt
+- Arbeitskopie: `%USERPROFILE%\dev\velvox`, Branch `feature/automix` (NICHT auf GitHub, nur lokal + Drive-Bundle).
+- Sicherung: `scripts\backup-to-drive.ps1` → `G:\Meine Ablage\MUSIC\Plugin\_git-backup\velvox.bundle`.
+- Auf einem anderen PC fortsetzen: `git fetch drive-backup feature/automix:feature/automix` (Remote `drive-backup` zeigt auf das Bundle), dann `git checkout feature/automix`.
+- pluginval: `%USERPROFILE%\dev\tools\pluginval-1.0.4\pluginval.exe` (auf diesem PC am 23.10. neu installiert).
+- Python ist auf diesem PC NICHT installiert (Tools in `tools/` brauchen es).
 
-## In Arbeit (dieser letzte Commit, nur teilweise getestet)
-- **Auto-Mix-Optimierer:** `Source/AutoMix/AutoMixObjective.*` (Zielfunktion) + `AutoMixEngine::candidatesFor` + Kandidatensuche in `run()` (Varianten: Dynamik leichter/dichter, Sättigung, Höhen nach der Dynamik als EQ 2, Effekte trockener/mehr Raum, De-Esser stärker, Kombination der zwei besten). Kompiliert; Auto-Mix-Tests 444/444 grün; volle Suite nach diesem Schritt **nicht** gelaufen.
+## Erledigt am 23.10. (committed, getestet)
+- **Volle Testsuite: 9797 Checks, 0 Fehler. pluginval Strenge 10: SUCCESS** (vor und nach dem Restyle).
+- **Neuer Look nach dem Stilguide** (`HEADLINER Audioplugin UI-Stilguide.png`, `PluginStil.png` im Drive-Ordner), dokumentiert in `docs/STYLEGUIDE.md`:
+  - Palette in `Source/UI/Theme.h` (#0B1020/#111827/#1F2937/#334155, Cyan #00D1FF, Blau #6366FF, Violett #A855F7, Pink #F472B6), `neon()`, `moduleColour()` pro Modul.
+  - Montserrat statt Inter (`Resources/Fonts`, OFL, `THIRD_PARTY_LICENSES.md` angepasst), Größen ×0,93.
+  - Regler: matter Knopf + leuchtender Verlaufsring (`VelvoxLookAndFeel::drawRotarySlider`, `dialBody`).
+  - Buttons: aktiv = `drawNeonFill` (Indigo + Blau→Violett-Rahmen), Primär = Blau→Violett-Pille.
+  - Modulfarbe an Ketten-Kacheln (`ChainView.cpp`), Panel-Kopf und Power-Button (`DetailPanels.cpp`, `PowerButton::setHue`).
+  - Großbuchstaben: Reglernamen, Choice-Captions, Abschnitte, Panel-Titel, AUTO MIX / VOCAL-STATUS / FEINSCHLIFF, INPUT/OUTPUT.
+  - Hintergrundlicht: blau links, violett rechts oben, pink rechts unten (`PluginEditor.cpp`).
+- **Optimierer-Tests** (`Tests/AutoMixTests.cpp` → `optimizerTests()`) + `docs/AUTOMIX_OBJECTIVE.md`.
+- Sporadischer Testfehler „original off“ behoben (Klickhelfer wartet 150 statt 10 ms).
+- CHANGELOG-Eintrag 0.4.0.
 
 ## Nächste Schritte
-1. Volle Testsuite + pluginval (`%USERPROFILE%\dev\tools\pluginval-1.0.4`) laufen lassen.
-2. Tests für den Optimierer (Kandidaten gültig, Base gewinnt ohne Vorteil, EQ-2-Variante setzt Routing) + `docs/AUTOMIX_OBJECTIVE.md`.
-3. Planer: neue Reverb-Charaktere/Parameter direkt nutzen (Sustained → Large Hall).
-4. Benchmark-Runner `--bench <dir> <out>` (JSON/WAV/CSV pro Datei), Baseline mit 0.3 (Commit ab2e014) rendern, Python-Vergleich + Hörtest-Kit (randomisiert, lautheitsangeglichen).
-5. Datensatz: VocalSet (CC BY 4.0) geprüft/entpackt in `%USERPROFILE%\dev\velvox-data\sources\vocalset11` (3613 Dateien). Split nach Sängern vorschlagen (dev f1–f6/m1–m7, val f7–f8/m8–m9, held-out f9/m10/m11). Sonovox-Demo (nur Evaluation) lief im Hintergrund weiter: `python tools/dataset/fetch.py --source sonovox-free-demo --allow-evaluation` setzt fort.
-6. In FL Studio testen (Pops über längere Wiedergabe, Browser, Mausrad-Q), Hörtest.
+1. **Stil-Feinschliff** (Snapshots: `VelvoxTests --snapshot out.png x 0 pro <sel> none` bzw. `x 0 beginner -1 mixed`):
+   - Modul-Chips in der Auto-Mix-Liste („EQ“, „Ride“, „Comp“) noch cyan → `moduleColour` verwenden.
+   - Preset-Leiste oben wie im Guide (`< Festival Punch >` mittig, Icons Settings/Menü), evtl. Lade-/Startbildschirm (Guide Nr. 13).
+   - Meter-Werte größer/fetter; Kompakt-/Minimal-Ansicht (Guide Nr. 7) wäre neu.
+   - Optional: Voxity-artige große Neon-Icons pro Modul im Panel-Kopf.
+2. **Auto-Mix:** Beim hellen/sibilanten Testmaterial bleiben hohe Strafen (tonal ~9, sibilance ~4–7, artifacts ~7–8) – prüfen, warum „artifacts“ (Peak bei Ziel-Lautheit) so hoch ist.
+3. Planer: neue Reverb-Charaktere direkt im Basisplan nutzen (getragen → Large Hall; bisher nur als Variante).
+4. Benchmark-Runner `--bench <dir> <out>` + Baseline 0.3 (Commit ab2e014) + Hörtest-Kit.
+5. Datensatz VocalSet (lag auf dem anderen PC unter `%USERPROFILE%\dev\velvox-data`, hier nicht vorhanden). Split nach Sängern: dev f1–f6/m1–m7, val f7–f8/m8–m9, held-out f9/m10/m11.
+6. In FL Studio testen (neuer Look, Pops, Browser, Mausrad-Q), Hörtest.
 
 ## Hilfen
-- Build: `scripts\build.ps1`; nur Tests: `cmake --build build --config Release --target VelvoxTests`
-- Snapshots: `VelvoxTests --snapshot out.png x 0 pro <selection> [none|mixed|check|welcome]`
-- FX-Labor: `VelvoxTests --fxrender <dir> [vocal.wav]` + `python tools/bench/fx_analyse.py <dir>`
-- Pop-Scan: `VelvoxTests --popscan <tone|vocal|silence|floor> <automix> <editor> <sek> <fs> <realtime>`
-- Testreihenfolge: `--seq "A|B"`, `--from <name>`
+- Build + alle Tests: `scripts\build.ps1`. Nur Tests bauen: VS-CMake (`vswhere` → `...\CMake\bin\cmake.exe`) `--build build --config Release --target VelvoxTests`.
+- Einzelne Suite: `VelvoxTests --test "Velvox automatic mix"`; `--seq "A|B"`, `--from <name>`, `--category`.
+- FX-Labor: `VelvoxTests --fxrender <dir> [vocal.wav]`; Pop-Scan: `VelvoxTests --popscan <tone|vocal|silence|floor> <automix> <editor> <sek> <fs> <realtime>`.

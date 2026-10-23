@@ -63,18 +63,18 @@ void VelvoxAudioProcessorEditor::Canvas::paint (juce::Graphics& g)
         juce::Graphics b (backdrop);
         b.addTransform (juce::AffineTransform::scale (scale));
         b.fillAll (colours::background);
-        drawGlow (b, { 240.0f, -40.0f }, 640.0f, 0.17f, colours::teal);
-        drawGlow (b, { 1280.0f, 140.0f }, 720.0f, 0.15f, colours::violet);
-        drawGlow (b, { 760.0f, 1000.0f }, 820.0f, 0.10f, colours::blue);
-        drawGlow (b, { 60.0f, 760.0f }, 420.0f, 0.07f, colours::violet);
+        drawGlow (b, { -60.0f, 420.0f }, 620.0f, 0.20f, colours::blue);
+        drawGlow (b, { 1380.0f, 160.0f }, 700.0f, 0.15f, colours::violet);
+        drawGlow (b, { 1240.0f, 980.0f }, 620.0f, 0.09f, colours::pink);
+        drawGlow (b, { 300.0f, -80.0f }, 520.0f, 0.10f, colours::teal);
 
         for (auto rail : { leftRail(), rightRail() })
             drawGlassPanel (b, rail.toFloat(), radius::panel, colours::teal, 0.04f);
 
-        for (auto [rail, text] : { std::pair (leftRail(), "Input"), std::pair (rightRail(), "Output") })
+        for (auto [rail, text] : { std::pair (leftRail(), "INPUT"), std::pair (rightRail(), "OUTPUT") })
         {
             b.setColour (colours::text);
-            b.setFont (font (15.0f, true));
+            b.setFont (caps (14.5f));
             b.drawText (text, rail.toFloat().withHeight ((float) railCaptionH).withTrimmedTop (4.0f), juce::Justification::centred, false);
         }
     }
