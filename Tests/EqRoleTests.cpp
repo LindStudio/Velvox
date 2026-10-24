@@ -128,3 +128,188 @@ public:
 };
 
 static EqMacroTests eqMacroTests;
+
+//==============================================================================
+#include "SyntheticVocal.h"
+#include "AutoMix/AutoMixEngine.h"
+
+namespace
+{
+    std::map<juce::String, float> defaultValues()
+    {
+        std::map<juce::String, float> v;
+        for (auto& s : getParameterSpecs())
+            v[s.id] = s.defaultValue;
+        return v;
+    }
+
+    // The band of `role` in a plan (over `current`), if the plan has one
+    std::optional<dsp::EqBand> planBand (const automix::MixPlan& plan, const std::map<juce::String, float>& current, dsp::EqRole role, int instance = 0)
+    {
+        auto values = plan.values;
+        const auto access = eqbands::accessFor (values, &current);
+        const int i = eqbands::findBand (access, instance, role);
+        if (i < 0)
+            return std::nullopt;
+        return eqbands::readBand (access, instance, i);
+    }
+
+    int countRoleBands (const automix::MixPlan& plan, const std::map<juce::String, float>& current)
+    {
+        auto values = plan.values;
+        const auto access = eqbands::accessFor (values, &current);
+        int n = 0;
+        for (int i = 0; i < dsp::maxEqBands; ++i)
+            if (eqbands::readBand (access, 0, i).role != 0)
+                ++n;
+        return n;
+    }
+}
+
+class EqAutoMixTests final : public juce::UnitTest
+{
+public:
+    EqAutoMixTests() : juce::UnitTest ("Velvox EQ auto-mix", "Velvox") {}
+
+    void runTest() override
+    {
+        using dsp::EqRole;
+        using automix::AutoMixEngine;
+
+        // The decisions of the 0.5 auto-mix (fixed bands) for these inputs, recorded before the change:
+        // the 0.6 auto-mix must reach the same frequencies / gains, now in role bands
+        struct Golden
+        {
+            const char* name;
+            VocalSpec spec;
+            const char* chosen;
+            const char* routing;
+            float hpf; int hpfSlope;          // 0 = 12 dB/oct, 1 = 24 dB/oct
+            float lowFreq, lowGain;           // low shelf
+            float midFreq, midGain, midQ;     // mid bell
+            float highFreq, highGain;         // high shelf
+            float outputGain;
+        };
+        std::vector<Golden> goldens;
+        { VocalSpec s; s.seconds = 12.0;
+          goldens.push_back ({ "clean dry", s, "Basisplan", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
+                               100.0f, 0, 200.0f, -1.9933f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 3.5459f }); }
+        { VocalSpec s; s.seconds = 12.0; s.tiltDb = -5.0f; s.f0 = 120.0f;
+          goldens.push_back ({ "dark low", s, "Mehr Raum (Large Hall) + Ohne S\xc3\xa4ttigung", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
+                               70.0f, 1, 180.0f, 0.0f, 285.0876f, -2.0254f, 1.2f, 9000.0f, 2.8646f, 2.0544f }); }
+        { VocalSpec s; s.seconds = 12.0; s.tiltDb = 4.0f; s.sibilance = 1.6f; s.f0 = 300.0f;
+          goldens.push_back ({ "bright sibilant", s, "H\xc3\xb6hen sanfter + De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,deess,doubler,delay:send,reverb:send",
+                               136.4929f, 0, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 5000.0f, -3.4294f, 1.9203f }); }
+        { VocalSpec s; s.seconds = 12.0; s.channels = 2; s.stereoDifference = 0.5f; s.rumbleDb = -26.0f;
+          goldens.push_back ({ "stereo with rumble", s, "Dynamik leichter + De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,smash,deess,sat,delay:send,reverb:send",
+                               126.5934f, 1, 200.0f, -2.3243f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 2.7278f }); }
+        { VocalSpec s; s.seconds = 12.0; s.tiltDb = -3.0f; s.f0 = 150.0f; s.sampleRate = 44100.0;
+          goldens.push_back ({ "dark 44.1 kHz", s, "Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
+                               70.0f, 0, 200.0f, -3.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 3.5252f }); }
+
+        const auto current = defaultValues();
+        for (const auto& g : goldens)
+        {
+            beginTest (juce::String ("Auto-mix result unchanged, now in role bands: ") + g.name);
+            const auto r = AutoMixEngine::run (makeVocal (g.spec), current);
+            expect (r.ok, r.error);
+            if (! r.ok)
+                continue;
+            expectEquals (r.candidates[(size_t) r.chosenCandidate].name, juce::String::fromUTF8 (g.chosen), "same candidate");
+            expectEquals (r.plan.routing.toString(), juce::String (g.routing), "same chain");
+            expectWithinAbsoluteError (r.plan.get (pid::outputGain), g.outputGain, 0.25f, "output level (renders use the matched EQ now)");
+            logMessage ("    output gain " + juce::String (r.plan.get (pid::outputGain), 4) + " (0.5: " + juce::String (g.outputGain, 4) + ")");
+
+            const auto lowCut = planBand (r.plan, current, EqRole::lowCut);
+            expect (lowCut.has_value() && lowCut->on && lowCut->bandType() == dsp::EqBandType::lowCut, "low cut band");
+            if (lowCut)
+            {
+                expectWithinAbsoluteError (lowCut->freq, g.hpf, 0.01f);
+                expectEquals (lowCut->slope, g.hpfSlope == 1 ? 3 : 1, "12 / 24 dB/oct");
+            }
+
+            const auto check = [&] (EqRole role, dsp::EqBandType type, float freq, float gain, float q, const char* what)
+            {
+                const auto b = planBand (r.plan, current, role);
+                if (std::abs (gain) < 1.0e-4f)
+                {
+                    expect (! b.has_value() || ! b->on || std::abs (b->gain) < 1.0e-4f, juce::String (what) + ": flat / absent");
+                    return;
+                }
+                expect (b.has_value() && b->on && b->bandType() == type, juce::String (what) + " band");
+                if (b)
+                {
+                    expectWithinAbsoluteError (b->freq, freq, 0.01f, what);
+                    expectWithinAbsoluteError (b->gain, gain, 1.0e-3f, what);
+                    expectWithinAbsoluteError (b->q, q, 1.0e-4f, what);
+                }
+            };
+            check (EqRole::warmth, dsp::EqBandType::lowShelf, g.lowFreq, g.lowGain, 0.7071f, "low shelf");
+            check (EqRole::autoMix, dsp::EqBandType::bell, g.midFreq, g.midGain, g.midQ, "mid bell");
+            check (EqRole::air, dsp::EqBandType::highShelf, g.highFreq, g.highGain, 0.7071f, "high shelf");
+
+            // only role bands: nothing is written to the hidden 0.5 fixed bands
+            for (auto& [id, v] : r.plan.values)
+                for (auto* fixed : { "hpf", "lowFreq", "lowGain", "lowQ", "lowType", "midFreq", "midGain", "midQ", "highFreq", "highGain", "highQ", "highType", "lpf" })
+                    expect (! id.startsWith (fixed), "fixed band written: " + id);
+        }
+
+        beginTest ("Auto-mix keeps user bands, uses free slots, reuses its role bands");
+        {
+            auto withUser = current;
+            for (int n = 1; n <= 3; ++n)   // the bands of the user in slots 1-3
+            {
+                withUser[pid::eqBandId (n, pid::eqband::on)] = 1.0f;
+                withUser[pid::eqBandId (n, pid::eqband::freq)] = 500.0f * (float) n;
+                withUser[pid::eqBandId (n, pid::eqband::gain)] = 2.0f;
+            }
+            VocalSpec s; s.seconds = 12.0; s.tiltDb = -5.0f; s.f0 = 120.0f;
+            const auto profile = automix::VocalProfiler::analyse (makeVocal (s));
+            const auto plan = automix::AutoMixPlanner::plan (profile, withUser);
+            for (int n = 1; n <= 3; ++n)
+                for (auto* field : { pid::eqband::on, pid::eqband::type, pid::eqband::freq, pid::eqband::gain, pid::eqband::q, pid::eqband::slope, pid::eqband::role })
+                    expect (plan.values.count (pid::eqBandId (n, field)) == 0, "user band " + juce::String (n) + " untouched");
+            auto values = plan.values;
+            expectEquals (eqbands::findBand (eqbands::accessFor (values, &withUser), 0, EqRole::lowCut), 3, "first free slot after the user bands");
+
+            auto mixed = withUser;
+            for (auto& [id, v] : plan.values)
+                mixed[id] = v;
+            const auto again = automix::AutoMixPlanner::plan (profile, mixed);
+            expectEquals (countRoleBands (again, mixed), countRoleBands (plan, withUser), "a second run adds no role bands");
+        }
+
+        beginTest ("The EQ 2 variant moves the air band behind the dynamics");
+        {
+            VocalSpec s; s.seconds = 12.0;
+            const auto profile = automix::VocalProfiler::analyse (makeVocal (s));
+            auto base = automix::AutoMixPlanner::plan (profile, current);
+            base.set (pid::compOn, 1.0f);
+            if (! base.routing.contains (dsp::ModuleId::comp))
+                base.routing.insertAt (base.routing.size(), dsp::ModuleId::comp, 0);
+            {
+                auto values = base.values;
+                eqbands::findOrCreateBand (eqbands::accessFor (values, &current), 0, EqRole::air, dsp::EqBandType::highShelf, 9000.0f, 3.0f, 0.7071f);
+                for (auto& [id, v] : values)
+                    base.set (id, v);
+            }
+            const auto cands = AutoMixEngine::candidatesFor (base, profile, current);
+            const auto it = std::find_if (cands.begin(), cands.end(), [] (auto& c) { return c.second.routing.contains (dsp::ModuleId::eq, 1); });
+            expect (it != cands.end(), "an EQ 2 variant exists");
+            if (it != cands.end())
+            {
+                const auto air2 = planBand (it->second, current, EqRole::air, 1);
+                expect (air2.has_value() && air2->on, "air band in EQ 2");
+                if (air2)
+                {
+                    expectWithinAbsoluteError (air2->gain, 3.0f, 1.0e-4f);
+                    expectWithinAbsoluteError (air2->freq, 9000.0f, 0.01f);
+                }
+                const auto air1 = planBand (it->second, current, EqRole::air, 0);
+                expect (air1.has_value() && std::abs (air1->gain) < 1.0e-4f, "and left EQ 1");
+            }
+        }
+    }
+};
+
+static EqAutoMixTests eqAutoMixTests;
