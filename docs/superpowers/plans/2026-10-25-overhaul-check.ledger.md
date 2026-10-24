@@ -37,3 +37,6 @@ Task 5: complete (commit "fix planner", tests: Headliner Vocal Check 0.6 421/421
 Task 5: Ruling: EqBandResolver is an abstract class with pure find()/write() (no side effects) instead of a direct findOrCreateEqBand call — keeps "Alles anwenden" one merged transaction; the coordinator's adapter maps write() onto the eq track's band search/creation — cost if wrong: a small adapter.
 Task 5: Ruling: an existing low cut before VOCAL CHECK that still lets rumble through is raised by a third (x1.26) — cost if wrong: a slightly higher cut than needed.
 Task 5: Ruling: changes to modules that are off and not switched on by the fix are skipped (overcompressed, noise, space, mono partly) — an empty plan means "no Anwenden" — cost: none.
+Task 6: complete (commit "controller", tests: Headliner Vocal Check 0.6 452/452; RED was getVocalCheck() missing)
+Task 6: Ruling: ignore list and genre are state-tree properties (checkIgnored, checkGenre) set without undo, like uiMode — they restore through replaceState, old projects have none — cost if wrong: "Ignorieren" is not undoable.
+Task 6: Ruling: the applied-generation guard lives only in memory (the analysis frames are not saved either) — cost: none.
