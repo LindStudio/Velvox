@@ -83,8 +83,8 @@ namespace velvox::ui
         bool setSendMode (dsp::ModuleId id, int instance, bool send);
         bool undo();
         bool redo();
-        bool canUndo() const noexcept { return ! undoStack.empty(); }
-        bool canRedo() const noexcept { return ! redoStack.empty(); }
+        bool canUndo() const;
+        bool canRedo() const;
 
         // Current card rectangle (local coordinates) - for tests and hit testing.
         // Cards scrolled out of the row can lie outside the visible row area.
@@ -131,7 +131,6 @@ namespace velvox::ui
         void showTileMenu (const Tile& t);
         void showChainMenu();
         void applyRouting (const dsp::Routing& r, const juce::String& message = {});
-        void pushUndo();
         int tileAt (juce::Point<float> p) const;
         int gapAt (juce::Point<float> p) const;   // serial insert index of the "+" under the mouse, or -1
         juce::Point<float> gapCentre (int insertIndex) const;
@@ -190,9 +189,6 @@ namespace velvox::ui
         juce::String hint;
         juce::uint32 hintUntil = 0;
 
-        // Undo / redo of chain edits: complete snapshots (values + routing)
-        std::vector<ParameterSnapshot> undoStack, redoStack;
-        static constexpr size_t maxUndo = 40;
 
         // Animation: scrolling glides, hover fades in, a drag auto-scrolls near the row edges
         void tick();

@@ -38,6 +38,23 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
         apvts.addParameterListener (id, this);
     analyzerTimer.startTimerHz (15);
 
+    // Undo: the plugin's own gestures, preset loads and the automatic mix (one step each)
+    addListener (&gestureListener);
+    presetManager.setUndoHistory (&undoHistory);
+    autoMix.onApplying = [this] (bool starting, bool asStep)
+    {
+        if (asStep)
+        {
+            if (starting) undoHistory.beginTransaction (juce::String::fromUTF8 ("Auto-Mix"));
+            else          undoHistory.endTransaction();
+        }
+        else
+        {
+            if (starting) undoHistory.beginSuppress();
+            else          undoHistory.endSuppress();
+        }
+    };
+
     // The automatic mix compares through the A/B slots: A = before, B = the mix
     autoMix.onMixApplied = [this] (const ParameterSnapshot& before, const ParameterSnapshot& mix)
     {
@@ -55,6 +72,7 @@ VelvoxAudioProcessor::~VelvoxAudioProcessor()
 {
     analyzerTimer.stopTimer();
     cancelPendingUpdate();
+    removeListener (&gestureListener);
     for (auto& id : structureParams)
         apvts.removeParameterListener (id, this);
     apvts.state.removeListener (this);
@@ -524,6 +542,9 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
 
     syncRoutingFromState();
     autoMix.readState (autoMixHolder, savedVersion < 3);
+
+    // Another project (or the host restoring one): the history of the old state means nothing
+    undoHistory.clear();
 }
 
 //==============================================================================

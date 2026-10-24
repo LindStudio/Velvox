@@ -277,6 +277,9 @@ namespace velvox::automix
         hasPreviousSnapshot = true;
         showingPrevious = false;
 
+        // The whole mix is one undo step
+        if (onApplying) onApplying (true, true);
+
         // Apply through the normal parameters (gestures: the host sees every change)
         for (const auto& [id, value] : result.plan.values)
             if (auto* param = apvts.getParameter (id))
@@ -289,6 +292,7 @@ namespace velvox::automix
                 param->endChangeGesture();
             }
         apvts.state.setProperty (statekeys::routing, result.plan.routing.toString(), nullptr);
+        if (onApplying) onApplying (false, true);
 
         mixSnapshot = ParameterSnapshot::capture (apvts, de ("Headliner Auto-Mix"));
         if (onMixApplied)
@@ -337,6 +341,8 @@ namespace velvox::automix
         }
         if (! hasPreviousSnapshot || ! hasMix() || previous == showingPrevious)
             return;
+        // Listening to the state before / after is no edit: never an undo step
+        if (onApplying) onApplying (true, false);
         if (previous)
         {
             mixSnapshot = ParameterSnapshot::capture (apvts, mixSnapshot.name); // keep tweaks made to the mix
@@ -346,6 +352,7 @@ namespace velvox::automix
         {
             mixSnapshot.applyTo (apvts, true);
         }
+        if (onApplying) onApplying (false, false);
         showingPrevious = previous;
         sendChangeMessage();
     }
@@ -354,7 +361,9 @@ namespace velvox::automix
     {
         if (! hasPreviousSnapshot)
             return;
+        if (onApplying) onApplying (true, true);
         previousSnapshot.applyTo (apvts, true);
+        if (onApplying) onApplying (false, true);
         hasPreviousSnapshot = false;
         showingPrevious = false;
         report = {};

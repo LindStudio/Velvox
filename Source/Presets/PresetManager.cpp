@@ -42,7 +42,16 @@ namespace velvox
     {
         if (! juce::isPositiveAndBelow (index, entries.size()))
             return false;
+        if (undo == nullptr)
+            return applyEntry (index);
 
+        bool ok = false;
+        undo->perform ("Preset: " + entries.getReference (index).name, [&] { ok = applyEntry (index); });
+        return ok;
+    }
+
+    bool PresetManager::applyEntry (int index)
+    {
         const auto& entry = entries.getReference (index);
 
         if (entry.isFactory)

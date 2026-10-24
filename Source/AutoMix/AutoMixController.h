@@ -91,6 +91,9 @@ namespace velvox::automix
         std::function<void (const ParameterSnapshot& before, const ParameterSnapshot& mix)> onMixApplied;
         std::function<void (bool showPrevious)> selectCompare;
         std::function<bool()> isComparePrevious;
+        // Called around every multi-parameter change made here: (starting, asUndoStep).
+        // asUndoStep = false for the Vorher / Nachher switch (listening, not editing).
+        std::function<void (bool starting, bool asUndoStep)> onApplying;
         // Back to the state before the last automatic mix
         void restorePrevious();
 

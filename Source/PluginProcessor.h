@@ -9,6 +9,7 @@
 #include "Parameters/ParameterLayout.h"
 #include "Parameters/SettingsReader.h"
 #include "Presets/PresetManager.h"
+#include "Presets/UndoHistory.h"
 #include "AutoMix/AutoMixController.h"
 
 class VelvoxAudioProcessor final : public juce::AudioProcessor,
@@ -51,6 +52,11 @@ public:
     //==========================================================================
     juce::AudioProcessorValueTreeState& getState() noexcept { return apvts; }
     velvox::PresetManager& getPresetManager() noexcept { return presetManager; }
+
+    // One global undo history (parameter gestures, routing edits, preset loads, transactions).
+    // Message thread only. Other code groups several edits into one step with
+    // getUndo().beginTransaction (name) / endTransaction() or getUndo().perform (name, fn).
+    velvox::UndoHistory& getUndo() noexcept { return undoHistory; }
     velvox::dsp::VocalChain& getChain() noexcept { return chain; }
 
     // Automatic mix: capture during playback, analysis, plan, apply (see AutoMix/)
@@ -136,6 +142,7 @@ public:
 private:
 
     juce::AudioProcessorValueTreeState apvts;
+    velvox::UndoHistory undoHistory { apvts };
     velvox::PresetManager presetManager;
     velvox::dsp::VocalChain chain;
     velvox::automix::AutoMixController autoMix { *this, apvts };
@@ -163,6 +170,17 @@ private:
 
     velvox::dsp::SeqLockValue<velvox::dsp::Routing> routingShared { velvox::dsp::Routing::defaults() };
     velvox::dsp::Routing audioRouting = velvox::dsp::Routing::defaults();   // audio thread's last good copy
+
+    // Feeds the undo history with the plugin's own gestures (message thread)
+    struct GestureListener final : juce::AudioProcessorListener
+    {
+        explicit GestureListener (velvox::UndoHistory& h) : history (h) {}
+        void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
+        void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
+        void audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int index) override { history.gestureBegan (index); }
+        void audioProcessorParameterChangeGestureEnd (juce::AudioProcessor*, int index) override { history.gestureEnded (index); }
+        velvox::UndoHistory& history;
+    } gestureListener { undoHistory };
 
     // A/B slots hold full parameter snapshots
     std::array<velvox::ParameterSnapshot, 2> slots;

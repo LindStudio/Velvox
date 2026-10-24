@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ParameterSnapshot.h"
+#include "UndoHistory.h"
 
 namespace velvox
 {
@@ -22,6 +23,9 @@ namespace velvox
 
         static juce::File getDefaultUserPresetDirectory();
         static inline const juce::String fileExtension { ".vvpreset" };
+
+        // Loading a preset is one undo step (set by the processor)
+        void setUndoHistory (UndoHistory* h) noexcept { undo = h; }
 
         void refresh();
         const juce::Array<Entry>& getEntries() const noexcept { return entries; }
@@ -48,7 +52,10 @@ namespace velvox
     private:
         void setCurrentPresetName (const juce::String& name);
 
+        bool applyEntry (int index);
+
         juce::AudioProcessorValueTreeState& apvts;
+        UndoHistory* undo = nullptr;
         juce::File userDirectory;
         juce::Array<Entry> entries;
 

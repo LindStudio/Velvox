@@ -1247,7 +1247,7 @@ namespace velvox::ui
         dragging = false;
         if (r != routing)
         {
-            pushUndo();
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
             applyRouting (r);
         }
         scrollToShow (t.id, t.instance);
@@ -1314,7 +1314,7 @@ namespace velvox::ui
         r.moveTo (id, instance, from < routingIndex ? routingIndex - 1 : routingIndex);
         if (r != routing)
         {
-            pushUndo();
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
             applyRouting (r);
             scrollToShow (id, instance);
         }
@@ -1328,14 +1328,6 @@ namespace velvox::ui
             p->setValueNotifyingHost (p->getValue() > 0.5f ? 0.0f : 1.0f);
             p->endChangeGesture();
         }
-    }
-
-    void ChainView::pushUndo()
-    {
-        undoStack.push_back (ParameterSnapshot::capture (proc.getState(), "chain edit"));
-        if (undoStack.size() > maxUndo)
-            undoStack.erase (undoStack.begin());
-        redoStack.clear();
     }
 
     void ChainView::applyRouting (const dsp::Routing& r, const juce::String& message)
@@ -1390,7 +1382,7 @@ namespace velvox::ui
             showHint ("All " + juce::String (dsp::maxInstances (id)) + " " + dsp::moduleDisplayName (id) + " instances are already in the chain.");
             return -1;
         }
-        pushUndo();
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
 
         // A fresh instance: default settings, still off while it joins the chain
         auto& apvts = proc.getState();
@@ -1427,7 +1419,7 @@ namespace velvox::ui
             showHint ("All " + juce::String (dsp::maxInstances (id)) + " " + dsp::moduleDisplayName (id) + " instances are already in the chain.");
             return -1;
         }
-        pushUndo();
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
 
         auto& apvts = proc.getState();
         const auto onBase = juce::String (onParamFor (id));
@@ -1454,7 +1446,7 @@ namespace velvox::ui
         routing = proc.getRouting();
         if (! routing.contains (id, instance))
             return false;
-        pushUndo();
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
         const auto name = cardName (routing, id, instance);
 
         // Off first (automation of an instance outside the chain would add it back)
@@ -1479,7 +1471,7 @@ namespace velvox::ui
         auto r = proc.getRouting();
         if (! r.moveTo (id, instance, newIndex))
             return false;
-        pushUndo();
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
         applyRouting (r);
         return true;
     }
@@ -1489,34 +1481,29 @@ namespace velvox::ui
         auto r = proc.getRouting();
         if (! r.setInsert (id, instance, ! send))
             return false;
-        pushUndo();
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
         applyRouting (r);
         return true;
     }
 
     bool ChainView::undo()
     {
-        if (undoStack.empty())
-            return false;
-        redoStack.push_back (ParameterSnapshot::capture (proc.getState(), "redo"));
-        const auto snapshot = undoStack.back();
-        undoStack.pop_back();
-        snapshot.applyTo (proc.getState(), true);
-        applyRouting (proc.getRouting(), "Undone.");
-        return true;
+        const bool done = proc.getUndo().undo();
+        if (done)
+            applyRouting (proc.getRouting());
+        return done;
     }
 
     bool ChainView::redo()
     {
-        if (redoStack.empty())
-            return false;
-        undoStack.push_back (ParameterSnapshot::capture (proc.getState(), "undo"));
-        const auto snapshot = redoStack.back();
-        redoStack.pop_back();
-        snapshot.applyTo (proc.getState(), true);
-        applyRouting (proc.getRouting(), "Redone.");
-        return true;
+        const bool done = proc.getUndo().redo();
+        if (done)
+            applyRouting (proc.getRouting());
+        return done;
     }
+
+    bool ChainView::canUndo() const { return proc.getUndo().canUndo(); }
+    bool ChainView::canRedo() const { return proc.getUndo().canRedo(); }
 
     void ChainView::restoreDefaultChain()
     {
@@ -1530,7 +1517,7 @@ namespace velvox::ui
                     sorted.insertAt (sorted.size(), slot.id, slot.instance, slot.insert);
         if (sorted != current)
         {
-            pushUndo();
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
             applyRouting (sorted, "Modules sorted into the usual order.");
         }
     }
@@ -1549,7 +1536,7 @@ namespace velvox::ui
         const auto r = dsp::Routing::fromString (dsp::Routing::fromString (order).toString());
         if (r != proc.getRouting())
         {
-            pushUndo();
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
             applyRouting (r);
         }
         return true;
