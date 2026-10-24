@@ -9,6 +9,7 @@
 #include "DSP/SeqLockValue.h"
 #include "Parameters/ParameterLayout.h"
 #include "Parameters/SettingsReader.h"
+#include "Parameters/EqBands.h"
 #include "Presets/PresetManager.h"
 #include "AutoMix/AutoMixController.h"
 
@@ -160,6 +161,7 @@ private:
     velvox::PresetManager presetManager;
     velvox::dsp::VocalChain chain;
     velvox::automix::AutoMixController autoMix { *this, apvts };
+    velvox::eqbands::LegacyBridge eqBridge { apvts };   // 0.5 fixed-band edits -> role bands
 
     velvox::SettingsReader reader;
 

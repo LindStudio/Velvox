@@ -537,6 +537,7 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
         return;
 
     auto tree = juce::ValueTree::fromXml (*xml);
+    eqbands::ScopedBridgeSuspend noEqBridge;   // values are restored as they were saved
 
     slotValid = { false, false };
     activeSlot = 0;
@@ -590,6 +591,10 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
         if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
             if (! savedIds.contains (rp->getParameterID()))
                 rp->setValueNotifyingHost (rp->getDefaultValue());
+
+    // 0.1-0.5 projects have no EQ bands: the fixed bands become bands 1-5, sound-identical
+    if (! eqbands::containsBandValues (savedIds))
+        eqbands::migrateState (eqbands::accessFor (apvts), true);
 
     // 0.1 - 0.3 routings list every module: keep only what can be heard (sound unchanged)
     apvts.state.setProperty (statekeys::routing, migrateRoutingString (savedRouting, apvts), nullptr);
