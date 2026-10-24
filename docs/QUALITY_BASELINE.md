@@ -1,6 +1,6 @@
 # Quality baseline – Headliner modules vs. reference plugins (0.6, 2026-10-25)
 
-Measured state of every Headliner module on `feature/automix` f4be906 (before the 0.6 DSP work), against the installed
+Measured state of every Headliner module on `feature/automix` c46dba8 (0.6 mix law merged, before the DSP work), against the installed
 reference plugins at matched settings on dry vocals and test signals. This is the starting point and the pass/fail gate
 (spec §6, §8 Q6) for the DSP-improvement agents. Rendered files (for listening):
 `C:\Users\jakob\dev\velvox-bench\2026-10-25\modules\<module>\` – `raw\` (every render, incl. JSON sidecars with latency,
@@ -49,8 +49,10 @@ or `--render --headliner comp --set compThreshold=-24 ...` (Headliner: APVTS IDs
 - **Clips** (VocalSet validation singers only – f9, m10, m11 stay held out – and the MYLK dry chorus), 48 kHz, −18 LUFS:
   `f7_row` (female, soft, s-sounds), `f8_belt` (female belt), `m8_caro` (male legato phrase), `m8_belt` (male belt),
   `m9_breathy` (male breathy), `mylk_chorus` (pop chorus, dense, sibilant). Vocal metrics are the mean over the six clips.
-- **Delay / reverb wet**: Headliner's insert law today is `out = in + wet·mix`, so its wet signal is `out − in`; references
-  run at 100 % wet. `dry_leak_db` measures the raw Headliner output instead (that is the spec §2.9 bug).
+- **Mix law**: the single-module processor is a fresh instance, so it uses the 0.6 true dry/wet law (mixlaw track,
+  dry-hold for Delay/Reverb inserts, Doubler, Smash). Delay and Reverb run at Mix 100 % = wet only, like the references;
+  `dry_leak_db` (10 ms burst, output during the burst) checks spec §2.9. Before the merge the same run measured 0 dB dry
+  leak (legacy `out = in + wet·mix`); all other numbers were identical under both laws.
 - **Verdict**: `pass` when Headliner is within the tolerance of the primary (first) reference, or of an absolute limit
   where the reference does not define the target (`≤ x` / `x ± t` in the tolerance column); `info` rows describe character
   and are not gated. These tolerances are the proposed Q6 gate (next section) and live in `modules.py`, so a DSP agent
@@ -123,7 +125,7 @@ The tables are generated (`bench.py <module> --update-doc`). gap = Headliner −
 | vocal | st_loudness_std_lu (LU) – mean of clips | 2.43 | 2.06 | 2.47 | 0.37 | ref ± 0.50 | pass |
 | vocal | mix0_null_db (dB) – latency 0 | -152 | – | – | – | ≤ -60.0 | pass |
 | vocal | off_null_db (dB) | -152 | – | – | – | ≤ -100 | pass |
-| vocal | cpu_pct (%) – median over this module's renders | 0.24 | 0.23 | 0.20 | 0.01 | ref + 0.50 | pass |
+| vocal | cpu_pct (%) – median over this module's renders | 0.24 | 0.23 | 0.19 | 0.02 | ref + 0.50 | pass |
 <!-- END comp -->
 
 <!-- BEGIN deess -->
@@ -156,7 +158,7 @@ Calibrated: vocal: soothe2 depth=0
 | vocal | transient_change_db (dB) | 0.42 | 0.26 | 0.16 | 0.00 ± 0.50 | pass |
 | vocal | musical_noise_db (dB) | 0.11 | 0.06 | 0.05 | ref + 0.20 | pass |
 | vocal | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| vocal | cpu_pct (%) – median over this module's renders | 1.45 | 1.28 | 0.17 | ref + 1.00 | pass |
+| vocal | cpu_pct (%) – median over this module's renders | 1.44 | 1.24 | 0.19 | ref + 1.00 | pass |
 <!-- END smooth -->
 
 <!-- BEGIN sat -->
@@ -168,14 +170,14 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 |---|---|---|---|---|---|---|
 | tape | thd_1k_db (dB) | -19.8 | -19.9 | 0.07 | ref ± 1.00 | pass |
 | tape | thd_1k_m24_db (dB) | -38.4 | -45.8 | 7.38 | ref − 0.00 | info |
-| tape | h2_h3_db (dB) | -116 | -113 | -2.25 | ref − 0.00 | info |
+| tape | h2_h3_db (dB) | -116 | -113 | -2.51 | ref − 0.00 | info |
 | tape | aliasing_db (dB) | -36.6 | -70.2 | 33.6 | ref + 3.00 | FAIL |
 | tape | imd_db (dB) | -5.75 | -2.41 | -3.34 | ref + 3.00 | pass |
 | tape | crest_reduction_db (dB) – mean of clips | 7.41 | 8.72 | -1.31 | ref − 0.00 | info |
 | tape | st_loudness_std_lu (LU) – mean of clips | 3.20 | 3.27 | -0.07 | ref − 0.00 | info |
 | tape | mix0_null_db (dB) – latency 3 | -152 | – | – | ≤ -60.0 | pass |
 | tape | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| tape | cpu_pct (%) – median over this module's renders | 0.55 | 2.56 | -2.01 | ref + 1.00 | pass |
+| tape | cpu_pct (%) – median over this module's renders | 0.37 | 2.51 | -2.13 | ref + 1.00 | pass |
 | tube | thd_1k_db (dB) | -15.2 | -15.3 | 0.08 | ref ± 1.00 | pass |
 | tube | thd_1k_m24_db (dB) | -24.9 | -23.9 | -1.05 | ref − 0.00 | info |
 | tube | h2_h3_db (dB) | 13.2 | -13.5 | 26.7 | ref − 0.00 | info |
@@ -196,7 +198,7 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 | up12 | hnr_drop_db (dB) | -8.51 | -2.55 | -5.96 | ref − 0.00 | info |
 | up12 | mix0_null_db (dB) – latency 5760 | -152 | – | – | ≤ -60.0 | pass |
 | up12 | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| up12 | cpu_pct (%) – median over this module's renders | 4.14 | 1.41 | 2.73 | ref + 2.00 | FAIL |
+| up12 | cpu_pct (%) – median over this module's renders | 2.24 | 0.75 | 1.50 | ref + 2.00 | pass |
 | down5 | pitch_err_cents (ct) | 2.68 | 23.7 | -21.1 | ≤ 2.00 | FAIL |
 | down5 | pitch_jitter_cents (ct) | 0.00 | 0.00 | -0.00 | ≤ 1.00 | pass |
 | down5 | spurious_db (dB) | -90.9 | -55.4 | -35.4 | ≤ -60.0 | pass |
@@ -230,7 +232,7 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 | default | mono_loss_db (dB) | 0.14 | 0.47 | -0.32 | ref + 1.00 | pass |
 | default | mix0_null_db (dB) – latency 0 | -152 | – | – | ≤ -60.0 | pass |
 | default | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.56 | 0.29 | 0.26 | ref + 1.00 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.56 | 0.29 | 0.27 | ref + 1.00 | pass |
 <!-- END choir -->
 
 <!-- BEGIN delay -->
@@ -242,10 +244,10 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 | plain | feedback_db_per_repeat (dB) – set feedback 30% | -11.6 | -11.8 | 0.15 | ref ± 1.00 | pass |
 | plain | echo_smear_ms (ms) | 0.17 | 0.19 | -0.02 | ref + 1.00 | pass |
 | plain | inter_echo_floor_db (dB) | -288 | -103 | -184 | ref + 3.00 | pass |
-| plain | dry_leak_db (dB) – Headliner raw insert output; the wet extraction is not applied here | 0.00 | -300 | 300 | ≤ -60.0 | FAIL |
+| plain | dry_leak_db (dB) – burst, 100 % wet | -300 | -300 | 0.00 | ≤ -60.0 | pass |
 | plain | mix0_null_db (dB) – latency 0 | -152 | – | – | ≤ -60.0 | pass |
 | plain | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| plain | cpu_pct (%) – median over this module's renders | 0.33 | 0.62 | -0.28 | ref + 1.00 | pass |
+| plain | cpu_pct (%) – median over this module's renders | 0.34 | 0.63 | -0.29 | ref + 1.00 | pass |
 <!-- END delay -->
 
 <!-- BEGIN reverb -->
@@ -253,30 +255,30 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 
 | case | metric | Headliner | VintageVerb | Pro-R 2 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|---|
-| plate | t30_s (s) – set decay 1.8 s | 1.66 | 1.49 | 1.54 | 0.17 | ref − 0.00 | info |
-| plate | t30_err_pct (%) – set decay 1.8 s | 7.68 | 17.2 | 14.6 | -9.52 | ≤ 10.0 | pass |
+| plate | t30_s (s) – set decay 1.8 s | 1.66 | 1.49 | 1.53 | 0.17 | ref − 0.00 | info |
+| plate | t30_err_pct (%) – set decay 1.8 s | 7.68 | 17.1 | 15.0 | -9.41 | ≤ 10.0 | pass |
 | plate | edt_s (s) | 1.51 | 1.46 | 1.83 | 0.04 | ref − 0.00 | info |
-| plate | curvature_db (dB) | 0.18 | 0.13 | 0.18 | 0.06 | ref + 0.50 | pass |
-| plate | mean_ned | 0.97 | 0.90 | 0.90 | 0.07 | ref − 0.05 | pass |
+| plate | curvature_db (dB) | 0.18 | 0.15 | 0.15 | 0.04 | ref + 0.50 | pass |
+| plate | mean_ned | 0.97 | 0.90 | 0.93 | 0.07 | ref − 0.05 | pass |
 | plate | mixing_ms (ms) | 26.0 | 107 | 72.0 | -81.0 | ref + 20.0 | pass |
-| plate | modal_ringing_db (dB) | 11.1 | 7.55 | 9.51 | 3.56 | ref + 2.00 | FAIL |
-| plate | tail_corr | -0.02 | -0.00 | -0.05 | -0.02 | ref + 0.10 | pass |
-| plate | bass_ratio (x) | 0.98 | 1.02 | 1.26 | -0.04 | ref ± 0.20 | pass |
-| plate | treble_ratio (x) | 0.84 | 0.88 | 0.94 | -0.04 | ref ± 0.20 | pass |
-| plate | dry_leak_db (dB) – Headliner raw insert output; the wet extraction is not applied here | 0.00 | -151 | -300 | 151 | ≤ -60.0 | FAIL |
+| plate | modal_ringing_db (dB) | 11.1 | 7.46 | 8.90 | 3.65 | ref + 2.00 | FAIL |
+| plate | tail_corr | -0.02 | -0.00 | -0.06 | -0.02 | ref + 0.10 | pass |
+| plate | bass_ratio (x) | 0.98 | 1.03 | 1.31 | -0.05 | ref ± 0.20 | pass |
+| plate | treble_ratio (x) | 0.84 | 0.89 | 0.97 | -0.05 | ref ± 0.20 | pass |
+| plate | dry_leak_db (dB) – burst, 100 % wet | -300 | -151 | -300 | -149 | ≤ -60.0 | pass |
 | plate | mix0_null_db (dB) – latency 0 | -152 | – | – | – | ≤ -60.0 | pass |
 | plate | off_null_db (dB) | -152 | – | – | – | ≤ -100 | pass |
 | plate | cpu_pct (%) – median over this module's renders | 0.79 | 0.24 | 0.64 | 0.55 | ref + 2.00 | pass |
-| hall | t30_s (s) – set decay 2.6 s | 2.21 | 2.65 | 2.23 | -0.44 | ref − 0.00 | info |
-| hall | t30_err_pct (%) – set decay 2.6 s | 15.0 | 2.07 | 14.2 | 12.9 | ≤ 10.0 | FAIL |
-| hall | edt_s (s) | 1.65 | 2.17 | 2.09 | -0.52 | ref − 0.00 | info |
-| hall | curvature_db (dB) | 0.32 | 0.25 | 0.16 | 0.07 | ref + 0.50 | pass |
-| hall | mean_ned | 0.91 | 0.70 | 0.54 | 0.21 | ref − 0.05 | pass |
-| hall | mixing_ms (ms) | 72.0 | 207 | 410 | -135 | ref + 20.0 | pass |
-| hall | modal_ringing_db (dB) | 6.44 | 11.1 | 4.10 | -4.70 | ref + 2.00 | pass |
-| hall | tail_corr | 0.00 | 0.01 | -0.01 | -0.00 | ref + 0.10 | pass |
-| hall | bass_ratio (x) | 1.05 | 1.17 | 1.19 | -0.12 | ref ± 0.20 | pass |
-| hall | treble_ratio (x) | 0.69 | 0.74 | 0.91 | -0.05 | ref ± 0.20 | pass |
+| hall | t30_s (s) – set decay 2.6 s | 2.21 | 2.66 | 2.24 | -0.45 | ref − 0.00 | info |
+| hall | t30_err_pct (%) – set decay 2.6 s | 15.0 | 2.12 | 13.9 | 12.9 | ≤ 10.0 | FAIL |
+| hall | edt_s (s) | 1.65 | 2.17 | 2.07 | -0.52 | ref − 0.00 | info |
+| hall | curvature_db (dB) | 0.32 | 0.26 | 0.10 | 0.06 | ref + 0.50 | pass |
+| hall | mean_ned | 0.91 | 0.70 | 0.53 | 0.21 | ref − 0.05 | pass |
+| hall | mixing_ms (ms) | 72.0 | 207 | 363 | -135 | ref + 20.0 | pass |
+| hall | modal_ringing_db (dB) | 6.44 | 11.2 | 3.79 | -4.76 | ref + 2.00 | pass |
+| hall | tail_corr | 0.00 | 0.01 | -0.02 | -0.00 | ref + 0.10 | pass |
+| hall | bass_ratio (x) | 1.05 | 1.19 | 1.19 | -0.13 | ref ± 0.20 | pass |
+| hall | treble_ratio (x) | 0.69 | 0.75 | 0.90 | -0.05 | ref ± 0.20 | pass |
 <!-- END reverb -->
 
 <!-- BEGIN smash -->
@@ -292,7 +294,7 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 | default | crest_reduction_db (dB) – mean of clips | 0.69 | 1.20 | -0.51 | ref ± 2.00 | pass |
 | default | st_loudness_std_lu (LU) – mean of clips | 3.33 | 3.10 | 0.23 | ref + 0.50 | pass |
 | default | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.36 | 0.15 | 0.21 | ref + 0.50 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.37 | 0.15 | 0.21 | ref + 0.50 | pass |
 <!-- END smash -->
 
 <!-- BEGIN ride -->
@@ -340,7 +342,59 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 
 ## Biggest quality gaps (ranked) and DSP recommendations
 
-GAPS_PLACEHOLDER
+Ranked by audibility on dry vocals × size of the gap. 21 gated FAILs in 9 modules; De-Esser, Doubler, Delay, Vocal Smash,
+Stutter, Pulse and Vocal Check pass at baseline.
+
+1. **Saturation – aliasing 34 dB worse than Saturn 2** (Tape −36.6 vs −70.2 dB, Tube −47.1 vs −66.2 dB at equal THD;
+   4987 Hz at −6 dBFS). Audible as grainy, inharmonic fizz on bright vocals and sibilants. *Do:* 4× (8× for the Hard
+   character) polyphase oversampling around the shaper (half-band IIR cascade, constant latency), plus first-order ADAA on
+   the static curves so 4× is enough; keep the DC/bias path inside the oversampled section. Target: aliasing ≤ −67 dB,
+   THD unchanged (`thd_1k_db` stays the calibration point). The planned 3-band split (spec 5.6) must not add aliasing:
+   oversample once around all three shapers. Character note (info): Tube is even-dominant (H2/H3 +13 dB) where Saturn's
+   Warm Tube is odd-dominant (−13 dB), and Tape distorts more at −24 dBFS (−38 vs −46 dB) – a choice, not a defect.
+2. **EQ – cramping near Nyquist: a 15 kHz bell is 5.5 dB off** its own shape (Pro-Q 4: 0.06 dB). The +6 dB "air" bell
+   lands narrower and lower; the 12 kHz shelf in the vocal case is 0.64 dB off. *Do:* Vicanek magnitude-matched
+   biquads (or MZTi / 2× oversampling for bands above ~fs/8) for bell, shelves and cuts; the cut/shelf prototypes already
+   match below 6 kHz (cut case 0.02 dB). This is spec 5.1's "analog-matched response". Target: `cramp_dev_db` ≤ 0.56,
+   response ≤ 0.5 dB off the analog prototype in all three cases. (Remaining vocal-case deviation 0.99 dB is the HPF
+   region −0.19 dB at 100 Hz plus the HF shelf.)
+3. **Pitch – 120 ms latency vs 22 ms (Graillon 3), a constant +2.7 ct ratio error, 3× the CPU.** Spurious energy on a
+   tone is excellent (−73 dB vs −44 dB) and vocal pitch accuracy is equal (1.7 vs 1.9 ct). *Do:* fix the semitone→ratio
+   (or sample-rate) path – 220 Hz ×2 comes out at 441.1 Hz; shrink the Signalsmith block/interval to ~1024/256 at 48 kHz
+   (≈ 30 ms) or add a low-latency PSOLA path for monophonic vocals with the stretch as fallback; check "phasiness" on
+   sustained notes by ear in `listen\`.
+4. **Reverb – Plate rings (modal_ringing 11.1 dB vs 7.5 VintageVerb / 8.9 Pro-R 2)**, Hall decays 15 % short of the set
+   2.6 s (EDT 1.65 vs 2.1–2.2 s). Density, mixing time, smoothness and stereo are already better than both references.
+   *Do (plate):* modulate the tank delays (slow random-walk, ±5–10 samples, different rates per line), add two more
+   allpasses with incommensurate lengths in the input diffuser, and give each loop its own 1-pole absorption so no mode
+   decays slower than its neighbours. *Do (hall):* derive per-line feedback from the actual loop lengths
+   (g = 10^(−3·L/(fs·T60))) and calibrate the type's decay scaling so T30 = set decay ± 10 %.
+5. **Smooth – removes broadband instead of targeting resonances.** At more removed energy than soothe2 (Amount 75 vs
+   depth 0) the largest stationary resonance drops 0.26 dB (soothe2 0.98 dB) and the STFT peak-to-envelope only 0.05 dB
+   (0.20 dB); flatness gain is higher (1.03 vs 0.79) – the hallmark of an overall dulling. Musical noise and transients are
+   on par. *Do:* the spec 5.4 STFT design – 2048/512 Hann (latency ≤ 1024 if using 1024/256), spectral envelope from a
+   1/3-oct (or cepstral) smoothing, gain only where |X| exceeds the envelope by > sensitivity, per-bin attack/release and
+   ±2-bin frequency smoothing of the gain mask, phase-coherent overlap-add, depth scaled by excess (soothe-like). Re-check
+   `musical_noise_db` and `transient_change_db` – those are where STFT designs usually regress.
+6. **Compressor – ballistics distortion at 100 Hz: −48 dB vs −57 dB (Pro-C 2 Vocal)**; static curve 1.13 dB off the
+   ideal soft knee (limit 1.0). Audible as grit on low male notes with 10/120 ms. *Do:* move the smoothing into the log
+   domain (Giannoulis et al. 2012, branching smooth detector) with a short peak-hold (~ one 50 Hz period) or an RMS
+   detector option, and a program-dependent release (fast/slow dual release); check the knee polynomial against the
+   ideal (the knee is 6 dB wide at threshold −24, ratio 4).
+7. **Choir – narrow and rough:** L/R correlation 0.94 vs 0.79 (Waves Doubler4), AM roughness 2.12 vs 1.62 dB on a
+   sustained tone. *Do:* spread voices to fixed, alternating pan positions scaled by Width (outer voices ±80–100 %),
+   decorrelate per-voice modulation (independent smoothed random walks, 0.1–0.6 Hz), and normalise the voice sum so
+   beating between equal-gain voices does not dominate (slightly different voice gains / delays).
+8. **Level Ride – evens the vocal less than Vocal Rider:** short-term loudness spread 3.30 LU vs 2.92 LU (dry 3.80) at
+   ±8 dB range, with similar smoothness (gain jitter 0.07 vs 0.05 dB). *Do:* faster word-level response (or 50–100 ms
+   lookahead with constant latency), raise the effective Amount mapping, keep the transient preservation (−0.26 dB now).
+
+Passing modules – what to keep: De-Esser equals Pro-DS at equal sibilance reduction (selectivity 1.16 vs 1.43 dB,
+lisp −2.7 vs −2.35 dB, transients untouched where Pro-DS adds +3 dB) and nulls perfectly when inactive; Delay matches
+Timeless 3 timing/feedback with a cleaner floor; Doubler is smoother than Doubler2 (roughness 0.92 vs 1.90 dB) – the
+new engine (5.8) must not lose that; Smash has 19 dB less LF distortion than Pro-C 2 Punch; Stutter/Pulse edges are
+click-free (> 5 kHz splatter −88 / −151 dB). CPU: everything is within budget except Pitch (2.2 % of real time per
+instance vs 0.75 % for Graillon; under the 2 % margin, but the most expensive module).
 
 ## Pass/fail tolerances for the DSP agents (Q6)
 

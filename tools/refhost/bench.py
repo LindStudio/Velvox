@@ -490,7 +490,7 @@ def _vocal_renders(ctx):
     out = []
     for clip in ctx.clips:
         x = S.load_clip(clip)
-        ys = ctx.render(clip.name, x, tail=0.5 if ctx.case.info.get("wet") else 0.0)
+        ys = ctx.render(clip.name, x, tail=2.0 if ctx.module.key in ("delay", "reverb") else 0.0)
         lm = {}
         q.write_wav(os.path.join(ctx.listen, f"{ctx.case.name}__{clip.name}__dry.wav"), x, FS)
         for n, y in ys.items():
@@ -715,7 +715,7 @@ def proc_dry_leak(ctx, case):
         m = q.channels(y)
         seg = m[:int(0.012 * FS)]
         leak[n] = q.db(np.sum(seg ** 2) / max(np.sum(stereo(x)[:int(0.012 * FS)] ** 2), 1e-30))
-    ctx.metric("dry_leak_db", leak, note="Headliner raw insert output; the wet extraction is not applied here")
+    ctx.metric("dry_leak_db", leak, note="burst, 100 % wet")
 
 
 def proc_reverb_ir(ctx, case):

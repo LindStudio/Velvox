@@ -216,6 +216,26 @@ public:
             }
             expectLessThan (10.0 * std::log10 (err2 / sig2 + 1.0e-30), -90.0, "EQ at 0 dB nulls against the input");
         }
+
+        beginTest ("single-module processor uses the fresh (true dry/wet) mix law: delay at 100 % has no dry");
+        {
+            auto proc = refhost::makeSingleModule (dsp::ModuleId::delay, 0);
+            expect (proc->getMixLaws().lawOf (dsp::ModuleId::delay, 0) == dsp::MixLaw::trueDryWet);
+            for (auto [id, v] : { std::pair<const char*, const char*> { pid::delayMix, "100" }, { pid::delayFeedback, "0" },
+                                  { pid::delayTime, "200" }, { pid::delaySync, "0" } })
+            {
+                juce::String err;
+                expect (refhost::setParameterText (*refhost::findParameter (*proc, id), v, err), err);
+            }
+            juce::AudioBuffer<float> in (2, 48000);
+            in.clear();
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 12000; i < 12480; ++i)
+                    in.setSample (ch, i, 0.5f * (float) std::sin (0.2 * i));   // burst after the start-up
+            refhost::RenderStats st;
+            const auto out = refhost::renderOffline (*proc, in, fs, 512, 0, st);
+            expectLessThan (out.getMagnitude (0, 12000, 480), 1.0e-3f, "no dry during the burst");
+        }
     }
 };
 

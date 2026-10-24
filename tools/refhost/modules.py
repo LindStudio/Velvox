@@ -241,7 +241,7 @@ _add(Module(
                                     "delayHighCut": 6000, "delayPingPong": 0, "delaySpread": 0, "delayDrive": 0, "delayDiffusion": 0,
                                     "delayMod": 0, "delayDuckAmount": 0},
                 procedures=["delay_ir", "dry_leak", "vocal_listen", "nulls", "cpu"],
-                info={"time_ms": 375, "feedback": 0.30, "wet": "subtract_dry"})],
+                info={"time_ms": 375, "feedback": 0.30})],
     tolerances={"echo_time_err_ms": ("lower", 0.5), "feedback_db_per_repeat": ("match", 1.0), "echo_smear_ms": ("lower", 1.0),
                 "inter_echo_floor_db": ("lower", 3.0), "dry_leak_db": ("lower", 0.0, -60.0), "cpu_pct": ("lower", 1.0)}))
 
@@ -260,12 +260,12 @@ _add(Module(
         Case("plate", headliner={**_REV_H, "reverbType": 1, "reverbDecay": 1.8, "reverbSize": 60, "reverbDamping": 9000},
              refs={"VintageVerb": [("ReverbMode", "Plate"), ("Decay", "1.8"), ("Size", "60"), ("HighShelf", "-6"), ("HighFreq", "9000")],
                    "Pro-R 2": [("Style", "Plate"), ("Space", "1.8")]},
-             procedures=["reverb_ir", "dry_leak", "vocal_listen", "nulls", "cpu"], info={"decay_s": 1.8, "wet": "subtract_dry"}),
+             procedures=["reverb_ir", "dry_leak", "vocal_listen", "nulls", "cpu"], info={"decay_s": 1.8}),
         Case("hall", headliner={**_REV_H, "reverbType": 2, "reverbDecay": 2.6, "reverbSize": 70, "reverbDamping": 6500},
              refs={"VintageVerb": [("ReverbMode", "Concert Hall"), ("Decay", "2.6"), ("Size", "70"), ("HighShelf", "-6"),
                                    ("HighFreq", "6500")],
                    "Pro-R 2": [("Style", "Modern"), ("Space", "2.6")]},
-             procedures=["reverb_ir", "vocal_listen"], info={"decay_s": 2.6, "wet": "subtract_dry"}),
+             procedures=["reverb_ir", "vocal_listen"], info={"decay_s": 2.6}),
     ],
     tolerances={"t30_err_pct": ("lower", 0.0, 10.0), "t30_s": ("info", 0.0), "edt_s": ("info", 0.0),
                 "curvature_db": ("lower", 0.5), "mean_ned": ("higher", 0.05),

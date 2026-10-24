@@ -2,7 +2,7 @@
 
 // The in-process Headliner processor reduced to one module: the routing holds only that
 // instance (as an insert), the module is switched on and the global safety clip is off, so a
-// render measures the module alone. Parameters are then set by their APVTS IDs in real units.
+// render measures the module alone. A fresh processor uses the 0.6 true dry/wet mix law (MixLaws::allTrue). Parameters are then set by their APVTS IDs in real units.
 
 #include "PluginProcessor.h"
 #include "Parameters/ParameterIDs.h"
