@@ -262,8 +262,15 @@ namespace velvox::automix
         }
 
         // ================= Level Ride: phrase levels =================
-        const bool rideWanted = p.dynamicsValid && p.dynamicsDb > 8.0f && ! compressed && ! plan.conservative;
+        // The 400 ms level spread also counts reverb tails between words as "quiet words";
+        // the loudness range (3 s windows) has to confirm the swings, else a wet but steady
+        // hook would get its tails boosted into the next word onset
+        const bool steadyLoudness = p.loudnessRangeValid && p.loudnessRangeDb < 3.0f;
+        const bool rideWanted = p.dynamicsValid && p.dynamicsDb > 8.0f && ! steadyLoudness && ! compressed && ! plan.conservative;
         plan.set (pid::rideOn, rideWanted ? 1.0f : 0.0f);
+        if (p.dynamicsValid && p.dynamicsDb > 8.0f && steadyLoudness && ! compressed)
+            plan.notes.push_back (de ("Kein Level Ride: Die Lautheit ist über die Phrasen gleichmäßig (LRA ") + juce::String (p.loudnessRangeDb, 1)
+                                  + de (" LU) - die leisen Stellen sind Hallfahnen oder Pausen, keine leisen Wörter."));
         if (rideWanted)
         {
             const float amount = clamp (40.0f + 4.0f * (p.dynamicsDb - 8.0f), 40.0f, 80.0f);

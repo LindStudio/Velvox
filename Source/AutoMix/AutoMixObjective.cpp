@@ -90,9 +90,13 @@ namespace velvox::automix
         // original (peak-to-loudness growth). Headroom alone is a mild cost: the output stage
         // only turns a dynamic take down a little. Measured against the original, so removing
         // energy without touching the peaks (de-essing) is not mistaken for an artifact.
+        // The render is float and runs before the clip guard, so samples over full scale only
+        // count when they would still hit it at the target loudness, and only beyond the
+        // clipping the recording already had (the same for every candidate).
         const float peakAtTarget = m.peakDb + (targetLufs - m.lufs);
         const float peakGrowth = original.valid ? (m.peakDb - m.lufs) - (original.peakDb - original.lufs) : 0.0f;
-        b.artifacts = 4.0f * (float) m.clipRuns
+        const int newClipRuns = peakAtTarget > -0.1f ? std::max (0, m.clipRuns - (original.valid ? original.clipRuns : 0)) : 0;
+        b.artifacts = 4.0f * (float) newClipRuns
                     + 1.0f * window (peakGrowth, -100.0f, 1.5f, 1.0f)
                     + 0.25f * window (peakAtTarget, -100.0f, -1.0f, 2.0f);
 

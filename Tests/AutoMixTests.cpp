@@ -439,6 +439,20 @@ public:
                 expectEquals (typeFor (0.90f, 5.0f), 3, "sustained -> Large Hall");
             }
 
+            // Level Ride needs the loudness range to confirm the swings: on a wet, steady hook
+            // the reverb tails between words read as "quiet words" (13 dB apart at LRA 1 LU on
+            // real Splice hooks) and a ride would boost the tails into the next word onset
+            {
+                VocalSpec swings; swings.seconds = 14.0; swings.phraseRangeDb = 14.0f;
+                auto prof = VocalProfiler::analyse (makeVocal (swings));
+                logMessage ("    swings: dynamics " + juce::String (prof.dynamicsDb, 1) + " dB, LRA "
+                            + (prof.loudnessRangeValid ? juce::String (prof.loudnessRangeDb, 1) + " LU" : juce::String ("n/a")));
+                expect (AutoMixPlanner::plan (prof, defaults()).on (pid::rideOn), "real phrase swings -> level ride");
+                prof.loudnessRangeValid = true;
+                prof.loudnessRangeDb = 1.0f;
+                expect (! AutoMixPlanner::plan (prof, defaults()).on (pid::rideOn), "steady loudness (LRA 1 LU) -> no level ride");
+            }
+
             // Different recordings -> different configurations
             int differences = 0;
             for (auto& [id, v] : pd.values)
@@ -606,9 +620,23 @@ public:
             harsh.presenceDb = 0.0f;
             expect (evaluate (harsh, original, profile, -18.0f, true, false).harshness > 1.0f, "harshness costs");
 
+            // Clipping that survives the output stage (still at full scale at the target loudness) costs
             auto clipped = m;
             clipped.clipRuns = 2;
+            clipped.peakDb = 0.0f;
             expect (evaluate (clipped, original, profile, -18.0f, true, false).artifacts >= 8.0f, "clipping costs");
+
+            // The render is float and runs before the clip guard: overs on a hot render that the
+            // output stage turns down are no distortion, and clipping inherited from the
+            // recording is the same for every candidate
+            auto hot = m;
+            hot.lufs = -10.0f; hot.peakDb = 2.0f; hot.clipRuns = 12;   // same peak-to-loudness as m
+            expect (evaluate (hot, original, profile, -18.0f, true, false).artifacts < 0.01f, "float overs before the output stage are free");
+            auto inheritedOrig = clipped;   // the recording already hits full scale
+            inheritedOrig.clipRuns = 3;
+            auto inherited = clipped;
+            inherited.clipRuns = 3;
+            expect (evaluate (inherited, inheritedOrig, profile, -18.0f, true, false).artifacts < 1.0f, "clipping from the recording is not the chain's fault");
 
             // Headroom: a dynamic take (peak 15.6 dB over its loudness) is only turned down a
             // little by the output stage - that is not an artifact. A de-esser that takes the
