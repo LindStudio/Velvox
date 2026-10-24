@@ -896,6 +896,24 @@ def markdown(res):
     return "\n".join(lines) + "\n"
 
 
+DOC = os.path.join(REPO, "docs", "QUALITY_BASELINE.md")
+
+
+def update_doc(key, md, doc=DOC):
+    """Replaces the text between '<!-- BEGIN key -->' and '<!-- END key -->' with the module's table."""
+    with open(doc, encoding="utf-8") as fh:
+        text = fh.read()
+    b, e = f"<!-- BEGIN {key} -->", f"<!-- END {key} -->"
+    if b not in text or e not in text:
+        print(f"no markers for {key} in {doc}")
+        return False
+    head, rest = text.split(b, 1)
+    _, tail = rest.split(e, 1)
+    with open(doc, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(head + b + "\n" + md + e + tail)
+    return True
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("module", help="module key (" + ", ".join(M.MODULES) + ") or 'all'")
@@ -903,6 +921,8 @@ def main(argv=None):
     ap.add_argument("--clips", type=int, default=len(S.CLIPS), help="use the first N clips")
     ap.add_argument("--no-ref", action="store_true", help="Headliner only (quick re-measure)")
     ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument("--update-doc", action="store_true",
+                    help="replace this module's table in docs/QUALITY_BASELINE.md (between its BEGIN/END markers)")
     a = ap.parse_args(argv)
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -917,6 +937,8 @@ def main(argv=None):
         md = markdown(res)
         print(md)
         summary.append(md)
+        if a.update_doc:
+            update_doc(k, md)
         fails = sum(m["verdict"] == "FAIL" for m in res["metrics"])
         print(f"[{k}] {len(res['metrics'])} metrics, {fails} FAIL, {res['seconds']} s")
     if a.module == "all":

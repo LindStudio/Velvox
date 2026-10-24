@@ -74,6 +74,21 @@ class Targets(unittest.TestCase):
         self.assertEqual(bench.verdict(1.0, 2.0, "info", 0.0), "info")
 
 
+class Doc(unittest.TestCase):
+    def test_update_doc_replaces_only_the_module_block(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "doc.md")
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write("intro\n<!-- BEGIN eq -->\nold eq\n<!-- END eq -->\nmid\n<!-- BEGIN comp -->\nold comp\n<!-- END comp -->\n")
+            self.assertTrue(bench.update_doc("eq", "| new |\n", doc=p))
+            self.assertFalse(bench.update_doc("nope", "x", doc=p))
+            text = open(p, encoding="utf-8").read()
+        self.assertIn("| new |", text)
+        self.assertNotIn("old eq", text)
+        self.assertIn("old comp", text)
+        self.assertTrue(text.startswith("intro"))
+
+
 class MissingReference(unittest.TestCase):
     @unittest.skipUnless(os.path.exists(bench.HOST), "HeadlinerRefHost not built")
     def test_bench_missing_reference(self):

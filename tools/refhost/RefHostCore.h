@@ -224,14 +224,21 @@ namespace velvox::refhost
         if (! target)
         {
             // a continuous parameter that displays words ("yes" / "no", "Freq-shift"): scan its range
+            const bool probeWords = ! discrete && p.getText (0.0f, 128) == p.getText (1.0f, 128) && p.getText (0.0f, 128) == p.getText (0.5f, 128);
+            auto textAt = [&p, probeWords] (float v)
+            {
+                if (probeWords)
+                    p.setValue (v);
+                return p.getText (v, 128).trim();
+            };
             for (int i = 0; i <= 400; ++i)
             {
                 const float v = (float) i / 400.0f;
-                if (p.getText (v, 128).trim().equalsIgnoreCase (text.trim()))
+                if (textAt (v).equalsIgnoreCase (text.trim()))
                 {
                     // centre of the run of values that show this text
                     int j = i;
-                    while (j < 400 && p.getText ((float) (j + 1) / 400.0f, 128).trim().equalsIgnoreCase (text.trim()))
+                    while (j < 400 && textAt ((float) (j + 1) / 400.0f).equalsIgnoreCase (text.trim()))
                         ++j;
                     apply (0.5f * (v + (float) j / 400.0f));
                     return true;

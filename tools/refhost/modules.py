@@ -149,11 +149,13 @@ _add(Module(
 _add(Module(
     key="smooth", title="Smooth",
     refs=[Ref("soothe2", "oeksound/soothe2_x64.vst3", params=[("mode", "soft"), ("mix", "100"), ("delta", "off")])],
-    cases=[Case("vocal", headliner={"smoothAmount": 50, "smoothSensitivity": 50, "smoothLow": 800, "smoothHigh": 12000,
+    cases=[Case("vocal", headliner={"smoothAmount": 75, "smoothSensitivity": 50, "smoothLow": 800, "smoothHigh": 12000,
                                     "smoothAttack": 5, "smoothRelease": 80, "smoothMode": 0, "smoothOutput": 0, "smoothDelta": 0},
                 procedures=["resonance_vocal", "nulls", "cpu"],
                 calibrate={"soothe2": Calib("depth", [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10], "delta_energy")})],
-    tolerances={"pte_reduction_db": ("higher", 0.3), "ltas_reduction_db": ("higher", 0.5), "flatness_gain_db": ("higher", 0.2),
+    # delta_db is the calibration match (soothe2 depth 0 already removes ~15 dB below the dry level on f7_row, so
+    # Headliner runs at Amount 75 to act comparably); informative only.
+    tolerances={"delta_db": ("info", 0.0), "pte_reduction_db": ("higher", 0.3), "ltas_reduction_db": ("higher", 0.5), "flatness_gain_db": ("higher", 0.2),
                 "transient_change_db": ("match", 0.5, 0.0), "musical_noise_db": ("lower", 0.2), "cpu_pct": ("lower", 1.0)}))
 
 # ---------------------------------------------------------------------------------------------
@@ -256,15 +258,17 @@ _add(Module(
           Ref("Pro-R 2", FF + "Pro-R 2.vst3", params=_PRR)],
     cases=[
         Case("plate", headliner={**_REV_H, "reverbType": 1, "reverbDecay": 1.8, "reverbSize": 60, "reverbDamping": 9000},
-             refs={"VintageVerb": [("ReverbMode", "Plate"), ("Decay", "1.8"), ("Size", "60")],
+             refs={"VintageVerb": [("ReverbMode", "Plate"), ("Decay", "1.8"), ("Size", "60"), ("HighShelf", "-6"), ("HighFreq", "9000")],
                    "Pro-R 2": [("Style", "Plate"), ("Space", "1.8")]},
              procedures=["reverb_ir", "dry_leak", "vocal_listen", "nulls", "cpu"], info={"decay_s": 1.8, "wet": "subtract_dry"}),
         Case("hall", headliner={**_REV_H, "reverbType": 2, "reverbDecay": 2.6, "reverbSize": 70, "reverbDamping": 6500},
-             refs={"VintageVerb": [("ReverbMode", "Concert Hall"), ("Decay", "2.6"), ("Size", "70")],
+             refs={"VintageVerb": [("ReverbMode", "Concert Hall"), ("Decay", "2.6"), ("Size", "70"), ("HighShelf", "-6"),
+                                   ("HighFreq", "6500")],
                    "Pro-R 2": [("Style", "Modern"), ("Space", "2.6")]},
              procedures=["reverb_ir", "vocal_listen"], info={"decay_s": 2.6, "wet": "subtract_dry"}),
     ],
-    tolerances={"t30_err_pct": ("lower", 10.0), "curvature_db": ("lower", 0.5), "mean_ned": ("higher", 0.05),
+    tolerances={"t30_err_pct": ("lower", 0.0, 10.0), "t30_s": ("info", 0.0), "edt_s": ("info", 0.0),
+                "curvature_db": ("lower", 0.5), "mean_ned": ("higher", 0.05),
                 "mixing_ms": ("lower", 20.0), "modal_ringing_db": ("lower", 2.0), "tail_corr": ("lower", 0.1),
                 "dry_leak_db": ("lower", 0.0, -60.0), "cpu_pct": ("lower", 2.0)}))
 
