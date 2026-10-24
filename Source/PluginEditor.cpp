@@ -167,6 +167,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
       spectrum (p.getChain().meters.inputTap, p.getChain().meters.outputTap),
       scopeL ((size_t) dsp::StereoTap::capacity), scopeR ((size_t) dsp::StereoTap::capacity),
       browser (p),
+      presetBrowser (p.getPresetManager(), dialog),
       topBar (p, dialog),
       chainView (p),
       simpleView (p, &spectrum),
@@ -181,7 +182,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
 
     for (auto* c : std::initializer_list<juce::Component*> { &topBar, &chainView, &simpleView, &meters })
         canvas.addAndMakeVisible (c);
-    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser })
+    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser })
         canvas.addChildComponent (c);
 
     chainView.setLiveData (&live);
@@ -191,6 +192,12 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
 
     topBar.onModeChange = [this] (Mode m) { setMode (m); };
     topBar.onTabChange = [this] (Tab t) { setTab (t); };
+    topBar.onPresetList = [this]
+    {
+        help.close();
+        presetBrowser.open();
+        raiseOverlays();
+    };
     topBar.onHelp = [this]
     {
         showHelp (detail != nullptr && isModulePanelShown() ? help::keyForModule (selected < 0 ? selected : (int) dsp::selectionModule (selected))
@@ -229,7 +236,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     chainView.setBounds (chainArea());
     simpleView.setBounds (bodyArea());
     meters.setBounds (meterArea().reduced (6, 4));
-    for (auto* overlay : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser })
+    for (auto* overlay : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser })
         overlay->setBounds (0, 0, baseWidth, baseHeight);
 
     // ---- View state (stored with the project, never affects audio)
@@ -450,7 +457,7 @@ void VelvoxAudioProcessorEditor::select (int id)
 void VelvoxAudioProcessorEditor::raiseOverlays()
 {
     canvas.info.toFront (false);
-    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &browser, &analysis, &dialog, &help, &tutorial })
+    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &browser, &presetBrowser, &analysis, &dialog, &help, &tutorial })
         c->toFront (false);
     if (analysis.isVisible())
         analysis.toFront (true);

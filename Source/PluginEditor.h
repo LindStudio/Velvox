@@ -13,6 +13,7 @@
 #include "UI/TutorialOverlay.h"
 #include "UI/ModuleBrowser.h"
 #include "UI/SimpleView.h"
+#include "UI/PresetBrowser.h"
 
 // The whole UI is laid out on a fixed design canvas (ui::baseWidth x ui::baseHeight = 1000 x 600)
 // that is scaled uniformly to the window size, so every window size keeps the same proportions
@@ -68,6 +69,7 @@ public:
     velvox::ui::AutoMixView& getAutoMixView() noexcept { return mixView; }
     bool isMixDetailsOpen() const noexcept { return detailsOverlay.isVisible(); }
     velvox::ui::ModuleBrowser& getBrowser() noexcept { return browser; }
+    velvox::ui::PresetBrowser& getPresetBrowser() noexcept { return presetBrowser; }
     velvox::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return analysis; }
     velvox::ui::DetailPanel* getDetail() noexcept { return detail.get(); }
     velvox::ui::CompactMeters& getMeters() noexcept { return meters; }
@@ -137,6 +139,7 @@ private:
     velvox::ui::HelpOverlay help;
     velvox::ui::TutorialOverlay tutorial;
     velvox::ui::ModuleBrowser browser;
+    velvox::ui::PresetBrowser presetBrowser;
     velvox::ui::TopBar topBar;
     velvox::ui::ChainView chainView;
     velvox::ui::SimpleView simpleView;

@@ -112,3 +112,12 @@ Width-Voices / Space / Rhythm / Analysis in a wrapping flow, hover/highlight des
 "voll" + reason, Up/Down (Left/Right while the search is empty) move the highlight, Enter adds it, Esc closes. UiTests updated.)
 - Ruling: removed assertion family "category chips filter (All / Space / Analysis)" — spec 2.7 shows all groups at once with a
   search field; replaced by "every card sits in its category group, grouped order", hover text, Enter/Esc/highlight tests.
+
+Task 9: complete (PresetBrowser overlay: categories Alle / factory / Eigene / Favoriten, search, star favourites in UserSettings
+"presetFavourites" ("f:"/"u:" + name), hover/selection description, double-click / Enter load (one undo step), Esc, Speichern /
+Speichern als … / Umbenennen … / Löschen; PresetManager: Entry::description, renameUserPreset. PresetBrowserTests 61 checks.)
+TDD note: written test-first in this order, but the first run already passed (implementation was written in the same step).
+- Ruling: the preset list takes the PresetManager by reference (editor passes the processor's), so tests use a temporary preset
+  folder and never touch the user's Documents folder.
+- Ruling: "Speichern" overwrites the loaded user preset; with a factory preset (or none) loaded it asks for a name (= Speichern als).
+- Ruling: the old header save / preset-menu icons are gone; everything is in the list (spec 2.8).

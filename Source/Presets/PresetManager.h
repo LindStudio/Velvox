@@ -16,6 +16,7 @@ namespace velvox
             juce::String category;
             bool isFactory = true;
             juce::File file; // user presets only
+            juce::String description;
         };
 
         explicit PresetManager (juce::AudioProcessorValueTreeState& state,
@@ -37,6 +38,8 @@ namespace velvox
         // Saves the current parameter values as a user preset (overwrites same name)
         bool saveUserPreset (const juce::String& name);
         bool deleteUserPreset (int index);
+        // Renames a user preset file (factory presets cannot be renamed); false when the name is taken
+        bool renameUserPreset (int index, const juce::String& newName);
 
         juce::String getCurrentPresetName() const;
         int getCurrentIndex() const;
