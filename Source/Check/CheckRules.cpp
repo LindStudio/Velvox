@@ -69,10 +69,13 @@ namespace velvox::check
             }
 
             // Deviation from the voice template: strongest local peak in [lo, hi)
-            struct Bump { float hz = 0.0f, db = -100.0f; int band = -1; };
-            Bump deviationPeak (float lo, float hi) const
+            struct Bump { float hz = 0.0f, db = -100.0f, z = -100.0f; int band = -1; };
+            // Strongest local peak in [lo, hi) of the deviation in units of the spread of the
+            // template voices (bands where voices differ a lot need a larger deviation)
+            Bump deviationPeak (float lo, float hi, float minDb) const
             {
                 Bump best;
+                const auto& spread = voiceTemplateSpread (r.highVoice);
                 const auto& d = r.deviationDb;
                 if (d.size() != (size_t) dsp::VocalAnalyzer::numBands)
                     return best;
@@ -81,8 +84,9 @@ namespace velvox::check
                     const float c = dsp::VocalAnalyzer::bandCentre (b);
                     if (c < lo || c >= hi || r.toneDb.size() != d.size() || r.toneDb[(size_t) b] < -190.0f)
                         continue;
-                    if (d[(size_t) b] > best.db && d[(size_t) b] >= d[(size_t) b - 1] && d[(size_t) b] >= d[(size_t) b + 1])
-                        best = { c, d[(size_t) b], b };
+                    const float z = d[(size_t) b] / std::max (1.5f, spread[(size_t) b]);
+                    if (d[(size_t) b] >= minDb && z > best.z && d[(size_t) b] >= d[(size_t) b - 1] && d[(size_t) b] >= d[(size_t) b + 1])
+                        best = { c, d[(size_t) b], z, b };
                 }
                 return best;
             }
@@ -166,17 +170,17 @@ namespace velvox::check
             void tonal()
             {
                 // ---- Broad excesses against the voice template (where the template is reliable)
-                const auto bumpFinding = [this] (const char* id, const char* word, EqRole role, float lo, float hi, float threshold)
+                const auto bumpFinding = [this] (const char* id, const char* word, EqRole role, float lo, float hi, float minDb)
                 {
                     // Not below the lowest sung notes (the fundamentals are the voice itself)
                     const float from = std::max (lo, r.pitchValid ? r.f0LowHz * 1.12f : lo);
-                    const auto p = deviationPeak (from, hi);
-                    if (p.band < 0 || p.db < threshold - 2.0f)
+                    const auto p = deviationPeak (from, hi, minDb);
+                    if (p.band < 0 || p.z < t.devZ - 1.0f)
                         return;
                     const float gain = -halfDb (juce::jlimit (1.5f, 6.0f, 0.75f * p.db));
                     const float q = bumpQ (p, r.deviationDb);
                     const float hz = p.hz;
-                    auto& f = add (id, Category::tonal, conf (p.db, threshold, 4.0f), severity (p.db, threshold, 3.0f), ModuleId::eq,
+                    auto& f = add (id, Category::tonal, conf (p.z, t.devZ, 1.5f), severity (p.db, minDb + 1.5f, 3.0f), ModuleId::eq,
                                    de (word) + de (" um ") + hzText (hz) + " (" + dbText (halfDb (p.db)) + ")",
                                    de ("EQ ") + dbText (gain) + de (" bei ") + hzText (hz),
                                    de ("Um ") + hzText (hz) + " " + dbText (p.db) + de (" über einer typischen trockenen Stimme (1/3 Oktave)."),
@@ -312,20 +316,20 @@ namespace velvox::check
 
             void sibilance()
             {
-                if (! r.sibilanceValid)
+                if (! r.sibilancePeakValid)
                     return;
-                const float threshold = t.sibilanceMax + 1.0f;
-                if (r.sibilanceVsVowelDb < threshold - 2.0f)
+                const float threshold = t.sibilancePeakMax + 1.0f;
+                if (r.sibilancePeakDb < threshold - 2.0f)
                     return;
-                const float excess = r.sibilanceVsVowelDb - t.sibilanceMax;
+                const float excess = r.sibilancePeakDb - t.sibilancePeakMax;
                 const float sHz = r.sibilanceHz > 0.0f ? r.sibilanceHz : 7000.0f;
                 const float detector = std::round (juce::jlimit (4000.0f, 8000.0f, 0.78f * sHz) / 100.0f) * 100.0f;
                 const float range = halfDb (juce::jlimit (3.0f, 10.0f, 3.0f + excess));
                 // Start reducing a little below the level of the S sounds
-                const float thresholdDb = std::round (juce::jlimit (-60.0f, -6.0f, r.voiceLevelDb + r.sibilanceVsVowelDb - 6.0f));
-                auto& f = add ("sibilance", Category::sibilance, conf (r.sibilanceVsVowelDb, threshold, 4.0f), severity (r.sibilanceVsVowelDb, threshold, 3.0f),
+                const float thresholdDb = std::round (juce::jlimit (-60.0f, -6.0f, r.voiceLevelDb + (r.sibilanceValid ? r.sibilanceVsVowelDb : -8.0f) - 6.0f));
+                auto& f = add ("sibilance", Category::sibilance, conf (r.sibilancePeakDb, threshold, 4.0f), severity (r.sibilancePeakDb, threshold, 3.0f),
                                ModuleId::deess, de ("Scharfe S-Laute (") + dbText (halfDb (excess)) + ")", de ("De-Esser bei ") + hzText (detector),
-                               de ("S-Laute liegen ") + dbText (r.sibilanceVsVowelDb) + de (" gegenüber den Vokalen (Ziel bis ") + dbText (t.sibilanceMax) + de ("), Schwerpunkt um ") + hzText (sHz) + ".",
+                               de ("Die lautesten S-Momente (5–10 kHz) liegen ") + dbText (r.sibilancePeakDb) + de (" gegenüber den Vokalen (Ziel bis ") + dbText (t.sibilancePeakMax) + de ("), Schwerpunkt um ") + hzText (sHz) + ".",
                                de ("Laute S-Laute stechen bei hoher Lautstärke und werden durch Kompression und Hall noch schärfer."));
                 f.freqHz = sHz;
                 f.action.modules.push_back (ModuleId::deess);
@@ -418,7 +422,7 @@ namespace velvox::check
                 if (r.noiseFloorDb > -199.0f && r.snrDb < t.snrMin + 2.0f)
                 {
                     const float deficit = t.snrMin - r.snrDb;
-                    auto& f = add ("noise", Category::noise, conf (deficit, 2.0f, 8.0f), severity (deficit, 2.0f, 8.0f), ModuleId::ride,
+                    auto& f = add ("noise", Category::noise, conf (deficit, 0.0f, 8.0f), severity (deficit, 0.0f, 8.0f), ModuleId::ride,
                                    de ("Rauschen in Pausen (") + num (r.snrDb, 0) + " dB Abstand)", de ("Rauschen nicht mit anheben (Ride-Schwelle)"),
                                    de ("Die Pausen liegen bei ") + num (r.noiseFloorDb, 1) + de (" dBFS, nur ") + num (r.snrDb, 1) + de (" dB unter der Stimme."),
                                    de ("Jedes Dynamikmodul hebt das Rauschen zwischen den Wörtern an."));
@@ -479,7 +483,7 @@ namespace velvox::check
     {
         const auto t = targetsFor (r, genre);
         Rules rules { r, t };
-        rules.material = juce::jlimit (0.75f, 1.0f, 0.75f + 0.25f * (r.voicedSeconds - dsp::VocalAnalyzer::minVoicedSeconds) / 11.0f);
+        rules.material = juce::jlimit (0.9f, 1.0f, 0.9f + 0.1f * (r.voicedSeconds - dsp::VocalAnalyzer::minVoicedSeconds) / 6.0f);
 
         rules.level();
         if (r.enoughMaterial)

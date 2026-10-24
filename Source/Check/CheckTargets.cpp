@@ -25,6 +25,7 @@ namespace velvox::check
                 t.crestMax = 22.0f;
                 t.lraMax = 14.0f;
                 t.tailMax = 1.6f;
+                t.sibilancePeakMax = -10.0f;
                 break;
         }
         // A high voice (lowest notes above 250 Hz) has no fundamentals in the body band:

@@ -25,7 +25,8 @@ namespace velvox::check
         Window air { -32.0f, -16.0f };      // 10 - 16 kHz
         float presenceMax = -4.0f;          // 2 - 5 kHz
         float rumbleMax = -24.0f;           // 40 - 90 Hz
-        float sibilanceMax = -6.0f;         // S frames against vowel frames
+        float sibilanceMax = -6.0f;         // S frames against vowel frames (objective; shown as a fact)
+        float sibilancePeakMax = -9.0f;     // loudest 5-10 kHz moments against the vowels (the rule)
 
         // Dynamics
         Window phrase { 3.0f, 6.0f };       // spread of 400 ms voice levels (10th - 95th percentile)
@@ -40,11 +41,12 @@ namespace velvox::check
         float snrMin = 30.0f;
         float tailMax = 0.9f;               // s for a 30 dB decay after words
 
-        // Frequency-specific deviations from the voice template (1/3-octave, dB)
-        float devMud = 4.5f;                // 200 - 500 Hz
-        float devBoxy = 4.5f;               // 500 - 1000 Hz
-        float devHarsh = 4.5f;              // 2.5 - 5 kHz
-        float resonanceMin = 8.0f;          // narrow peak over its +-1/2 octave surroundings
+        // Frequency-specific deviations from the voice template (1/3-octave): at least devMin
+        // dB and devZ times the spread of the template voices in that band
+        float devMud = 2.5f;                // 200 - 500 Hz
+        float devBoxy = 2.5f;               // 500 - 1000 Hz
+        float devZ = 2.0f;
+        float resonanceMin = 12.0f;         // narrow peak over its +-1/2 octave surroundings
 
         static CheckTargets make (Genre genre, bool highVoice, bool spoken);
     };
