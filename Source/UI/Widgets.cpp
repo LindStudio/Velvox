@@ -22,7 +22,7 @@ namespace velvox::ui
             return l;
         }
 
-        constexpr int knobLabelH = 18, knobValueH = 22, knobGap = 5;
+        constexpr int knobLabelH = 14, knobValueH = 16, knobGap = 4;   // design: value 16, name 14, 4 px under the dial
         constexpr int popupWidth = 290;
 
         juce::TextLayout layoutText (const juce::String& text, float width)
@@ -150,8 +150,10 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    Knob::Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour)
+    Knob::Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent)
     {
+        // White (the old default) means "no module colour given": the design cyan
+        slider.setColour (juce::Slider::rotarySliderFillColourId, accent == colours::accent ? colours::teal : accent);
         slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
         slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, knobValueH);
         slider.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
@@ -161,7 +163,8 @@ namespace velvox::ui
         addAndMakeVisible (slider);
 
         name.setText (label.toUpperCase(), juce::dontSendNotification);
-        addAndMakeVisible (styleCaption (name));
+        addAndMakeVisible (name);
+        applyLabelStyle();
 
         attachment = std::make_unique<APVTS::SliderAttachment> (state, paramId, slider);
         this->paramId = paramId;
@@ -189,6 +192,8 @@ namespace velvox::ui
     {
         hero = isHero;
         slider.getProperties().set (VelvoxLookAndFeel::heroProperty, isHero);
+        if (isHero)
+            maxDial = dialsize::macro;
         applyLabelStyle();
         resized();
         repaint();
@@ -205,37 +210,35 @@ namespace velvox::ui
 
     void Knob::applyLabelStyle()
     {
-        // Primary controls read first: larger, brighter name and read-out
-        const bool strong = hero || prominence == Prominence::primary;
-        styleCaption (name, hero ? 15.0f : (strong ? 14.5f : typesize::label));
-        name.setColour (juce::Label::textColourId, strong ? colours::text : colours::textDim);
-        slider.getProperties().set (VelvoxLookAndFeel::strongProperty, strong);
+        // Design: knob name Montserrat SemiBold 9 px, #6B7489, capitals, under the value
+        name.setFont (semiBold (9.0f, 0.06f));
+        name.setJustificationType (juce::Justification::centred);
+        name.setColour (juce::Label::textColourId, colours::knobName);
+        name.setInterceptsMouseClicks (false, false);
+        slider.getProperties().set (VelvoxLookAndFeel::strongProperty, hero || prominence == Prominence::primary);
         slider.sendLookAndFeelChange();
     }
 
     void Knob::resized()
     {
-        // Caption, dial and value stay together as one block, centred in the cell
+        // Design: dial on top, value (Roboto Mono) and name below, one block centred in the cell
         auto r = getLocalBounds();
-        const bool strong = hero || prominence == Prominence::primary;
-        const int labelH = strong ? knobLabelH + 2 : knobLabelH;
-        const int valueH = strong ? knobValueH + 2 : knobValueH;
-        const int dial = juce::jlimit (24, maxDial, std::min (r.getWidth() - 8, r.getHeight() - labelH - valueH - 2 * knobGap));
-        auto block = r.withSizeKeepingCentre (r.getWidth(), labelH + knobGap + dial + knobGap + valueH);
+        const int dial = juce::jlimit (24, maxDial, std::min (r.getWidth() - 8, r.getHeight() - knobValueH - knobLabelH - knobGap));
+        auto block = r.withSizeKeepingCentre (r.getWidth(), dial + knobGap + knobValueH + knobLabelH);
 
-        name.setBounds (block.removeFromTop (labelH));
-        block.removeFromTop (knobGap);
-        valueBoxH = valueH + knobGap;
+        valueBoxH = knobGap + knobValueH;
         slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, block.getWidth(), valueBoxH);
-        slider.setBounds (block);
+        slider.setBounds (block.removeFromTop (dial + valueBoxH));
+        name.setBounds (block.removeFromTop (knobLabelH));
+
+        dialArea = slider.getBounds().withHeight (dial).withSizeKeepingCentre (dial, dial);
+        valueArea = slider.getBounds().withTrimmedTop (dial + knobGap);
     }
 
     juce::Rectangle<float> Knob::dialBounds() const
     {
         // Same area the look-and-feel draws the dial into
-        auto b = slider.getBounds().toFloat().withTrimmedBottom ((float) valueBoxH);
-        const float size = std::min (b.getWidth(), b.getHeight());
-        return b.withSizeKeepingCentre (size, size).reduced (2.0f);
+        return dialArea.toFloat();
     }
 
     void Knob::tick()
@@ -336,14 +339,12 @@ namespace velvox::ui
         if (std::abs (eff - base) < 1.0e-3 * (range.getLength() + 1.0e-9))
             return;
 
-        // Glowing dot on the groove where the macros move the processed value
+        // Glowing dot on the tick ring (r 44 of 100 units) where the macros move the processed value
         const auto params = slider.getRotaryParameters();
         const float prop = (float) slider.valueToProportionOfLength (eff);
         const float angle = params.startAngleRadians + prop * (params.endAngleRadians - params.startAngleRadians);
         const auto d = dialBounds();
-        const float radius = d.getWidth() * 0.5f;
-        const float tw = std::max (3.0f, radius * VelvoxLookAndFeel::grooveRatio);
-        const auto p = d.getCentre().getPointOnCircumference (radius - tw * 0.5f, angle);
+        const auto p = d.getCentre().getPointOnCircumference (d.getWidth() * 0.44f, angle);
 
         drawGlow (g, p, 8.0f, 0.5f, colours::teal);
         g.setColour (colours::text);
@@ -351,9 +352,11 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    Toggle::Toggle (APVTS& state, const char* paramId, const juce::String& label, juce::Colour)
+    Toggle::Toggle (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent)
     {
         setButtonText (label);
+        if (accent != colours::accent)
+            setColour (juce::ToggleButton::tickColourId, accent);
         attachment = std::make_unique<APVTS::ButtonAttachment> (state, paramId, *this);
         if (const auto* spec = findParameterSpec (paramId))
             setTooltip (spec->description);

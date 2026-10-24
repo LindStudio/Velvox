@@ -64,6 +64,7 @@ set(VELVOX_SOURCES
     Source/UI/Theme.cpp
     Source/UI/VelvoxLookAndFeel.cpp
     Source/UI/Widgets.cpp
+    Source/UI/Segments.cpp
     Source/UI/Spectrum.cpp
     Source/UI/ModuleViews.cpp
     Source/UI/ChainView.cpp

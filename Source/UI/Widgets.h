@@ -73,6 +73,11 @@ namespace velvox::ui
         enum class Prominence { primary, secondary, detail };
         void setProminence (Prominence p);
         void setMaxDialSize (int px) { maxDial = px; resized(); }
+        // Design layout: dial (this diameter) on top, value (Roboto Mono) and name below
+        void setDialSize (int px) { maxDial = px; resized(); }
+        juce::Rectangle<int> getDialArea() const noexcept { return dialArea; }
+        juce::Rectangle<int> getValueArea() const noexcept { return valueArea; }
+        juce::Rectangle<int> getNameArea() const noexcept { return name.getBounds(); }
         void setDescription (const juce::String& text) { description = text; }
         const juce::String& getParamId() const noexcept { return paramId; }
 
@@ -101,6 +106,7 @@ namespace velvox::ui
         float lastEffective = std::numeric_limits<float>::quiet_NaN();
         int maxDial = dialsize::secondary;
         int valueBoxH = 25;
+        juce::Rectangle<int> dialArea, valueArea;
         bool hero = false;
         Prominence prominence = Prominence::secondary;
         Smoothed shownPos, hover;

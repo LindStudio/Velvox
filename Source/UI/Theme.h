@@ -83,10 +83,10 @@ namespace velvox::ui
         inline constexpr float hero = 27.0f;
     }
 
-    // Dial diameters: primary controls, secondary controls, rarely used details
+    // Dial diameters of the design: module knobs 50-56, Vocal Control 54, SMASH 150
     namespace dialsize
     {
-        inline constexpr int primary = 104, secondary = 74, detail = 62, rail = 70;
+        inline constexpr int primary = 56, secondary = 50, detail = 50, rail = 54, macro = 54, smash = 150;
     }
 
     namespace motion

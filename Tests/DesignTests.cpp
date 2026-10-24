@@ -5,6 +5,7 @@
 #include "TestHelpers.h"
 #include "UI/Theme.h"
 #include "PluginEditor.h"
+#include "UI/Segments.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -41,6 +42,58 @@ public:
             expect (ui::moduleColour (ModuleId::reverb) == juce::Colour (0xfff472b6), "REVERB #F472B6");
             expect (ui::colours::windowBg == juce::Colour (0xff05060a), "window #05060A");
             expect (ui::monoFont (11.5f).getTypefaceName().containsIgnoreCase ("Roboto Mono"), "values in Roboto Mono");
+        }
+
+        beginTest ("Design: segments follow the parameter both ways");
+        {
+            Harness h;
+            auto& state = h.proc.getState();
+            const juce::StringArray labels { "1/4", "1/4D", "1/8", "1/8D", "1/8T", "1/16" };
+            ui::Segments seg (state, pid::delayDivision, labels, ui::moduleColour (ModuleId::delay));
+            seg.setBounds (0, 0, 360, 28);
+            auto* choice = dynamic_cast<juce::AudioParameterChoice*> (state.getParameter (pid::delayDivision));
+            expect (choice != nullptr);
+            if (choice != nullptr)
+            {
+                for (int i = 0; i < labels.size(); ++i)
+                    expectEquals (seg.getChoiceForSegment (i), choice->choices.indexOf (labels[i]), "label maps by name: " + labels[i]);
+
+                const int dotted8 = choice->choices.indexOf ("1/8D");
+                choice->setValueNotifyingHost (choice->convertTo0to1 ((float) dotted8));
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (60);
+                expectEquals (seg.getSelectedSegment(), 3, "host change shows in the segments");
+
+                seg.clickSegment (0);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (60);
+                expectEquals (choice->getIndex(), choice->choices.indexOf ("1/4"), "click sets the parameter");
+
+                // A value without a segment (1/64) selects none
+                choice->setValueNotifyingHost (choice->convertTo0to1 (0.0f));
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (60);
+                expectEquals (seg.getSelectedSegment(), -1, "no segment for 1/64");
+            }
+
+            // Bool parameter: two segments (off / on)
+            ui::Segments onOff (state, pid::delaySync, { "Free", "Sync" }, ui::moduleColour (ModuleId::delay));
+            onOff.clickSegment (1);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (60);
+            expect (state.getRawParameterValue (pid::delaySync)->load() > 0.5f, "bool segment on");
+        }
+
+        beginTest ("Design: knob is dial, value, name from top to bottom; double-click returns the default");
+        {
+            Harness h;
+            auto& state = h.proc.getState();
+            ui::Knob k (state, pid::compRatio, "Ratio", ui::moduleColour (ModuleId::comp));
+            k.setDialSize (50);
+            k.setBounds (0, 0, 90, 84);   // exactly dial 50 + gap 4 + value 16 + name 14
+            expectEquals (k.getDialArea().getHeight(), 50, "dial 50 px");
+            expect (k.getDialArea().getY() <= 4, "dial on top");
+            expect (k.getValueArea().getY() >= k.getDialArea().getBottom(), "value below the dial");
+            expect (k.getNameArea().getY() > k.getValueArea().getY(), "name below the value");
+            expect (k.slider.findColour (juce::Slider::rotarySliderFillColourId) == ui::moduleColour (ModuleId::comp), "accent = module colour");
+            expect (k.slider.isDoubleClickReturnEnabled());
+            expectWithinAbsoluteError ((float) k.slider.getDoubleClickReturnValue(), 3.0f, 1.0e-4f, "double-click value = default 3:1");
         }
     }
 };

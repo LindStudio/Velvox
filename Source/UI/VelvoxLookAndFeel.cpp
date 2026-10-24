@@ -51,194 +51,114 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    // Knob geometry shared by the cached metal body and the live overlay
-    namespace
-    {
-        struct DialGeometry
-        {
-            float radius, groove, grooveR, bodyR, capR;
-        };
-
-        DialGeometry dialGeometry (float radius)
-        {
-            DialGeometry d;
-            d.radius = radius;
-            d.groove = std::max (3.0f, radius * VelvoxLookAndFeel::grooveRatio);
-            d.grooveR = radius - d.groove * 0.5f;
-            d.bodyR = d.grooveR - d.groove * 0.5f - std::max (2.5f, radius * 0.075f);
-            d.capR = d.bodyR * 0.88f;
-            return d;
-        }
-
-        // The matte knob body: cast shadow, a dark rim with a thin bevel that
-        // catches the light on top, and a smooth cap that is a shade lighter at
-        // the upper left. Independent of the value, so it is drawn once per size.
-        void paintDialBody (juce::Graphics& g, juce::Point<float> c, const DialGeometry& d)
-        {
-            using juce::Colour;
-            const float bodyR = d.bodyR, capR = d.capR;
-            const auto body = juce::Rectangle<float> (bodyR * 2.0f, bodyR * 2.0f).withCentre (c);
-            const auto cap = juce::Rectangle<float> (capR * 2.0f, capR * 2.0f).withCentre (c);
-
-            // Cast shadow (light from above) and tight contact shadow
-            drawGlow (g, c.translated (0.0f, bodyR * 0.25f), bodyR * 1.3f, 0.8f, juce::Colours::black);
-            g.setColour (juce::Colours::black.withAlpha (0.6f));
-            g.fillEllipse (body.expanded (1.0f).translated (0.0f, 1.5f));
-
-            // Rim: near-black side wall, a little lighter on top
-            g.setGradientFill (juce::ColourGradient (Colour (0xff2a3346), c.x, body.getY(),
-                                                     Colour (0xff05070c), c.x, body.getBottom(), false));
-            g.fillEllipse (body);
-            g.setColour (colours::accent.withAlpha (0.10f));
-            g.drawEllipse (body.reduced (0.5f), 1.0f);
-
-            // Cap: smooth dark face with a soft light from the upper left
-            g.setGradientFill (juce::ColourGradient (Colour (0xff1e2638), c.x - capR * 0.5f, cap.getY(),
-                                                     Colour (0xff0a0e17), c.x + capR * 0.4f, cap.getBottom(), false));
-            g.fillEllipse (cap);
-            juce::ColourGradient sheen (colours::accent.withAlpha (0.07f), c.x - capR * 0.35f, c.y - capR * 0.55f,
-                                        colours::accent.withAlpha (0.0f), c.x - capR * 0.35f + capR * 1.2f, c.y - capR * 0.55f, true);
-            g.setGradientFill (sheen);
-            g.fillEllipse (cap);
-
-            // Edge light on top of the cap, edge shadow below
-            juce::Path topEdge, bottomEdge;
-            topEdge.addCentredArc (c.x, c.y, capR - 0.5f, capR - 0.5f, 0.0f, -1.4f, 1.4f, true);
-            bottomEdge.addCentredArc (c.x, c.y, capR - 0.5f, capR - 0.5f, 0.0f, juce::MathConstants<float>::pi - 1.1f,
-                                      juce::MathConstants<float>::pi + 1.1f, true);
-            g.setColour (colours::accent.withAlpha (0.16f));
-            g.strokePath (topEdge, juce::PathStrokeType (1.0f));
-            g.setColour (juce::Colours::black.withAlpha (0.6f));
-            g.strokePath (bottomEdge, juce::PathStrokeType (1.2f));
-        }
-    }
-
-    const juce::Image& VelvoxLookAndFeel::dialBody (float radius, float physicalScale)
-    {
-        // Rendered at the physical pixel size so it stays sharp at any window size / DPI
-        const int px = juce::jlimit (16, 1024, juce::roundToInt (radius * 2.0f * physicalScale));
-        if (auto it = bodyCache.find (px); it != bodyCache.end())
-            return it->second;
-
-        if (bodyCache.size() > 48)
-            bodyCache.clear();
-
-        juce::Image img (juce::Image::ARGB, px, px, true);
-        {
-            juce::Graphics gi (img);
-            const float s = (float) px / (radius * 2.0f);
-            gi.addTransform (juce::AffineTransform::scale (s));
-            paintDialBody (gi, { radius, radius }, dialGeometry (radius));
-        }
-        return bodyCache.emplace (px, std::move (img)).first->second;
-    }
-
-    //==========================================================================
-    // Neon dial (style guide: "Regler, modern, glow"). Outside: a dark track
-    // ring carrying the value arc, lit cyan -> blue -> violet along the travel
-    // and glowing into the panel. Inside: the matte knob (cached) with a white
-    // pointer line.
+    // Knob of the HEADLINER VOCAL design. Units of a 100 x 100 knob (u = px per unit):
+    //   tick ring   57 ticks over 270 deg, r 40.5..47.5, width 1.3; lit up to the value
+    //               in the accent colour with a glow, the rest #30343D
+    //   shadow      circle r 37, 7 units down, soft
+    //   body        r 35, #34373F -> #121418, fine light edge on top
+    //   cap         r 26, #17191D -> #2A2D34 (recessed)
+    //   pointer     glowing dot r 3.4 on r 27
+    // Bipolar parameters light the ticks from the centre detent towards the value.
     void VelvoxLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float pos,
                                               float startAngle, float endAngle, juce::Slider& slider)
     {
-        const auto bounds = juce::Rectangle<int> (x, y, width, height).toFloat().reduced (2.0f);
-        const float radius = std::min (bounds.getWidth(), bounds.getHeight()) * 0.5f;
-        const auto centre = bounds.getCentre();
+        const auto area = juce::Rectangle<int> (x, y, width, height).toFloat();
+        const float size = std::min (area.getWidth(), area.getHeight());
+        const float u = size / 100.0f;
+        const auto centre = area.getCentre();
         const bool enabled = slider.isEnabled();
         const auto& props = slider.getProperties();
         const float shown = (float) (double) props.getWithDefault (animPosProperty, (double) pos);
         const float hover = enabled ? (float) (double) props.getWithDefault (hoverProperty, 0.0) : 0.0f;
-        const float a = enabled ? 1.0f : 0.35f;
-        const auto d = dialGeometry (radius);
-
+        const auto accent = slider.findColour (juce::Slider::rotarySliderFillColourId);
         const float span = endAngle - startAngle;
+        const float valueAngle = startAngle + shown * span;
+
         const auto range = slider.getRange();
         const bool bipolar = range.getStart() < 0.0 && range.getEnd() > 0.0;
-        const float valueAngle = startAngle + shown * span;
-        float fromAngle = startAngle;
-        if (bipolar)
-            fromAngle = startAngle + (float) slider.valueToProportionOfLength (0.0) * span;
+        const float origin = bipolar ? (float) slider.valueToProportionOfLength (0.0) : 0.0f;
+        const float lo = std::min (origin, shown), hi = std::max (origin, shown);
 
-        // ---- Track: a thin dark ring
-        juce::Path track;
-        track.addCentredArc (centre.x, centre.y, d.grooveR, d.grooveR, 0.0f, startAngle, endAngle, true);
-        g.setColour (juce::Colour (0xff070a12));
-        g.strokePath (track, juce::PathStrokeType (d.groove, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour (colours::line.withAlpha (0.55f));
-        g.strokePath (track, juce::PathStrokeType (d.groove * 0.35f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        const auto polar = [&] (float angle, float radius) { return centre.getPointOnCircumference (radius * u, angle); };
+        const auto circle = [&] (juce::Point<float> c, float radius) { return juce::Rectangle<float> (radius * 2.0f * u, radius * 2.0f * u).withCentre (c); };
 
-        // Centre detent mark for bipolar controls
-        if (bipolar)
+        // 1) Tick ring
+        constexpr int numTicks = 57;
+        for (int i = 0; i < numTicks; ++i)
         {
-            const auto p0 = centre.getPointOnCircumference (d.radius + 1.0f, fromAngle);
-            const auto p1 = centre.getPointOnCircumference (d.radius - d.groove - 1.0f, fromAngle);
-            g.setColour (colours::accent.withAlpha (0.3f * a));
-            g.drawLine ({ p0, p1 }, 1.0f);
-        }
-
-        // ---- Value arc: neon light with a wide soft glow underneath
-        if (std::abs (valueAngle - fromAngle) > 0.002f)
-        {
-            const float lo = std::min (fromAngle, valueAngle), hi = std::max (fromAngle, valueAngle);
-            juce::Path arc;
-            arc.addCentredArc (centre.x, centre.y, d.grooveR, d.grooveR, 0.0f, lo, hi, true);
-            const auto from = centre.getPointOnCircumference (d.grooveR, startAngle);
-            const auto to = centre.getPointOnCircumference (d.grooveR, endAngle);
-            const float glow = enabled ? 1.0f + 0.5f * hover : 0.0f;
-            if (glow > 0.0f)
+            const float t = (float) i / (float) (numTicks - 1);
+            const float a = startAngle + t * span;
+            const bool lit = enabled && t >= lo - 0.0001f && t <= hi + 0.0001f && hi - lo > 0.0005f;
+            const juce::Line<float> tick (polar (a, 40.5f), polar (a, 47.5f));
+            if (lit)
             {
-                g.setGradientFill (auroraGradient (from, to, 0.07f * glow));
-                g.strokePath (arc, juce::PathStrokeType (d.groove * 4.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-                g.setGradientFill (auroraGradient (from, to, 0.16f * glow));
-                g.strokePath (arc, juce::PathStrokeType (d.groove * 2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                g.setColour (accent.withAlpha (0.22f + 0.1f * hover));
+                g.drawLine (tick, 3.4f * u);
             }
-            g.setGradientFill (auroraGradient (from, to, a));
-            g.strokePath (arc, juce::PathStrokeType (d.groove * 0.9f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            // Hot core of the light
-            g.setColour (colours::accent.withAlpha (0.35f * a));
-            g.strokePath (arc, juce::PathStrokeType (std::max (0.8f, d.groove * 0.22f), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour (lit ? accent : colours::tickOff);
+            g.drawLine (tick, std::max (1.0f, 1.3f * u));
         }
 
-        // ---- Knob body (cached)
+        // 2) Shadow
         {
-            const float physical = g.getInternalContext().getPhysicalPixelScaleFactor();
-            const auto& img = dialBody (radius, physical);
-            const juce::Graphics::ScopedSaveState s (g);
-            g.setOpacity (enabled ? 1.0f : 0.55f);
-            g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-            g.drawImage (img, juce::Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (centre));
+            const auto sc = centre.translated (0.0f, 7.0f * u);
+            juce::ColourGradient shadow (juce::Colours::black.withAlpha (0.85f), sc.x, sc.y,
+                                         juce::Colours::transparentBlack, sc.x + 37.0f * u, sc.y, true);
+            shadow.addColour (0.5, juce::Colours::black.withAlpha (0.85f));
+            g.setGradientFill (shadow);
+            g.fillEllipse (circle (sc, 37.0f));
         }
 
-        // Hover: a faint coloured light on the cap
+        // 3) Body
+        {
+            const auto r = circle (centre, 35.0f);
+            g.setGradientFill (juce::ColourGradient (colours::knobTop, r.getX(), r.getY(),
+                                                     colours::knobBottom, r.getX() + r.getWidth() * 0.3f, r.getBottom(), false));
+            g.fillEllipse (r);
+            g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.14f), r.getCentreX(), r.getY(),
+                                                     juce::Colours::transparentWhite, r.getCentreX(), r.getCentreY(), false));
+            g.drawEllipse (circle (centre, 34.4f), 1.2f * u);
+        }
+
+        // 4) Cap (recessed)
+        {
+            const auto r = circle (centre, 26.0f);
+            g.setGradientFill (juce::ColourGradient (colours::capTop, r.getX(), r.getY(),
+                                                     colours::capBottom, r.getX() + r.getWidth() * 0.3f, r.getBottom(), false));
+            g.fillEllipse (r);
+            g.setGradientFill (juce::ColourGradient (juce::Colours::transparentWhite, r.getCentreX(), r.getCentreY(),
+                                                     juce::Colours::white.withAlpha (0.14f), r.getCentreX(), r.getBottom(), false));
+            g.drawEllipse (circle (centre, 25.4f), 0.8f * u);
+        }
+
         if (hover > 0.01f)
         {
-            g.setColour (aurora (shown, 0.07f * hover));
-            g.fillEllipse (juce::Rectangle<float> (d.capR * 2.0f, d.capR * 2.0f).withCentre (centre));
+            g.setColour (juce::Colours::white.withAlpha (0.03f * hover));
+            g.fillEllipse (circle (centre, 35.0f));
         }
 
-        // ---- Pointer: a white line from inside the cap to its edge
-        const auto inner = centre.getPointOnCircumference (d.capR * 0.42f, valueAngle);
-        const auto outer = centre.getPointOnCircumference (d.capR * 0.92f, valueAngle);
-        const float lineW = std::max (1.8f, d.capR * 0.085f);
-        g.setColour (juce::Colours::black.withAlpha (0.6f));
-        g.drawLine ({ inner.translated (0.0f, 1.0f), outer.translated (0.0f, 1.0f) }, lineW + 1.2f);
-        if (enabled)
+        // 5) Glowing dot
         {
-            g.setColour (colours::accent.withAlpha (0.12f + 0.1f * hover));
-            g.drawLine ({ inner, outer }, lineW * 2.6f);
+            const auto p = polar (valueAngle, 27.0f);
+            const auto dot = enabled ? accent : colours::tickOff;
+            for (int i = 3; i >= 1; --i)
+            {
+                g.setColour (dot.withAlpha (0.10f));
+                g.fillEllipse (circle (p, 3.4f + (float) i * 1.7f));
+            }
+            g.setColour (dot);
+            g.fillEllipse (circle (p, 3.4f));
         }
-        g.setColour (enabled ? colours::accent.withAlpha (0.95f) : colours::textFaint);
-        g.drawLine ({ inner, outer }, lineW);
     }
 
     juce::Label* VelvoxLookAndFeel::createSliderTextBox (juce::Slider& slider)
     {
+        // Design: value in Roboto Mono 11.5 px, #E8EBF2 (editable on click)
         auto* l = LookAndFeel_V4::createSliderTextBox (slider);
-        const bool strong = (bool) slider.getProperties().getWithDefault (strongProperty, false);
         l->setHasFocusOutline (false);
-        l->setFont (display (strong ? typesize::value + 3.0f : typesize::value + 1.0f));
+        l->setFont (monoFont (11.5f));
         l->setJustificationType (juce::Justification::centredBottom);
-        l->setColour (juce::Label::textColourId, strong ? colours::text : colours::text.withAlpha (0.88f));
+        l->setColour (juce::Label::textColourId, colours::text);
         l->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
         l->setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
         l->setColour (juce::Label::outlineWhenEditingColourId, colours::line);
@@ -273,28 +193,31 @@ namespace velvox::ui
             return;
         }
 
+        // Design switch: track 26 x 14 (accent when on, with a soft halo), white knob 10 px,
+        // label to the right in Montserrat 11 px
+        const auto accentId = juce::ToggleButton::tickColourId;
+        const auto accent = b.isColourSpecified (accentId) ? b.findColour (accentId) : colours::teal;
+        const auto bounds = b.getLocalBounds().toFloat();
+        const auto track = juce::Rectangle<float> (26.0f, 14.0f).withPosition (bounds.getX() + 1.0f, bounds.getCentreY() - 7.0f);
         if (on)
         {
-            juce::Path shape;
-            shape.addRoundedRectangle (r, corner);
-            drawNeonFill (g, shape, r, 1.0f);
+            g.setColour (accent.withAlpha (0.25f));
+            g.fillRoundedRectangle (track.expanded (2.0f), 9.0f);
         }
-        else
-        {
-            g.setColour (colours::accent.withAlpha (highlighted ? 0.05f : 0.02f));
-            g.fillRoundedRectangle (r, corner);
-            g.setColour (highlighted ? colours::line.brighter (0.4f) : colours::line);
-            g.drawRoundedRectangle (r, corner, 1.0f);
-        }
+        g.setColour (on ? accent : colours::switchOff);
+        g.fillRoundedRectangle (track, 7.0f);
+        const float knobX = on ? track.getRight() - 7.0f : track.getX() + 7.0f;
+        g.setColour (b.isEnabled() ? colours::textStrong : colours::textMuted);
+        g.fillEllipse (juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ knobX, track.getCentreY() }));
 
-        if (on)
-            drawGlow (g, dc, dot * 2.2f, 0.4f, colours::teal);
-        g.setColour (on ? colours::teal.interpolatedWith (juce::Colours::white, 0.35f) : colours::textFaint);
-        g.fillEllipse (juce::Rectangle<float> (dot, dot).withCentre (dc));
-
-        g.setColour (on ? colours::text : colours::textDim);
-        g.setFont (medium (std::min (14.0f, r.getHeight() * 0.46f)));
-        g.drawText (b.getButtonText(), textArea, juce::Justification::centred, false);
+        auto textCol = highlighted ? colours::textStrong : colours::textSoft;
+        if (! b.isEnabled())
+            textCol = textCol.withMultipliedAlpha (0.5f);
+        g.setColour (textCol);
+        g.setFont (medium (12.0f));
+        g.drawFittedText (b.getButtonText(), bounds.withTrimmedLeft (track.getWidth() + 9.0f).toNearestInt(),
+                          juce::Justification::centredLeft, 1, 0.9f);
+        juce::ignoreUnused (dot, textArea, corner);
     }
 
     // Text buttons: ghost style. Connected edges form segmented controls.
@@ -309,6 +232,18 @@ namespace velvox::ui
         juce::Path shape;
         shape.addRoundedRectangle (r.getX(), r.getY(), r.getWidth(), r.getHeight(), corner, corner,
                                    ! flatL, ! flatR, ! flatL, ! flatR);
+
+        // Design segment (on a #0D0F15 group): active = accent at 16 %, hover = white 3 / 6 %
+        if ((bool) b.getProperties().getWithDefault (segmentProperty, false))
+        {
+            const auto seg = b.getLocalBounds().toFloat();
+            if (on)
+                g.setColour (b.findColour (juce::TextButton::buttonOnColourId).withAlpha (0.16f));
+            else
+                g.setColour (juce::Colours::white.withAlpha (down ? 0.06f : (highlighted ? 0.03f : 0.0f)));
+            g.fillRoundedRectangle (seg, 5.0f);
+            return;
+        }
 
         if ((bool) b.getProperties().getWithDefault ("primary", false))
         {
@@ -368,6 +303,18 @@ namespace velvox::ui
     void VelvoxLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool highlighted, bool)
     {
         const bool on = b.getToggleState();
+        if ((bool) b.getProperties().getWithDefault (segmentProperty, false))
+        {
+            // Design: active = accent mixed 55 % towards white, inactive #7C859B; SemiBold 11
+            auto c = on ? b.findColour (juce::TextButton::buttonOnColourId).interpolatedWith (juce::Colours::white, 0.55f)
+                        : (highlighted ? colours::textSoft : juce::Colour (0xff7c859b));
+            if (! b.isEnabled())
+                c = c.withMultipliedAlpha (0.5f);
+            g.setColour (c);
+            g.setFont (semiBold (11.0f));
+            g.drawFittedText (b.getButtonText(), b.getLocalBounds().reduced (2, 0), juce::Justification::centred, 1, 0.8f);
+            return;
+        }
         auto c = b.findColour (on ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId);
         if (highlighted && ! on)
             c = colours::text.withAlpha (0.9f);
