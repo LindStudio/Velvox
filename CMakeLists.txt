@@ -179,3 +179,12 @@ if(VELVOX_BUILD_TESTS)
             juce::juce_recommended_config_flags
             juce::juce_recommended_warning_flags)
 endif()
+
+# ---------------------------------------------------------------------------
+# Reference host (0.6 DSP quality): renders WAVs through one Headliner module or an
+# installed VST3 (VST3 hosting enabled for this tool only). See docs/QUALITY_BASELINE.md.
+# ---------------------------------------------------------------------------
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/RefHostTests.cpp)
+    target_include_directories(VelvoxTests PRIVATE tools/refhost)
+endif()
