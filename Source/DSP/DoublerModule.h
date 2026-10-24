@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DspUtilities.h"
+#include "MixLaw.h"
 
 namespace velvox::dsp
 {
@@ -13,6 +14,8 @@ namespace velvox::dsp
         float detuneCents = 8.0f;  // peak pitch deviation of the voices
         float monoSafe = 0.5f;     // 0 = voices fully in the mono sum, 1 = side only (mono sum = dry)
         float toneHz = 9000.0f;    // high cut on the voices
+        // legacy: the dry stays at unity at every Mix; true: the dry fades out above 50 %, 100 % = voices only
+        MixLaw mixLaw = MixLaw::legacy;
     };
 
     // Two-voice doubler. Each voice is the (mono) input through a slowly
@@ -54,5 +57,6 @@ namespace velvox::dsp
         juce::SmoothedValue<float> amount { 0.0f }, width { 0.8f }, monoSafe { 0.5f }, delayMs { 14.0f }, detune { 8.0f };
         juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> tone { 9000.0f };
         bool wasActive = false;
+        MixLaw law = MixLaw::legacy;
     };
 }

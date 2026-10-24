@@ -17,3 +17,13 @@ Task 2: Ruling: law = "dry-hold" for additive modules (dry 1 up to 50 %, then li
   100 % is wet only (the bug). At the top end it is an equal-gain crossfade. Correlated modules (EQ, Comp, Sat, Pitch, Choir, Pulse)
   keep their existing linear (equal-gain) crossfade. Cost if wrong: 50 % sounds "dry + half wet" instead of a 50/50 blend; changing
   additiveDryGain() is a one-line change.
+Task 3: complete (true law in Delay/Reverb inserts, Doubler, Smash; ChainSettings::mixLaws default allLegacy; tests red (no
+  ChainSettings::mixLaws) -> green: residual at 100 % true law: delay insert -316 dB, reverb insert -316 dB, doubler -313 dB; legacy
+  insert == send at the chain end (< 1e-6); true == legacy bit-exact at 0/20/35/50 %; smash 100 % = squashed path alone (-149 dB);
+  Mix jump 0 -> 100 %: largest step 1.1-1.7 x the sine's own)
+Task 3: Ruling: under the true law ducking scales only the wet (out = dry * dryGain(m) + m * duck * wet); the dry gain follows the
+  undocked, smoothed Mix — ducking exists to keep echoes off the words, not to change the dry. Cost if wrong: one line in the insert loop.
+Task 3: Ruling: Smash `norm` under the true law = 1 / (1 + 0.6 * (dryGain + blend - 1)) (the summed path gain above unity), computed
+  so it is bit-identical to legacy up to 50 %; at 100 % norm = 1 (squashed path at its own makeup level).
+Task 3: Ruling: Doubler at 100 % with Mono-safe > 0 leaves only the side part of the voices in mono (mono sum of the voices is cut
+  by design) — the dry is not kept back "for mono"; the UI may want to hint at this. Cost if wrong: mono collapse at extreme settings.

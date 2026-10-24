@@ -134,7 +134,11 @@ namespace velvox::dsp
 
             const float wetGain = dbToGain (grDb + makeup);
             const float b = blend.getNextValue();
-            const float norm = 1.0f / (1.0f + 0.6f * b);
+            // Legacy: original at unity. True law: the original fades out above 50 % and
+            // `norm` follows the summed path gain (identical to legacy up to 50 %)
+            const float dryGain = additiveDryGain (b, settings.mixLaw);
+            const float extra = dryGain >= 1.0f ? b : dryGain + b - 1.0f;   // summed gain above unity
+            const float norm = 1.0f / (1.0f + 0.6f * extra);
             const float on = enabled.getNextValue();
             const float out = outputGain.getNextValue();
 
@@ -148,7 +152,7 @@ namespace velvox::dsp
 
                 const float added = b * wet;
                 blendPeak = std::max (blendPeak, std::abs (added));
-                const float processed = (dry + added) * norm * out;
+                const float processed = (dry * dryGain + added) * norm * out;
                 ch[c][i] = dry + on * (processed - dry);
             }
 

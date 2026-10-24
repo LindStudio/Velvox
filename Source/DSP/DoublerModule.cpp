@@ -68,6 +68,7 @@ namespace velvox::dsp
         delayMs.setTargetValue (juce::jlimit (1.0f, maxDelayMs, s.delayMs));
         detune.setTargetValue (juce::jlimit (0.0f, maxDetuneCents, s.detuneCents));
         tone.setTargetValue (juce::jlimit (1000.0f, 20000.0f, s.toneHz));
+        law = s.mixLaw;
     }
 
     void DoublerModule::updateFilters() noexcept
@@ -160,14 +161,31 @@ namespace velvox::dsp
                 const float side = 0.5f * (left - right);
                 const float a = amount.getNextValue();
 
-                if (numChannels > 1)
+                if (law == MixLaw::legacy)
                 {
-                    ch[0][i] += a * (mid + side);
-                    ch[1][i] += a * (mid - side);
+                    if (numChannels > 1)
+                    {
+                        ch[0][i] += a * (mid + side);
+                        ch[1][i] += a * (mid - side);
+                    }
+                    else
+                    {
+                        ch[0][i] += a * mid;
+                    }
                 }
                 else
                 {
-                    ch[0][i] += a * mid;
+                    // True dry/wet: the original fades out above 50 % (the smoothed amount also fades on/off)
+                    const float dryGain = additiveDryGain (a, law);
+                    if (numChannels > 1)
+                    {
+                        ch[0][i] = ch[0][i] * dryGain + a * (mid + side);
+                        ch[1][i] = ch[1][i] * dryGain + a * (mid - side);
+                    }
+                    else
+                    {
+                        ch[0][i] = ch[0][i] * dryGain + a * mid;
+                    }
                 }
             }
         }

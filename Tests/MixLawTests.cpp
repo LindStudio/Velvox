@@ -87,6 +87,100 @@ namespace
         return false;
     }
 
+    //==========================================================================
+    // The bare chain (no processor): one module, every other stage neutral
+    struct ChainRig
+    {
+        double fs = 48000.0;
+        dsp::ChainSettings s;
+
+        ChainRig (const char* routing)
+        {
+            s.eqOn = s.compOn = s.deessOn = false;
+            s.safetyClip = false;
+            s.routing = dsp::Routing::fromString (routing);
+        }
+
+        void law (dsp::MixLaw l) { s.mixLaws = l == dsp::MixLaw::legacy ? dsp::MixLaws::allLegacy() : dsp::MixLaws::allTrue(); }
+
+        juce::AudioBuffer<float> run (const juce::AudioBuffer<float>& in, int block = 512) const
+        {
+            auto chain = std::make_unique<dsp::VocalChain>();
+            chain->prepare (fs, block);
+            juce::AudioBuffer<float> out (in);
+            for (int start = 0; start < out.getNumSamples(); start += block)
+            {
+                const int n = std::min (block, out.getNumSamples() - start);
+                juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), out.getNumChannels(), start, n);
+                chain->process (view, out.getNumChannels(), s);
+            }
+            return out;
+        }
+
+        int latency() const
+        {
+            dsp::VocalChain c;
+            c.prepare (fs, 512);
+            return c.getLatencyFor (s.routing, s.pitch.enabled);
+        }
+    };
+
+    float maxAbsDiff (const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b)
+    {
+        float d = 0.0f;
+        for (int ch = 0; ch < a.getNumChannels(); ++ch)
+            for (int i = 0; i < a.getNumSamples(); ++i)
+                d = std::max (d, std::abs (a.getSample (ch, i) - b.getSample (ch, i)));
+        return d;
+    }
+
+    // Additive modules, configured at Mix `m` with a wet path that starts late
+    enum class Additive { delay, reverb, doubler, smash };
+
+    ChainRig additiveRig (Additive which, float m, bool asSend = false)
+    {
+        switch (which)
+        {
+            case Additive::delay:
+            {
+                ChainRig r (asSend ? "v2,delay:send" : "v2,delay:insert");
+                r.s.delayOn = true; r.s.delayMix = m; r.s.delay.feedback = 0.0f; r.s.delayTimeMs = 300.0f;
+                return r;
+            }
+            case Additive::reverb:
+            {
+                ChainRig r (asSend ? "v2,reverb:send" : "v2,reverb:insert");
+                r.s.reverbOn = true; r.s.reverbMix = m; r.s.reverb.preDelayMs = 100.0f;
+                return r;
+            }
+            case Additive::doubler:
+            {
+                ChainRig r ("v2,doubler");
+                r.s.doubler.enabled = true; r.s.doubler.mix = m; r.s.doubler.delayMs = 14.0f; r.s.doubler.monoSafe = 0.0f;
+                return r;
+            }
+            case Additive::smash:
+            {
+                ChainRig r ("v2,smash");
+                r.s.smash.enabled = true; r.s.smash.blend = m;
+                return r;
+            }
+        }
+        return ChainRig ("v2");
+    }
+
+    const char* additiveName (Additive a)
+    {
+        switch (a)
+        {
+            case Additive::delay:   return "Delay insert";
+            case Additive::reverb:  return "Reverb insert";
+            case Additive::doubler: return "Doubler";
+            case Additive::smash:   return "Smash";
+        }
+        return "?";
+    }
+
     // Routing and every parameter value, one line each (to compare two mixes)
     juce::String digest (Harness& h)
     {
@@ -127,7 +221,123 @@ public:
     {
         bugTests();
         lawTypeTests();
+        dspTests();
         baselineTools();
+    }
+
+    void dspTests()
+    {
+        using dsp::MixLaw;
+        const double fs = 48000.0;
+
+        beginTest ("True law: Delay / Reverb inserts and Doubler at Mix 100 % leave no dry (>= 60 dB down)");
+        {
+            for (auto a : { Additive::delay, Additive::reverb, Additive::doubler })
+            {
+                // The burst ends before the first wet sample can arrive (300 ms, 100 ms pre-delay, 14 ms voices)
+                const auto b = makeBurst (fs, 2, a == Additive::doubler ? 10.0 : 20.0);
+                auto rig = additiveRig (a, 1.0f);
+                rig.law (MixLaw::trueDryWet);
+                const double r = burstResidualDb (rig.run (b.signal), b, rig.latency());
+                rig.law (MixLaw::legacy);
+                const double legacy = burstResidualDb (rig.run (b.signal), b, rig.latency());
+                logMessage (juce::String (additiveName (a)) + " 100 %: dry residual true law " + juce::String (r, 1)
+                            + " dB, legacy " + juce::String (legacy, 1) + " dB");
+                expectLessThan (r, -60.0, additiveName (a));
+                expectWithinAbsoluteError (legacy, 0.0, 0.1, "legacy keeps the dry at unity");
+            }
+        }
+
+        beginTest ("Legacy law: an insert behaves exactly like 0.5 (out = in + wet * mix, same as the send at the chain end)");
+        {
+            const auto in = makeBurst (fs, 2, 200.0).signal;
+            for (auto a : { Additive::delay, Additive::reverb })
+                for (float m : { 0.3f, 0.8f, 1.0f })
+                {
+                    auto ins = additiveRig (a, m);
+                    auto send = additiveRig (a, m, true);
+                    ins.law (MixLaw::legacy);
+                    send.law (MixLaw::trueDryWet);   // a send never depends on the law
+                    const float d = maxAbsDiff (ins.run (in), send.run (in));
+                    expectLessThan (d, 1.0e-6f, juce::String (additiveName (a)) + " " + juce::String (m));
+                }
+        }
+
+        beginTest ("True law up to 50 % is bit-identical to the legacy law (auto-mix, macros and presets keep their sound)");
+        {
+            juce::AudioBuffer<float> in (2, (int) fs);
+            juce::Random r (3);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < in.getNumSamples(); ++i)
+                    in.setSample (ch, i, 0.3f * (r.nextFloat() * 2.0f - 1.0f) * (float) std::sin (pi * i / fs * 3.0));
+            for (auto a : { Additive::delay, Additive::reverb, Additive::doubler, Additive::smash })
+                for (float m : { 0.0f, 0.2f, 0.35f, 0.5f })
+                {
+                    auto t = additiveRig (a, m), l = additiveRig (a, m);
+                    t.law (MixLaw::trueDryWet);
+                    l.law (MixLaw::legacy);
+                    expectEquals (maxAbsDiff (t.run (in), l.run (in)), 0.0f, juce::String (additiveName (a)) + " " + juce::String (m));
+                }
+        }
+
+        beginTest ("True law: Smash at Blend 100 % is the squashed path alone (the legacy output minus exactly the dry)");
+        {
+            const auto in = makeBurst (fs, 2, 300.0).signal;
+            auto t = additiveRig (Additive::smash, 1.0f), l = additiveRig (Additive::smash, 1.0f);
+            t.law (MixLaw::trueDryWet);
+            l.law (MixLaw::legacy);
+            const auto yt = t.run (in), yl = l.run (in);
+            // legacy at blend 1: (dry + wet) / 1.6  ->  wet = 1.6 * legacy - dry
+            double err = 0.0, ref = 0.0;
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < in.getNumSamples(); ++i)
+                {
+                    const double wet = 1.6 * yl.getSample (ch, i) - in.getSample (ch, i);
+                    err += juce::square (yt.getSample (ch, i) - wet);
+                    ref += juce::square ((double) in.getSample (ch, i));
+                }
+            const double db = 10.0 * std::log10 (std::max (1.0e-30, err) / ref);
+            logMessage ("Smash 100 %: deviation from the squashed path alone " + juce::String (db, 1) + " dB");
+            expectLessThan (db, -100.0);
+        }
+
+        beginTest ("True law: moving Mix 0 -> 100 % while playing does not click");
+        {
+            for (auto a : { Additive::delay, Additive::reverb, Additive::doubler, Additive::smash })
+            {
+                // Starts slightly on, so the module is running (its own wake-up is not what is tested)
+                auto rig = additiveRig (a, 0.01f);
+                rig.s.delayTimeMs = 302.5f;   // the echo is out of phase with the dry
+                rig.law (MixLaw::trueDryWet);
+                const int block = 256, n = 188 * block;
+                juce::AudioBuffer<float> io (2, n);
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < n; ++i)
+                        io.setSample (ch, i, 0.4f * (float) std::sin (2.0 * pi * 200.0 * i / fs));
+                const float naturalStep = 0.4f * (float) (2.0 * pi * 200.0 / fs);
+                auto chain = std::make_unique<dsp::VocalChain>();
+                chain->prepare (fs, block);
+                float worst = 0.0f, prev = 0.0f;
+                for (int start = 0; start < n; start += block)
+                {
+                    if (start >= n / 2)
+                    {
+                        rig.s.delayMix = rig.s.reverbMix = rig.s.doubler.mix = rig.s.smash.blend = 1.0f;
+                    }
+                    juce::AudioBuffer<float> view (io.getArrayOfWritePointers(), 2, start, block);
+                    chain->process (view, 2, rig.s);
+                    for (int i = 0; i < block; ++i)
+                    {
+                        const float y = io.getSample (0, start + i);
+                        if (start + i > n / 2 - block && start + i < n / 2 + (int) (0.1 * fs))
+                            worst = std::max (worst, std::abs (y - prev));
+                        prev = y;
+                    }
+                }
+                logMessage (juce::String (additiveName (a)) + ": largest step during the Mix jump " + juce::String (worst / naturalStep, 2) + " x the sine's own");
+                expectLessThan (worst, 3.0f * naturalStep, additiveName (a));
+            }
+        }
     }
 
     void lawTypeTests()

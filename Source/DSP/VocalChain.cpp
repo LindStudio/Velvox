@@ -232,8 +232,18 @@ namespace velvox::dsp
             deessGate[(size_t) k].setTargets (b.deessOn, 1.0f);
         }
         if (at (ModuleId::sat))      saturation[(size_t) k].setSettings (b.sat);
-        if (at (ModuleId::doubler))  doubler[(size_t) k].setSettings (b.doubler);
-        if (at (ModuleId::smash))    smash[(size_t) k].setSettings (b.smash);
+        if (at (ModuleId::doubler))
+        {
+            auto d = b.doubler;
+            d.mixLaw = s.mixLaws.lawOf (ModuleId::doubler, k);
+            doubler[(size_t) k].setSettings (d);
+        }
+        if (at (ModuleId::smash))
+        {
+            auto sm = b.smash;
+            sm.mixLaw = s.mixLaws.lawOf (ModuleId::smash, k);
+            smash[(size_t) k].setSettings (sm);
+        }
         if (at (ModuleId::choir))    choir[(size_t) k].setSettings (b.choir);
         if (at (ModuleId::smooth))   smooth[(size_t) k].setSettings (b.smooth);
         if (at (ModuleId::ride))     ride[(size_t) k].setSettings (b.ride);
@@ -259,6 +269,7 @@ namespace velvox::dsp
                 meters.effectiveDelayMs.store (delaySettings.timeMs, std::memory_order_relaxed);
             }
             delay[(size_t) k].setSettings (delaySettings);
+            delayLaw[(size_t) k] = s.mixLaws.lawOf (ModuleId::delay, k);
             delayReturn[(size_t) k].setTargetValue (b.delayOn ? juce::jlimit (0.0f, 1.0f, b.delayMix) : 0.0f);
         }
 
@@ -266,6 +277,7 @@ namespace velvox::dsp
         {
             reverbDucker[(size_t) k].setSettings (b.reverbDuck);
             reverb[(size_t) k].setSettings (b.reverb);
+            reverbLaw[(size_t) k] = s.mixLaws.lawOf (ModuleId::reverb, k);
             reverbReturn[(size_t) k].setTargetValue (b.reverbOn ? juce::jlimit (0.0f, 1.0f, b.reverbMix) : 0.0f);
         }
     }
@@ -557,12 +569,28 @@ namespace velvox::dsp
                 else
                     reverb[k].process (io, wet.getArrayOfWritePointers(), numChannels, n);
 
-                // Insert: out = in + wet * mix (same law as the send)
-                for (int i = 0; i < n; ++i)
+                const auto law = isDelay ? delayLaw[k] : reverbLaw[k];
+                if (law == MixLaw::legacy)
                 {
-                    const float g = ret.getNextValue() * (duck != nullptr ? duck[i] : 1.0f);
-                    for (int ch = 0; ch < numChannels; ++ch)
-                        io[ch][i] += g * wet.getSample (ch, i);
+                    // Legacy insert (0.1-0.5): out = in + wet * mix (same law as the send)
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float g = ret.getNextValue() * (duck != nullptr ? duck[i] : 1.0f);
+                        for (int ch = 0; ch < numChannels; ++ch)
+                            io[ch][i] += g * wet.getSample (ch, i);
+                    }
+                }
+                else
+                {
+                    // True dry/wet: the dry fades out above 50 % (see MixLaw.h); ducking acts on the wet only
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float m = ret.getNextValue();
+                        const float dryGain = additiveDryGain (m, law);
+                        const float g = m * (duck != nullptr ? duck[i] : 1.0f);
+                        for (int ch = 0; ch < numChannels; ++ch)
+                            io[ch][i] = io[ch][i] * dryGain + g * wet.getSample (ch, i);
+                    }
                 }
                 break;
             }

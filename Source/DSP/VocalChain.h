@@ -20,6 +20,7 @@
 #include "CheckModule.h"
 #include "RideModule.h"
 #include "Instances.h"
+#include "MixLaw.h"
 
 namespace velvox::dsp
 {
@@ -74,6 +75,10 @@ namespace velvox::dsp
         bool duckExternal = false;    // use the sidechain input when available
 
         Routing routing = Routing::defaults();
+
+        // Mix law of every module instance (0.6). The DSP default is the 0.5 behaviour;
+        // the processor fills it from the instance state (fresh instances: true dry/wet).
+        MixLaws mixLaws = MixLaws::allLegacy();
 
         StereoSettings stereo;
 
@@ -210,6 +215,9 @@ namespace velvox::dsp
         std::array<juce::SmoothedValue<float>, numReverbs> reverbReturn;
         std::array<bool, numDelays> delayActive {};
         std::array<bool, numReverbs> reverbActive {};
+        // Law of each insert (a send always adds its return to the dry)
+        std::array<MixLaw, numDelays> delayLaw {};
+        std::array<MixLaw, numReverbs> reverbLaw {};
 
         juce::SmoothedValue<float> inputGain { 1.0f }, outputGain { 1.0f }, wetAmount { 1.0f };
         juce::SmoothedValue<float> delayIntoReverb { 0.0f };
