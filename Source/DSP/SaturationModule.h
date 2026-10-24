@@ -67,6 +67,13 @@ namespace velvox::dsp
         // Antiderivative of shape (x, driveLin, character) with respect to x
         static double antiderivative (double x, double driveLin, int character) noexcept;
 
+        // UI feed (message thread, no state):
+        //  transferCurve: y = shape (x) * compensation for the given character and drive
+        //  harmonicProfile: H1..H8 of a sine at levelDb through the curve, dB relative to H1
+        //  (H1 itself = the level change of the fundamental incl. compensation, normally ~0 dB)
+        static void transferCurve (int character, float driveDb, const float* x, float* y, int n) noexcept;
+        static std::array<float, 8> harmonicProfile (int character, float driveDb, float levelDb) noexcept;
+
         static constexpr int numBands = 3;
         const SatMeters& getMeters() const noexcept { return meters; }
 

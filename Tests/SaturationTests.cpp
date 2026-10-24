@@ -3,6 +3,7 @@
 // the Low / Mid / High multiband mode.
 
 #include "TestHelpers.h"
+#include "SyntheticVocal.h"
 #include "DSP/SaturationModule.h"
 #include <juce_dsp/juce_dsp.h>
 
@@ -311,6 +312,86 @@ public:
                         + juce::String (splatterDb (in, fs48, 4800), 1) + " dB, always on "
                         + juce::String (splatterDb (renderWith (single (1, 0.0f), in), fs48, 4800), 1) + " dB)");
             expectLessThan (sp, -60.0);
+        }
+
+        beginTest ("Four clearly different characters (harmonic signature)");
+        {
+            std::array<std::array<float, 8>, 4> sig {};
+            for (int c = 0; c < 4; ++c)
+            {
+                sig[(size_t) c] = SaturationModule::harmonicProfile (c, 12.0f, -12.0f);
+                juce::String t ("character " + juce::String (c) + ":");
+                for (float h : sig[(size_t) c])
+                    t << " " << juce::String (h, 1);
+                logMessage (t);
+            }
+            for (int a = 0; a < 4; ++a)
+                for (int b = a + 1; b < 4; ++b)
+                {
+                    float d = 0.0f;
+                    for (int k = 1; k < 5; ++k)   // H2..H5
+                        d = std::max (d, std::abs (std::max (sig[(size_t) a][(size_t) k], -100.0f) - std::max (sig[(size_t) b][(size_t) k], -100.0f)));
+                    expectGreaterThan (d, 6.0f, "characters " + juce::String (a) + " / " + juce::String (b));
+                }
+        }
+
+        beginTest ("harmonicProfile and transferCurve match the processed audio");
+        {
+            for (int c = 0; c < 4; ++c)
+            {
+                const auto prof = SaturationModule::harmonicProfile (c, 12.0f, -12.0f);
+                const auto out = renderWith (single (c, 12.0f), sineVec (fs48, 1000.0, -12.0, 2.0));
+                const auto s = spectrumOf (out, fs48);
+                for (int k = 2; k <= 3; ++k)
+                {
+                    const double measured = dbOf (s.band (k * 1000.0) / s.band (1000.0));
+                    if (prof[(size_t) k - 1] > -80.0f)
+                        expectWithinAbsoluteError ((double) prof[(size_t) k - 1], measured, 1.0, "H" + juce::String (k));
+                }
+
+                float x[5] { -1.0f, -0.25f, 0.0f, 0.1f, 0.5f }, y[5] {};
+                SaturationModule::transferCurve (c, 12.0f, x, y, 5);
+                const float d = juce::Decibels::decibelsToGain (12.0f);
+                for (int i = 0; i < 5; ++i)
+                    expectWithinAbsoluteError (y[i], SaturationModule::shape (x[i], d, c) * SaturationModule::compensationFor (d, c), 1.0e-6f);
+            }
+        }
+
+        beginTest ("Loudness stays matched across the Drive range (vocal-like signal)");
+        {
+            VocalSpec vs;
+            vs.seconds = 4.0;
+            vs.levelDb = -18.0f;
+            const auto voice = makeVocal (vs).vocal[0];
+            const auto rms = [] (const std::vector<float>& v, size_t from)
+            {
+                double e = 0.0;
+                for (size_t i = from; i < v.size(); ++i)
+                    e += (double) v[i] * v[i];
+                return 10.0 * std::log10 (e / (double) (v.size() - from) + 1.0e-30);
+            };
+            const double inDb = rms (voice, 4800);
+            for (int c = 0; c < 4; ++c)
+                for (float drive : { 0.0f, 6.0f, 12.0f, 18.0f, 24.0f })
+                {
+                    const double change = rms (renderWith (single (c, drive), voice), 4800) - inDb;
+                    logMessage ("character " + juce::String (c) + ", drive " + juce::String (drive, 0) + " dB: level " + juce::String (change, 2) + " dB");
+                    // Ruling (ledger): the 0.2 compensation is kept (old projects keep their level);
+                    // it holds the vocal within -1.1 .. +1.7 dB over the whole Drive range
+                    expectWithinAbsoluteError (change, 0.0, 2.0);
+                }
+        }
+
+        beginTest ("Meters report band input and output levels");
+        {
+            SaturationModule sat;
+            sat.setSettings (single (1, 12.0f));
+            sat.prepare (fs48, 512);
+            render (sat, sineVec (fs48, 1000.0, -12.0, 0.5));
+            const float in = sat.getMeters().inDb[0].load(), out = sat.getMeters().outDb[0].load();
+            logMessage ("meters: in " + juce::String (in, 1) + " dB, out " + juce::String (out, 1) + " dB");
+            expectWithinAbsoluteError (in, -15.0f, 0.5f);   // RMS of a -12 dBFS sine
+            expectWithinAbsoluteError (out, -15.0f, 1.0f);  // compensated
         }
     }
 };

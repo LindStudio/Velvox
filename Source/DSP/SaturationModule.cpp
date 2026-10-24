@@ -104,6 +104,46 @@ namespace velvox::dsp
         return outSum > 1.0e-12 ? (float) std::sqrt (inSum / outSum) : 1.0f;
     }
 
+    void SaturationModule::transferCurve (int character, float driveDb, const float* x, float* y, int n) noexcept
+    {
+        character = juce::jlimit (0, numCharacters - 1, character);
+        const float d = dbToGain (driveDb);
+        const float c = compensationFor (d, character);
+        for (int i = 0; i < n; ++i)
+            y[i] = shape (x[i], d, character) * c;
+    }
+
+    std::array<float, 8> SaturationModule::harmonicProfile (int character, float driveDb, float levelDb) noexcept
+    {
+        character = juce::jlimit (0, numCharacters - 1, character);
+        constexpr int points = 64;
+        const float d = dbToGain (driveDb);
+        const float c = compensationFor (d, character);
+        const float a = dbToGain (levelDb);
+        float y[points];
+        for (int i = 0; i < points; ++i)
+            y[i] = shape (a * std::sin (juce::MathConstants<float>::twoPi * (float) i / (float) points), d, character) * c;
+
+        std::array<double, 8> mag {};
+        for (int k = 1; k <= 8; ++k)
+        {
+            double re = 0.0, im = 0.0;
+            for (int i = 0; i < points; ++i)
+            {
+                const double w = juce::MathConstants<double>::twoPi * k * i / points;
+                re += y[i] * std::cos (w);
+                im += y[i] * std::sin (w);
+            }
+            mag[(size_t) k - 1] = 2.0 * std::sqrt (re * re + im * im) / points;
+        }
+
+        std::array<float, 8> out {};
+        out[0] = (float) (20.0 * std::log10 (mag[0] / std::max (1.0e-12, (double) a) + 1.0e-12));
+        for (int k = 1; k < 8; ++k)
+            out[(size_t) k] = (float) (20.0 * std::log10 (mag[(size_t) k] / std::max (mag[0], 1.0e-12) + 1.0e-12));
+        return out;
+    }
+
     void SaturationModule::Svf::set (double fc, double fs) noexcept
     {
         const double g = std::tan (juce::MathConstants<double>::pi * fc / fs);
