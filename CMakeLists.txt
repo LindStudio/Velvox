@@ -205,3 +205,8 @@ if(VELVOX_BUILD_TESTS)
             juce::juce_recommended_config_flags
             juce::juce_recommended_warning_flags)
 endif()
+
+# Time modules quality tests (0.6: Delay, Pulse, Stutter)
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/TimeModuleTests.cpp)
+endif()

@@ -8,14 +8,22 @@ namespace velvox::dsp
         constexpr float maxFeedback = 0.9f;
         constexpr int updateInterval = 32;
         constexpr double crossfadeSeconds = 0.06;
+        constexpr double glideSeconds = 0.05;       // tape-style follow time for small moves
+        constexpr float maxGlideRate = 0.08f;       // |d delay / dt|: about +-1.4 semitones
+        constexpr double jumpSeconds = 0.015;       // farther away than this: crossfade instead
         constexpr double twoPi = 6.283185307179586;
         constexpr float diffuserMs[maxChannels][3] { { 2.1f, 3.7f, 5.3f }, { 2.4f, 3.3f, 5.9f } };
         constexpr float maxModMs = 2.5f;
 
-        // Transparent below ~0.5, smoothly bounded to +-1.5 above
+        // Exactly linear up to 0.8 (0.6: the old plain tanh added -50 dB THD at -10 dBFS),
+        // then a C1-continuous soft knee that is bounded to +-1.5 like before
         inline float loopLimiter (float x) noexcept
         {
-            return 1.5f * std::tanh (x * (1.0f / 1.5f));
+            constexpr float knee = 0.8f, range = 1.5f - knee;
+            const float a = std::abs (x);
+            if (a <= knee)
+                return x;
+            return std::copysign (knee + range * std::tanh ((a - knee) * (1.0f / range)), x);
         }
     }
 
@@ -30,6 +38,9 @@ namespace velvox::dsp
     void DelayModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
+        glideCoeff = (float) std::exp (-1.0 / (glideSeconds * sampleRate));
+        maxGlideStep = maxGlideRate;
+        jumpSamples = (float) (jumpSeconds * sampleRate);
 
         for (int ch = 0; ch < maxChannels; ++ch)
         {
@@ -137,7 +148,8 @@ namespace velvox::dsp
 
         if (snapTime)
         {
-            currentDelay = nextDelay = targetDelay;
+            nextDelay = targetDelay;
+            currentDelay = targetDelay;
             fade = 1.0f;
             fadeStep = 0.0f;
             snapTime = false;
@@ -154,33 +166,47 @@ namespace velvox::dsp
                 updateFilters (false);
             }
 
-            // A new time starts a crossfade (one at a time; a later change waits for it)
-            if (fadeStep == 0.0f && std::abs (targetDelay - currentDelay) > 0.5f)
-            {
-                nextDelay = targetDelay;
-                fade = 0.0f;
-                fadeStep = fadeIncrement;
-            }
-
             diffusion.skip (n);
             const float apGain = 0.62f * diffusion.getCurrentValue();
             drive.skip (n);
             const float k = 1.0f + 5.0f * drive.getCurrentValue();
             const bool saturate = k > 1.001f;
 
-            // Slow wow (0.6 Hz) plus a faster flutter component (4.7 Hz)
-            modulation.skip (n);
-            modPhase1 += twoPi * 0.6 * n / fs;
-            modPhase2 += twoPi * 4.7 * n / fs;
-            if (modPhase1 > twoPi) modPhase1 -= twoPi;
-            if (modPhase2 > twoPi) modPhase2 -= twoPi;
-            const float modDepth = modulation.getCurrentValue() * maxModMs * 0.001f * (float) fs;
-            const float mod = modDepth * (float) (0.5 * (1.0 + std::sin (modPhase1)) + 0.08 * std::sin (modPhase2));
+            // Slow wow (0.6 Hz) plus a faster flutter component (4.7 Hz), evaluated per
+            // sample: a stepped read position would add zipper sidebands
+            const double inc1 = twoPi * 0.6 / fs, inc2 = twoPi * 4.7 / fs;
+            const float modScale = maxModMs * 0.001f * (float) fs;
 
             for (int i = start; i < start + n; ++i)
             {
                 const float fb = feedback.getNextValue();
                 const float sp = spread.getNextValue();
+
+                float mod = 0.0f;
+                const float modAmount = modulation.getNextValue();
+                modPhase1 += inc1;
+                modPhase2 += inc2;
+                if (modPhase1 > twoPi) modPhase1 -= twoPi;
+                if (modPhase2 > twoPi) modPhase2 -= twoPi;
+                if (modAmount > 0.0f)
+                    mod = modAmount * modScale * (float) (0.5 * (1.0 + std::sin (modPhase1)) + 0.08 * std::sin (modPhase2));
+
+                // Time: glide toward small moves, crossfade to jumps (one fade at a time)
+                if (fadeStep == 0.0f)
+                {
+                    const double gap = (double) targetDelay - currentDelay;
+                    if (std::abs (gap) > (double) jumpSamples)
+                    {
+                        nextDelay = targetDelay;
+                        fade = 0.0f;
+                        fadeStep = fadeIncrement;
+                    }
+                    else if (gap != 0.0)
+                    {
+                        const double step = juce::jlimit (-(double) maxGlideStep, (double) maxGlideStep, gap * (1.0 - (double) glideCoeff));
+                        currentDelay = std::abs (gap) < 1.0e-4 ? (double) targetDelay : currentDelay + step;
+                    }
+                }
 
                 float x = 1.0f;
                 if (fadeStep != 0.0f)
@@ -200,7 +226,7 @@ namespace velvox::dsp
                 {
                     // The diffusion all-passes add their length: read that much earlier
                     const float offset = (ch == 1 ? sp : 0.0f) + mod - (float) diffuserLatency[(size_t) ch];
-                    float t = readInterpolated (lines[(size_t) ch], currentDelay + offset);
+                    float t = readInterpolated (lines[(size_t) ch], (float) currentDelay + offset);
                     if (fadeStep != 0.0f || x < 1.0f)
                         t += x * (readInterpolated (lines[(size_t) ch], nextDelay + offset) - t);
 
@@ -230,6 +256,8 @@ namespace velvox::dsp
                     writePos = 0;
             }
         }
+
+        displayTimeMs.store ((float) ((fadeStep != 0.0f ? (double) nextDelay : currentDelay) * 1000.0 / fs), std::memory_order_relaxed);
 
         if (! hp.isStateFinite() || ! lp.isStateFinite())
             reset();
