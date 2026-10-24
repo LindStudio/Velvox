@@ -163,27 +163,34 @@ public:
                     r.insertDefault ((ModuleId) id, 0);
                     h.proc.setRouting (r);
                 }
+            // triggerClick() is delivered asynchronously: wait for the help to open (not a fixed time,
+            // the full suite can be slow)
+            const auto waitForHelp = [&]
+            {
+                for (int i = 0; i < 200 && ! ed.getHelp().isOpen(); ++i)
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+            };
             for (int id = -1; id < dsp::numModules; ++id)
             {
                 ed.selectModule (id);
                 expect (ed.getDetail() != nullptr);
                 ed.getDetail()->getHelpButton().triggerClick();
-                juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+                waitForHelp();
                 expect (ed.getHelp().isOpen());
                 expectEquals (ed.getHelp().getCurrentKey(), ui::help::keyForModule (id));
                 ed.getHelp().close();
             }
 
-            // The top bar button opens the page of the open module in Pro, the start page in Beginner
+            // The header button opens the page of the open module in CHAIN, the start page in AUTO MIX
             ed.selectModule ((int) ModuleId::ride);
             ed.getTopBar().getHelpButton().triggerClick();
-            juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+            waitForHelp();
             expectEquals (ed.getHelp().getCurrentKey(), juce::String ("ride"));
             ed.getHelp().close();
 
             ed.getTopBar().selectView (ui::TopBar::View::autoMix);
             ed.getTopBar().getHelpButton().triggerClick();
-            juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+            waitForHelp();
             expectEquals (ed.getHelp().getCurrentKey(), juce::String ("start"));
         }
 

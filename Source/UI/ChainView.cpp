@@ -3,6 +3,7 @@
 #include "../StateKeys.h"
 #include "UserSettings.h"
 #include "Icons.h"
+#include <set>
 
 namespace velvox::ui
 {
@@ -11,7 +12,6 @@ namespace velvox::ui
     namespace
     {
         constexpr float corner = radius::tile;
-        constexpr float sendW = 184.0f;
         constexpr float arrowW = 36.0f;
         constexpr float edgeFade = 44.0f;
         constexpr float plusR = 11.0f;
@@ -56,32 +56,6 @@ namespace velvox::ui
             g.fillRoundedRectangle (juce::Rectangle<float> (thickness, size).withCentre (c), thickness * 0.5f);
         }
 
-        // Small round hover action on a card (duplicate / remove)
-        void drawCardAction (juce::Graphics& g, juce::Rectangle<float> r, bool isRemove, float alpha)
-        {
-            g.setColour (colours::background.withAlpha (0.85f * alpha));
-            g.fillEllipse (r);
-            g.setColour ((isRemove ? colours::warning : colours::line.brighter (0.6f)).withAlpha (0.8f * alpha));
-            g.drawEllipse (r.reduced (0.5f), 1.0f);
-            const auto c = r.getCentre();
-            if (isRemove)
-            {
-                juce::Path x;
-                x.startNewSubPath (c.x - 3.5f, c.y - 3.5f);
-                x.lineTo (c.x + 3.5f, c.y + 3.5f);
-                x.startNewSubPath (c.x + 3.5f, c.y - 3.5f);
-                x.lineTo (c.x - 3.5f, c.y + 3.5f);
-                g.setColour (colours::text.withAlpha (alpha));
-                g.strokePath (x, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            }
-            else
-            {
-                // Two overlapping squares
-                g.setColour (colours::text.withAlpha (alpha));
-                g.drawRoundedRectangle (juce::Rectangle<float> (7.0f, 7.0f).withCentre (c.translated (-1.5f, -1.5f)), 1.5f, 1.2f);
-                g.drawRoundedRectangle (juce::Rectangle<float> (7.0f, 7.0f).withCentre (c.translated (1.8f, 1.8f)), 1.5f, 1.2f);
-            }
-        }
     }
 
     const char* ChainView::onParamFor (ModuleId id)
@@ -149,13 +123,16 @@ namespace velvox::ui
 
     juce::Rectangle<float> ChainView::rowArea() const
     {
-        return getLocalBounds().toFloat().reduced (endW + gap, 0.0f).withTrimmedTop (2.0f).withHeight (cardH);
+        return getLocalBounds().toFloat().reduced (endW + 6.0f, 0.0f).withHeight (cardH);
     }
 
+    // Send zone at the end of the row (behind the add column and a divider); at least one
+    // column wide, so a column can always be dropped there
     juce::Rectangle<float> ChainView::laneArea() const
     {
         const auto row = rowArea();
-        return row.withY (row.getBottom() + laneOffset).withHeight (laneH);
+        const float x = row.getX() + (float) numSerial * (serialW + gap) + addCardW + sendGap * 0.5f - scroll.current;
+        return { x, row.getY(), sendGap * 0.5f + (float) std::max (1, numSends) * (serialW + gap), row.getHeight() };
     }
 
     juce::Rectangle<float> ChainView::leftArrowArea() const  { return rowArea().withWidth (arrowW); }
@@ -169,20 +146,16 @@ namespace velvox::ui
 
     float ChainView::cardWidth (int n) const
     {
-        const float vw = rowArea().getWidth() - addCardW - gap;
-        if (n <= 0)
-            return minCardW;
-        const float fit = (vw - gap * (float) (n - 1)) / (float) n;
-        if (fit >= minCardW)
-            return std::min (fit, maxCardW);
-        // Not everything fits: as many whole cards as possible, never narrower than minCardW
-        const int k = std::max (1, (int) std::floor ((vw + gap) / (minCardW + gap)));
-        return std::max (minCardW, (vw - gap * (float) (k - 1)) / (float) k);
+        // Serial columns and the send zone (at least one column) share the row equally
+        const int columns = n + std::max (1, numSends);
+        const float vw = rowArea().getWidth() - addCardW - sendGap;
+        const float fit = vw / (float) std::max (1, columns);
+        return juce::jlimit (minCardW, maxCardW, fit);
     }
 
     float ChainView::contentWidth() const
     {
-        return (float) numSerial * (serialW + gap) + addCardW;
+        return (float) numSerial * (serialW + gap) + addCardW + sendGap + (float) std::max (1, numSends) * (serialW + gap);
     }
 
     float ChainView::getMaxScroll()
@@ -217,13 +190,13 @@ namespace velvox::ui
     {
         tiles.clear();
         const auto row = rowArea();
-        const auto lane = laneArea();
 
         std::vector<const dsp::ChainSlot*> serial, sends;
         for (const auto& slot : routing)
             (! slot.insert ? sends : serial).push_back (&slot);
 
         numSerial = (int) serial.size();
+        numSends = (int) sends.size();
         serialW = cardWidth (numSerial);
         const float maxScroll = std::max (0.0f, contentWidth() - row.getWidth());
         if (scroll.target > maxScroll || scroll.current > maxScroll)
@@ -237,12 +210,12 @@ namespace velvox::ui
                                { row.getX() + (float) i * (serialW + gap) - scroll.current, row.getY(), serialW, row.getHeight() },
                                false, i + 1 });
 
-        // Sends sit on the right part of the lane, between the chain end and the output
-        float x = lane.getRight() - sendW * (float) sends.size() - gap * (float) (sends.size() > 0 ? sends.size() - 1 : 0);
+        // Sends: columns in the send zone behind the divider
+        float x = laneArea().getX() + sendGap * 0.5f;
         for (auto* s : sends)
         {
-            tiles.push_back ({ s->id, s->instance, { x, lane.getY(), sendW, lane.getHeight() }, true, 0 });
-            x += sendW + gap;
+            tiles.push_back ({ s->id, s->instance, { x, row.getY(), serialW, row.getHeight() }, true, 0 });
+            x += serialW + gap;
         }
 
         inBox = { 0.0f, row.getY(), endW, row.getHeight() };
@@ -297,30 +270,151 @@ namespace velvox::ui
         return {};
     }
 
+    // Column geometry: power + name row, icon, two knob cells, footer
     juce::Rectangle<float> ChainView::dotBounds (const Tile& t) const
     {
-        if (t.inLane)
-            return juce::Rectangle<float> (26.0f, 26.0f).withCentre ({ t.bounds.getX() + 22.0f, t.bounds.getCentreY() });
-        return juce::Rectangle<float> (28.0f, 28.0f).withCentre ({ t.bounds.getX() + 26.0f, t.bounds.getY() + 26.0f });
+        return juce::Rectangle<float> (24.0f, 24.0f).withCentre ({ t.bounds.getX() + 20.0f, t.bounds.getY() + nameH * 0.5f });
     }
 
     juce::Rectangle<float> ChainView::modeBounds (const Tile& t) const
     {
-        if (t.inLane)
-            return { t.bounds.getRight() - 10.0f - 58.0f, t.bounds.getCentreY() - 12.0f, 58.0f, 24.0f };
-        return { t.bounds.getRight() - 12.0f - 58.0f, t.bounds.getBottom() - 12.0f - 24.0f, 58.0f, 24.0f };
+        // SEND / INSERT pill of delay and reverb, top right of the icon area
+        return { t.bounds.getRight() - 8.0f - 48.0f, t.bounds.getY() + nameH + 4.0f, 48.0f, 18.0f };
     }
 
-    juce::Rectangle<float> ChainView::removeBounds (const Tile& t) const
+    juce::Rectangle<float> ChainView::footerButton (const Tile& t, int slot) const
     {
-        if (t.inLane)
-            return juce::Rectangle<float> (20.0f, 20.0f).withCentre ({ modeBounds (t).getX() - 16.0f, t.bounds.getCentreY() });
-        return juce::Rectangle<float> (20.0f, 20.0f).withCentre ({ t.bounds.getRight() - 16.0f, t.bounds.getY() + 16.0f });
+        const auto footer = t.bounds.withTrimmedTop (t.bounds.getHeight() - footerH).reduced (6.0f, 5.0f);
+        const float w = footer.getWidth() / 4.0f;
+        return juce::Rectangle<float> (w, footer.getHeight()).withX (footer.getX() + w * (float) slot).withY (footer.getY())
+                   .withSizeKeepingCentre (std::min (w, 24.0f), 22.0f);
     }
 
-    juce::Rectangle<float> ChainView::duplicateBounds (const Tile& t) const
+    juce::Rectangle<float> ChainView::removeBounds (const Tile& t) const    { return footerButton (t, 2); }
+    juce::Rectangle<float> ChainView::duplicateBounds (const Tile& t) const { return footerButton (t, 1); }
+
+    juce::Rectangle<float> ChainView::getMoveLeftBounds (ModuleId id, int instance)
     {
-        return removeBounds (t).translated (-26.0f, 0.0f);
+        layoutTiles();
+        if (auto* t = findTile (id, instance))
+            return footerButton (*t, 0);
+        return {};
+    }
+
+    juce::Rectangle<float> ChainView::getMoveRightBounds (ModuleId id, int instance)
+    {
+        layoutTiles();
+        if (auto* t = findTile (id, instance))
+            return footerButton (*t, 3);
+        return {};
+    }
+
+    std::pair<const char*, const char*> ChainView::columnParams (ModuleId id)
+    {
+        switch (id)
+        {
+            case ModuleId::ride:    return { pid::rideTarget, pid::rideResponse };
+            case ModuleId::smooth:  return { pid::smoothAmount, pid::smoothSensitivity };
+            case ModuleId::smash:   return { pid::smashAmount, pid::smashBlend };
+            case ModuleId::choir:   return { pid::choirMix, pid::choirWidth };
+            case ModuleId::pulse:   return { pid::pulseDepth, pid::pulseRate };
+            case ModuleId::chop:    return { pid::chopDepth, pid::chopRate };
+            case ModuleId::delay:   return { pid::delayFeedback, pid::delayMix };
+            case ModuleId::reverb:  return { pid::reverbDecay, pid::reverbMix };
+            case ModuleId::eq:      return { pid::hpfFreq, pid::highGain };
+            case ModuleId::comp:    return { pid::compThreshold, pid::compRatio };
+            case ModuleId::deess:   return { pid::deessThreshold, pid::deessRange };
+            case ModuleId::sat:     return { pid::satDrive, pid::satMix };
+            case ModuleId::doubler: return { pid::doublerWidth, pid::doublerMix };
+            case ModuleId::pitch:   return { pid::pitchSemitones, pid::pitchMix };
+            case ModuleId::check:   return { nullptr, nullptr };
+        }
+        return { nullptr, nullptr };
+    }
+
+    std::pair<juce::String, juce::String> ChainView::columnLabels (ModuleId id)
+    {
+        switch (id)
+        {
+            case ModuleId::ride:    return { "Target", "Speed" };
+            case ModuleId::smooth:  return { "Amount", "Sharpness" };
+            case ModuleId::smash:   return { "Smash", "Mix" };
+            case ModuleId::choir:   return { "Blend", "Width" };
+            case ModuleId::pulse:   return { "Depth", "Rate" };
+            case ModuleId::chop:    return { "Gate", "Rate" };
+            case ModuleId::delay:   return { "Feedback", "Mix" };
+            case ModuleId::reverb:  return { "Decay", "Mix" };
+            case ModuleId::eq:      return { "Low Cut", "Highs" };
+            case ModuleId::comp:    return { "Threshold", "Ratio" };
+            case ModuleId::deess:   return { "Threshold", "Range" };
+            case ModuleId::sat:     return { "Drive", "Mix" };
+            case ModuleId::doubler: return { "Width", "Mix" };
+            case ModuleId::pitch:   return { "Pitch", "Mix" };
+            case ModuleId::check:   return {};
+        }
+        return {};
+    }
+
+    Knob* ChainView::getColumnKnob (ModuleId id, int instance, int which)
+    {
+        updateColumnKnobs();
+        const auto it = columnKnobs.find (dsp::selectionCode (id, instance));
+        return it != columnKnobs.end() && juce::isPositiveAndBelow (which, 2) ? it->second[(size_t) which].get() : nullptr;
+    }
+
+    void ChainView::updateColumnKnobs()
+    {
+        layoutTiles();
+        const auto row = rowArea();
+
+        // Knobs for every column in the chain, none for columns that left it
+        std::set<int> present;
+        for (const auto& t : tiles)
+        {
+            present.insert (t.code());
+            auto& pair = columnKnobs[t.code()];
+            if (pair[0] == nullptr && columnParams (t.id).first != nullptr)
+            {
+                const auto params = columnParams (t.id);
+                const auto labels = columnLabels (t.id);
+                const auto hue = moduleColour (t.id);
+                pair[0] = std::make_unique<Knob> (proc.getState(), dsp::instanceParamId (params.first, t.instance).toRawUTF8(), labels.first, hue);
+                pair[1] = std::make_unique<Knob> (proc.getState(), dsp::instanceParamId (params.second, t.instance).toRawUTF8(), labels.second, hue);
+                for (auto& k : pair)
+                {
+                    k->setDialSize (48);
+                    addChildComponent (*k);
+                }
+            }
+
+            const auto onIt = onState.find (t.code());
+            const bool on = (onIt == onState.end() ? isOn (t.id, t.instance) : onIt->second)
+                            || (t.instance == 0 && macroEngaged[(size_t) t.id]);
+            const bool shown = row.getX() - 0.5f <= t.bounds.getX() && t.bounds.getRight() <= row.getRight() + 0.5f
+                               && ! (dragging && dragTile >= 0 && tiles[(size_t) dragTile].code() == t.code());
+            for (int k = 0; k < 2; ++k)
+                if (auto& knob = pair[(size_t) k])
+                {
+                    const auto cell = juce::Rectangle<float> (t.bounds.getX() + 8.0f, t.bounds.getY() + nameH + iconH + knobCellH * (float) k,
+                                                              t.bounds.getWidth() - 16.0f, knobCellH);
+                    knob->setBounds (cell.toNearestInt());
+                    knob->setVisible (shown);
+                    knob->setAlpha (on ? 1.0f : 0.3f);
+                }
+        }
+        for (auto it = columnKnobs.begin(); it != columnKnobs.end();)
+            it = present.count (it->first) == 0 ? columnKnobs.erase (it) : std::next (it);
+
+        // Undo / redo / chain menu under the round "+" (they scroll with the add column)
+        const auto add = addCardArea();
+        const bool addShown = row.getX() - 0.5f <= add.getX() && add.getRight() <= row.getRight() + 0.5f;
+        auto stack = juce::Rectangle<float> (add.getCentreX() - 28.0f, add.getY() + nameH + iconH + 30.0f, 56.0f, 24.0f).toNearestInt();
+        for (auto* b : { &undoButton, &redoButton, &chainMenuButton })
+        {
+            b->setBounds (stack);
+            b->setVisible (addShown);
+            stack.translate (0, 30);
+        }
     }
 
     juce::Point<float> ChainView::gapCentre (int insertIndex) const
@@ -340,7 +434,7 @@ namespace velvox::ui
             const auto c = gapCentre (i);
             if (c.x < row.getX() - 1.0f || c.x > row.getRight() + 1.0f)
                 continue;
-            if (std::abs (p.x - c.x) <= gap * 0.5f + 3.0f && std::abs (p.y - c.y) <= plusR + 6.0f)
+            if (std::abs (p.x - c.x) <= 6.0f && std::abs (p.y - c.y) <= plusR + 6.0f)
                 return i;
         }
         return -1;
@@ -529,8 +623,11 @@ namespace velvox::ui
             changed = true;
         }
 
-        if (changed)
+        if (changed || columnKnobs.size() != routing.size())
+        {
+            updateColumnKnobs();
             repaint();
+        }
     }
 
     void ChainView::tick()
@@ -578,7 +675,10 @@ namespace velvox::ui
         moved = gapGlow.tick (0.22f) || moved;
 
         if (moved)
+        {
+            updateColumnKnobs();
             repaint();
+        }
     }
 
     //==========================================================================
@@ -586,54 +686,69 @@ namespace velvox::ui
 
     void ChainView::drawPort (juce::Graphics& g, juce::Rectangle<float> box, bool isOutput) const
     {
-        // Input and output are fixed ports of the signal path, not effect modules:
-        // recessed, without power button, with a direction arrow
+        // Input and output: slim end caps of the signal path with a direction arrow
         const bool isSel = isOutput && selected == outputTile;
         const bool hov = isOutput && hovered == hitOutput;
-        g.setColour (juce::Colours::black.withAlpha (0.28f));
-        g.fillRoundedRectangle (box, corner);
-        if (isSel)
-        {
-            g.setColour (colours::cyan.withAlpha (0.08f));
-            g.fillRoundedRectangle (box, corner);
-        }
-        g.setColour (isSel ? colours::cyan.withAlpha (0.8f) : colours::line.brighter (hov ? 0.5f : 0.1f));
-        g.drawRoundedRectangle (box.reduced (0.75f), corner, isSel ? 1.6f : 1.0f);
+        g.setColour (isSel ? colours::teal.withAlpha (0.10f) : colours::panelInset);
+        g.fillRoundedRectangle (box, 8.0f);
+        g.setColour (isSel ? colours::teal.withAlpha (0.7f) : (hov ? colours::border.brighter (0.5f) : colours::border));
+        g.drawRoundedRectangle (box.reduced (0.5f), 8.0f, 1.0f);
 
-        const auto c = juce::Point<float> (box.getCentreX(), box.getY() + 30.0f);
+        const auto c = juce::Point<float> (box.getCentreX(), box.getY() + 22.0f);
         juce::Path arrow;
-        arrow.startNewSubPath (c.x - 13.0f, c.y);
-        arrow.lineTo (c.x + 11.0f, c.y);
-        arrow.startNewSubPath (c.x + 4.0f, c.y - 7.0f);
-        arrow.lineTo (c.x + 11.0f, c.y);
-        arrow.lineTo (c.x + 4.0f, c.y + 7.0f);
-        g.setColour (isSel ? colours::cyan : colours::textDim);
-        g.strokePath (arrow, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        arrow.startNewSubPath (c.x - 6.0f, c.y);
+        arrow.lineTo (c.x + 5.0f, c.y);
+        arrow.startNewSubPath (c.x + 1.0f, c.y - 4.0f);
+        arrow.lineTo (c.x + 5.0f, c.y);
+        arrow.lineTo (c.x + 1.0f, c.y + 4.0f);
+        g.setColour (isSel ? colours::teal : colours::textMuted);
+        g.strokePath (arrow, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-        g.setColour (isSel ? colours::text : colours::textDim);
-        g.setFont (caps (13.0f));
-        g.drawText (isOutput ? "OUTPUT" : "INPUT", box.withTrimmedTop (44.0f).withHeight (20.0f), juce::Justification::centred, false);
+        // Vertical caption
+        juce::Graphics::ScopedSaveState s (g);
+        g.addTransform (juce::AffineTransform::rotation (-juce::MathConstants<float>::halfPi, box.getCentreX(), box.getCentreY()));
+        g.setColour (isSel ? colours::textStrong : colours::textMuted);
+        g.setFont (semiBold (10.0f, 0.3f));
+        g.drawText (isOutput ? "OUTPUT" : "INPUT", juce::Rectangle<float> (box.getHeight() - 80.0f, box.getWidth()).withCentre (box.getCentre()),
+                    juce::Justification::centred, false);
     }
 
     void ChainView::drawAddCard (juce::Graphics& g, juce::Rectangle<float> r) const
     {
+        // Round dashed "+" (opens the module browser with all modules)
         const auto it = hoverGlow.find (-77);
         const float hov = it != hoverGlow.end() ? it->second.current : 0.0f;
-        g.setColour (colours::accent.withAlpha (0.02f + 0.04f * hov));
-        g.fillRoundedRectangle (r, corner);
+        const auto c = juce::Point<float> (r.getCentreX(), r.getY() + nameH + iconH * 0.5f);
+        const auto circle = juce::Rectangle<float> (44.0f, 44.0f).withCentre (c);
+        g.setColour (colours::teal.withAlpha (0.04f + 0.06f * hov));
+        g.fillEllipse (circle);
         juce::Path outline;
-        outline.addRoundedRectangle (r.reduced (0.75f), corner);
+        outline.addEllipse (circle.reduced (0.75f));
         juce::Path dashed;
-        const float dashes[] { 5.0f, 4.0f };
-        juce::PathStrokeType (1.2f).createDashedStroke (dashed, outline, dashes, 2);
-        g.setColour ((hov > 0.5f ? colours::cyan : colours::line.brighter (0.5f)).withAlpha (0.55f + 0.4f * hov));
+        const float dashes[] { 4.0f, 4.0f };
+        juce::PathStrokeType (1.3f).createDashedStroke (dashed, outline, dashes, 2);
+        g.setColour ((hov > 0.5f ? colours::teal : colours::textDim).withAlpha (0.6f + 0.4f * hov));
         g.fillPath (dashed);
-        const auto c = juce::Point<float> (r.getCentreX(), r.getY() + 30.0f);
-        drawGlow (g, c, 18.0f, 0.15f + 0.25f * hov, colours::cyan);
-        drawPlus (g, c, 16.0f, hov > 0.5f ? colours::cyan : colours::textDim, 2.0f);
-        g.setColour (hov > 0.5f ? colours::text : colours::textDim);
-        g.setFont (medium (13.0f));
-        g.drawText ("Add module", r.withTrimmedTop (44.0f).withHeight (20.0f), juce::Justification::centred, false);
+        drawPlus (g, c, 16.0f, hov > 0.5f ? colours::teal : colours::textSoft, 2.0f);
+        g.setColour (colours::textFaint);
+        g.setFont (semiBold (9.0f, 0.2f));
+        g.drawText ("ADD", juce::Rectangle<float> (r.getWidth(), 14.0f).withCentre ({ c.x, circle.getBottom() + 12.0f }), juce::Justification::centred, false);
+    }
+
+    void ChainView::drawIcon (juce::Graphics& g, ModuleId id, juce::Rectangle<float> area, float alpha) const
+    {
+        auto& d = iconCache[(int) id];
+        if (d == nullptr)
+        {
+            const auto svg = moduleIconSvg (id).replace ("#FFFFFF", "#" + moduleColour (id).toDisplayString (false));
+            const auto utf8 = svg.toUTF8();
+            d = juce::Drawable::createFromImageData (utf8.getAddress(), utf8.sizeInBytes() - 1);
+        }
+        if (d == nullptr)
+            return;
+        // Neon: a soft halo in the module colour, then the line art
+        drawGlow (g, area.getCentre(), area.getWidth() * 0.62f, 0.20f * alpha, moduleColour (id));
+        d->drawWithin (g, area, juce::RectanglePlacement::centred, alpha);
     }
 
     void ChainView::drawTile (juce::Graphics& g, const Tile& t, juce::Rectangle<float> r, bool ghost) const
@@ -646,174 +761,146 @@ namespace velvox::ui
         const bool isSelected = code == selected && ! ghost;
         const auto glowIt = hoverGlow.find (code);
         const float hov = ghost ? 0.0f : (glowIt != hoverGlow.end() ? glowIt->second.current : 0.0f);
-        const bool repeated = routing.countOf (t.id) > 1;
         const auto hue = moduleColour (t.id);
+        const float content = on ? 1.0f : 0.3f;   // bypassed: content at 30 %
 
-        // Card body: raised when on, flat and darker when off
         if (ghost)
-            drawGlow (g, r.getCentre().translated (0.0f, 10.0f), r.getWidth() * 0.6f, 0.5f, juce::Colours::black);
-        g.setColour (ghost ? colours::raisedHi : (on ? colours::raised : colours::panel));
-        g.fillRoundedRectangle (r, corner);
-        if (on)
         {
-            // Lit card: a wash of the module's own neon hue from the top left
-            g.setGradientFill (juce::ColourGradient (hue.withAlpha (0.16f), r.getX(), r.getY(),
-                                                     hue.withAlpha (0.0f), r.getRight(), r.getBottom(), false));
-            g.fillRoundedRectangle (r, corner);
-            g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.05f), r.getX(), r.getY(),
-                                                     colours::accent.withAlpha (0.0f), r.getX(), r.getBottom(), false));
-            g.fillRoundedRectangle (r, corner);
+            drawGlow (g, r.getCentre().translated (0.0f, 10.0f), r.getWidth() * 0.7f, 0.6f, juce::Colours::black);
+            g.setColour (colours::raisedHi);
+            g.fillRoundedRectangle (r, 10.0f);
+            g.setColour (hue.withAlpha (0.6f));
+            g.drawRoundedRectangle (r.reduced (0.5f), 10.0f, 1.0f);
         }
+
+        // Selected: wash of the module colour, 14 % at the top -> 2 % at the bottom
         if (isSelected)
         {
-            g.setColour (hue.withAlpha (0.08f));
-            g.fillRoundedRectangle (r, corner);
+            g.setGradientFill (juce::ColourGradient (hue.withAlpha (0.14f), r.getX(), r.getY(), hue.withAlpha (0.02f), r.getX(), r.getBottom(), false));
+            g.fillRect (r);
+            g.setColour (hue);
+            g.fillRect (r.withHeight (2.0f).reduced (10.0f, 0.0f));
         }
         if (hov > 0.01f)
         {
-            g.setColour (colours::accent.withAlpha (0.035f * hov));
-            g.fillRoundedRectangle (r, corner);
+            g.setColour (juce::Colours::white.withAlpha (0.025f * hov));
+            g.fillRect (r);
         }
 
-        // Frame: module hue when selected, brighter when on
-        if (isSelected)
+        // Divider to the next column
+        if (! ghost)
         {
-            g.setColour (hue.withAlpha (0.9f));
-            g.drawRoundedRectangle (r.reduced (0.8f), corner, 1.6f);
-            g.fillRoundedRectangle (r.getX() + 16.0f, r.getY() + 1.5f, r.getWidth() - 32.0f, 2.5f, 1.25f);
-        }
-        else
-        {
-            g.setColour (ghost ? hue.withAlpha (0.6f)
-                               : (on ? colours::line.brighter (0.45f + 0.4f * hov) : colours::line.brighter (0.1f + 0.4f * hov)));
-            g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
+            g.setColour (colours::borderSoft);
+            g.fillRect (juce::Rectangle<float> (r.getRight() - 1.0f, r.getY() + 10.0f, 1.0f, r.getHeight() - 20.0f));
         }
 
         Tile shifted = t;
         shifted.bounds = r;
+
+        // Power + name (44)
         drawPowerGlyph (g, dotBounds (shifted), switchedOn, hov, hue);
+        const auto nameArea = juce::Rectangle<float> (dotBounds (shifted).getRight() + 6.0f, r.getY(), r.getRight() - 8.0f - dotBounds (shifted).getRight() - 6.0f, nameH);
+        g.setColour ((on ? colours::textStrong : colours::textMuted));
+        g.setFont (semiBold (11.5f, 0.15f));
+        g.drawFittedText (cardName (routing, t.id, t.instance).toUpperCase(), nameArea.toNearestInt(), juce::Justification::centredLeft, 1, 0.75f);
 
-        const auto nameColour = on ? colours::text : colours::textDim;
-        const auto baseName = juce::String (dsp::moduleDisplayName (t.id)).toUpperCase();
+        // Neon icon (78)
+        const auto iconArea = juce::Rectangle<float> (56.0f, 56.0f).withCentre ({ r.getCentreX(), r.getY() + nameH + iconH * 0.5f });
+        drawIcon (g, t.id, iconArea, content);
 
-        // Instance number chip ("2") after the name of a repeated module: two EQs are
-        // visibly two separate instances, not one module shown twice
-        const auto drawInstanceChip = [&] (float x, float centreY)
+        // Status under the icon: bypass / macro / auto-mix
+        juce::String status;
+        if (switchedOn && globalBypass)  status = "BYPASS";
+        else if (engagedOnly)            status = "MACRO";
+        else if (! switchedOn)           status = "OFF";
+        else if (autoKeys.contains (dsp::moduleKey (t.id))) status = "AUTO";
+        if (status.isNotEmpty())
         {
-            const auto chip = juce::Rectangle<float> (20.0f, 18.0f).withPosition (x, centreY - 9.0f);
-            g.setColour (hue.withAlpha (on ? 0.16f : 0.08f));
-            g.fillRoundedRectangle (chip, 5.0f);
-            g.setColour (hue.withAlpha (on ? 0.7f : 0.35f));
-            g.drawRoundedRectangle (chip.reduced (0.5f), 5.0f, 1.0f);
-            g.setColour (on ? colours::text : colours::textDim);
-            g.setFont (medium (11.5f));
-            g.drawText (juce::String (t.instance + 1), chip, juce::Justification::centred, false);
-        };
-
-        const float actions = ghost ? 0.0f : hov;
-
-        if (t.inLane)
-        {
-            // Parallel send: compact card on the lane
-            const auto dot = dotBounds (shifted);
-            auto text = r.withLeft (dot.getRight() + 10.0f).withRight (modeBounds (shifted).getX() - 6.0f - (actions > 0.05f ? 26.0f : 0.0f));
-            g.setColour (nameColour);
-            g.setFont (font (14.5f, true));
-            const float nameW = std::min (text.getWidth() - (repeated ? 26.0f : 0.0f),
-                                          (float) juce::GlyphArrangement::getStringWidthInt (font (14.5f, true), baseName) + 4.0f);
-            g.drawFittedText (baseName, text.withWidth (nameW).toNearestInt(), juce::Justification::centredLeft, 1, 0.9f);
-            if (repeated)
-                drawInstanceChip (text.getX() + nameW + 4.0f, text.getCentreY());
-        }
-        else
-        {
-            const auto dot = dotBounds (shifted);
-            const float textX = dot.getRight() + 10.0f;
-            const float nameRight = r.getRight() - 12.0f - (actions > 0.05f ? 54.0f : 0.0f);
-
-            g.setColour (nameColour);
-            g.setFont (font (15.5f, true));
-            const float nameW = std::min (nameRight - textX - (repeated ? 26.0f : 0.0f),
-                                          (float) juce::GlyphArrangement::getStringWidthInt (font (15.5f, true), baseName) + 4.0f);
-            g.drawFittedText (baseName, juce::Rectangle<float> (textX, r.getY() + 15.0f, nameW, 22.0f).toNearestInt(),
-                              juce::Justification::centredLeft, 1, 0.92f);
-            if (repeated)
-                drawInstanceChip (textX + nameW + 4.0f, r.getY() + 26.0f);
-
-            // Status line with the module icon
-            const auto iconArea = juce::Rectangle<float> (r.getX() + 16.0f, r.getY() + 46.0f, 20.0f, 20.0f);
-            if (on)
-                drawGlow (g, iconArea.getCentre(), 18.0f, 0.35f, hue);
-            drawModuleIcon (g, (int) t.id, iconArea, on ? hue.interpolatedWith (colours::text, 0.15f) : colours::textFaint);
-            juce::String status = switchedOn ? (globalBypass ? "Bypass" : "On") : (engagedOnly ? "On via macro" : "Off");
-            g.setColour (switchedOn && globalBypass ? colours::bypass : (on ? colours::text.withAlpha (0.82f) : colours::textFaint));
-            g.setFont (medium (13.0f));
-            auto statusArea = juce::Rectangle<float> (textX, iconArea.getY(), r.getRight() - 12.0f - textX, iconArea.getHeight());
-            if (canBeSend (t.id))
-                statusArea.setRight (modeBounds (shifted).getX() - 6.0f);
-            g.drawFittedText (status, statusArea.toNearestInt(), juce::Justification::centredLeft, 1, 0.9f);
-
-            // Position in the chain (bottom right, behind the drag handle)
-            if (! canBeSend (t.id) && (ghost ? 1.0f : hov) < 0.5f)
-            {
-                g.setColour (colours::textFaint);
-                g.setFont (medium (12.0f));
-                g.drawText (juce::String (t.position).paddedLeft ('0', 2), juce::Rectangle<float> (r.getRight() - 42.0f, iconArea.getY(), 28.0f, iconArea.getHeight()),
-                            juce::Justification::centredRight, false);
-            }
-
-            // Set up by the automatic mix
-            if (autoKeys.contains (dsp::moduleKey (t.id)) && switchedOn && actions < 0.05f)
-            {
-                const auto badge = juce::Rectangle<float> (r.getRight() - 50.0f, r.getY() + 9.0f, 40.0f, 17.0f);
-                g.setGradientFill (auroraGradient (badge.getTopLeft(), badge.getBottomRight(), 0.30f));
-                g.fillRoundedRectangle (badge, 8.5f);
-                g.setColour (colours::text);
-                g.setFont (medium (11.0f));
-                g.drawText ("Auto", badge, juce::Justification::centred, false);
-            }
-
-            // Activity bar along the bottom edge (gain reduction, ducking, movement)
-            const float act = activityOf (t);
-            if (switchedOn && act > 0.01f)
-            {
-                const auto bar = juce::Rectangle<float> (r.getX() + 14.0f, r.getBottom() - 6.0f, r.getWidth() - 28.0f, 2.5f);
-                g.setColour (hue.withAlpha (0.9f));
-                g.fillRoundedRectangle (bar.withWidth (std::max (3.0f, bar.getWidth() * act)), 1.25f);
-            }
-
-            // Drag handle: appears on hover (and while dragging) so the card reads as movable
-            const float grip = ghost ? 1.0f : hov;
-            if (grip > 0.01f && ! canBeSend (t.id))
-            {
-                g.setColour (colours::textDim.withAlpha (0.85f * grip));
-                for (int gx = 0; gx < 2; ++gx)
-                    for (int gy = -1; gy <= 1; ++gy)
-                        g.fillEllipse (juce::Rectangle<float> (2.6f, 2.6f).withCentre ({ r.getRight() - 22.0f + 5.0f * (float) gx,
-                                                                                          iconArea.getCentreY() + 5.0f * (float) gy }));
-            }
+            g.setColour (status == "BYPASS" ? colours::bypass : (status == "AUTO" ? hue : colours::textFaint));
+            g.setFont (semiBold (8.5f, 0.25f));
+            g.drawText (status, juce::Rectangle<float> (r.getWidth(), 12.0f).withPosition (r.getX(), r.getY() + nameH + iconH - 12.0f),
+                        juce::Justification::centred, false);
         }
 
-        // Hover actions: duplicate and remove
-        if (actions > 0.05f)
+        // VOCAL CHECK has no knobs: its place shows what it does
+        if (columnParams (t.id).first == nullptr)
         {
-            drawCardAction (g, removeBounds (shifted), true, actions);
-            if (routing.nextFreeInstance (t.id) >= 0)
-                drawCardAction (g, duplicateBounds (shifted), false, actions);
+            g.setColour (colours::textFaint.withAlpha (content));
+            g.setFont (font (10.5f));
+            g.drawFittedText ("Diagnose\nohne Klang-\nveränderung", juce::Rectangle<float> (r.getX() + 8.0f, r.getY() + nameH + iconH + 20.0f,
+                                                                                       r.getWidth() - 16.0f, knobCellH).toNearestInt(),
+                              juce::Justification::centredTop, 3, 0.9f);
         }
 
-        // Send / insert switch for delay and reverb
+        // Send / insert pill for delay and reverb
         if (canBeSend (t.id))
         {
             const auto m = modeBounds (shifted);
             const bool send = ! routing.isInsert (t.id, t.instance);
-            g.setColour (send ? colours::cyan.withAlpha (0.14f) : colours::accent.withAlpha (0.04f));
+            g.setColour (send ? hue.withAlpha (0.16f) : colours::control);
             g.fillRoundedRectangle (m, m.getHeight() * 0.5f);
-            g.setColour (send ? colours::cyan.withAlpha (0.55f) : colours::line.brighter (0.4f));
+            g.setColour (send ? hue.withAlpha (0.7f) : colours::border.brighter (0.4f));
             g.drawRoundedRectangle (m.reduced (0.5f), m.getHeight() * 0.5f, 1.0f);
-            g.setColour (send ? colours::text : colours::textDim);
-            g.setFont (medium (12.5f));
-            g.drawText (send ? "Send" : "Insert", m, juce::Justification::centred, false);
+            g.setColour (send ? colours::textStrong : colours::textMuted);
+            g.setFont (semiBold (9.0f, 0.15f));
+            g.drawText (send ? "SEND" : "INSERT", m, juce::Justification::centred, false);
+        }
+
+        // Activity line above the footer (gain reduction, ducking, movement)
+        const float act = activityOf (t);
+        const auto footerTop = r.getBottom() - footerH;
+        if (switchedOn && act > 0.01f)
+        {
+            const auto bar = juce::Rectangle<float> (r.getX() + 12.0f, footerTop - 3.0f, r.getWidth() - 24.0f, 2.0f);
+            g.setColour (hue.withAlpha (0.9f));
+            g.fillRoundedRectangle (bar.withWidth (std::max (3.0f, bar.getWidth() * act)), 1.0f);
+        }
+
+        // Footer: < duplicate remove >
+        g.setColour (colours::borderSoft);
+        g.fillRect (juce::Rectangle<float> (r.getX() + 8.0f, footerTop, r.getWidth() - 16.0f, 1.0f));
+        const bool canMoveLeft = ! t.inLane && t.position > 1;
+        const bool canMoveRight = ! t.inLane && t.position < numSerial;
+        const bool canDuplicate = routing.nextFreeInstance (t.id) >= 0;
+        for (int slot = 0; slot < 4; ++slot)
+        {
+            const auto b = footerButton (shifted, slot);
+            const bool enabled = slot == 0 ? canMoveLeft : (slot == 3 ? canMoveRight : (slot == 1 ? canDuplicate : true));
+            const bool hot = hov > 0.3f && b.contains (lastMouse);
+            const auto colour = ! enabled ? colours::textFaint.withAlpha (0.35f)
+                                          : (hot ? (slot == 2 ? colours::warning : colours::textStrong) : colours::textMuted);
+            if (hot && enabled)
+            {
+                g.setColour (juce::Colours::white.withAlpha (0.05f));
+                g.fillRoundedRectangle (b, 5.0f);
+            }
+            const auto c = b.getCentre();
+            if (slot == 0 || slot == 3)
+            {
+                juce::Path p;
+                const float s = slot == 3 ? 1.0f : -1.0f;
+                p.startNewSubPath (c.x - 2.5f * s, c.y - 5.0f);
+                p.lineTo (c.x + 2.5f * s, c.y);
+                p.lineTo (c.x - 2.5f * s, c.y + 5.0f);
+                g.setColour (colour);
+                g.strokePath (p, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            }
+            else if (slot == 1)
+            {
+                g.setColour (colour);
+                g.drawRoundedRectangle (juce::Rectangle<float> (7.0f, 7.0f).withCentre (c.translated (-1.5f, -1.5f)), 1.5f, 1.2f);
+                g.drawRoundedRectangle (juce::Rectangle<float> (7.0f, 7.0f).withCentre (c.translated (1.8f, 1.8f)), 1.5f, 1.2f);
+            }
+            else
+            {
+                juce::Path x;
+                x.startNewSubPath (c.x - 3.5f, c.y - 3.5f);
+                x.lineTo (c.x + 3.5f, c.y + 3.5f);
+                x.startNewSubPath (c.x + 3.5f, c.y - 3.5f);
+                x.lineTo (c.x - 3.5f, c.y + 3.5f);
+                g.setColour (colour);
+                g.strokePath (x, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            }
         }
     }
 
@@ -822,129 +909,113 @@ namespace velvox::ui
         layoutTiles();
         const auto row = rowArea();
         const auto lane = laneArea();
-        const float cy = row.getCentreY();
         const float maxScroll = std::max (0.0f, contentWidth() - row.getWidth());
 
-        // Spine: in -> serial chain -> out
-        g.setColour (colours::accent.withAlpha (0.10f));
-        g.fillRect (juce::Rectangle<float> (inBox.getRight(), cy - 0.75f, outBox.getX() - inBox.getRight(), 1.5f));
-
-        // Parallel lane: splits after the serial chain, joins at the output
-        const bool draggingSendable = dragging && dragTile >= 0 && canBeSend (tiles[(size_t) dragTile].id);
-        float firstSendX = 1.0e9f;
-        for (auto& t : tiles)
-            if (t.inLane)
-                firstSendX = std::min (firstSendX, t.bounds.getX());
-        if (firstSendX < 1.0e8f)
-        {
-            juce::Path branch;
-            branch.startNewSubPath (row.getRight() - 6.0f, row.getBottom());
-            branch.quadraticTo (row.getRight() - 6.0f, lane.getCentreY(), firstSendX - 30.0f, lane.getCentreY());
-            branch.lineTo (firstSendX, lane.getCentreY());
-            juce::Path join;
-            join.startNewSubPath (lane.getRight(), lane.getCentreY());
-            join.quadraticTo (outBox.getCentreX(), lane.getCentreY(), outBox.getCentreX(), outBox.getBottom());
-
-            g.setColour (colours::accent.withAlpha (0.22f));
-            const float dashes[] { 4.0f, 4.0f };
-            juce::Path dashedBranch, dashedJoin;
-            juce::PathStrokeType stroke (1.2f);
-            stroke.createDashedStroke (dashedBranch, branch, dashes, 2);
-            stroke.createDashedStroke (dashedJoin, join, dashes, 2);
-            g.fillPath (dashedBranch);
-            g.fillPath (dashedJoin);
-
-            drawCaption (g, "Parallel sends", juce::Rectangle<float> (firstSendX - 196.0f, lane.getY(), 150.0f, lane.getHeight()),
-                         juce::Justification::centredRight, colours::textDim, 10.5f);
-        }
-
-        // Drop zone while Delay or Reverb is dragged
-        if (draggingSendable)
-        {
-            const bool over = lane.expanded (0.0f, 10.0f).contains (dragPos);
-            const auto zone = lane.withTrimmedLeft ((float) chainMenuButton.getRight() - lane.getX() + 16.0f);
-            g.setColour (colours::cyan.withAlpha (over ? 0.12f : 0.05f));
-            g.fillRoundedRectangle (zone, corner);
-            juce::Path outline;
-            outline.addRoundedRectangle (zone.reduced (0.75f), corner);
-            juce::Path dashed;
-            const float dashes[] { 5.0f, 4.0f };
-            juce::PathStrokeType (1.2f).createDashedStroke (dashed, outline, dashes, 2);
-            g.setColour (colours::cyan.withAlpha (over ? 0.8f : 0.4f));
-            g.fillPath (dashed);
-            g.setColour (colours::text.withAlpha (over ? 1.0f : 0.7f));
-            g.setFont (medium (13.5f));
-            g.drawText ("Drop here to run it in parallel", zone.withTrimmedLeft (16.0f), juce::Justification::centredLeft, false);
-        }
+        // Panel behind the columns
+        g.setColour (colours::panel);
+        g.fillRoundedRectangle (row.expanded (0.0f, 0.0f), 12.0f);
+        g.setColour (colours::border);
+        g.drawRoundedRectangle (row.reduced (0.5f), 12.0f, 1.0f);
 
         drawPort (g, inBox, false);
         drawPort (g, outBox, true);
 
-        // Serial cards, clipped to the scrolling row
+        const bool draggingSendable = dragging && dragTile >= 0 && canBeSend (tiles[(size_t) dragTile].id);
+
         {
             juce::Graphics::ScopedSaveState s (g);
-            g.reduceClipRegion (row.expanded (0.0f, 2.0f).toNearestInt());
+            juce::Path clip;
+            clip.addRoundedRectangle (row, 12.0f);
+            g.reduceClipRegion (clip);
+
             for (int i = 0; i < (int) tiles.size(); ++i)
-                if (! tiles[(size_t) i].inLane && ! (dragging && i == dragTile))
+                if (! (dragging && i == dragTile))
                     drawTile (g, tiles[(size_t) i], tiles[(size_t) i].bounds, false);
             drawAddCard (g, addCardArea());
 
-            // "+" between two cards: insert a module exactly there
+            // Send zone: divider and caption
+            {
+                const float x = lane.getX();
+                g.setColour (colours::border.brighter (0.2f));
+                const float dashes[] { 3.0f, 4.0f };
+                juce::Path line, dashed;
+                line.startNewSubPath (x, row.getY() + 12.0f);
+                line.lineTo (x, row.getBottom() - 12.0f);
+                juce::PathStrokeType (1.0f).createDashedStroke (dashed, line, dashes, 2);
+                g.fillPath (dashed);
+                if (numSends == 0)
+                {
+                    g.setColour (colours::textFaint);
+                    g.setFont (semiBold (9.0f, 0.25f));
+                    g.drawFittedText ("SENDS\nDelay / Reverb\nhierher ziehen", lane.withTrimmedLeft (sendGap * 0.5f).reduced (8.0f, 0.0f).toNearestInt(),
+                                      juce::Justification::centred, 3, 0.85f);
+                }
+            }
+
+            // Drop zone while Delay or Reverb is dragged
+            if (draggingSendable)
+            {
+                const bool over = lane.contains (dragPos);
+                g.setColour (colours::teal.withAlpha (over ? 0.10f : 0.04f));
+                g.fillRect (lane.withTrimmedLeft (sendGap * 0.5f));
+            }
+
+            // "+" on a divider: insert a module exactly there
             if (hoveredGap >= 0 && gapGlow.current > 0.01f)
             {
                 const auto c = gapCentre (hoveredGap);
-                drawGlow (g, c, 20.0f, 0.35f * gapGlow.current, colours::cyan);
+                drawGlow (g, c, 20.0f, 0.35f * gapGlow.current, colours::teal);
                 g.setColour (colours::raisedHi.withAlpha (gapGlow.current));
                 g.fillEllipse (juce::Rectangle<float> (2.0f * plusR, 2.0f * plusR).withCentre (c));
-                g.setColour (colours::cyan.withAlpha (0.9f * gapGlow.current));
+                g.setColour (colours::teal.withAlpha (0.9f * gapGlow.current));
                 g.drawEllipse (juce::Rectangle<float> (2.0f * plusR, 2.0f * plusR).withCentre (c), 1.3f);
                 drawPlus (g, c, 10.0f, colours::text.withAlpha (gapGlow.current));
             }
 
-            // Insertion marker
-            if (dragging && dragTile >= 0 && ! lane.expanded (0.0f, 10.0f).contains (dragPos))
+            // Insertion marker while dragging
+            if (dragging && dragTile >= 0 && ! lane.contains (dragPos))
             {
                 const auto& t = tiles[(size_t) dragTile];
                 const int idx = insertIndexForX (dragPos.x);
-                float markerX = row.getX() - scroll.current - gap * 0.5f + 1.5f;
+                float markerX = row.getX() - scroll.current + 1.5f;
                 int count = 0;
                 for (auto& other : tiles)
                 {
                     if (other.inLane || (other.id == t.id && other.instance == t.instance))
                         continue;
                     if (count++ < idx)
-                        markerX = other.bounds.getRight() + gap * 0.5f;
+                        markerX = other.bounds.getRight();
                 }
                 markerX = juce::jlimit (row.getX() + 2.0f, row.getRight() - 2.0f, markerX);
-                drawGlow (g, { markerX, row.getCentreY() }, 22.0f, 0.35f, colours::cyan);
-                g.setColour (colours::cyan);
-                g.fillRoundedRectangle (markerX - 1.5f, row.getY() + 2.0f, 3.0f, row.getHeight() - 4.0f, 1.5f);
+                drawGlow (g, { markerX, row.getCentreY() }, 22.0f, 0.35f, colours::teal);
+                g.setColour (colours::teal);
+                g.fillRoundedRectangle (markerX - 1.5f, row.getY() + 8.0f, 3.0f, row.getHeight() - 16.0f, 1.5f);
             }
 
-            // More cards beyond the edges: fade and arrows
+            // More columns beyond the edges: fade and arrows
             if (scroll.current > 0.5f)
             {
                 const auto a = leftArrowArea();
-                g.setGradientFill (juce::ColourGradient (colours::background, a.getX(), 0.0f,
-                                                         colours::background.withAlpha (0.0f), a.getX() + edgeFade + arrowW * 0.5f, 0.0f, false));
-                g.fillRect (a.withWidth (edgeFade + arrowW * 0.5f).expanded (0.0f, 2.0f));
+                g.setGradientFill (juce::ColourGradient (colours::panel, a.getX(), 0.0f,
+                                                         colours::panel.withAlpha (0.0f), a.getX() + edgeFade + arrowW * 0.5f, 0.0f, false));
+                g.fillRect (a.withWidth (edgeFade + arrowW * 0.5f));
                 const bool hov = hovered == hitLeftArrow;
                 g.setColour (colours::raisedHi.withAlpha (hov ? 1.0f : 0.9f));
                 g.fillEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (a.getCentre()));
-                g.setColour (colours::line.brighter (hov ? 0.7f : 0.3f));
+                g.setColour (colours::border.brighter (hov ? 0.7f : 0.3f));
                 g.drawEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (a.getCentre()), 1.0f);
                 drawChevron (g, a.getCentre(), false, hov ? colours::text : colours::textDim);
             }
             if (scroll.current < maxScroll - 0.5f)
             {
                 const auto a = rightArrowArea();
-                g.setGradientFill (juce::ColourGradient (colours::background.withAlpha (0.0f), a.getRight() - edgeFade - arrowW * 0.5f, 0.0f,
-                                                         colours::background, a.getRight(), 0.0f, false));
-                g.fillRect (a.withLeft (a.getRight() - edgeFade - arrowW * 0.5f).expanded (0.0f, 2.0f));
+                g.setGradientFill (juce::ColourGradient (colours::panel.withAlpha (0.0f), a.getRight() - edgeFade - arrowW * 0.5f, 0.0f,
+                                                         colours::panel, a.getRight(), 0.0f, false));
+                g.fillRect (a.withLeft (a.getRight() - edgeFade - arrowW * 0.5f));
                 const bool hov = hovered == hitRightArrow;
                 g.setColour (colours::raisedHi.withAlpha (hov ? 1.0f : 0.9f));
                 g.fillEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (a.getCentre()));
-                g.setColour (colours::line.brighter (hov ? 0.7f : 0.3f));
+                g.setColour (colours::border.brighter (hov ? 0.7f : 0.3f));
                 g.drawEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (a.getCentre()), 1.0f);
                 drawChevron (g, a.getCentre(), true, hov ? colours::text : colours::textDim);
             }
@@ -956,24 +1027,19 @@ namespace velvox::ui
             const auto track = scrollTrack();
             g.setColour (colours::accent.withAlpha (0.05f));
             g.fillRoundedRectangle (track, 2.0f);
-            g.setColour (draggingThumb ? colours::cyan.withAlpha (0.8f) : colours::accent.withAlpha (0.28f));
+            g.setColour (draggingThumb ? colours::teal.withAlpha (0.8f) : colours::accent.withAlpha (0.28f));
             g.fillRoundedRectangle (scrollThumb(), 2.0f);
         }
 
-        // Parallel sends
-        for (int i = 0; i < (int) tiles.size(); ++i)
-            if (tiles[(size_t) i].inLane && ! (dragging && i == dragTile))
-                drawTile (g, tiles[(size_t) i], tiles[(size_t) i].bounds, false);
-
-        // Dragged card follows the mouse
+        // Dragged column follows the mouse
         if (dragging && dragTile >= 0)
         {
             const auto& t = tiles[(size_t) dragTile];
             const auto r = t.bounds.withPosition (dragPos - dragOffset);
-            if (lane.expanded (0.0f, 10.0f).contains (dragPos) && ! canBeSend (t.id))
+            if (lane.contains (dragPos) && ! canBeSend (t.id))
             {
                 g.setColour (colours::warning.withAlpha (0.10f));
-                g.fillRoundedRectangle (lane, corner);
+                g.fillRect (lane);
             }
             g.setOpacity (0.95f);
             drawTile (g, t, r, true);
@@ -981,12 +1047,14 @@ namespace velvox::ui
 
         if (hint.isNotEmpty())
         {
-            const float left = (float) chainMenuButton.getRight() + 16.0f;
-            const float right = firstSendX < 1.0e8f ? firstSendX - 210.0f : lane.getRight();
-            g.setColour (colours::warning);
+            const auto area = row.withTrimmedTop (row.getHeight() - 74.0f).reduced (40.0f, 18.0f);
+            g.setColour (colours::raisedHi.withAlpha (0.96f));
+            g.fillRoundedRectangle (area, 8.0f);
+            g.setColour (colours::warning.withAlpha (0.6f));
+            g.drawRoundedRectangle (area.reduced (0.5f), 8.0f, 1.0f);
+            g.setColour (colours::text);
             g.setFont (medium (13.0f));
-            g.drawFittedText (hint, juce::Rectangle<float> (left, lane.getY(), std::max (200.0f, right - left), lane.getHeight()).toNearestInt(),
-                              juce::Justification::centredLeft, 2, 0.9f);
+            g.drawFittedText (hint, area.reduced (12.0f, 2.0f).toNearestInt(), juce::Justification::centred, 2, 0.9f);
         }
     }
 
@@ -1054,22 +1122,28 @@ namespace velvox::ui
             return;
 
         const auto t = tiles[(size_t) i];
-        const auto glowIt = hoverGlow.find (t.code());
-        const bool actionsVisible = glowIt != hoverGlow.end() && glowIt->second.current > 0.3f;
 
         if (dotBounds (t).expanded (3.0f).contains (e.position))
         {
             toggleOn (t.id, t.instance);
             return;
         }
-        if (removeBounds (t).expanded (2.0f).contains (e.position) && (actionsVisible || hovered == i))
+        // Footer: < duplicate remove >
+        if (removeBounds (t).expanded (2.0f).contains (e.position))
         {
             removeInstance (t.id, t.instance);
             return;
         }
-        if (duplicateBounds (t).expanded (2.0f).contains (e.position) && (actionsVisible || hovered == i) && routing.nextFreeInstance (t.id) >= 0)
+        if (duplicateBounds (t).expanded (2.0f).contains (e.position))
         {
-            duplicateInstance (t.id, t.instance);
+            if (routing.nextFreeInstance (t.id) >= 0)
+                duplicateInstance (t.id, t.instance);
+            return;
+        }
+        if (footerButton (t, 0).expanded (2.0f).contains (e.position) || footerButton (t, 3).expanded (2.0f).contains (e.position))
+        {
+            if (! t.inLane)
+                moveBy (t.id, t.instance, footerButton (t, 0).expanded (2.0f).contains (e.position) ? -1 : 1);
             return;
         }
         if (canBeSend (t.id) && modeBounds (t).expanded (2.0f).contains (e.position))
@@ -1162,6 +1236,11 @@ namespace velvox::ui
     void ChainView::mouseMove (const juce::MouseEvent& e)
     {
         layoutTiles();
+        if (lastMouse != e.position)
+        {
+            lastMouse = e.position;
+            repaint();   // footer button highlight
+        }
         const int i = tileAt (e.position);
         const int g = gapAt (e.position);
         if (i != hovered || g != hoveredGap)
@@ -1187,18 +1266,37 @@ namespace velvox::ui
 
     void ChainView::resized()
     {
-        const auto lane = laneArea();
-        auto strip = juce::Rectangle<float> (lane.getX(), lane.getY(), 420.0f, lane.getHeight()).toNearestInt();
-        addButton.setBounds (strip.removeFromLeft (172));
-        strip.removeFromLeft (8);
-        undoButton.setBounds (strip.removeFromLeft (70));
-        strip.removeFromLeft (4);
-        redoButton.setBounds (strip.removeFromLeft (70));
-        strip.removeFromLeft (4);
-        chainMenuButton.setBounds (strip.removeFromLeft ((int) lane.getHeight()));
+        addButton.setVisible (false);   // the round "+" column replaces it (kept for its callback)
         pendingReveal = false;
         if (selected >= 0)
             scrollToShow (dsp::selectionModule (selected), dsp::selectionInstance (selected), false);
+        updateColumnKnobs();
+    }
+
+    void ChainView::moveBy (ModuleId id, int instance, int steps)
+    {
+        // One serial position earlier / later (sends are not counted)
+        auto r = routing;
+        int serialPos = -1, count = 0;
+        for (const auto& s : r)
+            if (s.insert)
+            {
+                if (s.sameInstance (id, instance))
+                    serialPos = count;
+                ++count;
+            }
+        const int target = serialPos + steps;
+        if (serialPos < 0 || target < 0 || target >= count)
+            return;
+        const int routingIndex = serialIndexToRoutingIndex (r, target, id, instance);
+        const int from = r.indexOf (id, instance);
+        r.moveTo (id, instance, from < routingIndex ? routingIndex - 1 : routingIndex);
+        if (r != routing)
+        {
+            pushUndo();
+            applyRouting (r);
+            scrollToShow (id, instance);
+        }
     }
 
     void ChainView::toggleOn (ModuleId id, int instance)

@@ -9,17 +9,17 @@ class VelvoxAudioProcessor;
 
 namespace velvox::ui
 {
-    // Chain editor: the processing chain as an ordered row of module instances.
-    //  - Top row: serial instances as cards in processing order (drag to reorder). The
-    //    row scrolls horizontally; cards never shrink below a readable width.
-    //  - Input and output sit at the ends as fixed ports, outside the scrolling row.
-    //  - Lower lane: delay / reverb instances running as parallel sends, plus the
-    //    "Add module" button and undo / redo.
-    //  - "+" between two cards (on hover) and the "Add module" card at the end open the
-    //    module browser for that position. Repeated modules show their instance number
-    //    ("EQ 1", "EQ 2") - each is an independent instance with its own settings.
-    //  - Card hover buttons: duplicate (copies the settings into a new instance) and
-    //    remove. Click a card to open it, its power button to bypass it.
+    // Module chain of the HEADLINER VOCAL design: one column per module instance, in
+    // processing order (height 330, equal widths, divider lines).
+    //   column = power + name (44) . neon icon (78) . two knobs (82 each) . footer (34)
+    //            with < duplicate remove > (move left, copy, take out, move right)
+    //  - The selected column carries a wash of its module colour (14 % -> 2 %), a
+    //    bypassed one shows its content at 30 % (the power button stays fully usable).
+    //  - Delay / reverb instances running as parallel sends sit at the end of the row,
+    //    behind a divider ("SENDS"); dragging a column there makes it a send.
+    //  - The columns scroll horizontally and never shrink below minCardW.
+    //  - "+" on a divider (on hover) and the round "+" at the end open the module browser
+    //    for that position. Repeated modules show their instance number ("EQ 2").
     // Every edit goes through the processor's routing (lock-free to the audio thread,
     // switched under a short fade) and can be undone.
     class ChainView final : public juce::Component, public juce::SettableTooltipClient
@@ -28,9 +28,16 @@ namespace velvox::ui
         static constexpr int outputTile = -1; // selection id for the output stage
 
         // Layout (design units)
-        static constexpr int preferredHeight = 136;
-        static constexpr float cardH = 80.0f, laneH = 40.0f, laneOffset = 14.0f;
-        static constexpr float minCardW = 168.0f, maxCardW = 220.0f, endW = 92.0f, gap = 14.0f, addCardW = 132.0f;
+        static constexpr int preferredHeight = 330;
+        static constexpr float cardH = 320.0f;
+        static constexpr float minCardW = 104.0f, maxCardW = 280.0f, endW = 26.0f, gap = 0.0f, addCardW = 72.0f, sendGap = 16.0f;
+        static constexpr float nameH = 44.0f, iconH = 78.0f, knobCellH = 82.0f, footerH = 34.0f;
+
+        // The two knobs of a column (nullptr: none, e.g. VOCAL CHECK) and their names
+        static std::pair<const char*, const char*> columnParams (dsp::ModuleId id);
+        static std::pair<juce::String, juce::String> columnLabels (dsp::ModuleId id);
+        // Knob `which` (0 = upper, 1 = lower) of a column, nullptr when the column has none
+        Knob* getColumnKnob (dsp::ModuleId id, int instance, int which);
 
         explicit ChainView (VelvoxAudioProcessor& processor);
 
@@ -82,6 +89,8 @@ namespace velvox::ui
         juce::Rectangle<float> getModeBounds (dsp::ModuleId id, int instance = 0);     // send / insert switch (delay, reverb)
         juce::Rectangle<float> getRemoveBounds (dsp::ModuleId id, int instance = 0);   // hover button
         juce::Rectangle<float> getDuplicateBounds (dsp::ModuleId id, int instance = 0);
+        juce::Rectangle<float> getMoveLeftBounds (dsp::ModuleId id, int instance = 0);   // footer arrows
+        juce::Rectangle<float> getMoveRightBounds (dsp::ModuleId id, int instance = 0);
         juce::Rectangle<float> getAddCardBounds();
         juce::Rectangle<float> getLaneBounds() const { return laneArea(); }
         juce::Rectangle<float> getRowViewport() const { return rowArea(); }
@@ -126,6 +135,10 @@ namespace velvox::ui
         juce::Rectangle<float> modeBounds (const Tile& t) const;
         juce::Rectangle<float> removeBounds (const Tile& t) const;
         juce::Rectangle<float> duplicateBounds (const Tile& t) const;
+        juce::Rectangle<float> footerButton (const Tile& t, int slot) const;   // 0 <, 1 duplicate, 2 remove, 3 >
+        void moveBy (dsp::ModuleId id, int instance, int steps);
+        void updateColumnKnobs();
+        void drawIcon (juce::Graphics&, dsp::ModuleId id, juce::Rectangle<float> area, float alpha) const;
         juce::Rectangle<float> addCardArea() const;
         juce::Rectangle<float> laneArea() const;
         juce::Rectangle<float> rowArea() const;
@@ -187,5 +200,11 @@ namespace velvox::ui
         juce::VBlankAttachment vblank { this, [this] { tick(); } };
         juce::StringArray autoKeys;
         bool globalBypass = false;
+
+        // Live knobs of the columns (selection code -> upper, lower) and recoloured icons
+        std::map<int, std::array<std::unique_ptr<Knob>, 2>> columnKnobs;
+        mutable std::map<int, std::unique_ptr<juce::Drawable>> iconCache;
+        int numSends = 0;
+        juce::Point<float> lastMouse;   // hover highlight of the footer buttons
     };
 }

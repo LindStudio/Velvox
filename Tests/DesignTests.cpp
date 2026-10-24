@@ -6,6 +6,7 @@
 #include "UI/Theme.h"
 #include "PluginEditor.h"
 #include "UI/Segments.h"
+#include "UI/ChainView.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -125,6 +126,90 @@ public:
             // The AUTO MIX view owns the analyse button
             top.selectView (ui::TopBar::View::autoMix);
             expect (ed.getAutoMixView().isVisible() && ed.getAutoMixView().getAnalyseButton().isVisible(), "analyse in the AUTO MIX view");
+        }
+
+        beginTest ("Design: a column carries its two knobs on the instance's parameters");
+        {
+            Harness h;
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 1360, ui::ChainView::preferredHeight);
+            expectEquals (ui::ChainView::preferredHeight, 330, "chain height 330");
+
+            const auto ids = [&] (ModuleId id, int instance)
+            {
+                juce::StringArray s;
+                for (int k = 0; k < 2; ++k)
+                    if (auto* knob = view.getColumnKnob (id, instance, k))
+                        s.add (knob->getParamId());
+                return s;
+            };
+            expect (ids (ModuleId::eq, 0) == juce::StringArray { "hpfFreq", "highGain" }, "EQ: low cut, highs");
+            view.insertModule (ModuleId::eq, 1);
+            view.refresh();
+            expect (ids (ModuleId::eq, 1) == juce::StringArray { "hpfFreq_2", "highGain_2" }, "EQ 2 on its own parameters");
+            expect (ids (ModuleId::reverb, 0) == juce::StringArray { "reverbDecay", "reverbMix" }, "REVERB: decay, mix");
+
+            const auto pairFor = ui::ChainView::columnParams (ModuleId::ride);
+            expect (juce::String (pairFor.first) == "rideTarget" && juce::String (pairFor.second) == "rideResponse", "LEVEL RIDE: target, speed");
+            expect (ui::ChainView::columnParams (ModuleId::check).first == nullptr, "VOCAL CHECK has no knobs");
+            for (int i = 0; i < dsp::numModules; ++i)
+            {
+                const auto p = ui::ChainView::columnParams ((ModuleId) i);
+                for (auto* id : { p.first, p.second })
+                    if (id != nullptr)
+                        expect (h.proc.getState().getParameter (id) != nullptr, juce::String ("column knob exists: ") + id);
+            }
+
+            // Knob sits inside its column, under the icon
+            const auto col = view.getTileBounds (ModuleId::eq, 0);
+            if (auto* k = view.getColumnKnob (ModuleId::eq, 0, 0))
+            {
+                expect (col.contains (k->getBounds().toFloat()), "knob inside the column");
+                expect (k->getY() > col.getY() + 100.0f, "below name and icon");
+            }
+        }
+
+        beginTest ("Design: column footer arrows reorder, bypassed column dims but stays switchable");
+        {
+            Harness h;
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 1360, ui::ChainView::preferredHeight);
+            view.refresh();
+            const auto r0 = h.proc.getRouting();
+            const int eqPos = r0.indexOf (ModuleId::eq, 0);
+            view.mouseDown (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), view.getMoveRightBounds (ModuleId::eq, 0).getCentre(),
+                                              {}, 1.0f, 0, 0, 0, 0, &view, &view, juce::Time::getCurrentTime(),
+                                              view.getMoveRightBounds (ModuleId::eq, 0).getCentre(), juce::Time::getCurrentTime(), 1, false));
+            expectEquals (h.proc.getRouting().indexOf (ModuleId::eq, 0), eqPos + 1, "right arrow moves EQ one step later");
+            expect (view.undo());
+            expectEquals (h.proc.getRouting().indexOf (ModuleId::eq, 0), eqPos, "undo restores the order");
+            expect (! view.getMoveLeftBounds (ModuleId::eq, 0).isEmpty(), "left arrow exists");
+
+            // Bypass: column content at 30 %, power button still works
+            h.set (pid::compOn, 0.0f);
+            view.refresh();
+            if (auto* k = view.getColumnKnob (ModuleId::comp, 0, 0))
+                expectWithinAbsoluteError (k->getAlpha(), 0.3f, 0.01f, "bypassed column dimmed");
+            const auto power = view.getPowerBounds (ModuleId::comp, 0).getCentre();
+            view.mouseDown (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), power, {}, 1.0f, 0, 0, 0, 0, &view, &view,
+                                              juce::Time::getCurrentTime(), power, juce::Time::getCurrentTime(), 1, false));
+            expect (h.proc.getState().getRawParameterValue (pid::compOn)->load() > 0.5f, "power turns it back on");
+            view.refresh();
+            if (auto* k = view.getColumnKnob (ModuleId::comp, 0, 0))
+                expectWithinAbsoluteError (k->getAlpha(), 1.0f, 0.01f, "full opacity again");
+        }
+
+        beginTest ("Design: 14 columns scroll instead of shrinking below 104 px");
+        {
+            Harness h;
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 1360, ui::ChainView::preferredHeight);
+            for (auto id : { ModuleId::ride, ModuleId::smash, ModuleId::smooth, ModuleId::sat, ModuleId::doubler, ModuleId::choir,
+                             ModuleId::chop, ModuleId::pulse, ModuleId::check, ModuleId::pitch, ModuleId::eq, ModuleId::comp })
+                view.insertModule (id);
+            for (const auto& s : h.proc.getRouting())
+                expect (view.getTileBounds (s.id, s.instance).getWidth() >= 104.0f - 0.01f, "column width >= 104");
+            expect (view.getMaxScroll() > 0.0f, "the chain scrolls");
         }
     }
 };
