@@ -500,15 +500,16 @@ public:
             expectEquals (parsed.size(), (int) getParameterSpecs().size());
         }
 
-        beginTest ("All parameters are automatable and have unique IDs");
+        beginTest ("Parameters are automatable (except internal / hidden 0.5 EQ IDs) and have unique IDs");
         {
             Harness h;
             juce::StringArray ids;
             for (auto* p : h.proc.getParameters())
             {
-                expect (p->isAutomatable());
                 if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
                 {
+                    const auto* spec = findParameterSpec (rp->getParameterID());
+                    expect (spec != nullptr && p->isAutomatable() == spec->automatable, rp->getParameterID());
                     expect (! ids.contains (rp->getParameterID()), "duplicate " + rp->getParameterID());
                     ids.add (rp->getParameterID());
                 }

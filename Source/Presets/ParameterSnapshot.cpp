@@ -3,6 +3,7 @@
 #include "../DSP/Routing.h"
 #include "../StateKeys.h"
 #include "../Parameters/RoutingMigration.h"
+#include "../Parameters/EqBands.h"
 
 namespace velvox
 {
@@ -24,6 +25,34 @@ namespace velvox
             return id == pid::bypass || id == pid::inputGain
                 || id == pid::levelMatchMode || id == pid::levelMatchWindow || id == pid::levelMatchRange;
         }
+
+        bool containsFixedEqBands (const std::map<juce::String, float>& values)
+        {
+            for (auto& [id, v] : values)
+                for (auto* base : { "hpf", "low", "mid", "high", "lpf" })
+                    if (id.startsWith (base))
+                        return true;
+            return false;
+        }
+
+        // 0.1-0.5 snapshots (presets, A/B slots) have no EQ bands: their fixed bands become bands 1-5
+        // with the 0.5 response, exactly like a loaded project. Missing values are the defaults (a full
+        // snapshot) or the current values (a partial one).
+        std::map<juce::String, float> withEqBands (const std::map<juce::String, float>& values, juce::AudioProcessorValueTreeState& apvts,
+                                                   bool resetMissingToDefault)
+        {
+            if (eqbands::containsBandValues (values) || ! (resetMissingToDefault || containsFixedEqBands (values)))
+                return values;
+
+            auto effective = values;
+            std::map<juce::String, float> fallback;
+            if (! resetMissingToDefault)
+                for (auto* p : apvts.processor.getParameters())
+                    if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+                        fallback[rp->getParameterID()] = rp->convertFrom0to1 (rp->getValue());
+            eqbands::migrateState (eqbands::accessFor (effective, resetMissingToDefault ? nullptr : &fallback), true);
+            return effective;
+        }
     }
 
     ParameterSnapshot ParameterSnapshot::capture (juce::AudioProcessorValueTreeState& apvts, const juce::String& name)
@@ -42,6 +71,9 @@ namespace velvox
 
     void ParameterSnapshot::applyTo (juce::AudioProcessorValueTreeState& apvts, bool resetMissingToDefault) const
     {
+        eqbands::ScopedBridgeSuspend noEqBridge;   // the snapshot sets the bands itself
+        const auto values = withEqBands (this->values, apvts, resetMissingToDefault);
+
         for (auto* p : apvts.processor.getParameters())
         {
             auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p);
@@ -74,6 +106,8 @@ namespace velvox
 
     bool ParameterSnapshot::differsFrom (juce::AudioProcessorValueTreeState& apvts) const
     {
+        const auto values = withEqBands (this->values, apvts, true);
+
         for (auto* p : apvts.processor.getParameters())
         {
             auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p);
