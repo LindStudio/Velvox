@@ -33,3 +33,7 @@ Task 4: Ruling: synthetic unit tests use +12 dB mud / +20 dB Q12 resonance (the 
 Task 4: Ruling: material factor reduced to 0.9..1.0 (4..10 s voice) — 10-20 s takes were pushed under the threshold — cost: slightly more findings on short takes.
 Task 4: Ruling: noise shows at SNR <= 30 dB (profiler threshold) — cost: none.
 Merge: feature/automix (mixlaw track, c46dba8) merged into overhaul/check; conflict only in CMakeLists test list.
+Task 5: complete (commit "fix planner", tests: Headliner Vocal Check 0.6 421/421; RED was the missing CheckFixPlanner.h)
+Task 5: Ruling: EqBandResolver is an abstract class with pure find()/write() (no side effects) instead of a direct findOrCreateEqBand call — keeps "Alles anwenden" one merged transaction; the coordinator's adapter maps write() onto the eq track's band search/creation — cost if wrong: a small adapter.
+Task 5: Ruling: an existing low cut before VOCAL CHECK that still lets rumble through is raised by a third (x1.26) — cost if wrong: a slightly higher cut than needed.
+Task 5: Ruling: changes to modules that are off and not switched on by the fix are skipped (overcompressed, noise, space, mono partly) — an empty plan means "no Anwenden" — cost: none.
