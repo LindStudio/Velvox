@@ -132,8 +132,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
       chainView (p),
       mixView (p),
       analysis (p.getAutoMix()),
-      inputGain (p.getState(), pid::inputGain, "Gain"),
-      outputGain (p.getState(), pid::outputGain, "Gain"),
+      vocalControl (p, live),
       safetyClip (p.getState(), pid::safetyClip, "Clip guard")
 {
     setLookAndFeel (&lookAndFeel);
@@ -142,7 +141,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     canvas.setBounds (0, 0, baseWidth, baseHeight);
 
     for (auto* c : std::initializer_list<juce::Component*> { &topBar, &chainView, &mixView, &inputMeter, &outputMeter,
-                                                              &inputGain, &outputGain, &safetyClip, &monoCheck, &correlation })
+                                                              &vocalControl, &safetyClip, &monoCheck, &correlation })
         canvas.addAndMakeVisible (c);
     canvas.addChildComponent (analysis);
     canvas.addChildComponent (dialog);
@@ -161,8 +160,6 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     monoCheck.setTooltip ("Listen in mono (not saved with the project)");
     monoCheck.onClick = [this] { proc.setMonoMonitor (monoCheck.getToggleState()); };
     monoCheck.setToggleState (proc.isMonoMonitor(), juce::dontSendNotification);
-    inputGain.setMaxDialSize (dialsize::rail);
-    outputGain.setMaxDialSize (dialsize::rail);
 
     topBar.onViewChange = [this] (TopBar::View v) { setView (v); };
     topBar.onHelp = [this]
@@ -207,20 +204,18 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     topBar.setBounds (0, 0, baseWidth, topBarH);
     chainView.setBounds (chainArea());
 
-    // IN / OUT meters next to the module panel, the gains, clip guard, mono and correlation below
-    auto meters = meterArea().reduced (10, 12);
+    // IN / OUT meters next to the module panel; clip guard, mono and correlation below.
+    // The levels themselves: input gain in the OUTPUT panel, output = VOCAL LEVEL.
+    auto meters = meterArea().reduced (10, 14);
     correlation.setBounds (meters.removeFromBottom (24));
-    meters.removeFromBottom (6);
+    meters.removeFromBottom (8);
     auto switches = meters.removeFromBottom (26);
     safetyClip.setBounds (switches.removeFromLeft (switches.getWidth() / 2 + 14));
     monoCheck.setBounds (switches.reduced (4, 0));
-    meters.removeFromBottom (6);
-    auto gains = meters.removeFromBottom (84);
-    inputGain.setBounds (gains.removeFromLeft (gains.getWidth() / 2));
-    outputGain.setBounds (gains);
-    meters.removeFromBottom (8);
+    meters.removeFromBottom (12);
     inputMeter.setBounds (meters.removeFromLeft (meters.getWidth() / 2).reduced (4, 0));
     outputMeter.setBounds (meters.reduced (4, 0));
+    vocalControl.setBounds (controlArea());
 
     for (auto* overlay : std::initializer_list<juce::Component*> { &analysis, &dialog, &help, &tutorial, &browser })
         overlay->setBounds (0, 0, baseWidth, baseHeight);
@@ -319,7 +314,7 @@ void VelvoxAudioProcessorEditor::setView (TopBar::View v)
                                        v == TopBar::View::chain ? "pro" : (v == TopBar::View::vocalCheck ? "check" : "beginner"), nullptr);
 
     // CHAIN: module columns, module panel, meters. AUTO MIX and VOCAL CHECK use the whole area.
-    for (auto* c : std::initializer_list<juce::Component*> { &chainView, &inputMeter, &outputMeter, &inputGain, &outputGain,
+    for (auto* c : std::initializer_list<juce::Component*> { &chainView, &inputMeter, &outputMeter,
                                                               &safetyClip, &monoCheck, &correlation })
         c->setVisible (proMode);
     canvas.showMeterPanel = proMode;
@@ -547,6 +542,7 @@ void VelvoxAudioProcessorEditor::timerCallback()
 
     topBar.refresh();
     chainView.refresh();
+    vocalControl.refresh();
 
     if (detail != nullptr)
         detail->refresh();

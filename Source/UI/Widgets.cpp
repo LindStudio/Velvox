@@ -461,22 +461,20 @@ namespace velvox::ui
         constexpr float minDb = -60.0f, maxDb = 6.0f;
         auto r = getLocalBounds().toFloat();
 
-        // LUFS read-out on a recessed plate
-        auto readout = r.removeFromBottom (58.0f);
-        {
-            const auto plate = readout.reduced (2.0f, 2.0f);
-            g.setColour (juce::Colours::black.withAlpha (0.28f));
-            g.fillRoundedRectangle (plate, radius::control);
-            g.setColour (colours::lineSoft);
-            g.drawRoundedRectangle (plate.reduced (0.5f), radius::control, 1.0f);
-        }
-        readout.removeFromTop (6.0f);
+        // Design: caption on top, LUFS in Roboto Mono below the bars
+        g.setColour (colours::textFaint);
+        g.setFont (semiBold (10.0f, 0.15f));
+        g.drawText (scaleLeft ? "INPUT" : "OUTPUT", r.removeFromTop (16.0f), juce::Justification::centred, false);
+        r.removeFromTop (6.0f);
+        auto readout = r.removeFromBottom (40.0f);
         g.setColour (colours::text);
-        g.setFont (display (30.0f));
+        g.setFont (monoFont (17.0f));
         g.drawText (loudness <= -99.0f ? juce::String ("-") : juce::String (loudness, 1),
-                    readout.removeFromTop (32.0f), juce::Justification::centred, false);
-        drawCaption (g, "LUFS", readout, juce::Justification::centredTop, colours::textDim, 9.5f);
-        r.removeFromBottom (12.0f);
+                    readout.removeFromTop (22.0f), juce::Justification::centred, false);
+        g.setColour (colours::knobName);
+        g.setFont (semiBold (9.0f, 0.1f));
+        g.drawText ("LUFS", readout.removeFromTop (14.0f), juce::Justification::centred, false);
+        r.removeFromBottom (8.0f);
 
         // Clip lamp
         auto lampRow = r.removeFromTop (12.0f);
@@ -487,17 +485,17 @@ namespace velvox::ui
         g.setColour (clipLatched ? colours::warning : colours::accent.withAlpha (0.12f));
         g.fillEllipse (lamp);
 
-        // Scale on one side, two bars next to it, both centred as one block
-        constexpr float scaleW = 30.0f, barsW = 26.0f, scaleGap = 6.0f;
+        // Scale on one side, two 5 px bars next to it, both centred as one block
+        constexpr float scaleW = 26.0f, barsW = 14.0f, scaleGap = 6.0f;
         auto block = r.withSizeKeepingCentre (std::min (r.getWidth(), scaleW + scaleGap + barsW), r.getHeight());
         auto scale = scaleLeft ? block.removeFromLeft (scaleW) : block.removeFromRight (scaleW);
         auto bars = scaleLeft ? block.removeFromRight (barsW) : block.removeFromLeft (barsW);
 
-        g.setFont (medium (11.5f));
+        g.setFont (monoFont (9.5f));
         for (float db : { 6.0f, 0.0f, -6.0f, -12.0f, -18.0f, -24.0f, -36.0f, -48.0f })
         {
             const float y = dbToY (db, bars, minDb, maxDb);
-            g.setColour (db == 0.0f ? colours::textDim : colours::textFaint);
+            g.setColour (db == 0.0f ? colours::textMuted : colours::textFaint);
             g.drawText (db > 0.0f ? "+" + juce::String ((int) db) : juce::String ((int) std::abs (db)), scale.withY (y - 7.0f).withHeight (14.0f),
                         scaleLeft ? juce::Justification::centredRight : juce::Justification::centredLeft, false);
             g.setColour (colours::accent.withAlpha (db == 0.0f ? 0.22f : 0.08f));
@@ -505,23 +503,23 @@ namespace velvox::ui
                                   : juce::Rectangle<float> (bars.getRight() + 2.0f, y - 0.5f, 3.0f, 1.0f));
         }
 
+        // Design: 2 x 5 px bars, gradient cyan -> violet -> pink (red only above 0 dBFS)
         const float barGap = 4.0f;
-        const float barW = (bars.getWidth() - barGap) * 0.5f;
+        const float barW = 5.0f;
         for (int ch = 0; ch < 2; ++ch)
         {
             auto bar = juce::Rectangle<float> (bars.getX() + (float) ch * (barW + barGap), bars.getY(), barW, bars.getHeight());
-            g.setColour (juce::Colours::black.withAlpha (0.5f));
+            g.setColour (colours::control);
             g.fillRoundedRectangle (bar, barW * 0.5f);
 
             const float db = juce::Decibels::gainToDecibels (level[(size_t) ch], -100.0f);
             const auto fill = bar.withTop (dbToY (db, bar, minDb, maxDb));
             if (fill.getHeight() > 0.5f)
             {
-                // Blue at the bottom, teal through the body, white near full scale, red above
-                juce::ColourGradient grad (colours::blue.withAlpha (0.55f), 0.0f, bar.getBottom(), colours::warning, 0.0f, bar.getY(), false);
-                grad.addColour (juce::jmap (-30.0, (double) minDb, (double) maxDb, 0.0, 1.0), colours::teal);
-                grad.addColour (juce::jmap (-3.0, (double) minDb, (double) maxDb, 0.0, 1.0), colours::teal.interpolatedWith (juce::Colours::white, 0.6f));
-                grad.addColour (juce::jmap (0.0, (double) minDb, (double) maxDb, 0.0, 1.0), juce::Colours::white);
+                juce::ColourGradient grad (juce::Colour (0xff00d1ff), 0.0f, bar.getBottom(), colours::warning, 0.0f, bar.getY(), false);
+                grad.addColour (juce::jmap (-24.0, (double) minDb, (double) maxDb, 0.0, 1.0), juce::Colour (0xff8b5cf6));
+                grad.addColour (juce::jmap (-1.0, (double) minDb, (double) maxDb, 0.0, 1.0), juce::Colour (0xfff472b6));
+                grad.addColour (juce::jmap (0.0, (double) minDb, (double) maxDb, 0.0, 1.0), juce::Colour (0xfff472b6));
                 g.setGradientFill (grad);
                 g.fillRoundedRectangle (fill, barW * 0.5f);
             }

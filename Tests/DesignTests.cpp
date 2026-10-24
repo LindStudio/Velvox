@@ -7,6 +7,7 @@
 #include "PluginEditor.h"
 #include "UI/Segments.h"
 #include "UI/ChainView.h"
+#include "UI/VocalControlBar.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -300,6 +301,29 @@ public:
                 expect (found[(int) ModuleId::delay].knobs.contains (pid), juce::String ("DELAY keeps ") + pid);
             for (auto* pid : { "reverbEarly", "reverbDiffusion", "reverbBass", "reverbHighCut", "reverbDuckAmount" })
                 expect (found[(int) ModuleId::reverb].knobs.contains (pid), juce::String ("REVERB keeps ") + pid);
+        }
+
+        beginTest ("Design: Vocal Control maps PUNCH and VOCAL LEVEL, in the macro colours");
+        {
+            Harness h;
+            ui::LiveData live;
+            ui::VocalControlBar bar (h.proc, live);
+            bar.setBounds (0, 0, 1360, 158);
+            BoundControls c;
+            collect (bar, c);
+            expect (c.knobs == juce::StringArray { "macroPresence", "macroSpace", "macroWidth", "macroAggression", "macroWarmth", "outputGain" },
+                    "PRESENCE SPACE WIDTH PUNCH WARMTH VOCAL LEVEL: " + c.knobs.joinIntoString (","));
+            const juce::uint32 expected[] { 0xff00d1ff, 0xff3b82f6, 0xff6366ff, 0xff8b5cf6, 0xffd946ef, 0xfff472b6 };
+            for (size_t i = 0; i < c.knobAccents.size() && i < 6; ++i)
+                expect (c.knobAccents[i] == juce::Colour (expected[i]), "macro colour " + juce::String ((int) i));
+            expect (bar.getGainReductionArea().getWidth() > 0, "GR read-out");
+
+            // The editor shows the bar in the CHAIN view under the module panel
+            h.proc.getState().state.setProperty ("uiMode", "pro", nullptr);
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
+            expect (ed.getVocalControl().isVisible(), "bar visible");
+            expect (ed.getVocalControl().getY() > ed.getDetail()->getBottom(), "below the module panel");
         }
 
         beginTest ("Design: an old project shows the same values in the new panels");

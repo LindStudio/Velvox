@@ -12,6 +12,7 @@
 #include "UI/HelpOverlay.h"
 #include "UI/TutorialOverlay.h"
 #include "UI/ModuleBrowser.h"
+#include "UI/VocalControlBar.h"
 
 // The whole UI is laid out on a fixed design canvas (ui::baseWidth x
 // ui::baseHeight) that is scaled uniformly to the window size, so every
@@ -48,6 +49,7 @@ public:
     velvox::ui::ModuleBrowser& getBrowser() noexcept { return browser; }
     velvox::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return analysis; }
     velvox::ui::DetailPanel* getDetail() noexcept { return detail.get(); }
+    velvox::ui::VocalControlBar& getVocalControl() noexcept { return vocalControl; }
     bool isProMode() const noexcept { return proMode; }   // the CHAIN view (module panel) is open
     void selectModule (int moduleIdOrOutput) { select (moduleIdOrOutput); }
 
@@ -102,7 +104,7 @@ private:
     std::unique_ptr<velvox::ui::DetailPanel> detail;
 
     velvox::ui::LevelMeter inputMeter, outputMeter;
-    velvox::ui::Knob inputGain, outputGain;
+    velvox::ui::VocalControlBar vocalControl;
     velvox::ui::Toggle safetyClip;
     juce::TextButton monoCheck { "Mono" };
     velvox::ui::CorrelationView correlation;

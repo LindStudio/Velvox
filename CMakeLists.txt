@@ -65,6 +65,7 @@ set(VELVOX_SOURCES
     Source/UI/VelvoxLookAndFeel.cpp
     Source/UI/Widgets.cpp
     Source/UI/Segments.cpp
+    Source/UI/VocalControlBar.cpp
     Source/UI/Spectrum.cpp
     Source/UI/ModuleViews.cpp
     Source/UI/ChainView.cpp
