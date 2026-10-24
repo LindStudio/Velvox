@@ -265,7 +265,8 @@ namespace velvox::ui
         g.drawText (shownTitle, nameLine.removeFromLeft (titleW), juce::Justification::centredLeft, false);
         g.setColour (on ? colours::textFaint : colours::textFaint.withAlpha (0.6f));
         g.setFont (semiBold (10.0f, 0.12f));
-        g.drawText (on ? slotInfo : slotInfo + juce::String::fromUTF8 (" \xc2\xb7 ") + "OFF", nameLine, juce::Justification::centredLeft, false);
+        const auto stateText = on ? slotInfo : (slotInfo.isEmpty() ? juce::String ("OFF") : slotInfo + juce::String::fromUTF8 (" \xc2\xb7 ") + "OFF");
+        g.drawText (stateText, nameLine, juce::Justification::centredLeft, false);
         g.setColour (colours::textMuted);
         g.setFont (font (11.0f / 0.93f));
         g.drawFittedText (subtitle, header, juce::Justification::topLeft, 1, 0.9f);
@@ -1310,7 +1311,7 @@ namespace velvox::ui
                   findings (p)
             {
                 visualHeight = 150;
-                mode = &choice (pid::checkMode, "Mode");
+                mode = &segments (pid::checkMode);
                 addAndMakeVisible (findings);
                 addAndMakeVisible (startStop);
                 addAndMakeVisible (resetButton);
@@ -1357,10 +1358,8 @@ namespace velvox::ui
             {
                 auto controls = r.removeFromLeft (236);
                 r.removeFromLeft (16);
-                section ("Analysis", controls);
-                auto c = inner (controls).reduced (6, 0);
-                mode->setBounds (c.removeFromTop (66));
-                c.removeFromTop (10);
+                auto c = controls;
+                placeGroup ("Analysis", *mode, c);
                 auto buttons = c.removeFromTop (34);
                 startStop.setBounds (buttons.removeFromLeft (buttons.getWidth() / 2 - 4));
                 buttons.removeFromLeft (8);
@@ -1370,7 +1369,7 @@ namespace velvox::ui
                 findings.setBounds (r);
             }
 
-            Choice* mode;
+            Segments* mode;
             FindingsList findings;
             juce::TextButton startStop { "Start" }, resetButton { "Reset" };
             juce::Label statusLabel;

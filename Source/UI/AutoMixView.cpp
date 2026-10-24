@@ -8,7 +8,17 @@ namespace velvox::ui
         juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
         juce::String num (float v, int decimals = 1) { return juce::String (v, decimals).replaceCharacter ('.', ','); }
 
-        constexpr int headerH = 56, gapV = 14, statusW = 360;
+        constexpr int headerH = 56, gapV = 12, statusW = 380, tuneH = 120;
+
+        // Design panel: #07080D, border #161925, radius 12
+        void drawPanel (juce::Graphics& g, juce::Rectangle<int> area)
+        {
+            const auto r = area.toFloat();
+            g.setColour (colours::panel);
+            g.fillRoundedRectangle (r, 12.0f);
+            g.setColour (colours::border);
+            g.drawRoundedRectangle (r.reduced (0.5f), 12.0f, 1.0f);
+        }
 
         int moduleIdForKey (const juce::String& key)
         {
@@ -195,8 +205,12 @@ namespace velvox::ui
         analyse.setTooltip (de ("Headliner erfasst einen Abschnitt deiner Vocal während der Wiedergabe und erstellt daraus den Mix. Der bisherige Zustand bleibt wiederherstellbar."));
         analyse.onClick = [this] { if (onAnalyse) onAnalyse(); };
 
-        previous.setConnectedEdges (juce::Button::ConnectedOnRight);
-        mix.setConnectedEdges (juce::Button::ConnectedOnLeft);
+        // Compare: segments of the design (blue = the AUTO MIX tab colour)
+        for (auto* b : { &previous, &mix, &original })
+        {
+            b->getProperties().set ("segment", true);
+            b->setColour (juce::TextButton::buttonOnColourId, colours::blue);
+        }
         previous.setTooltip (de ("Die Einstellungen vor dem Auto-Mix - echter Parameterwechsel, hörbar in der DAW"));
         mix.setTooltip (de ("Der automatische Mix (inklusive deiner Änderungen daran)"));
         previous.onClick = [this] { autoMix.showPrevious (true); updateButtons(); };
@@ -222,17 +236,13 @@ namespace velvox::ui
         for (auto* b : { &analyse, &previous, &mix, &original, &restore })
             addAndMakeVisible (b);
 
-        struct Def { const char* id; const char* name; };
-        const Def defs[6] { { pid::macroPresence, "Presence" }, { pid::macroWarmth, "Warmth" }, { pid::macroAggression, "Punch" },
-                            { pid::macroWidth, "Width" }, { pid::macroSpace, "Space" }, { pid::macroDensity, "Density" } };
-        for (size_t i = 0; i < macros.size(); ++i)
-        {
-            macros[i] = std::make_unique<Knob> (p.getState(), defs[i].id, defs[i].name);
-            macros[i]->setProminence (Knob::Prominence::primary);
-            macros[i]->setMaxDialSize (96);
-            addAndMakeVisible (*macros[i]);
-        }
-        levelMatch = std::make_unique<Choice> (p.getState(), pid::levelMatchMode, "Fairer Vergleich");
+        density = std::make_unique<Knob> (p.getState(), pid::macroDensity, "Density", colours::blue);
+        density->setDialSize (dialsize::macro);
+        addAndMakeVisible (*density);
+        juce::StringArray matchLabels { "Off", "Bypass match", "Auto gain" };
+        if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p.getState().getParameter (pid::levelMatchMode)))
+            matchLabels = c->choices;
+        levelMatch = std::make_unique<Segments> (p.getState(), pid::levelMatchMode, matchLabels, colours::blue);
         addAndMakeVisible (*levelMatch);
 
         autoMix.addChangeListener (this);
@@ -279,7 +289,7 @@ namespace velvox::ui
     void AutoMixView::updateButtons()
     {
         const bool has = autoMix.hasMix();
-        analyse.setButtonText (has ? "Neu analysieren" : "Audio analysieren");
+        analyse.setButtonText (has ? "Neu analysieren" : "Vocal analysieren");
 
         const bool canCompare = has && autoMix.hasPrevious();
         previous.setVisible (canCompare);
@@ -328,10 +338,10 @@ namespace velvox::ui
 
         // ---- Header
         {
-            auto h = headerArea.toFloat();
-            g.setColour (colours::text);
-            g.setFont (display (typesize::hero - 2.0f, true).withExtraKerningFactor (0.04f));
-            g.drawText ("AUTO MIX", h.removeFromLeft (150.0f), juce::Justification::centredLeft, false);
+            auto h = headerArea.toFloat().withTrimmedLeft (4.0f);
+            g.setColour (colours::textStrong);
+            g.setFont (semiBold (15.0f, 2.5f / 15.0f));
+            g.drawText ("AUTO MIX", h.removeFromLeft (124.0f), juce::Justification::centredLeft, false);
 
             // Status chip
             const juce::String chipText = r.valid ? (autoMix.isShowingPrevious() ? de ("Vorher-Zustand aktiv") : de ("Analyse abgeschlossen"))
@@ -349,10 +359,17 @@ namespace velvox::ui
             g.setColour (colours::text);
             g.setFont (chipFont);
             g.drawText (chipText, chip.withTrimmedLeft (24.0f), juce::Justification::centredLeft, false);
+
+            // Segment group behind the compare buttons
+            auto group = original.getBounds();
+            if (previous.isVisible())
+                group = group.getUnion (previous.getBounds()).getUnion (mix.getBounds());
+            g.setColour (colours::control);
+            g.fillRoundedRectangle (group.toFloat().expanded (3.0f), 7.0f);
         }
 
         // ---- A: vocal status
-        drawGlassPanel (g, statusArea.toFloat(), radius::panel, colours::teal, 0.06f);
+        drawPanel (g, statusArea);
         {
             auto a = statusArea.reduced (20, 16);
             g.setColour (colours::text);
@@ -424,7 +441,7 @@ namespace velvox::ui
         }
 
         // ---- B: automatic mix
-        drawGlassPanel (g, stepsArea.toFloat(), radius::panel, colours::violet, 0.06f);
+        drawPanel (g, stepsArea);
         {
             auto a = stepsArea.reduced (20, 16);
             auto head = a.removeFromTop (26);
@@ -445,24 +462,27 @@ namespace velvox::ui
                 g.drawText ("Let's mix your vocal.", a.removeFromTop (34), juce::Justification::centred, false);
                 g.setColour (colours::textDim);
                 g.setFont (font (14.5f));
-                g.drawFittedText (de ("Starte die Wiedergabe deiner Vocal in der DAW und klicke auf „Audio analysieren“. "
+                g.drawFittedText (de ("Starte die Wiedergabe deiner Vocal in der DAW und klicke auf „Vocal analysieren“. "
                                       "Headliner analysiert einen begrenzten Abschnitt, wählt die passenden Module und stellt sie ein - "
                                       "danach bleibt alles frei veränderbar."),
                                   a.removeFromTop (70).reduced (30, 0), juce::Justification::centredTop, 3);
             }
         }
 
-        // ---- D: fine-tuning
-        drawGlassPanel (g, macroArea.toFloat(), radius::panel, colours::blue, 0.05f);
+        // ---- D: fine-tuning (density + fair compare; the other macros are VOCAL CONTROL)
+        drawPanel (g, macroArea);
         {
-            auto head = macroArea.reduced (20, 14).removeFromTop (24);
-            g.setColour (colours::text);
-            g.setFont (caps (16.0f));
-            g.drawText ("FEINSCHLIFF", head, juce::Justification::centredLeft, false);
+            auto a = macroArea.reduced (20, 14);
+            g.setColour (colours::textStrong);
+            g.setFont (semiBold (13.0f, 0.18f));
+            g.drawText ("FEINSCHLIFF", a.removeFromTop (18), juce::Justification::centredLeft, false);
+            g.setColour (colours::textMuted);
+            g.setFont (font (11.0f / 0.93f));
+            g.drawText (de ("Presence, Space, Width, Punch, Warmth und Vocal Level: unten in Vocal Control"),
+                        a.removeFromTop (18), juce::Justification::centredLeft, false);
             g.setColour (colours::textFaint);
-            g.setFont (font (12.5f));
-            g.drawText (de ("Makros wirken auf die echten Modulparameter - zusätzlich zum Auto-Mix"),
-                        head.withTrimmedLeft (110), juce::Justification::centredLeft, false);
+            g.setFont (semiBold (10.0f, 0.15f));
+            g.drawText ("FAIRER VERGLEICH", levelMatch->getBounds().translated (0, -20).withHeight (16), juce::Justification::centredLeft, false);
         }
     }
 
@@ -484,7 +504,7 @@ namespace velvox::ui
         }
 
         r.removeFromTop (8);
-        macroArea = r.removeFromBottom (222);
+        macroArea = r.removeFromBottom (tuneH);
         r.removeFromBottom (gapV);
         statusArea = r.removeFromLeft (statusW);
         r.removeFromLeft (gapV);
@@ -499,11 +519,9 @@ namespace velvox::ui
         stepView.setBounds (list);
         steps->setSize (list.getWidth() - 8, steps->heightFor());
 
-        auto m = macroArea.reduced (16, 12).withTrimmedTop (30);
-        auto choice = m.removeFromRight (180);
-        levelMatch->setBounds (choice.withSizeKeepingCentre (170, 64));
-        const int w = m.getWidth() / (int) macros.size();
-        for (size_t i = 0; i < macros.size(); ++i)
-            macros[i]->setBounds (m.getX() + (int) i * w, m.getY(), w, m.getHeight());
+        auto m = macroArea.reduced (20, 10);
+        density->setBounds (m.removeFromRight (110).withSizeKeepingCentre (110, 96));
+        m.removeFromRight (24);
+        levelMatch->setBounds (m.removeFromRight (420).withSizeKeepingCentre (420, 30).translated (0, 12));
     }
 }

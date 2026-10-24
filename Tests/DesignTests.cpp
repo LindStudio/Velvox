@@ -326,6 +326,27 @@ public:
             expect (ed.getVocalControl().getY() > ed.getDetail()->getBottom(), "below the module panel");
         }
 
+        beginTest ("Design: AUTO MIX and VOCAL CHECK views in the design style");
+        {
+            Harness h;
+            h.proc.getAutoMix().dismissPrompt();
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
+            ed.getTopBar().selectView (ui::TopBar::View::autoMix);
+            auto& view = ed.getAutoMixView();
+
+            BoundControls c;
+            collect (view, c);
+            expect (c.knobs == juce::StringArray { "macroDensity" }, "macros live in Vocal Control; only Density stays here: " + c.knobs.joinIntoString (","));
+            expect (c.segments.contains ("levelMatchMode"), "fair compare as segments");
+            expectEquals (view.getAnalyseButton().getButtonText(), juce::String ("Vocal analysieren"), "design wording");
+            for (auto* b : { &view.getPreviousButton(), &view.getMixButton(), &view.getOriginalButton() })
+                expect ((bool) b->getProperties().getWithDefault ("segment", false), "compare buttons as segments: " + b->getButtonText());
+
+            ed.getTopBar().selectView (ui::TopBar::View::vocalCheck);
+            expect (ed.getDetail() != nullptr && ed.getDetail()->getWidth() >= 1300, "VOCAL CHECK uses the whole width");
+        }
+
         beginTest ("Design: an old project shows the same values in the new panels");
         {
             Harness h;

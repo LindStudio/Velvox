@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Widgets.h"
+#include "Segments.h"
 #include "../AutoMix/AutoMixController.h"
 
 class VelvoxAudioProcessor;
@@ -11,7 +12,7 @@ namespace velvox::ui
     //  A  Vocal status    analysis, material, edited modules, live input level, beat sidechain, output
     //  B  Automatic mix   the processing that was actually set up, with reasons (click = open module)
     //  C  compare         previous state / mix (real parameter switch) and the level-matched original
-    //  D  fine-tuning     the six macros, working on top of the mix
+    //  D  fine-tuning     density and the fair compare (the other macros: VOCAL CONTROL)
     //  E  re-analyse      always available
     class AutoMixView final : public juce::Component, private juce::ChangeListener
     {
@@ -49,8 +50,8 @@ namespace velvox::ui
         juce::TextButton analyse, previous { "Vorher" }, mix { "Headliner Mix" }, original { "Original" }, restore;
         std::unique_ptr<StepList> steps;
         juce::Viewport stepView;
-        std::array<std::unique_ptr<Knob>, 6> macros;
-        std::unique_ptr<Choice> levelMatch;
+        std::unique_ptr<Knob> density;          // the five other macros live in VOCAL CONTROL
+        std::unique_ptr<Segments> levelMatch;
 
         juce::Rectangle<int> statusArea, stepsArea, macroArea, headerArea;
         juce::String inputStatus, sidechainStatus;
