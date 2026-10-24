@@ -5,7 +5,7 @@
 namespace velvox::check
 {
     VocalCheckController::VocalCheckController (juce::AudioProcessorValueTreeState& state, dsp::VocalAnalyzer& a, Host h)
-        : apvts (state), analyzer (a), host (std::move (h)), eqResolver (std::make_unique<LegacyEqResolver>())
+        : apvts (state), analyzer (a), host (std::move (h)), eqResolver (std::make_unique<EqBandsResolver>())
     {
     }
 

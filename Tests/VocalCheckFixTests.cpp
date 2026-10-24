@@ -10,6 +10,7 @@
 #include "Parameters/ParameterLayout.h"
 #include "DSP/Instances.h"
 #include "StateKeys.h"
+#include "Parameters/EqBands.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -471,53 +472,84 @@ public:
         float value (const char* id) { return apvts.getParameter (id)->convertFrom0to1 (apvts.getParameter (id)->getValue()); }
     };
 
+    // The EQ band of a role in a value map (nullopt = none)
+    static std::optional<dsp::EqBand> roleBand (std::map<juce::String, float>& values, dsp::EqRole role, int instance = 0)
+    {
+        const auto a = eqbands::accessFor (values);
+        const int b = eqbands::findBand (a, instance, role);
+        if (b < 0)
+            return std::nullopt;
+        return eqbands::readBand (a, instance, b);
+    }
+
     void fixModel()
     {
         using namespace check;
-        const LegacyEqResolver legacy;
+        const EqBandsResolver bands;
         FixAction mud;
         mud.modules.push_back (ModuleId::eq);
-        mud.eq.push_back ({ EqRole::mud, EqShape::bell, 300.0f, -3.0f, 1.2f, 12 });
+        mud.eq.push_back ({ check::EqRole::mud, EqShape::bell, 300.0f, -3.0f, 1.2f, 12 });
 
-        beginTest ("Fix model: a missing EQ is switched on and inserted; the legacy resolver uses the low band as a bell");
+        beginTest ("Fix model: a missing EQ is switched on and inserted, the cut goes into the mud band");
         {
             State s ("v2,comp,check");
             s.values[pid::eqOn] = 0.0f;
-            const auto f = planFix (mud, "Mulm", s.context (legacy));
+            const auto f = planFix (mud, "Mulm", s.context (bands));
             expect (f.routing.has_value() && f.routing->contains (ModuleId::eq), "EQ inserted");
             s.apply (f);
             expect (s.routing.indexOf (ModuleId::eq) < s.routing.indexOf (ModuleId::check), "where an EQ usually sits (before the check)");
             expectEquals (s.get (pid::eqOn), 1.0f);
-            expectEquals (s.get (pid::lowType), 1.0f, "bell");
-            expectWithinAbsoluteError (s.get (pid::lowFreq), 300.0f, 0.5f);
-            expectWithinAbsoluteError (s.get (pid::lowGain), -3.0f, 0.01f);
-            expectWithinAbsoluteError (s.get (pid::lowQ), 1.2f, 0.01f);
+            const auto b = roleBand (s.values, dsp::EqRole::mud);
+            expect (b.has_value(), "mud band created");
+            if (b.has_value())
+            {
+                expect (b->on && b->bandType() == dsp::EqBandType::bell);
+                expectWithinAbsoluteError (b->freq, 300.0f, 0.5f);
+                expectWithinAbsoluteError (b->gain, -3.0f, 0.01f);
+                expectWithinAbsoluteError (b->q, 1.2f, 0.01f);
+            }
         }
 
-        beginTest ("Fix model: EQ after VOCAL CHECK - applying twice does not double the cut, a deeper user cut stays");
+        beginTest ("Fix model: user bands (role none) and other roles are never touched");
         {
             State s ("v2,check,eq");
             s.values[pid::eqOn] = 1.0f;
-            s.apply (planFix (mud, "Mulm", s.context (legacy)));
-            expectWithinAbsoluteError (s.get (pid::lowGain), -3.0f, 0.01f);
-            const auto again = planFix (mud, "Mulm", s.context (legacy));
-            s.apply (again);
-            expectWithinAbsoluteError (s.get (pid::lowGain), -3.0f, 0.01f, "idempotent");
+            const auto a = eqbands::accessFor (s.values);
+            dsp::EqBand user;
+            user.on = true;
+            user.freq = 300.0f;
+            user.gain = -2.0f;
+            eqbands::writeBand (a, 0, 0, user);
+            eqbands::findOrCreateBand (a, 0, dsp::EqRole::air, dsp::EqBandType::highShelf, 10000.0f, 2.0f, 0.7071f);
+            s.apply (planFix (mud, "Mulm", s.context (bands)));
+            const auto u = eqbands::readBand (a, 0, 0);
+            expect (u == user, "the user band is unchanged");
+            expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::air)->gain, 2.0f, 0.01f);
+            expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::mud)->gain, -3.0f, 0.01f);
+        }
 
-            s.values[pid::lowGain] = -5.0f;
-            s.apply (planFix (mud, "Mulm", s.context (legacy)));
-            expectWithinAbsoluteError (s.get (pid::lowGain), -5.0f, 0.01f, "never weakens an existing cut");
+        beginTest ("Fix model: EQ after VOCAL CHECK - applying twice does not double the cut, a deeper cut stays");
+        {
+            State s ("v2,check,eq");
+            s.values[pid::eqOn] = 1.0f;
+            s.apply (planFix (mud, "Mulm", s.context (bands)));
+            expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::mud)->gain, -3.0f, 0.01f);
+            s.apply (planFix (mud, "Mulm", s.context (bands)));
+            expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::mud)->gain, -3.0f, 0.01f, "idempotent");
+
+            const auto a = eqbands::accessFor (s.values);
+            eqbands::findOrCreateBand (a, 0, dsp::EqRole::mud, dsp::EqBandType::bell, 300.0f, -5.0f, 1.2f);
+            s.apply (planFix (mud, "Mulm", s.context (bands)));
+            expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::mud)->gain, -5.0f, 0.01f, "never weakens an existing cut");
         }
 
         beginTest ("Fix model: EQ before VOCAL CHECK - the measurement contains its cut, the fix adds to it");
         {
             State s ("v2,eq,check");
             s.values[pid::eqOn] = 1.0f;
-            s.values[pid::lowType] = 1.0f;
-            s.values[pid::lowFreq] = 310.0f;
-            s.values[pid::lowGain] = -2.0f;
-            s.apply (planFix (mud, "Mulm", s.context (legacy)));
-            expectWithinAbsoluteError (s.get (pid::lowGain), -5.0f, 0.01f);
+            eqbands::findOrCreateBand (eqbands::accessFor (s.values), 0, dsp::EqRole::mud, dsp::EqBandType::bell, 310.0f, -2.0f, 1.2f);
+            s.apply (planFix (mud, "Mulm", s.context (bands)));
+            expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::mud)->gain, -5.0f, 0.01f);
         }
 
         beginTest ("Fix model: parameter kinds; modules that are off are not touched unless the fix switches them on");
@@ -529,7 +561,7 @@ public:
             sib.params.push_back ({ pid::deessThreshold, -36.0f, ParamChange::Kind::atMost, 0.0f });
             sib.params.push_back ({ pid::deessRange, 9.0f, ParamChange::Kind::amount, 0.0f });
             s.values[pid::deessOn] = 0.0f;
-            s.apply (planFix (sib, "S", s.context (legacy)));
+            s.apply (planFix (sib, "S", s.context (bands)));
             expectEquals (s.get (pid::deessOn), 1.0f);
             expect (s.routing.contains (ModuleId::deess));
             expectWithinAbsoluteError (s.get (pid::deessFreq), 5500.0f, 0.5f);
@@ -540,11 +572,11 @@ public:
             over.params.push_back ({ pid::compRatio, -1.5f, ParamChange::Kind::amount, 1.0f });
             State off ("v2,eq,check");
             off.values[pid::compOn] = 0.0f;
-            expect (planFix (over, "x", off.context (legacy)).empty(), "nothing to reduce");
+            expect (planFix (over, "x", off.context (bands)).empty(), "nothing to reduce");
             State on ("v2,comp,check");
             on.values[pid::compOn] = 1.0f;
             on.values[pid::compRatio] = 4.0f;
-            on.apply (planFix (over, "x", on.context (legacy)));
+            on.apply (planFix (over, "x", on.context (bands)));
             expectWithinAbsoluteError (on.get (pid::compRatio), 2.5f, 0.01f);
         }
 
@@ -557,28 +589,28 @@ public:
             mud2.eq.front().gainDb = -4.5f;
             FixAction rumble, plosive;
             rumble.modules.push_back (ModuleId::eq);
-            rumble.eq.push_back ({ EqRole::lowcut, EqShape::lowCut, 90.0f, 0.0f, 0.7071f, 12 });
+            rumble.eq.push_back ({ check::EqRole::lowcut, EqShape::lowCut, 90.0f, 0.0f, 0.7071f, 12 });
             plosive.modules.push_back (ModuleId::eq);
-            plosive.eq.push_back ({ EqRole::lowcut, EqShape::lowCut, 120.0f, 0.0f, 0.7071f, 24 });
-            const auto f = planFixes ({ { mud, "a" }, { rumble, "b" }, { mud2, "c" }, { plosive, "d" } }, s.context (legacy), "Alles");
+            plosive.eq.push_back ({ check::EqRole::lowcut, EqShape::lowCut, 120.0f, 0.0f, 0.7071f, 24 });
+            const auto f = planFixes ({ { mud, "a" }, { rumble, "b" }, { mud2, "c" }, { plosive, "d" } }, s.context (bands), "Alles");
             s.apply (f);
-            expectWithinAbsoluteError (s.get (pid::lowGain), -4.5f, 0.01f);
-            expectWithinAbsoluteError (s.get (pid::lowFreq), 320.0f, 0.5f);
-            expectEquals (s.get (pid::hpfOn), 1.0f);
-            expectWithinAbsoluteError (s.get (pid::hpfFreq), 120.0f, 0.5f);
-            expectEquals (s.get (pid::hpfSlope), 1.0f, "24 dB/oct");
+            const auto m = roleBand (s.values, dsp::EqRole::mud);
+            expectWithinAbsoluteError (m->gain, -4.5f, 0.01f);
+            expectWithinAbsoluteError (m->freq, 320.0f, 0.5f);
+            const auto lc = roleBand (s.values, dsp::EqRole::lowCut);
+            expect (lc.has_value() && lc->on && lc->bandType() == dsp::EqBandType::lowCut);
+            expectWithinAbsoluteError (lc->freq, 120.0f, 0.5f);
+            expectEquals (lc->slope, 3, "24 dB/oct");
             expectEquals (f.name, juce::String ("Alles"));
         }
 
         beginTest ("Fix model: applying is one undo step (parameters and routing)");
         {
             UndoHost host;
-            const auto before = host.apvts.state.getProperty (statekeys::routing).toString();
-            State s (before);
+            State s ("v2,comp,check");
             for (auto& [id, v] : s.values)
                 if (auto* p = host.apvts.getParameter (id))
                     v = p->convertFrom0to1 (p->getValue());
-            s.routing = Routing::fromString ("v2,comp,check");
             host.apvts.state.setProperty (statekeys::routing, s.routing.toString(), nullptr);
             host.apvts.getParameter (pid::eqOn)->setValueNotifyingHost (0.0f);
             s.values[pid::eqOn] = 0.0f;
@@ -586,15 +618,20 @@ public:
             host.undo.clearUndoHistory();
             const auto routingBefore = host.apvts.state.getProperty (statekeys::routing).toString();
 
-            applyResolvedFix (host.apvts, planFix (mud, "Vocal Check: Mulm", s.context (legacy)));
-            expectWithinAbsoluteError (host.value (pid::lowGain), -3.0f, 0.01f);
+            applyResolvedFix (host.apvts, planFix (mud, "Vocal Check: Mulm", s.context (bands)));
+            const auto access = eqbands::accessFor (host.apvts);
+            const int band = eqbands::findBand (access, 0, dsp::EqRole::mud);
+            expect (band >= 0, "mud band");
+            const auto gainId = eqbands::bandParamId (0, std::max (0, band), pid::eqband::gain);
+            expectWithinAbsoluteError (host.value (gainId.toRawUTF8()), -3.0f, 0.01f);
             expectEquals (host.value (pid::eqOn), 1.0f);
             expect (host.apvts.state.getProperty (statekeys::routing).toString() != routingBefore);
             expect (host.undo.canUndo(), "undoable");
             expectEquals (host.undo.getUndoDescription(), juce::String ("Vocal Check: Mulm"));
 
             host.undo.undo();
-            expectWithinAbsoluteError (host.value (pid::lowGain), 0.0f, 0.01f, "one undo restores the gain");
+            expectWithinAbsoluteError (host.value (gainId.toRawUTF8()), 0.0f, 0.01f, "one undo restores the band");
+            expect (eqbands::findBand (access, 0, dsp::EqRole::mud) < 0, "... removes its role");
             expectEquals (host.value (pid::eqOn), 0.0f, "... the switch");
             expectEquals (host.apvts.state.getProperty (statekeys::routing).toString(), routingBefore, "... and the routing");
             expect (! host.undo.canUndo(), "it was a single step");
@@ -657,12 +694,18 @@ public:
             expect (vc.apply ("rumble"));
             expect (h.proc.getRouting().contains (ModuleId::eq), "EQ inserted");
             expectEquals (h.get (pid::eqOn), 1.0f);
-            expectEquals (h.get (pid::hpfOn), 1.0f);
-            const float hpf = h.get (pid::hpfFreq);
-            expect (hpf >= 60.0f && hpf <= 150.0f);
+            const auto lowCut = [&h]
+            {
+                const auto a = eqbands::accessFor (h.proc.getState());
+                const int b = eqbands::findBand (a, 0, dsp::EqRole::lowCut);
+                return b < 0 ? dsp::EqBand {} : eqbands::readBand (a, 0, b);
+            };
+            const auto lc = lowCut();
+            expect (lc.on && lc.bandType() == dsp::EqBandType::lowCut, "low cut band");
+            expect (lc.freq >= 60.0f && lc.freq <= 150.0f);
             expect (! vc.canApply ("rumble"), "applied on this measurement");
             expect (! vc.apply ("rumble"));
-            expectEquals (h.get (pid::hpfFreq), hpf, "unchanged");
+            expect (lowCut() == lc, "unchanged");
             expect (! vc.canApply ("nothing-like-this"));
         }
 
@@ -693,7 +736,11 @@ public:
                 applicable += vc.canApply (f->id) ? 1 : 0;
             expectGreaterThan (applicable, 1);
             expectEquals (vc.applyAll(), applicable);
-            expectEquals (h.get (pid::hpfSlope), 1.0f, "plosives: the steeper cut won");
+            {
+                const auto a = eqbands::accessFor (h.proc.getState());
+                const int b = eqbands::findBand (a, 0, dsp::EqRole::lowCut);
+                expect (b >= 0 && eqbands::readBand (a, 0, b).slope == 3, "plosives: the steeper cut (24 dB/oct) won");
+            }
             expectEquals (vc.applyAll(), 0, "nothing left on this measurement");
         }
 

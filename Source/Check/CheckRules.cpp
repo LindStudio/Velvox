@@ -191,7 +191,7 @@ namespace velvox::check
                     f.action.eq.push_back ({ role, EqShape::bell, hz, gain, q, 12 });
                 };
                 bumpFinding ("mud", "Mulm", EqRole::mud, 200.0f, 500.0f, t.devMud);
-                bumpFinding ("boxy", "Boxig", EqRole::autoRole, 500.0f, 1000.0f, t.devBoxy);
+                bumpFinding ("boxy", "Boxig", EqRole::mud, 500.0f, 1000.0f, t.devBoxy);
 
                 // ---- Thin / dull / bright (band windows of the objective)
                 if (r.bodyDb < t.body.lo)
@@ -253,7 +253,7 @@ namespace velvox::check
                                    de ("Eine schmale Spitze klingelt bei jedem Wort, das sie trifft (Raum, Mikrofon oder Stimme)."));
                     f.freqHz = res.hz;
                     f.action.modules.push_back (ModuleId::eq);
-                    f.action.eq.push_back ({ EqRole::autoRole, EqShape::bell, res.hz, gain, 6.0f, 12 });
+                    f.action.eq.push_back ({ res.hz < 1000.0f ? EqRole::mud : EqRole::presence, EqShape::bell, res.hz, gain, 6.0f, 12 });
                     resonanceHz.push_back (res.hz);
                 }
 
@@ -309,7 +309,7 @@ namespace velvox::check
                                        de ("Bei 2–5 kHz ist das Ohr am empfindlichsten: zu viel klingt stechend und ermüdet bei Club-Lautstärke."));
                         f.freqHz = hz;
                         f.action.modules.push_back (ModuleId::eq);
-                        f.action.eq.push_back ({ EqRole::autoRole, EqShape::bell, hz, gain, 1.2f, 12 });
+                        f.action.eq.push_back ({ EqRole::presence, EqShape::bell, hz, gain, 1.2f, 12 });
                     }
                 }
             }

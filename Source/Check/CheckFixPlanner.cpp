@@ -2,6 +2,7 @@
 #include "../DSP/Instances.h"
 #include "../Parameters/ParameterLayout.h"
 #include "../StateKeys.h"
+#include "../Parameters/EqBands.h"
 #include <map>
 
 namespace velvox::check
@@ -33,7 +34,6 @@ namespace velvox::check
 
     namespace
     {
-        bool near (float a, float b) { return a > 0.0f && b > 0.0f && std::abs (std::log2 (a / b)) <= 1.0f / 3.0f + 1.0e-3f; }
 
         float clampTo (const juce::String& id, float v)
         {
@@ -42,17 +42,7 @@ namespace velvox::check
             return v;
         }
 
-        // Legacy EQ slots
-        enum class Slot { low, mid, high };
         juce::String idOf (const char* base, int k) { return dsp::instanceParamId (base, k); }
-
-        Slot bellSlot (float freq, int k, const ValueLookup& v)
-        {
-            const bool lowShelfInUse = v (idOf (pid::lowType, k)) < 0.5f && std::abs (v (idOf (pid::lowGain, k))) > 0.01f;
-            if (freq < 600.0f)
-                return lowShelfInUse ? Slot::mid : Slot::low;
-            return freq <= 8000.0f ? Slot::mid : Slot::high;
-        }
 
         struct Planner
         {
@@ -215,9 +205,8 @@ namespace velvox::check
         // Requests that address the same band (see the resolver contract)
         bool sameBand (const EqBandRequest& a, const EqBandRequest& b)
         {
-            if (a.role != b.role || (a.shape == EqShape::lowCut) != (b.shape == EqShape::lowCut))
-                return false;
-            return a.role != EqRole::autoRole || near (a.freqHz, b.freqHz);
+            // One band per role in the EQ
+            return a.role == b.role && (a.shape == EqShape::lowCut) == (b.shape == EqShape::lowCut);
         }
     }
 
@@ -277,107 +266,101 @@ namespace velvox::check
     }
 
     //==========================================================================
-    std::optional<EqBandResolver::Band> LegacyEqResolver::find (const EqBandRequest& r, int k, const ValueLookup& v) const
+    namespace
     {
-        const bool eqOn = v (idOf (pid::eqOn, k)) > 0.5f;
-        const auto band = [&] (const char* freq, const char* gain, const char* q) -> std::optional<Band>
+        dsp::EqRole roleOf (EqRole r)
         {
-            Band b;
-            b.freqHz = v (idOf (freq, k));
-            b.gainDb = v (idOf (gain, k));
-            b.q = v (idOf (q, k));
-            b.on = eqOn;
-            return b;
-        };
-        switch (r.shape)
-        {
-            case EqShape::lowCut:
-                if (v (idOf (pid::hpfOn, k)) > 0.5f)
-                    return Band { v (idOf (pid::hpfFreq, k)), 0.0f, 0.7071f, v (idOf (pid::hpfSlope, k)) > 0.5f ? 24 : 12, eqOn };
-                return std::nullopt;
-            case EqShape::highCut:
-                if (v (idOf (pid::lpfOn, k)) > 0.5f)
-                    return Band { v (idOf (pid::lpfFreq, k)), 0.0f, 0.7071f, 12, eqOn };
-                return std::nullopt;
-            case EqShape::lowShelf:
-                if (v (idOf (pid::lowType, k)) < 0.5f && std::abs (v (idOf (pid::lowGain, k))) > 0.01f)
-                    return band (pid::lowFreq, pid::lowGain, pid::lowQ);
-                return std::nullopt;
-            case EqShape::highShelf:
-                if (v (idOf (pid::highType, k)) < 0.5f && std::abs (v (idOf (pid::highGain, k))) > 0.01f)
-                    return band (pid::highFreq, pid::highGain, pid::highQ);
-                return std::nullopt;
-            case EqShape::bell:
-                switch (bellSlot (r.freqHz, k, v))
-                {
-                    case Slot::low:
-                        if (v (idOf (pid::lowType, k)) > 0.5f && std::abs (v (idOf (pid::lowGain, k))) > 0.01f && near (v (idOf (pid::lowFreq, k)), r.freqHz))
-                            return band (pid::lowFreq, pid::lowGain, pid::lowQ);
-                        return std::nullopt;
-                    case Slot::mid:
-                        if (std::abs (v (idOf (pid::midGain, k))) > 0.01f && near (v (idOf (pid::midFreq, k)), r.freqHz))
-                            return band (pid::midFreq, pid::midGain, pid::midQ);
-                        return std::nullopt;
-                    case Slot::high:
-                        if (v (idOf (pid::highType, k)) > 0.5f && std::abs (v (idOf (pid::highGain, k))) > 0.01f && near (v (idOf (pid::highFreq, k)), r.freqHz))
-                            return band (pid::highFreq, pid::highGain, pid::highQ);
-                        return std::nullopt;
-                }
+            switch (r)
+            {
+                case EqRole::presence: return dsp::EqRole::presence;
+                case EqRole::warmth:   return dsp::EqRole::warmth;
+                case EqRole::air:      return dsp::EqRole::air;
+                case EqRole::lowcut:   return dsp::EqRole::lowCut;
+                case EqRole::mud:      return dsp::EqRole::mud;
+                case EqRole::autoRole: return dsp::EqRole::presence;
+                case EqRole::none:     break;
+            }
+            return dsp::EqRole::none;
         }
-        return std::nullopt;
+
+        dsp::EqBandType typeOf (EqShape s)
+        {
+            switch (s)
+            {
+                case EqShape::bell:      return dsp::EqBandType::bell;
+                case EqShape::lowShelf:  return dsp::EqBandType::lowShelf;
+                case EqShape::highShelf: return dsp::EqBandType::highShelf;
+                case EqShape::lowCut:    return dsp::EqBandType::lowCut;
+                case EqShape::highCut:   return dsp::EqBandType::highCut;
+            }
+            return dsp::EqBandType::bell;
+        }
+
+        // dB/oct <-> slope index (6, 12, 18, 24, 36, 48)
+        int slopeIndex (int dbPerOct)
+        {
+            static const int slopes[] { 6, 12, 18, 24, 36, 48 };
+            for (int i = 0; i < 6; ++i)
+                if (dbPerOct <= slopes[i])
+                    return i;
+            return 5;
+        }
+
+        int slopeDb (int index)
+        {
+            static const int slopes[] { 6, 12, 18, 24, 36, 48 };
+            return slopes[juce::jlimit (0, 5, index)];
+        }
+
+        // Reads through an overlay of pending writes, writes into it
+        eqbands::Access overlayAccess (const ValueLookup& values, std::map<juce::String, float>& overlay)
+        {
+            eqbands::Access a;
+            a.get = [&values, &overlay] (const juce::String& id)
+            {
+                const auto it = overlay.find (id);
+                return it != overlay.end() ? it->second : values (id);
+            };
+            a.set = [&overlay] (const juce::String& id, float v) { overlay[id] = clampTo (id, v); };
+            return a;
+        }
     }
 
-    std::vector<ResolvedParam> LegacyEqResolver::write (const EqBandRequest& r, int k, const ValueLookup& v) const
+    std::optional<EqBandResolver::Band> EqBandsResolver::find (const EqBandRequest& r, int k, const ValueLookup& values) const
     {
-        std::vector<ResolvedParam> p;
-        const auto add = [&p, k] (const char* base, float value) { p.push_back ({ idOf (base, k), value }); };
-        switch (r.shape)
-        {
-            case EqShape::lowCut:
-                add (pid::hpfOn, 1.0f);
-                add (pid::hpfFreq, r.freqHz);
-                add (pid::hpfSlope, r.slopeDbPerOct >= 24 ? 1.0f : 0.0f);
-                break;
-            case EqShape::highCut:
-                add (pid::lpfOn, 1.0f);
-                add (pid::lpfFreq, r.freqHz);
-                break;
-            case EqShape::lowShelf:
-                add (pid::lowType, 0.0f);
-                add (pid::lowFreq, r.freqHz);
-                add (pid::lowGain, r.gainDb);
-                add (pid::lowQ, 0.7071f);
-                break;
-            case EqShape::highShelf:
-                add (pid::highType, 0.0f);
-                add (pid::highFreq, r.freqHz);
-                add (pid::highGain, r.gainDb);
-                add (pid::highQ, 0.7071f);
-                break;
-            case EqShape::bell:
-                switch (bellSlot (r.freqHz, k, v))
-                {
-                    case Slot::low:
-                        add (pid::lowType, 1.0f);
-                        add (pid::lowFreq, r.freqHz);
-                        add (pid::lowGain, r.gainDb);
-                        add (pid::lowQ, r.q);
-                        break;
-                    case Slot::mid:
-                        add (pid::midFreq, r.freqHz);
-                        add (pid::midGain, r.gainDb);
-                        add (pid::midQ, r.q);
-                        break;
-                    case Slot::high:
-                        add (pid::highType, 1.0f);
-                        add (pid::highFreq, r.freqHz);
-                        add (pid::highGain, r.gainDb);
-                        add (pid::highQ, r.q);
-                        break;
-                }
-                break;
-        }
-        return p;
+        const auto role = roleOf (r.role);
+        if (role == dsp::EqRole::none)
+            return std::nullopt;
+        std::map<juce::String, float> none;
+        const auto access = overlayAccess (values, none);
+        const int band = eqbands::findBand (access, k, role);
+        if (band < 0)
+            return std::nullopt;
+        const auto b = eqbands::readBand (access, k, band);
+        Band out;
+        out.freqHz = b.freq;
+        out.gainDb = b.isCut() ? 0.0f : b.gain;
+        out.q = b.q;
+        out.slopeDbPerOct = slopeDb (b.slope);
+        out.on = b.on && values (dsp::instanceParamId (pid::eqOn, k)) > 0.5f;
+        return out;
+    }
+
+    std::vector<ResolvedParam> EqBandsResolver::write (const EqBandRequest& r, int k, const ValueLookup& values) const
+    {
+        const auto role = roleOf (r.role);
+        if (role == dsp::EqRole::none)
+            return {};
+        std::map<juce::String, float> overlay;
+        const auto access = overlayAccess (values, overlay);
+        const bool cut = r.shape == EqShape::lowCut || r.shape == EqShape::highCut;
+        if (eqbands::findOrCreateBand (access, k, role, typeOf (r.shape), r.freqHz, cut ? 0.0f : r.gainDb, r.q,
+                                       cut ? slopeIndex (r.slopeDbPerOct) : -1) < 0)
+            return {};   // all 16 bands in use
+        std::vector<ResolvedParam> out;
+        for (auto& [id, v] : overlay)
+            out.push_back ({ id, v });
+        return out;
     }
 
     //==========================================================================

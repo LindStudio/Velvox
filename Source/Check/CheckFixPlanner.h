@@ -20,15 +20,13 @@ namespace velvox::check
 {
     using ValueLookup = std::function<float (const juce::String& paramId)>;   // real units, full ids
 
-    // Maps abstract EQ band requests onto the EQ's parameters. The EQ track replaces the
-    // temporary LegacyEqResolver by one for its 16 user bands with roles (findOrCreateEqBand).
+    // Maps abstract EQ band requests onto the EQ parameters.
     // Contract:
-    //  - role autoRole matches an existing band of that role within +-1/3 octave of freqHz;
-    //    every other role (lowcut, mud, warmth, air, presence) matches its single band; role
-    //    none is never used by VOCAL CHECK (user bands are never touched)
-    //  - find() reports the matching band of EQ instance `instance` (nullopt = none yet)
+    //  - every role addresses ONE band of EQ instance `instance` (the 0.6 EQ: one band per role);
+    //    role none is never used by VOCAL CHECK (user bands are never touched)
+    //  - find() reports that band (nullopt = none yet)
     //  - write() returns the parameter values that make the band exactly `absolute` (gain in
-    //    absolute dB), creating it in a free slot when find() found none. Pure: no side effects.
+    //    absolute dB), switched on, creating it in a free slot when there is none. Pure: no side effects.
     class EqBandResolver
     {
     public:
@@ -44,11 +42,12 @@ namespace velvox::check
         virtual std::vector<ResolvedParam> write (const EqBandRequest& absolute, int instance, const ValueLookup& values) const = 0;
     };
 
-    // Today's fixed EQ (HPF, low band, mid bell, high band, LPF): low cut -> HPF, low shelf ->
-    // low band (shelf), bells below 600 Hz -> low band as bell (mid bell when the low band is a
-    // shelf in use), bells 600 Hz - 8 kHz -> mid bell, high shelf and higher bells -> high band.
-    // Two requests for the same slot: the later one wins (a limit of the fixed EQ).
-    class LegacyEqResolver final : public EqBandResolver
+    // The 0.6 EQ (16 bands with roles, Parameters/EqBands.h): lowcut -> role lowCut (shared with
+    // the automatic mix: there is one low cut), warmth / air -> those roles (shared with the
+    // automatic mix, which steers the same bands), mud and presence -> the roles that are free
+    // for VOCAL CHECK: mud for cuts below 1 kHz (mud, boxy, low resonances), presence for cuts
+    // above (harshness, resonances).
+    class EqBandsResolver final : public EqBandResolver
     {
     public:
         std::optional<Band> find (const EqBandRequest& request, int instance, const ValueLookup& values) const override;
