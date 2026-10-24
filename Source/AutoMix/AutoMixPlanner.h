@@ -2,6 +2,8 @@
 
 #include "VocalProfile.h"
 #include "../DSP/Routing.h"
+#include "../DSP/EqDesign.h"
+#include <optional>
 #include <map>
 #include <set>
 
@@ -36,6 +38,16 @@ namespace velvox::automix
         std::set<dsp::ModuleId> activeModules() const;
         Decision* find (dsp::ModuleId m);
     };
+
+    // ---- EQ role bands of a plan (spec 8, Q5). The plan overlays `current` (the parameter values the
+    //      plan starts from; empty = defaults). User bands (role none) are never written.
+    dsp::EqBand eqBand (dsp::EqBandType type, float freq, float gain, float q, int slope = 3);
+    std::optional<dsp::EqBand> roleBand (const MixPlan& plan, const std::map<juce::String, float>& current, dsp::EqRole role, int instance = 0);
+    float roleGain (const MixPlan& plan, const std::map<juce::String, float>& current, dsp::EqRole role, int instance = 0);   // 0 when absent / off
+    // Writes the band of `role` (all fields of `value`, role set); a missing one is created in a free slot
+    // only when `createIfMissing`. Returns the band, -1 when it was not written.
+    int setRoleBand (MixPlan& plan, const std::map<juce::String, float>& current, int instance, dsp::EqRole role,
+                     const dsp::EqBand& value, bool createIfMissing);
 
     // Rule-based mixing decisions for party / EDM / hypertechno lead vocals.
     // Pure function: profile + current values in, plan out (any thread).

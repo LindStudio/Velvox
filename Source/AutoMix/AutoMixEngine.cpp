@@ -202,8 +202,11 @@ namespace velvox::automix
     }
 
     //==========================================================================
-    std::vector<std::pair<juce::String, MixPlan>> AutoMixEngine::candidatesFor (const MixPlan& base, const VocalProfile& profile)
+    std::vector<std::pair<juce::String, MixPlan>> AutoMixEngine::candidatesFor (const MixPlan& base, const VocalProfile& profile,
+                                                                               const std::map<juce::String, float>& current)
     {
+        using dsp::EqRole;
+        using dsp::EqBandType;
         using M = dsp::ModuleId;
         std::vector<std::pair<juce::String, MixPlan>> out;
         out.push_back ({ de ("Basisplan"), base });
@@ -273,14 +276,11 @@ namespace velvox::automix
         // 5 kHz takes the edge off; the render decides whether that is worth it.
         add (de ("Höhen sanfter"), [&] (MixPlan& c)
         {
-            if (profile.topDb <= -7.0f || c.get (pid::highGain) > 0.2f || ! c.routing.contains (M::eq))
+            if (profile.topDb <= -7.0f || roleGain (c, current, EqRole::air) > 0.2f || ! c.routing.contains (M::eq))
                 return false;
             c.set (pid::eqOn, 1.0f);
-            c.set (pid::highType, 0.0f);
-            c.set (pid::highFreq, 5000.0f);
-            c.set (pid::highQ, 0.7071f);
-            c.set (pid::highGain, -juce::jlimit (1.5f, 4.0f, 1.0f + 0.4f * (profile.topDb + 7.0f)));
-            return true;
+            return setRoleBand (c, current, 0, EqRole::air,
+                                eqBand (EqBandType::highShelf, 5000.0f, -juce::jlimit (1.5f, 4.0f, 1.0f + 0.4f * (profile.topDb + 7.0f)), 0.7071f), true) >= 0;
         });
 
         // Tone after the dynamics: the high shelf (and a presence boost) moves into a second
@@ -288,31 +288,40 @@ namespace velvox::automix
         // compressor makes it react to the highs and lifts the S sounds into the de-esser.
         add (de ("Höhen nach der Dynamik (EQ 2)"), [&] (MixPlan& c)
         {
-            const float high = c.get (pid::highGain);
-            const bool presenceBoost = c.get (pid::midGain) > 0.2f && c.get (pid::midFreq) >= 1800.0f;
+            const auto air = roleBand (c, current, EqRole::air);
+            const auto mid = roleBand (c, current, EqRole::autoMix);
+            const float high = air.has_value() && air->on ? air->gain : 0.0f;
+            const bool presenceBoost = mid.has_value() && mid->on && mid->gain > 0.2f && mid->freq >= 1800.0f;
             if (high <= 0.2f && ! presenceBoost)
                 return false;
             c.set (k2 (pid::eqOn), 1.0f);
             c.set (k2 (pid::eqMix), 100.0f);
-            c.set (k2 (pid::hpfOn), 0.0f);
-            c.set (k2 (pid::lpfOn), 0.0f);
-            c.set (k2 (pid::lowGain), 0.0f);
-            c.set (k2 (pid::midGain), 0.0f);
-            c.set (k2 (pid::highGain), 0.0f);
+            // EQ 2 carries only what moves there: its own role bands are switched off / flat
+            for (auto role : { EqRole::lowCut, EqRole::highCut })
+                if (auto b = roleBand (c, current, role, 1); b.has_value() && b->on)
+                {
+                    b->on = false;
+                    setRoleBand (c, current, 1, role, *b, false);
+                }
+            for (auto role : { EqRole::warmth, EqRole::autoMix, EqRole::air })
+                if (auto b = roleBand (c, current, role, 1); b.has_value() && b->gain != 0.0f)
+                {
+                    b->gain = 0.0f;
+                    setRoleBand (c, current, 1, role, *b, false);
+                }
             if (high > 0.2f)
             {
-                c.set (k2 (pid::highType), c.get (pid::highType));
-                c.set (k2 (pid::highFreq), c.get (pid::highFreq, 10000.0f));
-                c.set (k2 (pid::highQ), c.get (pid::highQ, 0.7071f));
-                c.set (k2 (pid::highGain), high);
-                c.set (pid::highGain, 0.0f);
+                setRoleBand (c, current, 1, EqRole::air, *air, true);
+                auto flat = *air;
+                flat.gain = 0.0f;
+                setRoleBand (c, current, 0, EqRole::air, flat, false);
             }
             if (presenceBoost)
             {
-                c.set (k2 (pid::midFreq), c.get (pid::midFreq));
-                c.set (k2 (pid::midQ), c.get (pid::midQ, 1.0f));
-                c.set (k2 (pid::midGain), c.get (pid::midGain));
-                c.set (pid::midGain, 0.0f);
+                setRoleBand (c, current, 1, EqRole::autoMix, *mid, true);
+                auto flat = *mid;
+                flat.gain = 0.0f;
+                setRoleBand (c, current, 0, EqRole::autoMix, flat, false);
             }
             int after = -1;
             for (auto m : { M::comp, M::smash, M::deess, M::smooth })
@@ -363,7 +372,7 @@ namespace velvox::automix
         // Keeps the explanations true to the chosen candidate: titles that carry values are
         // rebuilt, decisions of modules the candidate switched off are removed
         void syncDecisions (MixPlan& plan, const juce::String& candidateName, const ObjectiveBreakdown& before,
-                            const ObjectiveBreakdown& after)
+                            const ObjectiveBreakdown& after, const std::map<juce::String, float>& current)
         {
             using M = dsp::ModuleId;
             plan.decisions.erase (std::remove_if (plan.decisions.begin(), plan.decisions.end(), [&plan] (const Decision& d)
@@ -395,7 +404,7 @@ namespace velvox::automix
                                             de ("Leichte Obertöne - die Variante mit Sättigung schnitt in der Messung besser ab."), true });
             if (plan.routing.contains (M::eq, 1))
             {
-                const float g = plan.get (dsp::instanceParamId (pid::highGain, 1));
+                const float g = roleGain (plan, current, dsp::EqRole::air, 1);
                 juce::String title = de ("EQ 2 nach der Dynamik");
                 if (g > 0.0f)
                     title << de (": Höhen ") << db (g);
@@ -505,9 +514,10 @@ namespace velvox::automix
             }
 
             // Brightness: the chain must not make an already bright voice brighter
-            if (m.topDb > r.original.topDb + 5.0f && plan.get (pid::highGain) > 0.0f)
+            if (auto air = roleBand (plan, current, dsp::EqRole::air); m.topDb > r.original.topDb + 5.0f && air.has_value() && air->on && air->gain > 0.0f)
             {
-                plan.set (pid::highGain, std::max (0.0f, plan.get (pid::highGain) - 1.5f));
+                air->gain = std::max (0.0f, air->gain - 1.5f);
+                setRoleBand (plan, current, 0, dsp::EqRole::air, *air, false);
                 r.adjustments.push_back (de ("Höhenanhebung verringert (Kette wurde zu hell)."));
                 changed = true;
             }
@@ -520,9 +530,10 @@ namespace velvox::automix
             }
 
             // Low end: keep the body of the voice
-            if (m.bodyDb < r.original.bodyDb - 6.0f && plan.get (pid::hpfFreq) > 65.0f)
+            if (auto lowCut = roleBand (plan, current, dsp::EqRole::lowCut); m.bodyDb < r.original.bodyDb - 6.0f && lowCut.has_value() && lowCut->freq > 65.0f)
             {
-                plan.set (pid::hpfFreq, plan.get (pid::hpfFreq) * 0.85f);
+                lowCut->freq *= 0.85f;
+                setRoleBand (plan, current, 0, dsp::EqRole::lowCut, *lowCut, false);
                 r.adjustments.push_back (de ("Low Cut gesenkt (zu viel Körper ging verloren)."));
                 changed = true;
             }
@@ -547,7 +558,7 @@ namespace velvox::automix
         //      target loudness (AutoMixObjective). A variant must beat the base plan.
         const float target = targetLufs (r.original.lufs);
         {
-            auto variants = candidatesFor (plan, r.profile);
+            auto variants = candidatesFor (plan, r.profile, current);
             const auto score = [&] (const juce::String& name, const MixPlan& cand, bool isBase)
             {
                 CandidateResult c;
@@ -599,7 +610,7 @@ namespace velvox::automix
             if (best != 0)
             {
                 plan = variants[best].second;
-                syncDecisions (plan, variants[best].first, r.candidates[0].score, r.candidates[best].score);
+                syncDecisions (plan, variants[best].first, r.candidates[0].score, r.candidates[best].score, current);
                 r.adjustments.push_back (de ("Variante gewählt: ") + variants[best].first);
             }
         }
