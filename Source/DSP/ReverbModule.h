@@ -9,7 +9,7 @@ namespace velvox::dsp
         // Character (persisted choice index - append only):
         // 0 Room, 1 Plate, 2 Hall, 3 Large Hall, 4 Ambience, 5 Atmosphere, 6 Cinematic, 7 Ethereal
         int type = 1;
-        float decaySeconds = 1.8f;  // RT60 in the mid range
+        float decaySeconds = 1.8f;  // T30 of the whole tail (broadband); the mids ring a little longer when damped
         float preDelayMs = 20.0f;
         float size = 0.6f;          // 0..1
         float dampingHz = 7000.0f;  // above this the tail decays at least twice as fast
@@ -70,6 +70,19 @@ namespace velvox::dsp
 
         // Loop gain of one line at DC (< 1 = stable); for tests
         float loopGainAtDc (int line) const noexcept { return gainMid[(size_t) line] * (1.0f + bassK[(size_t) line]); }
+
+        // Decay display feed (UI, message thread or audio thread, no allocation): the RT60 in seconds the
+        // tail has at `hz` for these settings - analytic, from the same loop filters the engine uses.
+        // Draw a decay-per-frequency curve by calling it at a few frequencies.
+        static float predictedRt60 (const ReverbSettings& s, float hz, double sampleRate = 48000.0) noexcept;
+
+        // The decay control means the T30 of the whole tail (what is heard, all frequencies together),
+        // not only the mid band: the damping makes the highs decay faster, so the loop T60 in the mids is
+        // lengthened by this factor (1..maxCompensation) until the broadband T30 equals the set decay.
+        static float decayCompensationFor (const ReverbSettings& s, double sampleRate) noexcept;
+        float decayCompensation() const noexcept { return compensation.getTargetValue(); }
+        static constexpr float maxCompensation = 1.6f;
+        static constexpr double dampingExponent = 0.6, buildUpWeight = 1.3;
 
     private:
         struct DelayLine
@@ -149,7 +162,10 @@ namespace velvox::dsp
         juce::SmoothedValue<float> sizeScale { 1.0f }, preDelaySamples { 0.0f }, width { 1.0f }, early { 0.5f },
                                    topologyGain { 1.0f }, diffusion { 0.7f }, modulation { 0.3f };
         juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> decay { 1.8f }, damping { 7000.0f }, lowCut { 200.0f },
-                                                                               highCut { 12000.0f }, bass { 1.0f };
+                                                                               highCut { 12000.0f }, bass { 1.0f }, compensation { 1.0f };
+        // inputs of the last decay-compensation computation (recomputed only when one changes)
+        std::array<float, 7> compKey { -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };
+        void updateCompensationTarget() noexcept;
         float appliedScale = -1.0f;
         static constexpr int updateInterval = 32;
     };

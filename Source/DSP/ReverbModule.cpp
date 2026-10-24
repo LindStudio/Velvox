@@ -1,4 +1,5 @@
 #include "ReverbModule.h"
+#include <complex>
 
 namespace velvox::dsp
 {
@@ -64,6 +65,71 @@ namespace velvox::dsp
             return p;
         }
 
+        // Late line l (0..15) and its in-loop density all-pass, in ms at size scale 1
+        inline float lineMsAt (const ReverbModule::Voicing& v, int l) noexcept
+        {
+            const float t = (float) l / (float) (ReverbModule::numLines - 1);
+            return v.lineMinMs * std::pow (v.lineMaxMs / v.lineMinMs, t) * (1.0f + 0.031f * std::sin ((float) l * 3.7f));
+        }
+
+        inline int densitySamplesAt (const ReverbModule::Voicing& v, int l, double fs) noexcept
+        {
+            const float t = (float) l / (float) (ReverbModule::numLines - 1);
+            const float ms = v.densityMs * (0.35f + 0.65f * t) * (1.0f + 0.07f * std::sin ((float) l * 2.3f));
+            return std::max (1, (int) std::lround (ms * 0.001 * fs));
+        }
+
+        inline float sizeScaleFor (float size) noexcept
+        {
+            return minScale + (maxScale - minScale) * juce::jlimit (0.0f, 1.0f, size);
+        }
+
+        // Jot absorption low-pass H = (1 - a) / (1 - a z^-1): unity at DC, one extra factor g at fDamp
+        inline double jotCoeff (double g, double cosW) noexcept
+        {
+            const double r = g * g;
+            if (1.0 - r <= 1.0e-9)
+                return 0.0;
+            const double p = 1.0 - r * cosW;
+            const double disc = std::max (0.0, p * p - (1.0 - r) * (1.0 - r));
+            return juce::jlimit (0.0, 0.999, (p - std::sqrt (disc)) / (1.0 - r));
+        }
+
+        // Analytic loop model of the mean line: RT60 at `hz` relative to the loop's mid RT60
+        struct LoopModel
+        {
+            double m = 1.0, fs = 48000.0, gMid = 1.0, a = 0.0, k = 0.0, b = 0.0;
+
+            LoopModel (const ReverbSettings& s, double sampleRate) noexcept : fs (sampleRate)
+            {
+                const auto& v = ReverbModule::voicing (s.type);
+                const double scale = sizeScaleFor (s.size);
+                double sum = 0.0;
+                for (int l = 0; l < ReverbModule::numLines; ++l)
+                    sum += lineMsAt (v, l) * scale * 0.001 * fs + densitySamplesAt (v, l, fs);
+                m = sum / ReverbModule::numLines;
+                constexpr double tRef = 2.0;
+                const double bassMult = juce::jlimit (0.5, 2.0, (double) s.bassMultiplier);
+                gMid = std::pow (10.0, -3.0 * m / (tRef * fs));
+                k = std::pow (10.0, -3.0 * m / (tRef * bassMult * fs)) / gMid - 1.0;
+                const double fDamp = juce::jlimit (500.0, 0.45 * fs, (double) juce::jlimit (500.0f, 20000.0f, s.dampingHz) * v.hfBias);
+                a = jotCoeff (gMid, std::cos (twoPi * fDamp / fs));
+                b = 1.0 - std::exp (-twoPi * bassCrossoverHz / fs);
+            }
+
+            // RT60 at hz / RT60 of the loop in the mids
+            double ratioAt (double hz) const noexcept
+            {
+                const std::complex<double> zi = std::polar (1.0, -twoPi * juce::jlimit (1.0, 0.499 * fs, hz) / fs);
+                const double jot = (1.0 - a) / std::abs (1.0 - a * zi);
+                const double shelf = std::abs (1.0 + k * b / (1.0 - (1.0 - b) * zi));
+                const double g = gMid * jot * shelf;
+                if (g >= 1.0)
+                    return 50.0;
+                return (-3.0 * m / (fs * std::log10 (g))) / 2.0;
+            }
+        };
+
         // Small deterministic generator for the early reflection patterns
         struct Lcg
         {
@@ -79,6 +145,76 @@ namespace velvox::dsp
     const ReverbModule::Voicing& ReverbModule::voicing (int type) noexcept
     {
         return voicings[juce::jlimit (0, numTypes - 1, type)];
+    }
+
+    //==========================================================================
+    float ReverbModule::decayCompensationFor (const ReverbSettings& s, double sampleRate) noexcept
+    {
+        // A white impulse through the input low cut and the output high cut, every frequency decaying
+        // with its own RT60: the Schroeder curve is a sum of exponentials; its -5..-35 dB slope is the T30
+        const LoopModel model (s, sampleRate);
+        const auto hp = design::highPass (sampleRate, juce::jlimit (20.0f, 2000.0f, s.lowCutHz), 0.70710678);
+        const auto lp = design::lowPass (sampleRate, std::min ((double) juce::jlimit (1000.0f, 20000.0f, s.highCutHz), 0.45 * sampleRate),
+                                         0.70710678);
+        constexpr int numPoints = 40;
+        std::array<double, numPoints> w {}, r {};
+        const double f0 = 20.0, f1 = std::min (20000.0, 0.49 * sampleRate);
+        double total = 0.0;
+        for (int i = 0; i < numPoints; ++i)
+        {
+            const double f = f0 * std::pow (f1 / f0, (i + 0.5) / numPoints);
+            const double hpm = design::magnitude (hp, f, sampleRate), lpm = design::magnitude (lp, f, sampleRate);
+            w[(size_t) i] = f * hpm * hpm * lpm * lpm;   // white: the energy per log step grows with f
+            r[(size_t) i] = model.ratioAt (f);
+            total += w[(size_t) i];
+        }
+        const auto edcDb = [&] (double t)
+        {
+            double e = 0.0;
+            for (int i = 0; i < numPoints; ++i)
+                e += w[(size_t) i] * std::exp (-13.815510558 * t / r[(size_t) i]);
+            return 10.0 * std::log10 (std::max (e, 1.0e-300) / total);
+        };
+        const auto timeAt = [&] (double db)
+        {
+            double lo = 0.0, hi = 60.0;
+            for (int it = 0; it < 40; ++it)
+            {
+                const double mid = 0.5 * (lo + hi);
+                if (edcDb (mid) > db)
+                    lo = mid;
+                else
+                    hi = mid;
+            }
+            return 0.5 * (lo + hi);
+        };
+        const double t30 = 2.0 * (timeAt (-35.0) - timeAt (-5.0));   // in units of the loop's mid RT60
+
+        // Calibrated against the rendered tails (all 8 types, 0.5..6 s, damping 3..15 kHz): the dense
+        // network's highs live a little longer than the single-loop model says (exponent < 1), and long
+        // lines need a few passes to build the diffuse tail, which shortens the fitted slope of short decays
+        const double damped = std::pow (t30 > 0.0 ? 1.0 / t30 : 1.0, dampingExponent);
+        const double decaySeconds = juce::jlimit (0.1f, maxDecaySeconds, s.decaySeconds);
+        const double buildUp = 1.0 + buildUpWeight * (model.m / sampleRate) / decaySeconds;
+        return (float) juce::jlimit (1.0, (double) maxCompensation, damped * buildUp);
+    }
+
+    float ReverbModule::predictedRt60 (const ReverbSettings& s, float hz, double sampleRate) noexcept
+    {
+        const LoopModel model (s, sampleRate);
+        const double decaySeconds = juce::jlimit (0.1f, maxDecaySeconds, s.decaySeconds);
+        return (float) (decaySeconds * decayCompensationFor (s, sampleRate) * model.ratioAt (hz));
+    }
+
+    void ReverbModule::updateCompensationTarget() noexcept
+    {
+        const std::array<float, 7> key { (float) juce::jlimit (0, numTypes - 1, settings.type), settings.dampingHz,
+                                         settings.bassMultiplier, settings.lowCutHz, settings.highCutHz, settings.size,
+                                         settings.decaySeconds };
+        if (key == compKey)
+            return;
+        compKey = key;
+        compensation.setTargetValue (decayCompensationFor (settings, fs));
     }
 
     //==========================================================================
@@ -196,11 +332,13 @@ namespace velvox::dsp
         lowCut.reset (sampleRate, 0.05);
         highCut.reset (sampleRate, 0.05);
         bass.reset (sampleRate, 0.1);
+        compensation.reset (sampleRate, 0.1);
+        compKey.fill (-1.0f);
 
         setSettings (settings);
         for (auto* s : { &sizeScale, &preDelaySamples, &width, &early, &diffusion, &modulation })
             s->setCurrentAndTargetValue (s->getTargetValue());
-        for (auto* s : { &decay, &damping, &lowCut, &highCut, &bass })
+        for (auto* s : { &decay, &damping, &lowCut, &highCut, &bass, &compensation })
             s->setCurrentAndTargetValue (s->getTargetValue());
         topologyGain.setCurrentAndTargetValue (1.0f);
 
@@ -237,7 +375,7 @@ namespace velvox::dsp
     void ReverbModule::setSettings (const ReverbSettings& s) noexcept
     {
         settings = s;
-        sizeScale.setTargetValue (minScale + (maxScale - minScale) * juce::jlimit (0.0f, 1.0f, s.size));
+        sizeScale.setTargetValue (sizeScaleFor (s.size));
         preDelaySamples.setTargetValue ((float) (juce::jlimit (0.0f, maxPreDelayMs, s.preDelayMs) * 0.001 * fs));
         width.setTargetValue (juce::jlimit (0.0f, 1.0f, s.width));
         early.setTargetValue (juce::jlimit (0.0f, 1.0f, s.early));
@@ -248,6 +386,7 @@ namespace velvox::dsp
         lowCut.setTargetValue (juce::jlimit (20.0f, 2000.0f, s.lowCutHz));
         highCut.setTargetValue (juce::jlimit (1000.0f, 20000.0f, s.highCutHz));
         bass.setTargetValue (juce::jlimit (0.5f, 2.0f, s.bassMultiplier));
+        updateCompensationTarget();
     }
 
     void ReverbModule::configureTopology() noexcept
@@ -257,9 +396,7 @@ namespace velvox::dsp
         // Density all-passes and early reflection pattern depend on the character only
         for (int l = 0; l < numLines; ++l)
         {
-            const float t = (float) l / (float) (numLines - 1);
-            const float ms = v.densityMs * (0.35f + 0.65f * t) * (1.0f + 0.07f * std::sin ((float) l * 2.3f));
-            density[(size_t) l].setLength ((int) std::lround (ms * 0.001 * fs));
+            density[(size_t) l].setLength (densitySamplesAt (v, l, fs));
             const double rate = v.modRateHz * (0.55 + 0.9 * std::fmod ((double) l * 0.618034, 1.0));
             lfoInc[(size_t) l] = twoPi * rate / fs;
         }
@@ -294,16 +431,14 @@ namespace velvox::dsp
     {
         const auto& v = voicing (activeType);
         const float scale = sizeScale.getCurrentValue();
-        const double t60 = decay.getCurrentValue();
+        const double t60 = (double) decay.getCurrentValue() * compensation.getCurrentValue();
         const double bassT60 = t60 * bass.getCurrentValue();
         const double fDamp = juce::jlimit (500.0, 0.45 * fs, (double) damping.getCurrentValue() * v.hfBias);
         const double cosW = std::cos (twoPi * fDamp / fs);
 
         for (int l = 0; l < numLines; ++l)
         {
-            const float t = (float) l / (float) (numLines - 1);
-            const float ms = v.lineMinMs * std::pow (v.lineMaxMs / v.lineMinMs, t) * (1.0f + 0.031f * std::sin ((float) l * 3.7f));
-            baseDelay[(size_t) l] = ms * scale * 0.001f * (float) fs;
+            baseDelay[(size_t) l] = lineMsAt (v, l) * scale * 0.001f * (float) fs;
 
             // Effective loop length: line + density all-pass (its mean group delay = its length)
             const double m = baseDelay[(size_t) l] + density[(size_t) l].length;
@@ -314,14 +449,7 @@ namespace velvox::dsp
 
             // Jot absorption low-pass H = (1 - a) / (1 - a z^-1): unity at DC, and at fDamp one
             // extra factor gMid per pass - the RT60 there is half the mid RT60
-            const double r = gMid * gMid;
-            double a = 0.0;
-            if (1.0 - r > 1.0e-9)
-            {
-                const double p = 1.0 - r * cosW;
-                const double disc = std::max (0.0, p * p - (1.0 - r) * (1.0 - r));
-                a = juce::jlimit (0.0, 0.999, (p - std::sqrt (disc)) / (1.0 - r));
-            }
+            const double a = jotCoeff (gMid, cosW);
             dampA[(size_t) l] = (float) a;
             dampB[(size_t) l] = (float) (1.0 - a);
         }
@@ -367,8 +495,10 @@ namespace velvox::dsp
             }
 
             const bool sizeMoving = sizeScale.isSmoothing();
-            if (sizeMoving || decay.isSmoothing() || damping.isSmoothing() || bass.isSmoothing() || appliedScale < 0.0f)
+            if (sizeMoving || decay.isSmoothing() || damping.isSmoothing() || bass.isSmoothing() || compensation.isSmoothing()
+                || appliedScale < 0.0f)
             {
+                compensation.skip (n);
                 sizeScale.skip (n);
                 decay.skip (n);
                 damping.skip (n);
