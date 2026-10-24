@@ -84,13 +84,9 @@ namespace velvox::automix
 
         // Compare the automatic mix with the state before it (real parameter switch)
         void showPrevious (bool previous);
-        bool isShowingPrevious() const noexcept { return isComparePrevious ? (hasPreviousSnapshot && isComparePrevious()) : showingPrevious; }
+        // A hidden snapshot of the state before the mix (0.6: A/B is gone); Vorher / Nachher
+        bool isShowingPrevious() const noexcept { return showingPrevious; }
 
-        // The plugin's A/B slots do the comparison (set by the processor): after a mix
-        // A = the state before, B = the mix; "Vorher / Mix" switches the slots
-        std::function<void (const ParameterSnapshot& before, const ParameterSnapshot& mix)> onMixApplied;
-        std::function<void (bool showPrevious)> selectCompare;
-        std::function<bool()> isComparePrevious;
         // Called around every multi-parameter change made here: (starting, asUndoStep).
         // asUndoStep = false for the Vorher / Nachher switch (listening, not editing).
         std::function<void (bool starting, bool asUndoStep)> onApplying;

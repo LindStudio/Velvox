@@ -62,13 +62,6 @@ public:
     // Automatic mix: capture during playback, analysis, plan, apply (see AutoMix/)
     velvox::automix::AutoMixController& getAutoMix() noexcept { return autoMix; }
 
-    // A/B comparison (message thread only): two complete states - every parameter and the
-    // chain with its instances. An empty slot starts as a copy of the active one.
-    int getActiveSlot() const noexcept { return activeSlot; }
-    void selectSlot (int slot);
-    void copyActiveSlotToOther();
-    bool isSlotFilled (int slot) const noexcept { return slotValid[(size_t) juce::jlimit (0, 1, slot)]; }
-    bool slotsAreEqual();   // the other slot sounds like the current state (or is empty)
 
     // Module instances in the chain, order, send-insert modes. setRouting is
     // message-thread only; the audio thread reads a lock-free copy (SeqLockValue).
@@ -181,11 +174,6 @@ private:
         void audioProcessorParameterChangeGestureEnd (juce::AudioProcessor*, int index) override { history.gestureEnded (index); }
         velvox::UndoHistory& history;
     } gestureListener { undoHistory };
-
-    // A/B slots hold full parameter snapshots
-    std::array<velvox::ParameterSnapshot, 2> slots;
-    std::array<bool, 2> slotValid { false, false };
-    int activeSlot = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VelvoxAudioProcessor)
 };

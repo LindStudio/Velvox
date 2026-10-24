@@ -475,21 +475,6 @@ public:
             expect (h.proc.getRouting() == Routing::defaults(), "format 1 preset -> default routing: " + h.proc.getRouting().toString());
         }
 
-        beginTest ("A/B slots include routing and repeated instances");
-        {
-            Harness h;
-            auto r = Routing::defaults();
-            r.insertAt (1, ModuleId::eq, 1);
-            h.proc.selectSlot (1);
-            h.proc.setRouting (r);
-            setId (h, "midGain_2", 5.0f);
-            h.proc.selectSlot (0);
-            expect (h.proc.getRouting() == Routing::defaults());
-            expectWithinAbsoluteError (getId (h, "midGain_2"), 0.0f, 0.01f);
-            h.proc.selectSlot (1);
-            expect (h.proc.getRouting() == r);
-            expectWithinAbsoluteError (getId (h, "midGain_2"), 5.0f, 0.01f);
-        }
     }
 };
 

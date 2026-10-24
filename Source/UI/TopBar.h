@@ -73,8 +73,6 @@ namespace velvox::ui
 
         juce::TextButton presetButton, prev { juce::String::fromUTF8 ("\xe2\x80\xb9") }, next { juce::String::fromUTF8 ("\xe2\x80\xba") },
                          save, actions;   // icon buttons (drawn in paintOverChildren): save, menu
-        juce::TextButton slotA { "A" }, slotB { "B" }, copy { "Copy A to B" };
-        int abCheckCounter = 0;
         juce::OwnedArray<juce::Button> tabs;   // CHAIN, AUTO MIX, VOCAL CHECK
         View view = View::autoMix;
         Toggle bypass;
@@ -84,6 +82,5 @@ namespace velvox::ui
         int modifiedCheck = 0;
 
         juce::String shownPreset;
-        int shownSlot = -1;
     };
 }

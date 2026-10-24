@@ -172,16 +172,13 @@ namespace velvox::ui
         tabs[1]->setTooltip (juce::String::fromUTF8 ("Automatischer Mix: analysieren, Ergebnis, Vergleich"));
         tabs[2]->setTooltip (juce::String::fromUTF8 ("Vocal Check: Diagnose der Aufnahme mit Vorschlägen"));
 
-        for (auto* c : std::initializer_list<juce::Component*> { &presetButton, &prev, &next, &save, &actions, &slotA, &slotB,
-                                                                  &copy, &bypass, &help })
+        for (auto* c : std::initializer_list<juce::Component*> { &presetButton, &prev, &next, &save, &actions, &bypass, &help })
             addAndMakeVisible (c);
 
         // Segmented groups
         prev.setConnectedEdges (juce::Button::ConnectedOnRight);
         presetButton.setConnectedEdges (juce::Button::ConnectedOnLeft | juce::Button::ConnectedOnRight);
         next.setConnectedEdges (juce::Button::ConnectedOnLeft);
-        slotA.setConnectedEdges (juce::Button::ConnectedOnRight);
-        slotB.setConnectedEdges (juce::Button::ConnectedOnLeft);
 
         presetButton.setColour (juce::TextButton::textColourOffId, colours::text);
         presetButton.setColour (juce::TextButton::buttonColourId, colours::accent.withAlpha (0.025f));
@@ -196,13 +193,6 @@ namespace velvox::ui
         next.onClick = [this] { proc.getPresetManager().loadNext(); };
         save.onClick = [this] { requestSave(); };
         actions.onClick = [this] { showPresetActions(); };
-
-        slotA.setTooltip ("Settings A - switch to compare two versions");
-        slotB.setTooltip ("Settings B - switch to compare two versions");
-        copy.setTooltip ("Copy the active settings to the other slot");
-        slotA.onClick = [this] { proc.selectSlot (0); };
-        slotB.onClick = [this] { proc.selectSlot (1); };
-        copy.onClick = [this] { proc.copyActiveSlotToOther(); };
 
         bypass.setTooltip ("Hear the unprocessed vocal (latency compensated). For a fair comparison set Level match to Bypass match.");
         bypass.getProperties().set ("danger", true);   // drawn in the bypass colour while on
@@ -342,25 +332,6 @@ namespace velvox::ui
                     presetButton.setButtonText (modified ? shownPreset + "  (edited)" : shownPreset);
                 presetButton.setTooltip (modified ? "Choose a preset - the current one was edited (save it to keep your version)"
                                                   : "Choose a preset");
-            }
-        }
-
-        // A/B: the active slot is lit; the copy button also says whether A and B differ
-        // (checked a few times per second - it compares every parameter and the chain)
-        if (++abCheckCounter >= 12 || proc.getActiveSlot() != shownSlot)
-        {
-            abCheckCounter = 0;
-            shownSlot = proc.getActiveSlot();
-            slotA.setToggleState (shownSlot == 0, juce::dontSendNotification);
-            slotB.setToggleState (shownSlot == 1, juce::dontSendNotification);
-            const bool equal = proc.slotsAreEqual();
-            const juce::String text = equal ? "A = B" : (shownSlot == 0 ? "Copy A to B" : "Copy B to A");
-            if (copy.getButtonText() != text)
-            {
-                copy.setButtonText (text);
-                copy.setTooltip (equal ? "A and B are identical. Change something to compare two versions - or click to copy anyway."
-                                       : juce::String ("A and B differ. Click to copy the active slot (") + (shownSlot == 0 ? "A" : "B")
-                                             + ") to the other one.");
             }
         }
     }
@@ -511,10 +482,6 @@ namespace velvox::ui
         right.removeFromRight (8);
         bypass.setBounds (right.removeFromRight (92));
         right.removeFromRight (10);
-        copy.setBounds (right.removeFromRight (100));
-        right.removeFromRight (6);
-        slotB.setBounds (right.removeFromRight (34));
-        slotA.setBounds (right.removeFromRight (34));
         right.removeFromRight (18);
         const auto tabRow = right.withSizeKeepingCentre (right.getWidth(), getHeight());
         auto tabArea = tabRow;
@@ -535,7 +502,7 @@ namespace velvox::ui
 
     juce::Rectangle<int> TopBar::getCompareArea() const
     {
-        return slotA.getBounds().getUnion (copy.getBounds());
+        return bypass.getBounds();
     }
 
     juce::Rectangle<int> TopBar::getModeArea() const

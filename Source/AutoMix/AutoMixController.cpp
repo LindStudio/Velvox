@@ -295,8 +295,6 @@ namespace velvox::automix
         if (onApplying) onApplying (false, true);
 
         mixSnapshot = ParameterSnapshot::capture (apvts, de ("Headliner Auto-Mix"));
-        if (onMixApplied)
-            onMixApplied (previousSnapshot, mixSnapshot);
 
         // Report for the UI (only what was really set up)
         MixReport r;
@@ -330,15 +328,6 @@ namespace velvox::automix
 
     void AutoMixController::showPrevious (bool previous)
     {
-        if (selectCompare)
-        {
-            if (! hasPreviousSnapshot || ! hasMix())
-                return;
-            selectCompare (previous);
-            showingPrevious = previous;
-            sendChangeMessage();
-            return;
-        }
         if (! hasPreviousSnapshot || ! hasMix() || previous == showingPrevious)
             return;
         // Listening to the state before / after is no edit: never an undo step
