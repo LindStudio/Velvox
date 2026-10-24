@@ -119,6 +119,16 @@ namespace velvox
     bind (raw.reverbHighCut, pid::reverbHighCut);
     bind (raw.delaySpread, pid::delaySpread);   bind (raw.delayDrive, pid::delayDrive);
     bind (raw.delayDiffusion, pid::delayDiffusion); bind (raw.delayMod, pid::delayMod);
+    for (int n = 0; n < dsp::maxEqBands; ++n)
+    {
+        auto& b = raw.eqBands[(size_t) n];
+        const auto bindBand = [&] (Raw& r, const char* field) { bind (r, pid::eqBandId (n + 1, field).toRawUTF8()); };
+        bindBand (b.on, pid::eqband::on);       bindBand (b.type, pid::eqband::type);
+        bindBand (b.freq, pid::eqband::freq);   bindBand (b.gain, pid::eqband::gain);
+        bindBand (b.q, pid::eqband::q);         bindBand (b.slope, pid::eqband::slope);
+        bindBand (b.role, pid::eqband::role);
+    }
+    bind (raw.eqLegacyResponse, pid::eqLegacyResponse);
     }
 
     dsp::ChainSettings SettingsReader::read (const dsp::Routing& routing, bool monoMonitor) const noexcept
@@ -244,6 +254,12 @@ namespace velvox
     s.eq.lpfOn = raw.lpfOn.on();
     s.eq.lpfFreq = raw.lpfFreq.get();
     s.eq.lpfSlope = raw.lpfSlope.index();
+    for (size_t n = 0; n < raw.eqBands.size(); ++n)
+    {
+        const auto& b = raw.eqBands[n];
+        s.eq.bands[n] = { b.on.on(), b.type.index(), b.freq.get(), b.gain.get(), b.q.get(), b.slope.index(), b.role.index() };
+    }
+    s.eq.legacyResponse = raw.eqLegacyResponse.on();
     s.sat.character = raw.satCharacter.index();
     s.deess.mode = raw.deessMode.index();
     s.comp.detector = raw.compDetector.index();

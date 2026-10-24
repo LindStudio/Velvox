@@ -198,6 +198,9 @@ has a live visual (no static pictures).
 - **Quality gate (Q6):** for each module, measure the reference at matched settings first. Pass = within or better than the reference
   on the module's key metrics (tolerances set per metric in the plan). At most 3 improvement rounds per module. If a gap remains, it
   is documented in docs/BENCHMARK.md and work moves on. Nothing blocks the run.
+- **Quality fixes vs. old projects:** pure quality fixes (less aliasing, de-cramped response, less ringing, correct pitch
+  ratio, less distortion from ballistics, decay matching the set time) may change old projects slightly. They are listed in the
+  CHANGELOG. Changes of *character* (a different intended sound for the same settings) are avoided, or apply only to fresh instances.
 - **New parameters (Q7):** new IDs may be added wherever a listed control has none. Their default reproduces the old behaviour.
 - **Undo (Q8):** one global history (JUCE `UndoManager` on the APVTS plus routing edits). It holds all parameter gestures, routing
   edits, preset loads and Vocal Check "Anwenden"/"Alles anwenden", each as one step.

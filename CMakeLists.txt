@@ -35,6 +35,7 @@ set(VELVOX_SOURCES
     Source/Parameters/ParameterLayout.cpp
     Source/DSP/Filters.cpp
     Source/DSP/EqualizerModule.cpp
+    Source/DSP/EqDesign.cpp
     Source/DSP/CompressorModule.cpp
     Source/DSP/DeEsserModule.cpp
     Source/DSP/SaturationModule.cpp
@@ -79,6 +80,7 @@ set(VELVOX_SOURCES
     Source/UI/AnalysisOverlay.cpp
     Source/UI/TopBar.cpp
     Source/Parameters/SettingsReader.cpp
+    Source/Parameters/EqBands.cpp
     Source/Parameters/RoutingMigration.cpp
     Source/AutoMix/CaptureBuffer.cpp
     Source/AutoMix/VocalProfiler.cpp
@@ -170,7 +172,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)
@@ -178,6 +180,29 @@ if(VELVOX_BUILD_TESTS)
     # Modal loops only for the test runner (used to pump the message loop for UI snapshots)
     target_compile_definitions(VelvoxTests PRIVATE ${VELVOX_COMMON_DEFINITIONS} JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(VelvoxTests
+        PRIVATE
+            ${VELVOX_COMMON_LIBS}
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
+endif()
+
+# ---------------------------------------------------------------------------
+# Reference host (0.6 DSP quality): renders WAVs through one Headliner module or an
+# installed VST3 (VST3 hosting enabled for this tool only). See docs/QUALITY_BASELINE.md.
+# ---------------------------------------------------------------------------
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/RefHostTests.cpp)
+    target_include_directories(VelvoxTests PRIVATE tools/refhost)
+
+    juce_add_console_app(HeadlinerRefHost PRODUCT_NAME "HeadlinerRefHost")
+    target_sources(HeadlinerRefHost PRIVATE ${VELVOX_SOURCES} tools/refhost/RefHostMain.cpp)
+    target_include_directories(HeadlinerRefHost PRIVATE Source tools/refhost ${VELVOX_THIRD_PARTY_INCLUDES})
+    if(MSVC)
+        target_compile_options(HeadlinerRefHost PRIVATE /bigobj /utf-8)
+    endif()
+    target_compile_definitions(HeadlinerRefHost PRIVATE ${VELVOX_COMMON_DEFINITIONS}
+        JUCE_PLUGINHOST_VST3=1 JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_link_libraries(HeadlinerRefHost
         PRIVATE
             ${VELVOX_COMMON_LIBS}
             juce::juce_recommended_config_flags

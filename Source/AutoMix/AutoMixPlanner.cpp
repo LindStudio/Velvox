@@ -2,6 +2,7 @@
 #include "../Parameters/ParameterLayout.h"
 #include "../Parameters/SettingsReader.h"
 #include "../Parameters/RoutingMigration.h"
+#include "../Parameters/EqBands.h"
 
 namespace velvox::automix
 {
@@ -67,6 +68,54 @@ namespace velvox::automix
             if (! d.outputStage && d.module == m)
                 return &d;
         return nullptr;
+    }
+
+    //==========================================================================
+    dsp::EqBand eqBand (dsp::EqBandType type, float freq, float gain, float q, int slope)
+    {
+        dsp::EqBand b;
+        b.on = true;
+        b.type = (int) type;
+        b.freq = freq;
+        b.gain = gain;
+        b.q = q;
+        b.slope = slope;
+        return b;
+    }
+
+    std::optional<dsp::EqBand> roleBand (const MixPlan& plan, const std::map<juce::String, float>& current, dsp::EqRole role, int instance)
+    {
+        auto values = plan.values;
+        const auto access = eqbands::accessFor (values, current.empty() ? nullptr : &current);
+        const int i = eqbands::findBand (access, instance, role);
+        if (i < 0)
+            return std::nullopt;
+        return eqbands::readBand (access, instance, i);
+    }
+
+    float roleGain (const MixPlan& plan, const std::map<juce::String, float>& current, dsp::EqRole role, int instance)
+    {
+        const auto b = roleBand (plan, current, role, instance);
+        return b.has_value() && b->on ? b->gain : 0.0f;
+    }
+
+    int setRoleBand (MixPlan& plan, const std::map<juce::String, float>& current, int instance, dsp::EqRole role,
+                     const dsp::EqBand& value, bool createIfMissing)
+    {
+        const auto access = eqbands::accessFor (plan.values, current.empty() ? nullptr : &current);
+        int i = eqbands::findBand (access, instance, role);
+        if (i < 0)
+        {
+            if (! createIfMissing)
+                return -1;
+            i = eqbands::findFreeBand (access, instance);
+            if (i < 0)
+                return -1;
+        }
+        auto b = value;
+        b.role = (int) role;
+        eqbands::writeBand (access, instance, i, b);
+        return i;
     }
 
     void AutoMixPlanner::configureDeEsser (MixPlan& plan, const VocalProfile& p, float inGain, float range)
@@ -148,7 +197,15 @@ namespace velvox::automix
         // ================= EQ: clean-up, not colour =================
         plan.set (pid::eqOn, 1.0f);
         plan.set (pid::eqMix, 100.0f);
-        plan.set (pid::lpfOn, 0.0f);
+        // EQ decisions live in role bands of EQ 1 (spec 8, Q5): user bands are never touched
+        {
+            auto highCut = roleBand (plan, current, dsp::EqRole::highCut);
+            if (highCut.has_value() && highCut->on)
+            {
+                highCut->on = false;
+                setRoleBand (plan, current, 0, dsp::EqRole::highCut, *highCut, false);
+            }
+        }
         {
             float fc = 80.0f;
             juce::String reason = de ("Keine sichere Tonhöhe gemessen - Standard-Trennfrequenz für Gesang.");
@@ -168,38 +225,33 @@ namespace velvox::automix
                 fc = clamp (fc, 70.0f, 170.0f);
                 reason << de (" Zusätzlich viel Energie unter 90 Hz (") << db (p.rumbleDb) << ").";
             }
-            plan.set (pid::hpfOn, 1.0f);
-            plan.set (pid::hpfFreq, fc);
-            plan.set (pid::hpfSlope, rumble ? 1.0f : 0.0f);
-            decide (M::eq, de ("Low Cut ") + hz (plan.get (pid::hpfFreq)) + (rumble ? de (", 24 dB/Okt.") : de (", 12 dB/Okt.")), reason, measured);
+            setRoleBand (plan, current, 0, dsp::EqRole::lowCut, eqBand (dsp::EqBandType::lowCut, fc, 0.0f, 0.7071f, rumble ? 3 : 1), true);
+            decide (M::eq, de ("Low Cut ") + hz (fc) + (rumble ? de (", 24 dB/Okt.") : de (", 12 dB/Okt.")), reason, measured);
         }
 
         // Low band: body
-        plan.set (pid::lowType, 0.0f);
-        plan.set (pid::lowQ, 0.7071f);
-        plan.set (pid::lowFreq, 180.0f);
-        plan.set (pid::lowGain, 0.0f);
+        float lowFreq = 180.0f, lowGain = 0.0f;
         if (p.enoughMaterial && p.bodyDb > -3.0f && ! p.hasIssue ("mud"))
         {
             const float g = -clamp (1.5f + 0.4f * (p.bodyDb + 3.0f), 1.5f, 3.0f);
-            plan.set (pid::lowFreq, 200.0f);
-            plan.set (pid::lowGain, g);
+            lowFreq = 200.0f;
+            lowGain = g;
             decide (M::eq, de ("Tiefen ") + db (g) + de (" (Shelf 200 Hz)"),
                     de ("Viel Grundton-Energie (100-300 Hz: ") + db (p.bodyDb) + de (") - wirkt im Club-Mix schnell dröhnend."), true);
         }
         else if (p.enoughMaterial && p.bodyDb < -16.0f && ! noisy && p.pitchValid && p.f0LowHz < 200.0f)
         {
             const float g = clamp (1.0f + 0.15f * (-16.0f - p.bodyDb), 1.0f, 2.0f);
-            plan.set (pid::lowFreq, 170.0f);
-            plan.set (pid::lowGain, g);
+            lowFreq = 170.0f;
+            lowGain = g;
             decide (M::eq, de ("Wärme ") + db (g) + de (" (Shelf 170 Hz)"),
                     de ("Wenig Körper (100-300 Hz: ") + db (p.bodyDb) + de (") - eine kleine Anhebung gibt Wärme."), true);
         }
 
         // Mid bell: one clear problem at a time - a low resonance or the low-mid build-up
-        plan.set (pid::midGain, 0.0f);
-        plan.set (pid::midQ, 1.0f);
-        plan.set (pid::midFreq, 1500.0f);
+        setRoleBand (plan, current, 0, dsp::EqRole::warmth, eqBand (dsp::EqBandType::lowShelf, lowFreq, lowGain, 0.7071f), lowGain != 0.0f);
+
+        float midFreq = 1500.0f, midGain = 0.0f, midQ = 1.0f;
         const Resonance* lowRes = nullptr;
         for (auto& r : p.resonances)
             if (r.hz >= 250.0f && r.hz < 1200.0f && r.strong && p.pitchSpreadSemitones > 3.0f)
@@ -210,49 +262,48 @@ namespace velvox::automix
         if (p.enoughMaterial && lowRes != nullptr)
         {
             const float g = -clamp (0.3f * lowRes->excessDb, 2.0f, 4.0f);
-            plan.set (pid::midFreq, lowRes->hz);
-            plan.set (pid::midQ, 4.0f);
-            plan.set (pid::midGain, g);
+            midFreq = clamp (lowRes->hz, 200.0f, 8000.0f);   // the 0.5 mid band range
+            midQ = 4.0f;
+            midGain = g;
             decide (M::eq, de ("Resonanz ") + hz (lowRes->hz) + " " + db (g) + de (" (schmal)"),
                     de ("Schmale Spitze ") + db (lowRes->excessDb) + de (" über der Umgebung. Unter 1,2 kHz statisch mit dem EQ, darüber arbeitet SMOOTH."), true);
         }
         else if (p.enoughMaterial && p.hasIssue ("mud"))
         {
             const float g = -clamp (1.5f + 0.6f * (p.lowMidDb + 1.0f), 1.5f, 4.0f) * (plan.conservative ? 0.6f : 1.0f);
-            plan.set (pid::midFreq, clamp (p.lowMidPeakHz, 200.0f, 500.0f));
-            plan.set (pid::midQ, 1.2f);
-            plan.set (pid::midGain, g);
-            decide (M::eq, de ("Tiefmitten ") + db (g) + de (" bei ") + hz (plan.get (pid::midFreq)),
+            midFreq = clamp (p.lowMidPeakHz, 200.0f, 500.0f);
+            midQ = 1.2f;
+            midGain = g;
+            decide (M::eq, de ("Tiefmitten ") + db (g) + de (" bei ") + hz (midFreq),
                     de ("250-500 Hz ist ") + db (p.lowMidDb) + de (" gegenüber dem Kern - leicht mulmig. Ein breiter Schnitt macht Platz für Kick und Bass."), true);
         }
         else if (p.maskingHint && ! harsh)
         {
-            plan.set (pid::midFreq, 3000.0f);
-            plan.set (pid::midQ, 0.9f);
-            plan.set (pid::midGain, 1.0f);
+            midFreq = 3000.0f;
+            midQ = 0.9f;
+            midGain = 1.0f;
             decide (M::eq, de ("Präsenz +1,0 dB bei 3 kHz"),
                     de ("Der Beat ist im Präsenzbereich lauter als die Stimme (Sidechain-Messung, nur ein Hinweis) - daher nur eine kleine Anhebung."), false);
         }
 
         // High band: air / brightness, never on top of harshness or strong S sounds
-        plan.set (pid::highType, 0.0f);
-        plan.set (pid::highQ, 0.7071f);
-        plan.set (pid::highFreq, 10000.0f);
-        plan.set (pid::highGain, 0.0f);
+        setRoleBand (plan, current, 0, dsp::EqRole::autoMix, eqBand (dsp::EqBandType::bell, midFreq, midGain, midQ), midGain != 0.0f);
+
+        float highFreq = 10000.0f, highGain = 0.0f;
         if (p.enoughMaterial && dull && ! harsh)
         {
             float g = clamp (1.5f + 0.4f * (-16.0f - p.topDb), 1.5f, 4.5f);
             if (noisy || sibilant)
                 g = std::min (g, 2.0f);
-            plan.set (pid::highFreq, 9000.0f);
-            plan.set (pid::highGain, g);
+            highFreq = 9000.0f;
+            highGain = g;
             decide (M::eq, de ("Höhen ") + db (g) + de (" (Shelf 9 kHz)"),
                     de ("Die Aufnahme ist dunkel (über 2 kHz: ") + db (p.topDb) + ")" + (noisy || sibilant ? de (" - begrenzt wegen Rauschen/S-Lauten.") : juce::String (".")), true);
         }
         else if (p.enoughMaterial && p.airDb < -30.0f && ! harsh && ! sibilant && ! noisy)
         {
-            plan.set (pid::highFreq, 11000.0f);
-            plan.set (pid::highGain, 1.5f);
+            highFreq = 11000.0f;
+            highGain = 1.5f;
             decide (M::eq, de ("Luft +1,5 dB (Shelf 11 kHz)"),
                     de ("Wenig Energie über 10 kHz (") + db (p.airDb) + de (") - etwas Luft hilft der Stimme durch dichte Dance-Mixe."), true);
         }
@@ -260,6 +311,7 @@ namespace velvox::automix
         {
             plan.notes.push_back (de ("Keine Höhenanhebung: Die Aufnahme ist bereits hell genug."));
         }
+        setRoleBand (plan, current, 0, dsp::EqRole::air, eqBand (dsp::EqBandType::highShelf, highFreq, highGain, 0.7071f), highGain != 0.0f);
 
         // ================= Level Ride: phrase levels =================
         // Also on wet hooks with a small loudness range: in the blind listening test of

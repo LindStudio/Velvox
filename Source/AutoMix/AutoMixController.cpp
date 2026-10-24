@@ -1,6 +1,7 @@
 #include "AutoMixController.h"
 #include "../Parameters/ParameterLayout.h"
 #include "../StateKeys.h"
+#include "../Parameters/EqBands.h"
 
 namespace velvox::automix
 {
@@ -281,6 +282,7 @@ namespace velvox::automix
         if (onApplying) onApplying (true, true);
 
         // Apply through the normal parameters (gestures: the host sees every change)
+        eqbands::ScopedBridgeSuspend noEqBridge;   // the plan sets the EQ bands itself
         for (const auto& [id, value] : result.plan.values)
             if (auto* param = apvts.getParameter (id))
             {
