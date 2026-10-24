@@ -180,8 +180,11 @@ namespace velvox::refhost
             return std::min (rel (target.scaled, got.scaled), rel (target.raw, got.raw));
         }
 
-        inline double mismatchAt (juce::AudioProcessorParameter& p, const Number& target, float v)
+        // probe = true for plugins whose value-to-text ignores the value (shows the current one): set, then read
+        inline double mismatchAt (juce::AudioProcessorParameter& p, const Number& target, float v, bool probe = false)
         {
+            if (probe)
+                p.setValue (v);
             if (auto got = parseNumber (p.getText (v, 64)))
                 return mismatch (target, *got);
             return 1.0e12;
@@ -239,11 +242,12 @@ namespace velvox::refhost
         }
 
         constexpr double tolerance = 0.005;
+        const bool probe = ! discrete && p.getText (0.0f, 64) == p.getText (1.0f, 64) && p.getText (0.0f, 64) == p.getText (0.5f, 64);
 
         // 1. the plugin's own parser
         {
             const float v = p.getValueForText (text);
-            if (std::isfinite (v) && mismatchAt (p, *target, v) <= tolerance)
+            if (std::isfinite (v) && mismatchAt (p, *target, v, probe) <= tolerance)
             {
                 apply (v);
                 return true;
@@ -256,7 +260,7 @@ namespace velvox::refhost
         double bestCost = 1.0e300;
         for (int i = 0; i <= grid; ++i)
         {
-            const double c = mismatchAt (p, *target, (float) i / grid);
+            const double c = mismatchAt (p, *target, (float) i / grid, probe);
             if (c < bestCost)
             {
                 bestCost = c;
@@ -282,16 +286,16 @@ namespace velvox::refhost
             for (int it = 0; it < 60; ++it)
             {
                 const float m1 = lo + (hi - lo) / 3.0f, m2 = hi - (hi - lo) / 3.0f;
-                if (mismatchAt (p, *target, m1) <= mismatchAt (p, *target, m2))
+                if (mismatchAt (p, *target, m1, probe) <= mismatchAt (p, *target, m2, probe))
                     hi = m2;
                 else
                     lo = m1;
             }
             const float v = 0.5f * (lo + hi);
-            if (mismatchAt (p, *target, v) < bestCost)
+            if (mismatchAt (p, *target, v, probe) < bestCost)
                 bestV = v;
         }
-        const double cost = mismatchAt (p, *target, bestV);
+        const double cost = mismatchAt (p, *target, bestV, probe);
         if (cost > 0.02)
         {
             error = p.getName (64) + ": closest reachable value to '" + text + "' is '" + p.getText (bestV, 64) + "'";

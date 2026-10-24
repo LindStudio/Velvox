@@ -7,6 +7,7 @@ Tested in tools/refhost/tests/test_qmetrics.py.
 from __future__ import annotations
 
 import math
+import warnings
 
 import numpy as np
 from scipy import signal
@@ -20,7 +21,9 @@ EPS = 1e-30
 # ---------------------------------------------------------------------------------------------
 
 def read_wav(path):
-    fs, x = wavfile.read(path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", wavfile.WavFileWarning)
+        fs, x = wavfile.read(path)
     if x.dtype == np.int16:
         x = x / 32768.0
     elif x.dtype == np.int32:

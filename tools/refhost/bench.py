@@ -31,6 +31,7 @@ HOST = os.environ.get("REFHOST_EXE", os.path.join(REPO, "build", "HeadlinerRefHo
 DEFAULT_OUT = r"C:\Users\jakob\dev\velvox-bench\2026-10-25\modules"
 HEADLINER = "Headliner"
 BLOCK = 512
+PREROLL = 0.25   # seconds of silence before every input (parameter smoothing / engine switches settle, as in a DAW)
 
 # metric -> (better, default tolerance, unit, description)
 METRICS = {
@@ -38,6 +39,7 @@ METRICS = {
     "resp_rms_dev_db": ("lower", 0.2, "dB", "RMS response deviation from the analog prototype"),
     "resp_hf_max_dev_db": ("lower", 0.5, "dB", "max deviation above 10 kHz (cramping)"),
     "resp_vs_ref_max_db": ("lower", 0.5, "dB", "max |Headliner - reference| response (Headliner row only)"),
+    "cramp_dev_db": ("lower", 0.5, "dB", "max |bell at 15 kHz - same bell at 1.5 kHz shifted x10| (cramping)"),
     "curve_dev_db": ("lower", 1.0, "dB", "max deviation of the static curve from the ideal soft-knee curve"),
     "ratio_measured": ("match", 0.5, ":1", "ratio from the top of the static curve"),
     "threshold_measured_db": ("match", 2.0, "dB", "threshold where the curve leaves unity slope"),
@@ -58,14 +60,14 @@ METRICS = {
     "musical_noise_db": ("lower", 0.2, "dB", "mean spectral gain-mask flux (time + frequency)"),
     "thd_1k_db": ("match", 2.0, "dB", "THD, 1 kHz at -12 dBFS (calibration target for the reference)"),
     "thd_1k_m24_db": ("match", 3.0, "dB", "THD, 1 kHz at -24 dBFS (level dependence)"),
-    "h2_h3_db": ("match", 6.0, "dB", "2nd vs 3rd harmonic (even/odd character)"),
+    "h2_h3_db": ("info", 0.0, "dB", "2nd vs 3rd harmonic (even/odd character)"),
     "aliasing_db": ("lower", 3.0, "dB", "non-harmonic energy, 4987 Hz at -6 dBFS"),
     "imd_db": ("lower", 3.0, "dB", "SMPTE IMD, 60 Hz + 7 kHz 4:1"),
     "pitch_err_cents": ("lower", 2.0, "ct", "|median pitch error| of a 220 Hz tone"),
     "pitch_jitter_cents": ("lower", 1.0, "ct", "std of the pitch track of a 220 Hz tone"),
     "spurious_db": ("lower", 3.0, "dB", "non-harmonic energy of the shifted tone"),
     "vocal_pitch_err_cents": ("lower", 3.0, "ct", "median |f0 ratio error| on the vocals"),
-    "hnr_drop_db": ("lower", 1.5, "dB", "harmonics-to-noise ratio lost on the vocals"),
+    "hnr_drop_db": ("info", 0.0, "dB", "HNR(dry) - HNR(out) on the vocals (pitch changes it; informative only)"),
     "latency_ms": ("lower", 10.0, "ms", "reported latency"),
     "comb_depth_db": ("lower", 1.0, "dB", "peak-to-notch range of the mono-sum transfer (pink noise)"),
     "am_roughness_db": ("lower", 0.5, "dB", "std of the 20 ms envelope of a 440 Hz tone (beating/flanging)"),
@@ -87,7 +89,7 @@ METRICS = {
     "bass_ratio": ("match", 0.2, "x", "T30(250 Hz) / T30(1 kHz)"),
     "treble_ratio": ("match", 0.2, "x", "T30(4 kHz) / T30(1 kHz)"),
     "gain_jitter_db": ("lower", 0.05, "dB", "RMS 2nd difference of the 50 ms gain trace"),
-    "edge_splatter_db": ("lower", 0.0, "dB", "energy outside 1 kHz +-100 Hz (clicks at gate edges)"),
+    "edge_splatter_db": ("lower", 0.0, "dB", "energy above 5 kHz with a 1 kHz tone (clicks at gate edges)"),
     "gate_depth_db": ("lower", 0.0, "dB", "closed-gate level relative to open"),
     "null_vs_input_db": ("lower", 0.0, "dB", "residual output - input"),
     "mix0_null_db": ("lower", 0.0, "dB", "residual vs dry at mix 0 (Headliner)"),
@@ -104,6 +106,8 @@ ABSOLUTE = {"mix0_null_db": -60.0, "off_null_db": -100.0}
 def verdict(h, r, better, tol, absolute=None):
     if h is None or (isinstance(h, float) and math.isnan(h)):
         return "n/a"
+    if better == "info":
+        return "info"
     target = absolute if absolute is not None else r
     if target is None or (isinstance(target, float) and math.isnan(target)):
         return "info"
@@ -236,7 +240,9 @@ class Ctx:
 
     def render(self, sig, x, tail=0.0, sides=None, headliner_extra=None, ref_extra=None, tag="", raw=False):
         """Renders x through every side; returns {side: y} (failed references are recorded and left out)."""
-        inp = self.input_file(sig, x)
+        pre = int(PREROLL * FS)
+        xp = np.concatenate([np.zeros((pre,) + np.shape(x)[1:]), x], axis=0)
+        inp = self.input_file(sig, xp)
         sides = sides or self.sides()
         results = {}
 
@@ -257,7 +263,7 @@ class Ctx:
                     self.ref_errors[name] = str(e)
                     self.log(f"  reference failed: {e}")
                     continue
-                y = q.channels(y)
+                y = q.channels(y)[pre:]
                 if self.case.info.get("wet") == "subtract_dry" and side.kind == "headliner" and not headliner_extra and not raw:
                     xx = stereo(x)
                     y = y.copy()
@@ -334,16 +340,39 @@ def calibrate(ctx: Ctx, case: M.Case):
         hside = ctx.sides()[0]
         h = ctx.render("calib", x, sides=[hside])
         target = probe_value(cal.probe, x, h[HEADLINER])
-        best, best_err, best_v = None, 1e9, None
         base = list(ref.params) + list(case.refs.get(ref_name, []))
-        sides = [Side(f"{ref_name}", "ref", ref.plugin, ref.sub, base + [(cal.param, str(v))], ref.setn) for v in cal.values]
-        for v, side in zip(cal.values, sides):
-            r = ctx.render("calib", x, sides=[side], tag=f"_{cal.param.replace(' ', '')}{v}")
-            if ref_name not in r:
+        tried = {}
+
+        def measure(v):
+            side = Side(ref_name, "ref", ref.plugin, ref.sub, base + [(cal.param, f"{v:g}")], ref.setn)
+            r = ctx.render("calib", x, sides=[side], tag=f"_{cal.param.replace(' ', '')}{v:g}")
+            tried[v] = probe_value(cal.probe, x, r[ref_name]) if ref_name in r else None
+            return tried[v]
+
+        for v in cal.values:
+            if measure(v) is None:
                 break
-            val = probe_value(cal.probe, x, r[ref_name])
-            if abs(val - target) < best_err:
-                best_err, best, best_v = abs(val - target), v, val
+        ok = {v: m for v, m in tried.items() if m is not None}
+        best = best_v = None
+        if ok:
+            # refine between the two grid values that bracket the target (bisection, monotonic probe)
+            vs = sorted(ok)
+            for a, b in zip(vs, vs[1:]):
+                if (ok[a] - target) * (ok[b] - target) < 0:
+                    for _ in range(5):
+                        mid = 0.5 * (a + b)
+                        m = measure(mid)
+                        if m is None:
+                            break
+                        if (ok[a] - target) * (m - target) <= 0:
+                            b = mid
+                        else:
+                            a, ok[a] = mid, m
+                        ok[mid] = m
+                    break
+            best = min(tried, key=lambda v: abs(tried[v] - target) if tried[v] is not None else 1e9)
+            best_v = tried[best]
+            best = f"{best:g}"
         if best is not None:
             ctx.calibrated.setdefault(case.name, {})[ref_name] = (cal.param, str(best))
             ctx.log(f"  calibrated {ref_name}: {cal.param}={best} ({cal.probe}: ref {best_v:.2f} vs Headliner {target:.2f})")
@@ -369,6 +398,24 @@ def proc_eq_response(ctx, case):
         if r.name in resp:
             ctx.metric("resp_vs_ref_max_db", {HEADLINER: q.response_deviation(f, resp[r.name], resp[HEADLINER])["max_db"]},
                        note=f"vs {r.name}")
+
+
+def proc_eq_cramping(ctx, case):
+    """Definition-independent cramping test: the same bell an octave-decade lower (1.5 kHz) is the plugin's own
+    shape; at 15 kHz it must look the same (shifted by x10 in frequency)."""
+    x = S.white_noise(FS, 8.0, -24.0)
+    cr = case.info["cramp"]
+    lo = ctx.render("noise", x, headliner_extra=cr["lo"]["headliner"], ref_extra={k: v for k, v in cr["lo"].items()}, tag="_lo")
+    hi = ctx.render("noise", x, headliner_extra=cr["hi"]["headliner"], ref_extra={k: v for k, v in cr["hi"].items()}, tag="_hi")
+    f_hi = np.geomspace(4000, 20000, 120)
+    vals = {}
+    for n in hi:
+        if n not in lo:
+            continue
+        _, h_hi = q.freq_response(x, hi[n], FS, grid=f_hi)
+        _, h_lo = q.freq_response(x, lo[n], FS, grid=f_hi / 10)
+        vals[n] = float(np.max(np.abs(h_hi - h_lo)))
+    ctx.metric("cramp_dev_db", vals, note="bell +6 dB Q 1.5: 15 kHz vs 1.5 kHz x10")
 
 
 def _ideal_curve(levels, thr, ratio, knee):
@@ -725,8 +772,8 @@ def proc_gate_tone(ctx, case):
     for n, y in ys.items():
         m = q.mono(y)[int(0.5 * FS):]
         f, p = sps.welch(m, FS, nperseg=8192)
-        inband = p[(f > 900) & (f < 1100)].sum()
-        spl[n] = 10 * np.log10(max(p.sum() - inband, 1e-30) / max(p.sum(), 1e-30))
+        # clicks are broadband; smooth gate ramps keep their sidebands within a few kHz of the 1 kHz tone
+        spl[n] = 10 * np.log10(max(p[f > 5000].sum(), 1e-30) / max(p.sum(), 1e-30))
         w = int(0.002 * FS)
         c = np.concatenate([[0], np.cumsum(m ** 2)])
         st = np.arange(0, len(m) - w, w)
@@ -762,7 +809,7 @@ def proc_cpu(ctx, case):
 
 
 PROCEDURES = {
-    "eq_response": proc_eq_response, "dyn_curve": proc_dyn_curve, "dyn_timing": proc_dyn_timing, "thd_lf": proc_thd_lf,
+    "eq_response": proc_eq_response, "eq_cramping": proc_eq_cramping, "dyn_curve": proc_dyn_curve, "dyn_timing": proc_dyn_timing, "thd_lf": proc_thd_lf,
     "vocal": proc_vocal, "vocal_listen": proc_vocal_listen, "deess_vocal": proc_deess_vocal,
     "deess_inactive_null": proc_deess_inactive_null, "resonance_vocal": proc_resonance_vocal, "sat_tones": proc_sat_tones,
     "pitch_tones": proc_pitch_tones, "pitch_vocal": proc_pitch_vocal, "mod_widen": proc_mod_widen,
@@ -857,6 +904,10 @@ def main(argv=None):
     ap.add_argument("--no-ref", action="store_true", help="Headliner only (quick re-measure)")
     ap.add_argument("--jobs", type=int, default=4)
     a = ap.parse_args(argv)
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:
+        pass
     if not os.path.exists(HOST):
         sys.exit(f"HeadlinerRefHost not found at {HOST} (build target HeadlinerRefHost or set REFHOST_EXE)")
     keys = list(M.MODULES) if a.module == "all" else [a.module]

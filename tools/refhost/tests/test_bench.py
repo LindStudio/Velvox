@@ -71,6 +71,7 @@ class Targets(unittest.TestCase):
         self.assertEqual(bench.verdict(2.4, 2.0, "match", 0.5), "pass")
         self.assertEqual(bench.verdict(3.0, None, "lower", 1.0, absolute=-2.0), "FAIL")
         self.assertEqual(bench.verdict(float("nan"), 1.0, "lower", 1.0), "n/a")
+        self.assertEqual(bench.verdict(1.0, 2.0, "info", 0.0), "info")
 
 
 class MissingReference(unittest.TestCase):

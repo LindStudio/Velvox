@@ -44,6 +44,12 @@ namespace
                 juce::ParameterID { "flag", 1 }, "Flag", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
                 juce::AudioParameterFloatAttributes()
                     .withStringFromValueFunction ([] (float v, int) { return v > 0.5f ? juce::String ("yes") : juce::String ("no"); })));
+            // A plugin whose value-to-text conversion ignores the value and always shows the current one
+            addParameter (depth = new juce::AudioParameterFloat (
+                juce::ParameterID { "depth", 1 }, "Depth", juce::NormalisableRange<float> (0.0f, 100.0f), 38.0f,
+                juce::AudioParameterFloatAttributes()
+                    .withStringFromValueFunction ([this] (float, int) { return juce::String (depth != nullptr ? depth->get() : 38.0f, 1) + " %"; })
+                    .withValueFromStringFunction ([] (const juce::String&) { return 38.0f; })));
         }
 
         void prepareToPlay (double, int) override
@@ -87,6 +93,7 @@ namespace
         juce::AudioParameterFloat* freq = nullptr;
         juce::AudioParameterFloat* amount = nullptr;
         juce::AudioParameterFloat* flag = nullptr;
+        juce::AudioParameterFloat* depth = nullptr;
 
     private:
         std::vector<std::vector<float>> line;
@@ -175,6 +182,8 @@ public:
             expect (refhost::setParameterText (*fx.flag, "no", err), err);
             expectLessThan (fx.flag->get(), 0.5f);
             expect (refhost::describeParameters (fx).contains ("[A|B|C]"), "choices are listed");
+            expect (refhost::setParameterText (*fx.depth, "30", err), err);
+            expectWithinAbsoluteError (fx.depth->get(), 30.0f, 0.2f);
         }
 
         beginTest ("single-module Headliner processor: one insert, module on, transparent at neutral settings");

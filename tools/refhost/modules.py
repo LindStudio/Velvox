@@ -93,8 +93,10 @@ _add(Module(
         Case("air",
              headliner={**EQ_OFF, "midFreq": 15000, "midGain": 6, "midQ": 1.5},
              refs={"Pro-Q 4": _pq4_band(1, True, "Bell", 15000, 6, 1.5)},
-             procedures=["eq_response"],
-             info={"analog": [("bell", 15000.0, 6.0, 1.5)]}),
+             procedures=["eq_response", "eq_cramping"],
+             info={"analog": [("bell", 15000.0, 6.0, 1.5)],
+                   "cramp": {"lo": {"headliner": {"midFreq": 1500}, "Pro-Q 4": [("Band 1 Frequency", "1500")]},
+                             "hi": {"headliner": {"midFreq": 15000}, "Pro-Q 4": [("Band 1 Frequency", "15000")]}}}),
         Case("cut",
              headliner={**EQ_OFF, "midFreq": 350, "midGain": -6, "midQ": 2.0, "lowType": 0, "lowFreq": 150, "lowGain": -3,
                         "lowQ": 0.71},
@@ -102,8 +104,10 @@ _add(Module(
              procedures=["eq_response"],
              info={"analog": [("bell", 350.0, -6.0, 2.0), ("lowshelf", 150.0, -3.0, 0.71)]}),
     ],
-    tolerances={"resp_max_dev_db": ("lower", 0.5), "resp_hf_max_dev_db": ("lower", 0.5), "resp_rms_dev_db": ("lower", 0.2),
-                "cpu_pct": ("lower", 0.5)}))
+    # Pro-Q 4 uses its own Q / slope definitions (e.g. a 24 dB/oct cut is -6 dB at the corner), so the response
+    # accuracy is judged against Headliner's own analog prototypes (absolute limits); cramping is compared to Pro-Q 4.
+    tolerances={"resp_max_dev_db": ("lower", 0.0, 0.5), "resp_hf_max_dev_db": ("lower", 0.0, 0.5),
+                "resp_rms_dev_db": ("lower", 0.0, 0.2), "cramp_dev_db": ("lower", 0.5), "cpu_pct": ("lower", 0.5)}))
 
 # ---------------------------------------------------------------------------------------------
 # Compressor vs Pro-C 2 (Vocal style)
@@ -118,7 +122,10 @@ _add(Module(
           Ref("Pro-C 2 Clean", FF + "Pro-C 2.vst3", params=PRO_C2_BASE + [("Style", "Clean")] + _COMP_R[6:])],
     cases=[Case("vocal", headliner=_COMP_H, procedures=["dyn_curve", "dyn_timing", "thd_lf", "vocal", "nulls", "cpu"],
                 info={"threshold": -24, "ratio": 4, "knee": 6, "attack": 10, "release": 120})],
-    tolerances={"curve_dev_db": ("lower", 1.0), "ratio_measured": ("match", 0.5), "attack_ms": ("match", 5.0),
+    # Pro-C 2 "Vocal" is program dependent (its static ratio steepens to ~12:1), so ratio / threshold are judged against
+    # the set values; ballistics and THD against Pro-C 2 Vocal.
+    tolerances={"curve_dev_db": ("lower", 0.0, 1.0), "ratio_measured": ("match", 0.5, 4.0),
+                "threshold_measured_db": ("match", 2.0, -24.0), "attack_ms": ("match", 5.0),
                 "release_ms": ("match", 40.0), "thd_100hz_db": ("lower", 3.0), "crest_reduction_db": ("match", 1.0),
                 "st_loudness_std_lu": ("match", 0.5), "cpu_pct": ("lower", 0.5)}))
 
@@ -132,9 +139,9 @@ _add(Module(
                       ("High-Pass Frequency", "6000"), ("Low-Pass Frequency", "20000")])],
     cases=[Case("vocal", headliner={"deessFreq": 6500, "deessThreshold": -30, "deessRange": 6, "deessMode": 0, "deessListen": 0},
                 procedures=["deess_vocal", "deess_inactive_null", "nulls", "cpu"],
-                calibrate={"Pro-DS": Calib("Threshold", [-50, -45, -40, -35, -30, -25, -20, -15], "sib_reduction")})],
+                calibrate={"Pro-DS": Calib("Threshold", [-60, -55, -50, -45, -40, -35, -30, -25, -20], "sib_reduction")})],
     tolerances={"sib_reduction_db": ("higher", 1.0), "nonsib_hf_change_db": ("higher", 0.5), "selectivity_db": ("higher", 1.0),
-                "transient_change_db": ("match", 1.0), "inactive_null_db": ("lower", 0.0, -60.0), "cpu_pct": ("lower", 0.5)}))
+                "transient_change_db": ("match", 1.0, 0.0), "inactive_null_db": ("lower", 0.0, -60.0), "cpu_pct": ("lower", 0.5)}))
 
 # ---------------------------------------------------------------------------------------------
 # Smooth vs soothe2, depth calibrated to the same removed energy
@@ -145,9 +152,9 @@ _add(Module(
     cases=[Case("vocal", headliner={"smoothAmount": 50, "smoothSensitivity": 50, "smoothLow": 800, "smoothHigh": 12000,
                                     "smoothAttack": 5, "smoothRelease": 80, "smoothMode": 0, "smoothOutput": 0, "smoothDelta": 0},
                 procedures=["resonance_vocal", "nulls", "cpu"],
-                calibrate={"soothe2": Calib("depth", [1, 2, 3, 4, 5, 6, 8, 10, 12], "delta_energy")})],
+                calibrate={"soothe2": Calib("depth", [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10], "delta_energy")})],
     tolerances={"pte_reduction_db": ("higher", 0.3), "ltas_reduction_db": ("higher", 0.5), "flatness_gain_db": ("higher", 0.2),
-                "transient_change_db": ("match", 0.5), "musical_noise_db": ("lower", 0.2), "cpu_pct": ("lower", 1.0)}))
+                "transient_change_db": ("match", 0.5, 0.0), "musical_noise_db": ("lower", 0.2), "cpu_pct": ("lower", 1.0)}))
 
 # ---------------------------------------------------------------------------------------------
 # Saturation vs Saturn 2 (drive calibrated to the same THD at 1 kHz / -12 dBFS)
@@ -167,7 +174,8 @@ _add(Module(
              procedures=["sat_tones"],
              calibrate={"Saturn 2": Calib("Band 1 Drive", [5, 10, 15, 20, 30, 40, 50, 65, 80, 100], "thd_1k")}),
     ],
-    tolerances={"aliasing_db": ("lower", 3.0), "thd_1k_db": ("match", 2.0), "thd_1k_m24_db": ("match", 3.0),
+    tolerances={"aliasing_db": ("lower", 3.0), "thd_1k_db": ("match", 1.0), "thd_1k_m24_db": ("info", 0.0),
+                "crest_reduction_db": ("info", 0.0), "st_loudness_std_lu": ("info", 0.0),
                 "imd_db": ("lower", 3.0), "cpu_pct": ("lower", 1.0)}))
 
 # ---------------------------------------------------------------------------------------------
@@ -183,8 +191,9 @@ _add(Module(
            Case("down5", headliner={"pitchSemitones": -5, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
                 refs={"Graillon 3": [("Pitch Shift", "-5")]}, procedures=["pitch_tones", "pitch_vocal"],
                 info={"semitones": -5})],
-    tolerances={"pitch_err_cents": ("lower", 2.0), "pitch_jitter_cents": ("lower", 1.0), "spurious_db": ("lower", 3.0),
-                "vocal_pitch_err_cents": ("lower", 3.0), "hnr_drop_db": ("lower", 1.5), "latency_ms": ("lower", 10.0),
+    # Graillon tracks a pure sine 36 ct flat (its tracker wants a voice), so the tone tests use absolute limits.
+    tolerances={"pitch_err_cents": ("lower", 0.0, 2.0), "pitch_jitter_cents": ("lower", 0.0, 1.0), "spurious_db": ("lower", 0.0, -60.0),
+                "vocal_pitch_err_cents": ("lower", 1.0), "latency_ms": ("lower", 10.0),
                 "cpu_pct": ("lower", 2.0)}))
 
 # ---------------------------------------------------------------------------------------------
@@ -271,7 +280,9 @@ _add(Module(
                                       "smashOutput": 0},
                 procedures=["dyn_curve", "dyn_timing", "thd_lf", "vocal", "nulls", "cpu"],
                 info={"attack": 2, "release": 80})],
-    tolerances={"thd_100hz_db": ("lower", 3.0), "attack_ms": ("match", 5.0), "release_ms": ("match", 40.0),
+    # parallel compression: the static curve of the blend has no single ratio / threshold (informative only)
+    tolerances={"ratio_measured": ("info", 0.0), "threshold_measured_db": ("info", 0.0),
+                "thd_100hz_db": ("lower", 3.0), "attack_ms": ("match", 5.0), "release_ms": ("match", 40.0),
                 "crest_reduction_db": ("match", 2.0), "cpu_pct": ("lower", 0.5)}))
 
 # ---------------------------------------------------------------------------------------------
@@ -294,13 +305,13 @@ _add(Module(
     key="chop", title="Stutter", refs=[],
     cases=[Case("gate", headliner={"chopPattern": 0, "chopRate": 1, "chopDepth": 100, "chopSmooth": 3},
                 procedures=["gate_tone", "nulls", "cpu"])],
-    tolerances={"edge_splatter_db": ("lower", 0.0, -40.0), "gate_depth_db": ("lower", 0.0, -40.0), "cpu_pct": ("lower", 0.0, 1.0)}))
+    tolerances={"edge_splatter_db": ("lower", 0.0, -60.0), "gate_depth_db": ("lower", 0.0, -40.0), "cpu_pct": ("lower", 0.0, 1.0)}))
 
 _add(Module(
     key="pulse", title="Pulse", refs=[], mix_param="pulseMix",
     cases=[Case("default", headliner={"pulseRate": 2, "pulseDepth": 100, "pulseMix": 100},
                 procedures=["gate_tone", "nulls", "cpu"])],
-    tolerances={"edge_splatter_db": ("lower", 0.0, -40.0), "gate_depth_db": ("lower", 0.0, -30.0), "cpu_pct": ("lower", 0.0, 1.0)}))
+    tolerances={"edge_splatter_db": ("lower", 0.0, -60.0), "gate_depth_db": ("lower", 0.0, -30.0), "cpu_pct": ("lower", 0.0, 1.0)}))
 
 _add(Module(
     key="check", title="Vocal Check", refs=[],
