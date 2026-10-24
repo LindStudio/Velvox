@@ -93,9 +93,21 @@ namespace velvox::refhost
         {
             auto* p = params[i];
             const float v = p->getValue();
+            auto text = p->getText (v, 64).trim();
+            if (p->getLabel().isNotEmpty() && ! text.endsWithIgnoreCase (p->getLabel().trim()))
+                text << " " << p->getLabel().trim();
             s << juce::String (i).paddedLeft (' ', 4) << "  " << parameterId (*p).paddedRight (' ', 22) << "  "
-              << p->getName (64).paddedRight (' ', 30) << "  " << (p->getText (v, 64) + " " + p->getLabel()).trim().paddedRight (' ', 18)
-              << "  n=" << juce::String (v, 4) << "  steps=" << p->getNumSteps() << (p->isDiscrete() ? " discrete" : "") << "\n";
+              << p->getName (64).paddedRight (' ', 30) << "  " << text.paddedRight (' ', 18)
+              << "  n=" << juce::String (v, 4) << "  steps=" << p->getNumSteps() << (p->isDiscrete() ? " discrete" : "");
+            const int steps = p->getNumSteps();
+            if ((p->isDiscrete() || p->isBoolean()) && steps >= 2 && steps <= 64)
+            {
+                juce::StringArray names;
+                for (int k = 0; k < steps; ++k)
+                    names.add (p->getText ((float) k / (float) (steps - 1), 64).trim());
+                s << " [" << names.joinIntoString ("|") << "]";
+            }
+            s << "\n";
         }
         return s;
     }
@@ -112,6 +124,18 @@ namespace velvox::refhost
         inline std::optional<Number> parseNumber (const juce::String& text)
         {
             auto t = text.trim().toLowerCase();
+            if (t.containsChar (',') && ! t.containsChar ('.'))
+                t = t.replaceCharacter (',', '.');   // German-locale decimals
+            // "2k5" (soothe style) -> "2.5k"
+            for (int i = 1; i + 1 < t.length(); ++i)
+                if (t[i] == 'k' && juce::CharacterFunctions::isDigit (t[i - 1]) && juce::CharacterFunctions::isDigit (t[i + 1]))
+                {
+                    int e = i + 1;
+                    while (e < t.length() && juce::CharacterFunctions::isDigit (t[e]))
+                        ++e;
+                    t = t.substring (0, i) + "." + t.substring (i + 1, e) + "k" + t.substring (e);
+                    break;
+                }
             if (t.startsWith ("-inf") || t.startsWith ("-∞"))
                 return Number { -std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity() };
             int i = 0;
@@ -196,6 +220,20 @@ namespace velvox::refhost
         const auto target = parseNumber (text);
         if (! target)
         {
+            // a continuous parameter that displays words ("yes" / "no", "Freq-shift"): scan its range
+            for (int i = 0; i <= 400; ++i)
+            {
+                const float v = (float) i / 400.0f;
+                if (p.getText (v, 128).trim().equalsIgnoreCase (text.trim()))
+                {
+                    // centre of the run of values that show this text
+                    int j = i;
+                    while (j < 400 && p.getText ((float) (j + 1) / 400.0f, 128).trim().equalsIgnoreCase (text.trim()))
+                        ++j;
+                    apply (0.5f * (v + (float) j / 400.0f));
+                    return true;
+                }
+            }
             error = "'" + text + "' is no choice of " + p.getName (64) + " and no number";
             return false;
         }

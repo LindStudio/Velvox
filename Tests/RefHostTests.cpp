@@ -35,6 +35,15 @@ namespace
                 juce::AudioParameterFloatAttributes()
                     .withStringFromValueFunction ([] (float v, int) { return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " kHz"
                                                                                            : juce::String (v, 1) + " Hz"; })));
+            // German-locale decimals ("2,50") and a continuous parameter shown as yes / no (as some plugins do)
+            addParameter (amount = new juce::AudioParameterFloat (
+                juce::ParameterID { "amount", 1 }, "Amount", juce::NormalisableRange<float> (0.0f, 10.0f), 0.0f,
+                juce::AudioParameterFloatAttributes()
+                    .withStringFromValueFunction ([] (float v, int) { return juce::String (v, 2).replaceCharacter ('.', ',') + " dB"; })));
+            addParameter (flag = new juce::AudioParameterFloat (
+                juce::ParameterID { "flag", 1 }, "Flag", juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f,
+                juce::AudioParameterFloatAttributes()
+                    .withStringFromValueFunction ([] (float v, int) { return v > 0.5f ? juce::String ("yes") : juce::String ("no"); })));
         }
 
         void prepareToPlay (double, int) override
@@ -76,6 +85,8 @@ namespace
         juce::AudioParameterFloat* gain = nullptr;
         juce::AudioParameterChoice* mode = nullptr;
         juce::AudioParameterFloat* freq = nullptr;
+        juce::AudioParameterFloat* amount = nullptr;
+        juce::AudioParameterFloat* flag = nullptr;
 
     private:
         std::vector<std::vector<float>> line;
@@ -155,6 +166,15 @@ public:
             expect (refhost::setParameterText (*fx.freq, "300 Hz", err), err);
             expectWithinAbsoluteError (fx.freq->get(), 300.0f, 3.0f);
             expect (! refhost::setParameterText (*fx.mode, "Z", err), "unknown choice is an error");
+            expect (refhost::setParameterText (*fx.amount, "2.5", err), err);
+            expectWithinAbsoluteError (fx.amount->get(), 2.5f, 0.02f);
+            expect (refhost::setParameterText (*fx.freq, "2k5", err), err);
+            expectWithinAbsoluteError (fx.freq->get(), 2500.0f, 25.0f);
+            expect (refhost::setParameterText (*fx.flag, "yes", err), err);
+            expectGreaterThan (fx.flag->get(), 0.5f);
+            expect (refhost::setParameterText (*fx.flag, "no", err), err);
+            expectLessThan (fx.flag->get(), 0.5f);
+            expect (refhost::describeParameters (fx).contains ("[A|B|C]"), "choices are listed");
         }
 
         beginTest ("single-module Headliner processor: one insert, module on, transparent at neutral settings");
