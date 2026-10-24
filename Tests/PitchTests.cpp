@@ -2,6 +2,7 @@
 
 #include "TestHelpers.h"
 #include "DSP/PitchTracker.h"
+#include "DSP/FormantCorrector.h"
 #include <juce_dsp/juce_dsp.h>
 
 using namespace velvox;
@@ -421,6 +422,68 @@ public:
             for (int i = 0; i < (int) (0.5 * fs); ++i)
                 t.push (0.0f);
             expectEquals (t.getPeriod(), 0.0f, "silence is unvoiced");
+        }
+
+        beginTest ("Lattice: all-zero then all-pole with the same coefficients is the identity");
+        {
+            dsp::LatticePair lat;
+            std::array<float, dsp::LatticePair::order> k {};
+            juce::Random r (9);
+            for (auto& v : k) v = 0.5f * (r.nextFloat() * 2.0f - 1.0f);
+            double err = 0.0, ref = 0.0;
+            for (int i = 0; i < 4000; ++i)
+            {
+                const float x = r.nextFloat() - 0.5f;
+                const float y = lat.processAllPole (lat.processAllZero (x, k.data(), 0), k.data(), 0);
+                err += (double) (y - x) * (y - x);
+                ref += (double) x * x;
+            }
+            logMessage ("lattice round trip error " + juce::String (10.0 * std::log10 (err / ref + 1e-30), 1) + " dB");
+            expectLessThan (10.0 * std::log10 (err / ref + 1e-30), -100.0);
+        }
+
+        beginTest ("Formant corrector: identity warp passes the signal unchanged");
+        {
+            const double fs = 48000.0;
+            dsp::FormantCorrector fc;
+            fc.prepare (fs, 700, 512);
+            fc.setWarp (1.0f, 1.0f);
+            auto x = vowel (fs, 1.0, 150.0);
+            juce::AudioBuffer<float> y (x);
+            std::vector<float> per ((size_t) x.getNumSamples(), 320.0f);
+            for (int s = 0; s < x.getNumSamples(); s += 512)
+            {
+                const int n = std::min (512, x.getNumSamples() - s);
+                float* io[2] { y.getWritePointer (0, s), y.getWritePointer (1, s) };
+                fc.process (x.getReadPointer (0, s), io, 2, n, per.data() + s);
+            }
+            float diff = 0.0f;
+            for (int i = 0; i < x.getNumSamples(); ++i) diff = std::max (diff, std::abs (y.getSample (0, i) - x.getSample (0, i)));
+            expectEquals (diff, 0.0f);
+        }
+
+        beginTest ("Formant corrector: undoes the formant move of a resampling shift (+12 and -12 st)");
+        for (float rho : { 2.0f, 0.5f })
+        {
+            const double fs = 48000.0, F1 = 700.0, F2 = 1800.0;
+            dsp::FormantCorrector fc;
+            fc.prepare (fs, 700, 512);
+            fc.setWarp (rho, 1.0f);
+            const auto x = vowel (fs, 2.0, 150.0, F1, F2);
+            auto y = vowel (fs, 2.0, 150.0 * rho, F1 * rho, F2 * rho);   // what resampling by rho makes of x
+            std::vector<float> per ((size_t) x.getNumSamples(), (float) (fs / 150.0));
+            for (int s = 0; s < x.getNumSamples(); s += 256)
+            {
+                const int n = std::min (256, x.getNumSamples() - s);
+                float* io[2] { y.getWritePointer (0, s), y.getWritePointer (1, s) };
+                fc.process (x.getReadPointer (0, s), io, 2, n, per.data() + s);
+            }
+            const auto sp = spectrumOf (y, (int) (0.5 * fs), fs);
+            const double o1 = formantPeak (sp, 150.0 * rho, 350.0, 1150.0), o2 = formantPeak (sp, 150.0 * rho, 1250.0, 3000.0);
+            logMessage ("rho " + juce::String (rho, 1) + ": F1 " + juce::String (o1, 0) + ", F2 " + juce::String (o2, 0));
+            expectLessThan (std::abs (std::log2 (o1 / F1)), 1.0 / 3.0);
+            expectLessThan (std::abs (std::log2 (o2 / F2)), 1.0 / 3.0);
+            expect (allFinite (y));
         }
     }
 };

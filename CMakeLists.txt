@@ -50,6 +50,7 @@ set(VELVOX_SOURCES
     Source/DSP/Ducker.cpp
     Source/DSP/PitchModule.cpp
     Source/DSP/PitchTracker.cpp
+    Source/DSP/FormantCorrector.cpp
     Source/DSP/ChopModule.cpp
     Source/DSP/PulseModule.cpp
     Source/DSP/SmashModule.cpp
