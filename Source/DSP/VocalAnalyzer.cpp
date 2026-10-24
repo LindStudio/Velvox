@@ -32,9 +32,47 @@ namespace velvox::dsp
         : check (module),
           inL ((size_t) fftSize), inR ((size_t) fftSize),
           pullL ((size_t) fftSize), pullR ((size_t) fftSize),
-          work ((size_t) fftSize * 2)
+          work ((size_t) fftSize * 2),
+          pitchWork ((size_t) fftSize * 4)
     {
+        // Autocorrelation of the analysis window: divides out the taper of the frame
+        // autocorrelation, so a periodic signal reads ~1 at its period (computed once)
+        static const std::vector<float> acf = []
+        {
+            std::vector<float> w ((size_t) fftSize), a ((size_t) fftSize);
+            for (int i = 0; i < fftSize; ++i)
+                w[(size_t) i] = 0.5f - 0.5f * std::cos (2.0f * juce::MathConstants<float>::pi * (float) i / (float) (fftSize - 1));
+            for (int k = 0; k < fftSize; ++k)
+            {
+                double sum = 0.0;
+                for (int i = 0; i + k < fftSize; ++i)
+                    sum += (double) w[(size_t) i] * w[(size_t) (i + k)];
+                a[(size_t) k] = (float) sum;
+            }
+            const float a0 = a[0];
+            for (auto& v : a)
+                v /= a0;
+            return a;
+        }();
+        windowAcf = acf;
         setSampleRate (48000.0);
+    }
+
+    namespace
+    {
+        // ITU-R BS.1770 K-weighting (the 48 kHz coefficients, evaluated at a frequency):
+        // power gain of the pre-filter (high shelf) times the RLB high-pass
+        double kWeightingPower (double freq)
+        {
+            const auto mag2 = [freq] (double b0, double b1, double b2, double a1, double a2)
+            {
+                const std::complex<double> z = std::polar (1.0, -2.0 * juce::MathConstants<double>::pi * freq / 48000.0);
+                const auto h = (b0 + b1 * z + b2 * z * z) / (1.0 + a1 * z + a2 * z * z);
+                return std::norm (h);
+            };
+            return mag2 (1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, 0.73248077421585)
+                 * mag2 (1.0, -2.0, 1.0, -1.99004745483398, 0.99007225036621);
+        }
     }
 
     void VocalAnalyzer::setSampleRate (double sampleRate)
@@ -54,6 +92,8 @@ namespace velvox::dsp
                 ++binsPerBand[(size_t) band];
             }
         }
+        for (int b = 0; b < numBands; ++b)
+            kWeight[(size_t) b] = (float) kWeightingPower (bandCentre (b));
         clear();
     }
 
@@ -81,6 +121,7 @@ namespace velvox::dsp
     {
         frames.clear();
         fill = 0;
+        ++generation;
         check.resetStats();
     }
 
@@ -144,6 +185,8 @@ namespace velvox::dsp
 
         std::fill (work.begin() + fftSize, work.end(), 0.0f);
         window.multiplyWithWindowingTable (work.data(), (size_t) fftSize);
+        std::copy (work.begin(), work.begin() + fftSize, pitchWork.begin());
+        f.f0 = estimatePitch (pitchWork.data());
         fft.performFrequencyOnlyForwardTransform (work.data(), true);
         for (int k = 1; k < fftSize / 2; ++k)
         {
@@ -152,9 +195,73 @@ namespace velvox::dsp
                 f.bands[(size_t) band] += work[(size_t) k] * work[(size_t) k];
         }
 
+        // Band power -> mean square of the frame: one-sided Parseval with the Hann window
+        // (sum of w^2 = 3/8 N)
+        const double toMeanSquare = 2.0 / ((double) fftSize * 0.375 * (double) fftSize);
+        double lf = 0.0, k = 0.0;
+        for (int b = 0; b < numBands; ++b)
+        {
+            const double p = f.bands[(size_t) b];
+            k += p * kWeight[(size_t) b];
+            const float c = bandCentre (b);
+            if (c >= 40.0f && c < 150.0f)
+                lf += p;
+        }
+        f.kPower = (float) (k * toMeanSquare);
+        f.lfDb = toDb (lf * toMeanSquare);
+
         frames.push_back (f);
         while (frames.size() > maxFrames())
             frames.pop_front();
+    }
+
+    float VocalAnalyzer::estimatePitch (const float* windowed)
+    {
+        // `windowed` = pitchWork: the Hann-windowed frame in the first fftSize values.
+        // Autocorrelation = inverse FFT of the power spectrum (zero padded: no wrap-around).
+        const int n2 = fftSize * 2;
+        auto* w = pitchWork.data();
+        jassert (windowed == w);
+        juce::ignoreUnused (windowed);
+        std::fill (w + fftSize, w + n2 * 2, 0.0f);
+        pitchFft.performRealOnlyForwardTransform (w, true);
+        for (int k = 0; k <= n2 / 2; ++k)
+        {
+            const float re = w[2 * k], im = w[2 * k + 1];
+            w[2 * k] = re * re + im * im;
+            w[2 * k + 1] = 0.0f;
+        }
+        pitchFft.performRealOnlyInverseTransform (w);
+        const float r0 = w[0];
+        if (r0 <= 1.0e-12f)
+            return 0.0f;
+
+        const int minLag = std::max (2, (int) (fs / 1000.0));
+        const int maxLag = std::min (fftSize / 2, (int) (fs / 70.0));
+        const auto acf = [&] (int k) { return w[k] / (r0 * std::max (0.05f, windowAcf[(size_t) k])); };
+
+        // Search after the first dip below zero (the main lobe around lag 0 is not a period)
+        int start = minLag;
+        while (start < maxLag && acf (start) > 0.0f)
+            ++start;
+        float best = 0.0f;
+        for (int k = start; k <= maxLag; ++k)
+            best = std::max (best, acf (k));
+        if (best < 0.5f)
+            return 0.0f;
+        // The shortest lag that is nearly as periodic as the best one (avoids sub-octaves)
+        for (int k = start + 1; k < maxLag; ++k)
+        {
+            const float a = acf (k);
+            if (a >= 0.9f * best && a >= acf (k - 1) && a >= acf (k + 1))
+            {
+                const float y0 = acf (k - 1), y1 = a, y2 = acf (k + 1);
+                const float den = y0 - 2.0f * y1 + y2;
+                const float shift = std::abs (den) > 1.0e-9f ? juce::jlimit (-0.5f, 0.5f, 0.5f * (y0 - y2) / den) : 0.0f;
+                return (float) (fs / ((double) k + shift));
+            }
+        }
+        return 0.0f;
     }
 
     AnalysisResult VocalAnalyzer::measure() const
@@ -164,6 +271,7 @@ namespace velvox::dsp
         r.clipEvents = check.clipEvents.load();
         r.stereo = check.stereoContent.load();
         r.analysedSeconds = (float) (frames.size() * hop / fs);
+        r.generation = generation;
 
         using C = Finding::Certainty;
         // Material factor: little voice material lowers every spectral / dynamic confidence
@@ -274,6 +382,8 @@ namespace velvox::dsp
         const double ePres = energy (2000, 5000), eSib = energy (5000, 10000), eAir = energy (10000, 16000);
         const float midDb = toDb (eMid);
         r.bandDb = { toDb (eRumble) - midDb, toDb (eBody) - midDb, 0.0f, toDb (ePres) - midDb, toDb (eSib) - midDb, toDb (eAir) - midDb };
+
+        measureExtras (r, voiced, gate);
 
         if (! r.enoughMaterial)
             return r;
@@ -526,6 +636,199 @@ namespace velvox::dsp
             return a.severity > b.severity;
         });
         return r;
+    }
+
+    void VocalAnalyzer::measureExtras (AnalysisResult& r, const std::vector<bool>& voiced, float gate) const
+    {
+        const double frameSeconds = hop / fs;
+        const size_t nf = frames.size();
+        const double toMeanSquare = 2.0 / ((double) fftSize * 0.375 * (double) fftSize);
+
+        // ---- Voice level
+        {
+            std::vector<float> v;
+            for (size_t i = 0; i < nf; ++i)
+                if (voiced[i])
+                    v.push_back (frames[i].rmsDb);
+            if (! v.empty())
+                r.voiceLevelDb = percentile (v, 0.5f);
+        }
+
+        // ---- Pitch statistics
+        {
+            std::vector<float> f0s;
+            int voicedCount = 0;
+            for (size_t i = 0; i < nf; ++i)
+                if (voiced[i])
+                {
+                    ++voicedCount;
+                    if (frames[i].f0 > 0.0f)
+                        f0s.push_back (frames[i].f0);
+                }
+            r.pitchedShare = voicedCount > 0 ? (float) f0s.size() / (float) voicedCount : 0.0f;
+            if (f0s.size() >= 20 && r.pitchedShare > 0.25f)
+            {
+                r.pitchValid = true;
+                r.f0MedianHz = percentile (f0s, 0.5f);
+                r.f0LowHz = percentile (f0s, 0.1f);
+                r.f0HighHz = percentile (f0s, 0.9f);
+                r.pitchSpreadSemitones = 12.0f * std::log2 (std::max (1.0f, r.f0HighHz) / std::max (1.0f, r.f0LowHz));
+                r.highVoice = r.f0LowHz > 250.0f;
+                std::map<int, int> hist;
+                for (float f : f0s)
+                    ++hist[(int) std::lround (12.0f * std::log2 (f / 440.0f))];
+                for (auto& [semi, count] : hist)
+                    if ((float) count >= 0.04f * (float) f0s.size())
+                        r.sungNotesHz.push_back (440.0f * std::pow (2.0f, (float) semi / 12.0f));
+            }
+        }
+
+        // ---- Loudness (BS.1770 style gating on the analysis frames) and loudness range
+        {
+            const auto lufs = [] (double ms) { return -0.691f + toDb (ms); };
+            double sum = 0.0;
+            int count = 0;
+            for (auto& f : frames)
+                if (lufs (f.kPower) > -70.0f) { sum += f.kPower; ++count; }
+            if (count > 0)
+            {
+                const float relGate = lufs (sum / count) - 10.0f;
+                double s2 = 0.0;
+                int c2 = 0;
+                for (auto& f : frames)
+                    if (lufs (f.kPower) > -70.0f && lufs (f.kPower) > relGate) { s2 += f.kPower; ++c2; }
+                if (c2 > 0)
+                    r.loudnessLufs = lufs (s2 / c2);
+            }
+
+            // Short-term loudness: 3 s windows, step ~0.15 s; gates -70 LUFS and -20 LU
+            const int perWindow = std::max (1, (int) std::lround (3.0 / frameSeconds));
+            const int step = std::max (1, (int) std::lround (0.15 / frameSeconds));
+            std::vector<float> st;
+            for (size_t start = 0; start + (size_t) perWindow <= nf; start += (size_t) step)
+            {
+                double p = 0.0;
+                for (size_t i = start; i < start + (size_t) perWindow; ++i)
+                    p += frames[i].kPower;
+                const float l = lufs (p / perWindow);
+                if (l > -70.0f)
+                    st.push_back (l);
+            }
+            if (st.size() >= 20)
+            {
+                double p = 0.0;
+                for (float l : st)
+                    p += std::pow (10.0, (l + 0.691) / 10.0);
+                const float relGate = lufs (p / (double) st.size()) - 20.0f;
+                std::vector<float> kept;
+                for (float l : st)
+                    if (l > relGate)
+                        kept.push_back (l);
+                if (kept.size() >= 10)
+                {
+                    r.lraLu = percentile (kept, 0.95f) - percentile (kept, 0.10f);
+                    r.lraValid = true;
+                }
+            }
+        }
+
+        // ---- Plosives: low-frequency bursts far above the usual low end of the voice,
+        // dominating their frame and short (well above the frames 3 hops before and after)
+        {
+            std::vector<float> lfVoiced;
+            for (size_t i = 0; i < nf; ++i)
+                if (voiced[i])
+                    lfVoiced.push_back (frames[i].lfDb);
+            if (! lfVoiced.empty() && nf > 6)
+            {
+                const float medLf = percentile (lfVoiced, 0.5f);
+                bool inEvent = false;
+                for (size_t i = 3; i + 3 < nf; ++i)
+                {
+                    const auto& f = frames[i];
+                    double total = 0.0;
+                    for (auto p : f.bands)
+                        total += p;
+                    const float share = (float) (std::pow (10.0, f.lfDb / 10.0) / std::max (1.0e-20, total * toMeanSquare));
+                    const bool burst = f.lfDb > gate - 10.0f && f.lfDb >= medLf + 12.0f && share >= 0.4f
+                                    && f.lfDb >= frames[i - 3].lfDb + 6.0f && f.lfDb >= frames[i + 3].lfDb + 6.0f;
+                    if (burst && ! inEvent)
+                        ++r.plosiveCount;
+                    inEvent = burst;
+                }
+                const float voicedMinutes = (float) (lfVoiced.size() * frameSeconds / 60.0);
+                r.plosivesPerMinute = voicedMinutes > 0.0f ? (float) r.plosiveCount / voicedMinutes : 0.0f;
+            }
+        }
+
+        // ---- Stereo: mono-sum loss over the frames that carry signal in L / R
+        if (nf > 0)
+        {
+            std::vector<float> lrLevels;
+            for (auto& f : frames)
+                lrLevels.push_back (toDb ((f.ll + f.rr) / (2.0 * fftSize)));
+            const float loudLr = percentile (lrLevels, 0.95f);
+            double ll = 0.0, rr = 0.0, lr = 0.0;
+            for (size_t i = 0; i < nf; ++i)
+                if (lrLevels[i] > std::max (-50.0f, loudLr - 35.0f))
+                {
+                    ll += frames[i].ll;
+                    rr += frames[i].rr;
+                    lr += frames[i].lr;
+                }
+            if (ll + rr > 0.0)
+            {
+                const double monoSum = std::max (1.0e-12 * (ll + rr), 0.5 * (ll + rr + 2.0 * lr));
+                r.monoLossDb = juce::jmin (60.0f, toDb (ll + rr) - toDb (monoSum));
+                r.sideToMidDb = toDb (std::max (0.0, 0.25 * (ll + rr - 2.0 * lr))) - toDb (std::max (1.0e-20, 0.25 * (ll + rr + 2.0 * lr)));
+            }
+        }
+
+        // ---- Centre of the S energy (frames dominated by 4.5-11 kHz)
+        {
+            const auto range = [] (const Frame& f, float lo, float hi)
+            {
+                double e = 0.0;
+                for (int b = 0; b < numBands; ++b)
+                    if (bandCentre (b) >= lo && bandCentre (b) < hi)
+                        e += f.bands[(size_t) b];
+                return e;
+            };
+            std::array<double, numBands> sAvg {};
+            int sCount = 0;
+            for (size_t i = 0; i < nf; ++i)
+            {
+                const auto& f = frames[i];
+                const double total = range (f, 100, 16000);
+                if (total <= 0.0 || f.rmsDb < gate - 15.0f)
+                    continue;
+                if (range (f, 4500, 11000) / total > 0.45)
+                {
+                    for (int b = 0; b < numBands; ++b)
+                        sAvg[(size_t) b] += f.bands[(size_t) b];
+                    ++sCount;
+                }
+            }
+            if (sCount >= 4)
+            {
+                double bestE = 0.0;
+                for (int b = 0; b < numBands; ++b)
+                {
+                    const float c = bandCentre (b);
+                    if (c < 3500.0f || c > 11000.0f)
+                        continue;
+                    double e = 0.0;
+                    for (int j = b - 2; j <= b + 2; ++j)
+                        if (j >= 0 && j < numBands && binsPerBand[(size_t) j] > 0)
+                            e += sAvg[(size_t) j] / binsPerBand[(size_t) j];
+                    if (e > bestE)
+                    {
+                        bestE = e;
+                        r.sibilanceHz = c;
+                    }
+                }
+            }
+        }
     }
 
     AnalysisResult VocalAnalyzer::analyse() const

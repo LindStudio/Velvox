@@ -2,6 +2,8 @@
 
 #include <juce_dsp/juce_dsp.h>
 #include <deque>
+#include <map>
+#include <complex>
 #include "CheckModule.h"
 #include "Routing.h"
 #include "../Check/CheckTypes.h"
@@ -63,6 +65,29 @@ namespace velvox::dsp
         std::array<float, 6> bandDb {};   // rumble, body, mid, presence, sibilance, air (relative to mid)
         std::vector<float> spectrumDb;    // 1/12 octave average spectrum (voice frames), for the UI
         float spectrumLowHz = 40.0f;      // first band centre
+
+        // ---- 0.6 measurements
+        std::uint64_t generation = 0;     // analyzer generation the frames belong to (see VocalAnalyzer::clear)
+        float voiceLevelDb = -100.0f;     // median RMS of the voiced frames (dBFS, mid signal)
+        // Pitch (autocorrelation per frame)
+        bool pitchValid = false;
+        float f0MedianHz = 0.0f, f0LowHz = 0.0f, f0HighHz = 0.0f;
+        float pitchedShare = 0.0f;        // share of voiced frames with a clear pitch
+        float pitchSpreadSemitones = 0.0f;
+        std::vector<float> sungNotesHz;   // semitones that take >= 4 % of the pitched frames
+        bool highVoice = false;           // lowest notes (10th percentile) above 250 Hz
+        // Loudness of the vocal (mid signal, K-weighted, gated like BS.1770) and range (EBU 3342 style)
+        float loudnessLufs = -100.0f;
+        float lraLu = 0.0f;
+        bool lraValid = false;
+        // Plosives: short low-frequency bursts (40-150 Hz) far above the voice's usual low end
+        int plosiveCount = 0;
+        float plosivesPerMinute = 0.0f;
+        float sibilanceHz = 0.0f;         // centre of the S energy (0 = not measured)
+        float monoLossDb = 0.0f;          // stereo loudness minus the loudness of the mono sum
+        float sideToMidDb = -100.0f;
+        int hiddenFindings = 0;           // findings below the confidence threshold (not shown)
+        int score = -1;                   // 0..100, -1 = not enough material
     };
 
     // VOCAL CHECK analysis. Runs on the message thread (never the audio thread):
@@ -91,6 +116,8 @@ namespace velvox::dsp
         void stopCapture();
         bool isCapturing() const noexcept { return capturing; }
         void clear();
+        // Increments with every clear(): findings of an older generation are stale
+        std::uint64_t getGeneration() const noexcept { return generation; }
 
         // Message thread: drain the module and analyse new frames
         void pump();
@@ -100,6 +127,7 @@ namespace velvox::dsp
         AnalysisResult analyse() const;
     private:
         AnalysisResult measure() const;
+        void measureExtras (AnalysisResult& r, const std::vector<bool>& voiced, float gate) const;
     public:
 
         static float bandCentre (int band) noexcept { return 40.0f * std::pow (2.0f, (float) band / 12.0f); }
@@ -110,6 +138,9 @@ namespace velvox::dsp
             float rmsDb = -100.0f, peakDb = -100.0f;
             float lr = 0.0f, ll = 0.0f, rr = 0.0f;
             std::array<float, numBands> bands {};    // power per 1/12 octave band
+            float f0 = 0.0f;                         // Hz, 0 = no clear pitch
+            float lfDb = -200.0f;                    // 40-150 Hz level (dBFS)
+            float kPower = 0.0f;                     // K-weighted mean square of the mid signal
         };
 
         void analyseFrame();
@@ -128,5 +159,12 @@ namespace velvox::dsp
         std::vector<int> binToBand;
         std::array<int, numBands> binsPerBand {};
         std::deque<Frame> frames;
+        std::uint64_t generation = 0;
+
+        // Pitch: autocorrelation through a zero-padded FFT
+        juce::dsp::FFT pitchFft { fftOrder + 1 };
+        std::vector<float> pitchWork, windowAcf;
+        std::array<float, numBands> kWeight {};      // K-weighting power gain per band
+        float estimatePitch (const float* windowed);
     };
 }
