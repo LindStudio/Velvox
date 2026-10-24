@@ -14,11 +14,16 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 
 ### Geändert
 - **Zielfunktion, Term „artifacts“:** bestrafte bisher den Abstand Spitze–Lautheit absolut (bei dynamischen Takes 7–8 Punkte) und damit auch De-Essing (weniger Energie, gleiche Vokal-Spitzen). Jetzt zählt der *Zuwachs* gegenüber dem Original (> 1,5 dB), Headroom nur noch mild. Test: synthetischer heller Take 6,8 → 0,4.
+- **Neue Variante „Höhen sanfter“** (High-Shelf 5 kHz, −1,5…−4 dB) für Takes, die heller sind als das Tonal-Fenster – der Planer hob Höhen bisher nur an.
+- **Level Ride nur bei bestätigter Schwankung:** Bei nassen, gleichmäßigen Hooks (LRA < 3 LU) zählten Hallfahnen als „leise Wörter“; der Ride hob sie an und schob sie in den nächsten Wortanfang (Spitzen +7 dB, Mix landete bis zu 9 dB leiser als das Original). Jetzt kein Ride, Hinweis im Bericht.
 
 ### Behoben
 - Gelegentliche Knackser: Lesezugriff außerhalb der Delay-Linien (Reverb/Doubler).
+- Zielfunktion zählte Float-Überschreitungen im Render (vor dem Clip Guard) und Clipping aus der Aufnahme selbst als Artefakt der Kette.
+- Reverb-Schritt hieß „Hall-Hall“ / „Large Hall-Hall“.
 
 ### Technik
+- **Benchmark-Runner** `VelvoxTests --bench <ordner> <ausgabe>`: `bench.csv`, Renders mit Bericht, blindes Hörtest-Kit (`listening/NN_A|B.wav`, Schlüssel in `listening_key.csv`). Diagnose: `VELVOX_OVERRIDE="rideOn=0,..."` ändert den fertigen Plan vor dem Ganzdatei-Render. Siehe `docs/BENCHMARK.md`.
 - Neue Tests `optimizerTests` (Kandidaten gültig/begrenzt/deterministisch, Basis gewinnt ohne Vorteil, EQ-2-Variante, Wahl des besten Kandidaten).
 - Test-Klickhelfer wartet länger auf die asynchrone Zustellung (vorher sporadischer Fehler „original off“).
 
