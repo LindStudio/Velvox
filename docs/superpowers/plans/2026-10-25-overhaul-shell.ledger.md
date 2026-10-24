@@ -121,3 +121,9 @@ TDD note: written test-first in this order, but the first run already passed (im
   folder and never touch the user's Documents folder.
 - Ruling: "Speichern" overwrites the loaded user preset; with a factory preset (or none) loaded it asks for a name (= Speichern als).
 - Ruling: the old header save / preset-menu icons are gone; everything is in the list (spec 2.8).
+
+Task 10 (part 1): help pages start / chain / modules / controls / modes / automix / presets / compare / meters / problems rewritten
+for SIMPEL/ADVANCED, tabs, tiles, gestures, undo, preset list; module pages no longer mention VOCAL CONTROL / output rail;
+tutorial steps: modes, analyse, macros, presets, tabs, chain, body, global, help; docs/STYLEGUIDE.md window, controls, gestures,
+panel frame. DesignTests "help and tutorial describe the new interface" extended (no VOCAL CONTROL / A/B / CHAIN tab; start page
+explains SIMPEL/ADVANCED; gestures in "controls").
