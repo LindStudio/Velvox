@@ -65,9 +65,45 @@ namespace velvox::dsp
         modulation.reset (sampleRate, 0.1);
         lowCut.reset (sampleRate, 0.05);
         highCut.reset (sampleRate, 0.05);
+        driveAmount.reset (sampleRate, 0.02);
+
+        // Half-band low-pass at the 2x rate: h[c] = 1/2, every second tap beside it zero
+        {
+            constexpr int c = halfbandTaps / 2;
+            const double beta = 8.0;
+            const auto bessel0 = [] (double x)
+            {
+                double sum = 1.0, term = 1.0;
+                for (int k = 1; k < 30; ++k)
+                {
+                    term *= (x / (2.0 * k)) * (x / (2.0 * k));
+                    sum += term;
+                }
+                return sum;
+            };
+            double evenSum = 0.0;
+            for (int j = 0; j < halfbandTaps; ++j)
+            {
+                const int m = j - c;
+                double v = 0.0;
+                if (m == 0)
+                    v = 0.5;
+                else if (m % 2 != 0)
+                {
+                    const double r = (double) m / c;
+                    const double w = bessel0 (beta * std::sqrt (std::max (0.0, 1.0 - r * r))) / bessel0 (beta);
+                    v = std::sin (0.5 * juce::MathConstants<double>::pi * m) / (juce::MathConstants<double>::pi * m) * w;
+                    evenSum += v;
+                }
+                halfband[(size_t) j] = (float) v;
+            }
+            for (int j = 0; j < halfbandTaps; ++j)   // unity at DC: the side taps sum to exactly 1/2
+                if (j != c)
+                    halfband[(size_t) j] = (float) (halfband[(size_t) j] * 0.5 / evenSum);
+        }
 
         setSettings (settings);
-        for (auto* s : { &feedback, &spread, &drive, &diffusion, &modulation })
+        for (auto* s : { &feedback, &spread, &drive, &diffusion, &modulation, &driveAmount })
             s->setCurrentAndTargetValue (s->getTargetValue());
         snapTime = true;
         updateFilters (true);
@@ -85,6 +121,8 @@ namespace velvox::dsp
                 d.pos = 0;
             }
         writePos = 0;
+        driveStages = {};
+        drivePos = 0;
         hp.reset();
         lp.reset();
         // After a reset nothing is in the line: jump straight to the requested time
@@ -99,6 +137,7 @@ namespace velvox::dsp
         feedback.setTargetValue (juce::jlimit (0.0f, maxFeedback, s.feedback));
         spread.setTargetValue ((float) (juce::jlimit (0.0f, maxSpreadMs, s.spreadMs) * 0.001 * fs));
         drive.setTargetValue (juce::jlimit (0.0f, 1.0f, s.drive));
+        driveAmount.setTargetValue (s.drive > 0.0002f ? 1.0f : 0.0f);   // the old code saturated above k = 1.001
         diffusion.setTargetValue (juce::jlimit (0.0f, 1.0f, s.diffusion));
         modulation.setTargetValue (juce::jlimit (0.0f, 1.0f, s.modulation));
         lowCut.setTargetValue (juce::jlimit (20.0f, 20000.0f, s.lowCutHz));
@@ -141,6 +180,36 @@ namespace velvox::dsp
         return ((c3 * frac + c2) * frac + c1) * frac + c0;
     }
 
+    // One base-rate sample through the drive stage (latency driveLatency in both paths):
+    // up 2x (polyphase half-band), tanh(k x)/k at 2x, down 2x; blended with the undriven,
+    // equally delayed tap by `amount`
+    float DelayModule::driveSample (int ch, float t, float k, float amount) noexcept
+    {
+        auto& st = driveStages[(size_t) ch];
+        const int p = drivePos;
+        st.x[(size_t) (p & 31)] = t;
+        const float undriven = st.x[(size_t) ((p - driveLatency) & 31)];
+        if (amount <= 0.0f)
+            return undriven;
+
+        constexpr int sideTaps = halfbandTaps / 2 + 1;   // 24 even taps h[0], h[2], ... h[46]
+        constexpr int c = halfbandTaps / 2;
+        float even = 0.0f;
+        for (int i = 0; i < sideTaps; ++i)
+            even += halfband[(size_t) (2 * i)] * st.x[(size_t) ((p - i) & 31)];
+        even *= 2.0f;
+        const float odd = st.x[(size_t) ((p - (c + 1) / 2) & 31)];   // the centre tap: x[n - 12]
+
+        const float inv = 1.0f / k;
+        st.even[(size_t) (p & 31)] = std::tanh (k * even) * inv;
+        st.odd[(size_t) (p & 15)] = std::tanh (k * odd) * inv;
+
+        float y = 0.5f * st.odd[(size_t) ((p - (c - 1) / 2) & 15)];  // s[2n - 23]: the odd sample of 11 steps ago
+        for (int i = 0; i < sideTaps; ++i)
+            y += halfband[(size_t) (2 * i)] * st.even[(size_t) ((p - i) & 31)];
+        return undriven + amount * (y - undriven);
+    }
+
     void DelayModule::process (const float* const* input, float* const* wetOut, int numChannels, int numSamples) noexcept
     {
         const bool pingPong = settings.pingPong && numChannels > 1;
@@ -170,7 +239,6 @@ namespace velvox::dsp
             const float apGain = 0.62f * diffusion.getCurrentValue();
             drive.skip (n);
             const float k = 1.0f + 5.0f * drive.getCurrentValue();
-            const bool saturate = k > 1.001f;
 
             // Slow wow (0.6 Hz) plus a faster flutter component (4.7 Hz), evaluated per
             // sample: a stepped read position would add zipper sidebands
@@ -221,11 +289,12 @@ namespace velvox::dsp
                     x = fade;
                 }
 
+                const float driveMix = driveAmount.getNextValue();
                 float taps[maxChannels] {};
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
-                    // The diffusion all-passes add their length: read that much earlier
-                    const float offset = (ch == 1 ? sp : 0.0f) + mod - (float) diffuserLatency[(size_t) ch];
+                    // The diffusion all-passes and the drive stage add their length: read that much earlier
+                    const float offset = (ch == 1 ? sp : 0.0f) + mod - (float) (diffuserLatency[(size_t) ch] + driveLatency);
                     float t = readInterpolated (lines[(size_t) ch], (float) currentDelay + offset);
                     if (fadeStep != 0.0f || x < 1.0f)
                         t += x * (readInterpolated (lines[(size_t) ch], nextDelay + offset) - t);
@@ -233,11 +302,11 @@ namespace velvox::dsp
                     for (auto& ap : diffusers[(size_t) ch])
                         t = ap.process (t, apGain);
                     t = lp.process (hp.process (t, ch), ch);
-                    if (saturate)
-                        t = std::tanh (k * t) / k;
+                    t = driveSample (ch, t, k, driveMix);
                     taps[ch] = t;
                     wetOut[ch][i] = t;
                 }
+                drivePos = (drivePos + 1) & 1023;
 
                 if (pingPong)
                 {

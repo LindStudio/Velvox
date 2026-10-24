@@ -68,6 +68,24 @@ namespace velvox::dsp
         };
         static constexpr int numDiffusers = 3;
 
+        // Drive (0.6): the saturator runs at 2x through a linear-phase half-band FIR
+        // (47 taps, Kaiser) - no aliasing fizz on bright repeats. Its constant latency
+        // (driveLatency base samples) is taken off the read position and the undriven tap
+        // is delayed by the same amount, so the echo timing and the drive-off sound stay
+        // exactly as before.
+        static constexpr int halfbandTaps = 47, driveLatency = 23;
+        struct DriveStage
+        {
+            std::array<float, 32> x {};      // base-rate input history (age 0..23)
+            std::array<float, 32> even {};   // saturated even 2x samples (age 0..23)
+            std::array<float, 16> odd {};    // saturated odd 2x samples (age 0..11)
+        };
+        float driveSample (int ch, float t, float k, float amount) noexcept;
+        std::array<DriveStage, maxChannels> driveStages;
+        std::array<float, halfbandTaps> halfband {};
+        int drivePos = 0;
+        juce::SmoothedValue<float> driveAmount { 0.0f };   // 0/1 blend: switching drive on/off never clicks
+
         double fs = 44100.0;
         DelaySettings settings;
         std::array<std::vector<float>, maxChannels> lines;

@@ -86,8 +86,8 @@ namespace
         return f;
     }
 
-    // Power fraction (dB) of one channel above `cutHz` (Hann-windowed 8192-point FFT, averaged)
-    double energyAboveDb (const juce::AudioBuffer<float>& b, int ch, int from, int to, double cutHz)
+    // Power fraction (dB) of one channel in the bins `select` picks (Blackman-Harris windowed 8192-point FFT (-92 dB side lobes), averaged)
+    double energyFractionDb (const juce::AudioBuffer<float>& b, int ch, int from, int to, const std::function<bool (double)>& select)
     {
         constexpr int order = 13, n = 1 << order;
         juce::dsp::FFT fft (order);
@@ -97,17 +97,48 @@ namespace
         {
             std::fill (buf.begin(), buf.end(), 0.0f);
             for (int i = 0; i < n; ++i)
-                buf[(size_t) i] = b.getSample (ch, s + i) * (float) (0.5 - 0.5 * std::cos (twoPi * i / n));
+                buf[(size_t) i] = b.getSample (ch, s + i) * (float) (0.35875 - 0.48829 * std::cos (twoPi * i / n) + 0.14128 * std::cos (2.0 * twoPi * i / n) - 0.01168 * std::cos (3.0 * twoPi * i / n));
             fft.performFrequencyOnlyForwardTransform (buf.data());
             for (int k = 1; k < n / 2; ++k)
             {
                 const double p = (double) buf[(size_t) k] * buf[(size_t) k];
                 total += p;
-                if (k * fs / n > cutHz)
+                if (select (k * fs / n))
                     above += p;
             }
         }
         return 10.0 * std::log10 (above / std::max (1.0e-30, total) + 1.0e-30);
+    }
+
+    double energyAboveDb (const juce::AudioBuffer<float>& b, int ch, int from, int to, double cutHz)
+    {
+        return energyFractionDb (b, ch, from, to, [cutHz] (double f) { return f > cutHz; });
+    }
+
+    // Energy away from every harmonic of `f0` below Nyquist (aliasing), relative to the total
+    double inharmonicDb (const juce::AudioBuffer<float>& b, int ch, int from, int to, double f0)
+    {
+        return energyFractionDb (b, ch, from, to, [f0] (double f)
+        {
+            for (double h = f0; h < 0.5 * fs; h += f0)
+                if (std::abs (f - h) < 40.0)
+                    return false;
+            return f > 30.0;
+        });
+    }
+
+    int peakIndex (const juce::AudioBuffer<float>& b, int ch, int from, int to)
+    {
+        int p = from;
+        for (int i = from; i < to; ++i)
+            if (std::abs (b.getSample (ch, i)) > std::abs (b.getSample (ch, p)))
+                p = i;
+        return p;
+    }
+
+    float absMax (const juce::AudioBuffer<float>& b, int ch, int from, int to)
+    {
+        return b.getMagnitude (ch, from, to - from);
     }
 }
 
@@ -119,9 +150,91 @@ public:
     void runTest() override
     {
         delayTimeChanges();
+        delayCharacters();
     }
 
 private:
+    void delayCharacters()
+    {
+        beginTest ("Delay: ping-pong bounces L, R, L (also with spread)");
+        for (float spreadMs : { 0.0f, 20.0f })
+        {
+            auto s = openDelay (200.0f, 0.5f);
+            s.pingPong = true;
+            s.spreadMs = spreadMs;
+            DelayModule d;
+            d.setSettings (s);
+            d.prepare (fs, 256);
+            // Hard-left 4 ms Hann-windowed 2 kHz burst (band-limited and DC-free: the loop
+            // filters leave it intact); the ping-pong takes the mono sum
+            juce::AudioBuffer<float> in (2, (int) (1.0 * fs));
+            in.clear();
+            const int pulse = 192;
+            for (int i = 0; i < pulse; ++i)
+                in.setSample (0, i, (float) ((0.5 - 0.5 * std::cos (twoPi * i / pulse)) * std::sin (twoPi * 2000.0 * i / fs)));
+            const auto out = runDelay (d, in, 256);
+            const int t = (int) (0.2 * fs), sp = (int) std::lround (spreadMs * 0.001 * fs), w = 400;
+            const int e1 = t, e2 = 2 * t + sp, e3 = 3 * t + sp;
+            const auto energy = [&] (int ch, int at)
+            {
+                double e = 0.0;
+                for (int i = at - w; i < at + w; ++i)
+                    e += (double) out.getSample (ch, i) * out.getSample (ch, i);
+                return e;
+            };
+            const auto centre = [&] (int ch, int at)
+            {
+                double e = 0.0, m = 0.0;
+                for (int i = at - w; i < at + w; ++i)
+                {
+                    const double v = (double) out.getSample (ch, i) * out.getSample (ch, i);
+                    e += v;
+                    m += v * (i - at);
+                }
+                return m / std::max (1.0e-30, e);
+            };
+            double inE = 0.0;
+            for (int i = 0; i < pulse; ++i)
+                inE += (double) in.getSample (0, i) * in.getSample (0, i);
+            const auto db = [] (double ratio) { return 10.0 * std::log10 (ratio + 1.0e-30); };
+            const double pulseCentre = 0.5 * (pulse - 1);
+            const juce::String tag = " (spread " + juce::String (spreadMs) + " ms)";
+            expectWithinAbsoluteError (centre (0, e1), pulseCentre, 2.0, "echo 1 on time, L" + tag);
+            expectWithinAbsoluteError (centre (1, e2), pulseCentre, 2.0, "echo 2 on time, R" + tag);
+            expectWithinAbsoluteError (centre (0, e3), pulseCentre, 2.0, "echo 3 on time, L" + tag);
+            expectWithinAbsoluteError (db (energy (0, e1) / inE), -6.02, 0.1, "echo 1 = mono sum" + tag);
+            expectWithinAbsoluteError (db (energy (1, e2) / energy (0, e1)), -6.02, 0.1, "echo 2 one feedback step down" + tag);
+            expectWithinAbsoluteError (db (energy (0, e3) / energy (1, e2)), -6.02, 0.1, "echo 3 one feedback step down" + tag);
+            expectLessThan (db (energy (1, e1) / energy (0, e1)), -80.0, "R silent at echo 1" + tag);
+            expectLessThan (db (energy (0, e2) / energy (1, e2)), -80.0, "L silent at echo 2" + tag);
+            expectLessThan (db (energy (1, e3) / energy (0, e3)), -80.0, "R silent at echo 3" + tag);
+        }
+
+        beginTest ("Delay: drive does not alias");
+        {
+            // Sanity: a quiet tone with the least drive passes the 2x stage cleanly
+            auto lin = openDelay (300.0f);
+            lin.drive = 0.001f;
+            DelayModule dl;
+            dl.setSettings (lin);
+            dl.prepare (fs, 256);
+            const auto clean = runDelay (dl, sine (2.6, 4100.0, 0.01f), 256);
+            const double linAlias = inharmonicDb (clean, 0, (int) (0.5 * fs), (int) (2.6 * fs), 4100.0);
+            logMessage ("  drive 0.1 %, 4.1 kHz at -40 dBFS: inharmonic energy " + juce::String (linAlias, 1) + " dB");
+            expectLessThan (linAlias, -90.0);
+
+            auto s = openDelay (300.0f);
+            s.drive = 1.0f;
+            DelayModule d;
+            d.setSettings (s);
+            d.prepare (fs, 256);
+            const auto out = runDelay (d, sine (2.6, 4100.0, 0.5f), 256);
+            const double alias = inharmonicDb (out, 0, (int) (0.5 * fs), (int) (2.6 * fs), 4100.0);
+            logMessage ("  drive 100 %, 4.1 kHz at -6 dBFS: inharmonic energy " + juce::String (alias, 1) + " dB");
+            expectLessThan (alias, -60.0);
+        }
+    }
+
     void delayTimeChanges()
     {
         beginTest ("Delay: continuous time sweep glides (tape-style, no flutter, no dips)");
