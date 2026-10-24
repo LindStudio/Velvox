@@ -45,6 +45,17 @@ namespace velvox::dsp
 
         static float timeForTempo (double bpm, int divisionIndex) noexcept;
 
+        // Echo map feed (UI): the repeats a centred mono impulse produces with these
+        // settings, in time order. level = linear gain per side (feedback, ping-pong
+        // routing, spread and the loop filters' gain at 1 kHz; drive / diffusion /
+        // modulation ignored). Stops below floorDb or after maxTaps; returns the count.
+        // Message thread or audio thread (no allocation).
+        struct EchoTap { float timeMs; float levelL; float levelR; };
+        static int echoTaps (const DelaySettings& s, double sampleRate, EchoTap* out, int maxTaps, float floorDb = -60.0f) noexcept;
+        // Inverse for dragging an echo's height: the feedback that makes each repeat
+        // `ratio` (linear) of the previous one, clamped to the feedback range
+        static float feedbackForRatio (const DelaySettings& s, double sampleRate, float ratio) noexcept;
+
         // UI read-out: the current (gliding) delay time of the left tap in ms
         std::atomic<float> displayTimeMs { 375.0f };
 

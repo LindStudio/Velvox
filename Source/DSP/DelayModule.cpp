@@ -35,6 +35,79 @@ namespace velvox::dsp
         return (float) std::min ((double) maxDelayMs, ms);
     }
 
+    namespace
+    {
+        // Loop filters' gain at 1 kHz (one pass), as the processing designs them
+        double loopGainAt1k (const DelaySettings& s, double fs)
+        {
+            const double lo = juce::jlimit (20.0, 20000.0, (double) s.lowCutHz);
+            const double hi = std::min (juce::jlimit (200.0, 20000.0, (double) s.highCutHz), 0.45 * fs);
+            return design::magnitude (design::highPass (fs, lo, 0.70710678), 1000.0, fs)
+                 * design::magnitude (design::lowPass (fs, hi, 0.70710678), 1000.0, fs);
+        }
+    }
+
+    int DelayModule::echoTaps (const DelaySettings& s, double sampleRate, EchoTap* out, int maxTaps, float floorDb) noexcept
+    {
+        if (out == nullptr || maxTaps <= 0 || sampleRate <= 0.0)
+            return 0;
+        const double t = juce::jlimit (1.0, (double) maxDelayMs, (double) s.timeMs);
+        const double sp = juce::jlimit (0.0, (double) maxSpreadMs, (double) s.spreadMs);
+        const double fb = juce::jlimit (0.0, (double) maxFeedback, (double) s.feedback);
+        const double g = loopGainAt1k (s, sampleRate);
+        const double floorGain = juce::Decibels::decibelsToGain ((double) floorDb);
+        int count = 0;
+
+        if (s.pingPong)
+        {
+            // Mono sum enters on the left: repeat k is on L for odd k, R for even k; every
+            // pass through the right line adds the spread
+            double level = g;
+            for (int k = 1; count < maxTaps && level >= floorGain; ++k)
+            {
+                const bool left = (k % 2) == 1;
+                out[count++] = { (float) (k * t + (k / 2) * sp), left ? (float) level : 0.0f, left ? 0.0f : (float) level };
+                level *= fb * g;
+                if (fb <= 0.0)
+                    break;
+            }
+            return count;
+        }
+
+        // Independent sides: L repeats every t, R every t + spread; merged in time order
+        int kl = 1, kr = 1;
+        double levelL = g, levelR = g;
+        const double tr = t + sp;
+        while (count < maxTaps && (levelL >= floorGain || levelR >= floorGain))
+        {
+            const double timeL = levelL >= floorGain ? kl * t : 1.0e30;
+            const double timeR = levelR >= floorGain ? kr * tr : 1.0e30;
+            EchoTap tap { 0.0f, 0.0f, 0.0f };
+            const bool takeL = timeL <= timeR + 1.0e-9, takeR = timeR <= timeL + 1.0e-9;
+            tap.timeMs = (float) std::min (timeL, timeR);
+            if (takeL)
+            {
+                tap.levelL = (float) levelL;
+                levelL = fb > 0.0 ? levelL * fb * g : 0.0;
+                ++kl;
+            }
+            if (takeR)
+            {
+                tap.levelR = (float) levelR;
+                levelR = fb > 0.0 ? levelR * fb * g : 0.0;
+                ++kr;
+            }
+            out[count++] = tap;
+        }
+        return count;
+    }
+
+    float DelayModule::feedbackForRatio (const DelaySettings& s, double sampleRate, float ratio) noexcept
+    {
+        const double g = std::max (1.0e-6, loopGainAt1k (s, sampleRate));
+        return (float) juce::jlimit (0.0, (double) maxFeedback, (double) ratio / g);
+    }
+
     void DelayModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;

@@ -151,9 +151,85 @@ public:
     {
         delayTimeChanges();
         delayCharacters();
+        delayEchoMap();
     }
 
 private:
+    void delayEchoMap()
+    {
+        beginTest ("Delay: echoTaps matches the rendered echoes");
+        struct Case { bool pingPong; float spreadMs; };
+        for (auto c : { Case { false, 0.0f }, Case { false, 20.0f }, Case { true, 20.0f } })
+        {
+            DelaySettings s;   // loop filters 300 Hz / 6 kHz as in a fresh delay
+            s.timeMs = 250.0f;
+            s.feedback = 0.6f;
+            s.pingPong = c.pingPong;
+            s.spreadMs = c.spreadMs;
+            const juce::String tag = juce::String (c.pingPong ? " ping-pong" : " stereo") + " spread " + juce::String (c.spreadMs);
+
+            DelayModule::EchoTap taps[32];
+            const int n = DelayModule::echoTaps (s, fs, taps, 32, -40.0f);
+            expect (n >= 6, "taps" + tag);
+            for (int k = 1; k < n; ++k)
+                expect (taps[k].timeMs > taps[k - 1].timeMs, "time order" + tag);
+            expectWithinAbsoluteError (taps[0].timeMs, 250.0f, 1.0e-3f, "first tap" + tag);
+
+            // 40 ms 1 kHz burst, centred, measured in the middle 20 ms of every echo
+            juce::AudioBuffer<float> in (2, (int) (5.0 * fs));
+            in.clear();
+            const int len = (int) (0.04 * fs), edge = (int) (0.005 * fs);
+            for (int i = 0; i < len; ++i)
+            {
+                const double g = i < edge ? 0.5 - 0.5 * std::cos (twoPi * 0.5 * i / edge)
+                               : i >= len - edge ? 0.5 - 0.5 * std::cos (twoPi * 0.5 * (len - i) / edge) : 1.0;
+                const float x = (float) (0.25 * g * std::sin (twoPi * 1000.0 * i / fs));
+                in.setSample (0, i, x);
+                in.setSample (1, i, x);
+            }
+            DelayModule d;
+            d.setSettings (s);
+            d.prepare (fs, 256);
+            const auto out = runDelay (d, in, 256);
+            const auto rms = [] (const juce::AudioBuffer<float>& b, int ch, double fromMs)
+            {
+                const int a = (int) ((fromMs + 10.0) * 0.001 * fs), w = (int) (0.02 * fs);
+                if (a + w > b.getNumSamples())
+                    return 0.0;
+                double e = 0.0;
+                for (int i = a; i < a + w; ++i)
+                    e += (double) b.getSample (ch, i) * b.getSample (ch, i);
+                return std::sqrt (e / w);
+            };
+            const double ref = rms (in, 0, 0.0);
+            for (int k = 0; k < n; ++k)
+            {
+                if (taps[k].timeMs > 4800.0f)
+                    break;
+                const float levels[2] { taps[k].levelL, taps[k].levelR };
+                for (int ch = 0; ch < 2; ++ch)
+                {
+                    const double measured = rms (out, ch, taps[k].timeMs) / ref;
+                    if (levels[ch] > 0.0f)
+                        expectWithinAbsoluteError (juce::Decibels::gainToDecibels (measured), (double) juce::Decibels::gainToDecibels (levels[ch]), 0.3,
+                                                   "tap " + juce::String (k + 1) + " ch " + juce::String (ch) + tag);
+                    else if (c.pingPong)
+                        expectLessThan (measured, 1.0e-3, "silent side, tap " + juce::String (k + 1) + tag);
+                }
+            }
+        }
+
+        beginTest ("Delay: feedbackForRatio inverts the tap levels");
+        {
+            DelaySettings s;
+            s.feedback = 0.45f;
+            DelayModule::EchoTap taps[4];
+            DelayModule::echoTaps (s, fs, taps, 4);
+            expectWithinAbsoluteError (DelayModule::feedbackForRatio (s, fs, taps[1].levelL / taps[0].levelL), 0.45f, 1.0e-4f);
+            expectEquals (DelayModule::feedbackForRatio (s, fs, 5.0f), 0.9f);
+        }
+    }
+
     void delayCharacters()
     {
         beginTest ("Delay: ping-pong bounces L, R, L (also with spread)");
