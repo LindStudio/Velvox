@@ -48,6 +48,37 @@ public:
 
         constexpr double fs = 48000.0;
         const int n = (int) (3.0 * fs);
+
+        // Root-cause scan of the 0.5 configuration (120 ms / 15 ms): error per input frequency,
+        // shift and formant setting, pure sine (one spectral peak)
+        for (bool compensate : { false, true })
+            for (double f0 : { 220.0, 233.0, 440.0, 311.1 })
+            {
+                juce::String detail;
+                for (double st : { 12.0, 7.0, 1.0, -5.0, -12.0 })
+                {
+                    signalsmith::stretch::SignalsmithStretch<float> s (0x5eed);
+                    s.configure (1, (int) (0.120 * fs), (int) (0.015 * fs));
+                    s.setTransposeSemitones ((float) st);
+                    s.setFormantSemitones (0.0f, compensate);
+                    s.setFormantBase ((float) (220.0 / fs));
+                    std::vector<float> in ((size_t) n), out ((size_t) n);
+                    for (int i = 0; i < n; ++i)
+                        in[(size_t) i] = 0.25f * (float) std::sin (2.0 * pi * f0 * i / fs);
+                    for (int pos = 0; pos < n; pos += 512)
+                    {
+                        const int len = std::min (512, n - pos);
+                        const float* ip[1] { in.data() + pos };
+                        float* op[1] { out.data() + pos };
+                        s.process (ip, len, op, len);
+                    }
+                    const double expected = f0 * std::pow (2.0, st / 12.0);
+                    const double f = peakFreq (out, (int) fs, fs, expected * 0.8);
+                    detail << juce::String (st, 0) << ":" << juce::String (1200.0 * std::log2 (f / expected), 2) << "ct ";
+                }
+                logMessage ("sine " + juce::String (f0, 1) + " Hz" + (compensate ? " formant comp" : " no comp") + "  " + detail);
+            }
+
         for (double blockMs : { 40.0, 60.0, 80.0, 120.0 })
             for (double ratio : { 4.0, 8.0 })
                 for (bool compensate : { false, true })
