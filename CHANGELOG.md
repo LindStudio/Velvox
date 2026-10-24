@@ -15,11 +15,11 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 ### Geändert
 - **Zielfunktion, Term „artifacts“:** bestrafte bisher den Abstand Spitze–Lautheit absolut (bei dynamischen Takes 7–8 Punkte) und damit auch De-Essing (weniger Energie, gleiche Vokal-Spitzen). Jetzt zählt der *Zuwachs* gegenüber dem Original (> 1,5 dB), Headroom nur noch mild. Test: synthetischer heller Take 6,8 → 0,4.
 - **Neue Variante „Höhen sanfter“** (High-Shelf 5 kHz, −1,5…−4 dB) für Takes, die heller sind als das Tonal-Fenster – der Planer hob Höhen bisher nur an.
-- **Level Ride nur bei bestätigter Schwankung:** Bei nassen, gleichmäßigen Hooks (LRA < 3 LU) zählten Hallfahnen als „leise Wörter“; der Ride hob sie an und schob sie in den nächsten Wortanfang (Spitzen +7 dB, Mix landete bis zu 9 dB leiser als das Original). Jetzt kein Ride, Hinweis im Bericht.
+- **Kalibrierung am blinden Hörtest vom 24.10.** (0.3 vs 0.4 stand 5 : 5): Zielfunktion bevorzugt jetzt dicht/upfront (Phrasen-Fenster 3…6 dB, Crest-Untergrenze 5,5 dB), Spitzen-Zuwachs nur noch mild. Kompressor-Attack 3 ms mit Level Ride, sonst 8 ms (vorher 12). Eine zwischenzeitliche Regel „kein Level Ride bei LRA < 3 LU“ wurde nach dem Hörtest zurückgenommen – die Ride-Version war verständlicher. Ergebnis: „Dynamik dichter“ statt „Dynamik leichter“ auf den Titeln, bei denen 0.3 gewann.
 
 ### Behoben
 - Gelegentliche Knackser: Lesezugriff außerhalb der Delay-Linien (Reverb/Doubler).
-- Zielfunktion zählte Float-Überschreitungen im Render (vor dem Clip Guard) und Clipping aus der Aufnahme selbst als Artefakt der Kette.
+- Zielfunktion zählte Float-Überschreitungen im Render (vor der Ausgangsstufe) als Clipping; jetzt nur noch als Lautheitsverlust bewertet.
 - Reverb-Schritt hieß „Hall-Hall“ / „Large Hall-Hall“.
 
 ### Technik

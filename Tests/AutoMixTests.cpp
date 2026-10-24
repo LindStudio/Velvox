@@ -439,18 +439,18 @@ public:
                 expectEquals (typeFor (0.90f, 5.0f), 3, "sustained -> Large Hall");
             }
 
-            // Level Ride needs the loudness range to confirm the swings: on a wet, steady hook
-            // the reverb tails between words read as "quiet words" (13 dB apart at LRA 1 LU on
-            // real Splice hooks) and a ride would boost the tails into the next word onset
+            // Level Ride also on a wet, steady hook (LRA 1 LU): in the blind listening test of
+            // 2026-10-24 the ridden version was the more intelligible one. The ride lifts quiet
+            // syllables into the next onset, so the compressor behind it has to be fast.
             {
                 VocalSpec swings; swings.seconds = 14.0; swings.phraseRangeDb = 14.0f;
                 auto prof = VocalProfiler::analyse (makeVocal (swings));
-                logMessage ("    swings: dynamics " + juce::String (prof.dynamicsDb, 1) + " dB, LRA "
-                            + (prof.loudnessRangeValid ? juce::String (prof.loudnessRangeDb, 1) + " LU" : juce::String ("n/a")));
                 expect (AutoMixPlanner::plan (prof, defaults()).on (pid::rideOn), "real phrase swings -> level ride");
                 prof.loudnessRangeValid = true;
                 prof.loudnessRangeDb = 1.0f;
-                expect (! AutoMixPlanner::plan (prof, defaults()).on (pid::rideOn), "steady loudness (LRA 1 LU) -> no level ride");
+                const auto wet = AutoMixPlanner::plan (prof, defaults());
+                expect (wet.on (pid::rideOn), "steady loudness (LRA 1 LU) keeps the level ride");
+                expect (wet.get (pid::compAttack) <= 5.0f, "ride -> fast compressor attack: " + juce::String (wet.get (pid::compAttack), 1) + " ms");
             }
 
             // Different recordings -> different configurations
@@ -620,23 +620,16 @@ public:
             harsh.presenceDb = 0.0f;
             expect (evaluate (harsh, original, profile, -18.0f, true, false).harshness > 1.0f, "harshness costs");
 
-            // Clipping that survives the output stage (still at full scale at the target loudness) costs
-            auto clipped = m;
-            clipped.clipRuns = 2;
-            clipped.peakDb = 0.0f;
-            expect (evaluate (clipped, original, profile, -18.0f, true, false).artifacts >= 8.0f, "clipping costs");
-
-            // The render is float and runs before the clip guard: overs on a hot render that the
-            // output stage turns down are no distortion, and clipping inherited from the
-            // recording is the same for every candidate
+            // The render is float and runs before the output stage, which always turns the mix
+            // down to -1 dBFS peak: samples over full scale in the render never clip in the
+            // result. Their real cost is the loudness lost, which peak growth covers.
             auto hot = m;
             hot.lufs = -10.0f; hot.peakDb = 2.0f; hot.clipRuns = 12;   // same peak-to-loudness as m
             expect (evaluate (hot, original, profile, -18.0f, true, false).artifacts < 0.01f, "float overs before the output stage are free");
-            auto inheritedOrig = clipped;   // the recording already hits full scale
-            inheritedOrig.clipRuns = 3;
-            auto inherited = clipped;
-            inherited.clipRuns = 3;
-            expect (evaluate (inherited, inheritedOrig, profile, -18.0f, true, false).artifacts < 1.0f, "clipping from the recording is not the chain's fault");
+            auto hotAtTarget = hot;
+            hotAtTarget.lufs = -18.0f; hotAtTarget.peakDb = 4.0f;   // +4 dBFS even at the target loudness
+            const float hotCost = evaluate (hotAtTarget, original, profile, -18.0f, true, false).artifacts;
+            expect (hotCost > 0.5f && hotCost < 10.0f, "overs at the target loudness cost as lost loudness, not as clipping: " + juce::String (hotCost, 2));
 
             // Headroom: a dynamic take (peak 15.6 dB over its loudness) is only turned down a
             // little by the output stage - that is not an artifact. A de-esser that takes the
@@ -651,10 +644,20 @@ public:
             expect (evaluate (deEssed, dynOriginal, profile, -14.0f, true, false).artifacts - headroomCost < 0.5f,
                     "removing S energy is not punished as an artifact");
 
-            // ... but a chain that makes the peaks stick out further than in the original does cost
+            // ... a chain that makes the peaks stick out further than in the original costs - mildly,
+            // since at matched loudness the listening test did not hear onset peaks
             auto spiky = dynamicTake;
             spiky.peakDb += 4.0f;
-            expect (evaluate (spiky, dynOriginal, profile, -14.0f, true, false).artifacts >= 4.0f, "peaks sticking out cost");
+            const float spikyCost = evaluate (spiky, dynOriginal, profile, -14.0f, true, false).artifacts;
+            expect (spikyCost > headroomCost + 1.0f && spikyCost < 6.0f, "peaks sticking out cost a little: " + juce::String (spikyCost, 2));
+
+            // Listening test 2026-10-24: dense and upfront beat loose - a render with 4 dB phrase
+            // variation and 7 dB crest must not score worse than one with 8 dB and 12 dB
+            auto dense = m, loose = m;
+            dense.dynamicsDb = 4.0f; dense.crestDb = 7.0f;
+            loose.dynamicsDb = 8.0f; loose.crestDb = 12.0f;
+            expect (evaluate (dense, original, profile, -18.0f, true, false).total()
+                        < evaluate (loose, original, profile, -18.0f, true, false).total(), "dense beats loose");
 
             auto louder = m;
             louder.lufs = -12.0f;

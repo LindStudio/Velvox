@@ -52,11 +52,13 @@ namespace velvox::automix
                 + 1.0f * window (m.topDb, -16.0f, -7.0f)
                 + 0.4f * window (m.airDb, -32.0f, -16.0f, 3.0f);
 
-        // ---- Dynamics: a lead vocal in an EDM mix sits steady; over-compression is worse
-        // than a little movement, so the crest factor floor is weighted strongly
+        // ---- Dynamics: a lead vocal in an EDM mix sits steady and upfront. Calibrated on the
+        // blind listening test of 2026-10-24: the denser, more compressed versions won
+        // ("verständlicher", "komprimierter, klarer"), so the phrase window is tighter and
+        // only real squashing (crest below 5.5 dB) costs
         if (m.dynamicsValid)
-            b.dynamics = 0.8f * window (m.dynamicsDb, 4.0f, 8.0f);
-        b.dynamics += 1.5f * window (m.crestDb, 7.0f, 100.0f, 1.5f);
+            b.dynamics = 0.8f * window (m.dynamicsDb, 3.0f, 6.0f);
+        b.dynamics += 1.2f * window (m.crestDb, 5.5f, 100.0f, 1.5f);
 
         // ---- Sibilance (only where the S / vowel frames could be measured)
         if (m.sibilanceValid && original.sibilanceValid)
@@ -86,18 +88,17 @@ namespace velvox::automix
                 b.space += 0.2f * window (m.gapDb, lo, 200.0f, 3.0f);
         }
 
-        // ---- Artifacts: clipping, and peaks that the chain made stick out further than in the
-        // original (peak-to-loudness growth). Headroom alone is a mild cost: the output stage
-        // only turns a dynamic take down a little. Measured against the original, so removing
-        // energy without touching the peaks (de-essing) is not mistaken for an artifact.
-        // The render is float and runs before the clip guard, so samples over full scale only
-        // count when they would still hit it at the target loudness, and only beyond the
-        // clipping the recording already had (the same for every candidate).
+        // ---- Artifacts: peaks that the chain made stick out further than in the original
+        // (peak-to-loudness growth), and the headroom at the target loudness. Both cost
+        // loudness, not sound: the render is float and runs before the output stage, which
+        // always turns the mix down to -1 dBFS peak, so nothing over full scale in the render
+        // ever clips in the result (clip runs are reported, not scored). Measured against the
+        // original, so removing energy without touching the peaks (de-essing) is no artifact.
+        // Weighted mildly: at matched loudness the listening test of 2026-10-24 did not hear
+        // it (the ridden hooks with +7 dB onset peaks won on intelligibility).
         const float peakAtTarget = m.peakDb + (targetLufs - m.lufs);
         const float peakGrowth = original.valid ? (m.peakDb - m.lufs) - (original.peakDb - original.lufs) : 0.0f;
-        const int newClipRuns = peakAtTarget > -0.1f ? std::max (0, m.clipRuns - (original.valid ? original.clipRuns : 0)) : 0;
-        b.artifacts = 4.0f * (float) newClipRuns
-                    + 1.0f * window (peakGrowth, -100.0f, 1.5f, 1.0f)
+        b.artifacts = 0.3f * window (peakGrowth, -100.0f, 3.0f, 2.0f)
                     + 0.25f * window (peakAtTarget, -100.0f, -1.0f, 2.0f);
 
         // ---- Leaving the base plan has to be worth it
