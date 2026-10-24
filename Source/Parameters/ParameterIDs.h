@@ -238,4 +238,8 @@ namespace velvox::pid
 
     // Hidden per EQ instance: 1 = bands use the 0.5 bilinear designs (set only by the migration)
     inline constexpr const char* eqLegacyResponse = "eqLegacyResponse";
+
+    // ---- added in 0.6: Pulse "like Kickstart" (defaults = the 0.5 sound) ----
+    inline constexpr const char* pulseShape  = "pulseShape";    // choice: Custom (the pulseX/Y curve), Classic, Punch, Swell, Gate
+    inline constexpr const char* pulseAmount = "pulseAmount";   // %, 50 = pulseDepth exactly; 0 none, 100 full ducking
 }

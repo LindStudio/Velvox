@@ -4,12 +4,48 @@
 #include <juce_dsp/juce_dsp.h>
 #include "TestHelpers.h"
 #include "DSP/DelayModule.h"
+#include "DSP/PulseModule.h"
 
 using namespace velvox;
 using namespace velvox::dsp;
 
 namespace
 {
+    // A customised pre-0.6 Pulse (6-point curve, tension, mix) - the golden render below
+    // was recorded with the 0.5 code and must stay bit-identical for old projects
+    PulseSettings legacyPulse()
+    {
+        PulseSettings s;
+        s.enabled = true;
+        s.rate = 3;
+        s.depth = 0.8f;
+        s.attackMs = 2.0f;
+        s.releaseMs = 15.0f;
+        s.smoothMs = 3.0f;
+        s.interpolation = 1;
+        s.tension = 0.2f;
+        s.mix = 0.9f;
+        s.x = { 0.0f, 0.1f, 0.3f, 0.5f, 0.7f, 0.9f };
+        s.y = { 0.0f, 0.3f, 0.6f, 1.0f, 0.4f, 1.0f };
+        return s;
+    }
+
+    juce::AudioBuffer<float> runPulse (const PulseSettings& s, const juce::AudioBuffer<float>& in, double bpm, double ppq, bool playing)
+    {
+        PulseModule m;
+        m.setSettings (s);
+        m.prepare (48000.0, 256);
+        m.setTransport (bpm, ppq, playing);
+        juce::AudioBuffer<float> out (in);
+        for (int start = 0; start < out.getNumSamples(); start += 256)
+        {
+            const int n = std::min (256, out.getNumSamples() - start);
+            float* p[2] { out.getWritePointer (0, start), out.getWritePointer (1, start) };
+            m.process (p, 2, n);
+        }
+        return out;
+    }
+
     constexpr double fs = 48000.0;
     constexpr double twoPi = 6.283185307179586;
 
@@ -152,9 +188,140 @@ public:
         delayTimeChanges();
         delayCharacters();
         delayEchoMap();
+        pulseLegacy();
+        pulseShapes();
     }
 
 private:
+    void pulseLegacy()
+    {
+        beginTest ("Pulse: a pre-0.6 curve renders bit-identically (golden from the 0.5 code)");
+        {
+            const auto out = runPulse (legacyPulse(), sine (1.0, 220.0, 0.5f), 128.0, 1.3, true);
+            double sum = 0.0;
+            for (int i = 0; i < out.getNumSamples(); ++i)
+                sum += (double) out.getSample (0, i) * out.getSample (0, i);
+            const int idx[] { 1000, 5003, 11111, 23456, 40000 };
+            const double golden[] { -0.059158735, -0.062192701, -0.214160278, -0.013633898, 0.186837286 };
+            expectWithinAbsoluteError (sum, 2612.710222863, 1.0e-6, "golden energy");
+            for (int k = 0; k < 5; ++k)
+                expectWithinAbsoluteError ((double) out.getSample (0, idx[k]), golden[k], 1.0e-8, "golden sample " + juce::String (idx[k]));
+        }
+
+        beginTest ("Pulse: a saved state without the 0.6 parameters loads as Custom, Amount 50 %");
+        {
+            juce::MemoryBlock saved;
+            {
+                test::Harness h;
+                h.set (pid::pulseOn, 1.0f);
+                h.set (pid::pulseDepth, 80.0f);
+                h.set (pid::pulseShape, 3.0f);
+                h.set (pid::pulseAmount, 90.0f);
+                h.proc.getStateInformation (saved);
+            }
+            auto xml = juce::AudioProcessor::getXmlFromBinary (saved.getData(), (int) saved.getSize());
+            expect (xml != nullptr);
+            for (auto* id : { pid::pulseShape, pid::pulseAmount })
+                if (auto* child = xml->getChildByAttribute ("id", id))
+                    xml->removeChildElement (child, true);
+            juce::MemoryBlock old;
+            juce::AudioProcessor::copyXmlToBinary (*xml, old);
+            test::Harness h2;
+            h2.set (pid::pulseShape, 2.0f);
+            h2.set (pid::pulseAmount, 10.0f);
+            h2.proc.setStateInformation (old.getData(), (int) old.getSize());
+            expectEquals (h2.get (pid::pulseShape), 0.0f, "shape = Custom");
+            expectEquals (h2.get (pid::pulseAmount), 50.0f, "amount = 50 % (= the depth as before)");
+            expectEquals (h2.get (pid::pulseDepth), 80.0f, "depth kept");
+        }
+    }
+
+    void pulseShapes()
+    {
+        beginTest ("Pulse: the Amount macro is centred on Depth");
+        expectEquals (PulseModule::effectiveDepth (0.6f, 0.5f), 0.6f);
+        expectEquals (PulseModule::effectiveDepth (0.6f, 0.0f), 0.0f);
+        expectEquals (PulseModule::effectiveDepth (0.6f, 1.0f), 1.0f);
+        expectWithinAbsoluteError (PulseModule::effectiveDepth (0.6f, 0.25f), 0.3f, 1.0e-6f);
+        expectWithinAbsoluteError (PulseModule::effectiveDepth (0.6f, 0.75f), 0.8f, 1.0e-6f);
+        {
+            float prev = -1.0f;
+            bool monotonic = true;
+            for (int i = 0; i <= 100; ++i)
+            {
+                const float v = PulseModule::effectiveDepth (0.3f, i * 0.01f);
+                monotonic = monotonic && v >= prev;
+                prev = v;
+            }
+            expect (monotonic, "monotonic");
+        }
+
+        beginTest ("Pulse: four curated shapes - ducked at the beat, open before the next, all different");
+        expectEquals (PulseModule::shapeNames().size(), 5);
+        expectEquals (PulseModule::shapeNames()[0], juce::String ("Custom"));
+        for (int a = 1; a <= 4; ++a)
+        {
+            PulseSettings s;
+            s.shape = a;
+            expectLessThan (PulseModule::evaluateShape (s, 0.01f), 0.3f, PulseModule::shapeNames()[a] + " ducked at the beat");
+            float mx = 0.0f;
+            for (int i = 50; i < 97; ++i)
+                mx = std::max (mx, PulseModule::evaluateShape (s, i * 0.01f));
+            expectGreaterThan (mx, 0.99f, PulseModule::shapeNames()[a] + " open before the next beat");
+            for (int b = a + 1; b <= 4; ++b)
+            {
+                PulseSettings t;
+                t.shape = b;
+                double diff = 0.0;
+                for (int i = 0; i < 1000; ++i)
+                    diff += std::abs (PulseModule::evaluateShape (s, i * 0.001f) - PulseModule::evaluateShape (t, i * 0.001f));
+                expectGreaterThan (diff / 1000.0, 0.05, PulseModule::shapeNames()[a] + " vs " + PulseModule::shapeNames()[b]);
+            }
+        }
+
+        beginTest ("Pulse: every shape is click-free (incl. Custom), 1/1 .. 1/16 at 120 and 174 BPM");
+        for (int shape = 0; shape <= 4; ++shape)
+            for (int rate : { 0, 2, 4 })
+                for (double bpm : { 120.0, 174.0 })
+                {
+                    PulseSettings s;
+                    s.enabled = true;
+                    s.shape = shape;
+                    s.rate = rate;
+                    s.depth = 1.0f;
+                    const auto out = runPulse (s, sine (4.0, 1000.0, 0.25f), bpm, -1.0, false);
+                    const double spl = energyAboveDb (out, 0, (int) (0.5 * fs), out.getNumSamples(), 5000.0);
+                    expectLessThan (spl, -60.0, PulseModule::shapeNames()[shape] + " " + PulseModule::rateNames()[rate] + " @ " + juce::String (bpm));
+                    if (shape == 1 && rate == 4 && bpm == 174.0)
+                        logMessage ("  Classic 1/16 @ 174: splatter above 5 kHz " + juce::String (spl, 1) + " dB");
+                }
+
+        beginTest ("Pulse: gainAt is what is processed");
+        for (int shape : { 0, 1, 3 })
+        {
+            PulseSettings s;
+            s.enabled = true;
+            s.shape = shape;
+            s.rate = 0;            // 1/1 = 2 s at 120 BPM
+            s.depth = 0.7f;
+            s.amount = 0.8f;
+            s.attackMs = 0.05f;
+            s.releaseMs = 0.5f;
+            s.smoothMs = 0.0f;
+            juce::AudioBuffer<float> dc (2, (int) (2.0 * fs));
+            for (int ch = 0; ch < 2; ++ch)
+                juce::FloatVectorOperations::fill (dc.getWritePointer (ch), 1.0f, dc.getNumSamples());
+            const auto out = runPulse (s, dc, 120.0, -1.0, false);
+            double worst = 0.0;
+            for (int i = (int) (0.02 * fs); i < (int) (1.94 * fs); i += 37)
+            {
+                const float phase = (float) (i / (2.0 * fs));
+                worst = std::max (worst, (double) std::abs (out.getSample (0, i) - PulseModule::gainAt (s, phase)));
+            }
+            expectLessThan (worst, 0.02, "shape " + juce::String (shape));
+        }
+    }
+
     void delayEchoMap()
     {
         beginTest ("Delay: echoTaps matches the rendered echoes");
