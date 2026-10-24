@@ -96,3 +96,21 @@ Original besser 2× (04 DYL Lo-Fi, 11 DIE NACHBARIN mit Large Hall + Dynamik lei
   (100–300 Hz) liegt bei hohen Stimmen (tiefster Ton > 250 Hz) unter dem Grundton – dort zählt jetzt nur noch zu viel Körper.
   Held-out-Sänger (f9, m10, m11) bleiben für die Schlussprüfung unberührt.
 - Zweites Hörtest-Kit 0.3 vs. neu: `%USERPROFILE%\dev\velvox-bench\2026-10-24\hoertest2_0.3_vs_neu`.
+
+## Echter Song: „Midnight Crush“ (Jakob, 2026-10-25)
+
+Zwei Fassungen desselben Party-Songs, gleich laut gemastert (−9,1 LUFS): Jakobs eigener Mix gegen den Mix mit
+Headliner auf der Vocal. Blind gemessen (Dateien zufällig A/B benannt, Zuordnung erst nach dem Urteil geöffnet).
+
+| | Headliner | eigener Mix |
+|---|---|---|
+| Präsenz/Höhen 2,5–16 kHz | +1,9 … +2,4 dB | – |
+| Mulm (200–500 Hz vs. 1–4 kHz) | −0,1 dB | +1,8 dB |
+| S-Laute Median / 95 % | −6,3 / +1,1 dB | −7,5 / +1,2 dB |
+| Schärfe-Spitzen 2,5–5 kHz (95 %) | +1,2 dB | +0,2 dB |
+| Stereobreite Side/Mid | −9,6 dB | −12,0 dB |
+| LRA | 7,9 LU | 9,3 LU |
+
+Urteil nach Messung: Headliner-Fassung klarer, weniger mulmig, breiter, gleichmäßiger; S-Laute trotz mehr Höhen im Griff.
+Einziger Punkt dagegen: ~1 dB stärkere Schärfe-Spitzen (2,5–5 kHz) – beim Harshness-Thema im Blick behalten.
+Grenze: Die beiden Exporte sind nicht sample-gleich (Differenz unkorreliert), die Vocal ließ sich nicht isolieren.
