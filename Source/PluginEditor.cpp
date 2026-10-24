@@ -188,8 +188,8 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     };
     browser.onChoose = [this] (dsp::ModuleId id, int insertIndex, bool atEnd)
     {
-        // Added behind the chain, delay and reverb start as parallel sends (the usual vocal setup)
-        chainView.insertModule (id, atEnd ? -1 : insertIndex, atEnd && dsp::Routing::canBeSend (id));
+        // 0.6 (spec Q2): delay and reverb join as inserts, so "Mix" is true dry/wet; "Als Send" stays in the menu
+        chainView.insertModule (id, atEnd ? -1 : insertIndex, false);
     };
     help.onStartTutorial = [this] { startTutorial (false); };
     tutorial.targetFor = [this] (const juce::String& key) { return tutorialTarget (key); };

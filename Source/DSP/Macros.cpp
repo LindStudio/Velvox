@@ -16,6 +16,16 @@ namespace velvox::dsp
             on = true;
         }
 
+        // The same for a module with an additive Mix: the macro adds wet, but the dry gain of
+        // the true mix law keeps following the user's own Mix (`lawMix`) - a macro never takes
+        // the original vocal away (DSP/MixLaw.h)
+        void addMix (bool& on, float& mix, float macroMix, float& lawMix) noexcept
+        {
+            if (macroMix > 0.0f && lawMix < 0.0f)
+                lawMix = on ? mix : 0.0f;
+            addMix (on, mix, macroMix);
+        }
+
         // The EQ band a macro moves (spec 8, Q5): the band with its role, or - when there is none (a
         // fresh state, or the user deleted it) - a new one in a free slot with the 0.5 default of the
         // fixed band the macro used to move. A switched-off role band counts as 0 dB. User bands are
@@ -130,15 +140,15 @@ namespace velvox::dsp
         // ---- Width: doubled voices and a wider output (centre untouched)
         if (m.width > 0.0f)
         {
-            addMix (s.doubler.enabled, s.doubler.mix, 0.6f * m.width);
+            addMix (s.doubler.enabled, s.doubler.mix, 0.6f * m.width, s.doubler.lawMix);
             s.stereo.width += 0.5f * m.width;
         }
 
         // ---- Space: reverb and delay, ducked so the vocal stays clear
         if (m.space > 0.0f)
         {
-            addMix (s.reverbOn, s.reverbMix, 0.3f * m.space);
-            addMix (s.delayOn, s.delayMix, 0.15f * m.space);
+            addMix (s.reverbOn, s.reverbMix, 0.3f * m.space, s.reverbLawMix);
+            addMix (s.delayOn, s.delayMix, 0.15f * m.space, s.delayLawMix);
             s.reverbDuck.amountDb += 6.0f * m.space;
             s.delayDuck.amountDb += 6.0f * m.space;
         }

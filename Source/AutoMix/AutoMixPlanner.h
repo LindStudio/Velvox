@@ -23,7 +23,7 @@ namespace velvox::automix
     struct MixPlan
     {
         std::map<juce::String, float> values;
-        dsp::Routing routing = dsp::Routing::defaults();
+        dsp::Routing routing = dsp::Routing::legacyDefaults();   // the planner's chain keeps delay / reverb sends
         std::vector<Decision> decisions;
         std::vector<juce::String> notes;      // things left alone and why
         bool conservative = false;            // little or unreliable material: gentle settings only

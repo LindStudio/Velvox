@@ -1,6 +1,7 @@
 #include "ParameterSnapshot.h"
 #include "../Parameters/ParameterLayout.h"
 #include "../DSP/Routing.h"
+#include "../DSP/MixLaw.h"
 #include "../StateKeys.h"
 #include "../Parameters/RoutingMigration.h"
 #include "../Parameters/EqBands.h"
@@ -66,7 +67,28 @@ namespace velvox
                     s.values[rp->getParameterID()] = rp->convertFrom0to1 (rp->getValue());
 
         s.routing = apvts.state.getProperty (statekeys::routing).toString();
+        s.mixLaw = apvts.state.getProperty (statekeys::mixLaw).toString();
         return s;
+    }
+
+    namespace
+    {
+        // A snapshot without a mix law (factory presets, presets / snapshots from 0.5 and older):
+        // the instances whose additive Mix is above 50 % - the only settings where the true law
+        // sounds different - get the legacy law; all other instances keep theirs. The preset then
+        // sounds exactly as it was made, and an old project never loses its legacy flags.
+        juce::String lawForUnspecified (juce::AudioProcessorValueTreeState& apvts)
+        {
+            using dsp::ModuleId;
+            auto laws = dsp::MixLaws::fromString (apvts.state.getProperty (statekeys::mixLaw).toString());
+            const std::pair<ModuleId, const char*> mixes[] { { ModuleId::delay, pid::delayMix }, { ModuleId::reverb, pid::reverbMix },
+                                                             { ModuleId::doubler, pid::doublerMix }, { ModuleId::smash, pid::smashBlend } };
+            for (const auto& [id, base] : mixes)
+                for (int k = 0; k < dsp::maxInstances (id); ++k)
+                    if (const auto* v = apvts.getRawParameterValue (dsp::instanceParamId (base, k)); v != nullptr && v->load() > 50.0f)
+                        laws.setLegacy (id, k, true);
+            return laws.toString();
+        }
     }
 
     void ParameterSnapshot::applyTo (juce::AudioProcessorValueTreeState& apvts, bool resetMissingToDefault) const
@@ -102,6 +124,11 @@ namespace velvox
         if (routing.isNotEmpty() || resetMissingToDefault)
             apvts.state.setProperty (statekeys::routing,
                                      dsp::Routing::fromString (migrateRoutingString (routing, apvts)).toString(), nullptr);
+
+        // After the routing, so an undo / A-B recall restores the law exactly
+        if (mixLaw.isNotEmpty() || resetMissingToDefault)
+            apvts.state.setProperty (statekeys::mixLaw,
+                                     mixLaw.isNotEmpty() ? dsp::MixLaws::fromString (mixLaw).toString() : lawForUnspecified (apvts), nullptr);
     }
 
     bool ParameterSnapshot::differsFrom (juce::AudioProcessorValueTreeState& apvts) const
@@ -156,6 +183,8 @@ namespace velvox
         tree.setProperty (versionAttr, formatVersion, nullptr);
         if (routing.isNotEmpty())
             tree.setProperty (statekeys::routing, routing, nullptr);
+        if (mixLaw.isNotEmpty())
+            tree.setProperty (statekeys::mixLaw, mixLaw, nullptr);   // 0.6, optional
 
         for (const auto& [id, v] : values)
         {
@@ -178,6 +207,7 @@ namespace velvox
         s.category = tree.getProperty (categoryAttr).toString();
         s.description = tree.getProperty (descriptionAttr).toString();
         s.routing = tree.getProperty (statekeys::routing).toString(); // absent in format 1
+        s.mixLaw = tree.getProperty (statekeys::mixLaw).toString();   // absent before 0.6
 
         for (const auto& child : tree)
         {

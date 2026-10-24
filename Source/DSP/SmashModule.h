@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DspUtilities.h"
+#include "MixLaw.h"
 
 namespace velvox::dsp
 {
@@ -13,6 +14,9 @@ namespace velvox::dsp
         float releaseMs = 80.0f;
         float tone = 0.2f;        // -1 (warm) .. +1 (bright), squashed path only
         float outputDb = 0.0f;
+        // legacy: the squashed path is added under the original at every Blend;
+        // true: the original fades out above 50 %, Blend 100 % = squashed path only
+        MixLaw mixLaw = MixLaw::legacy;
     };
 
     // VOCAL SMASH - parallel compression on its own signal path.

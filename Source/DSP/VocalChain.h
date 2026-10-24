@@ -20,6 +20,7 @@
 #include "CheckModule.h"
 #include "RideModule.h"
 #include "Instances.h"
+#include "MixLaw.h"
 
 namespace velvox::dsp
 {
@@ -35,6 +36,7 @@ namespace velvox::dsp
         bool delayOn = false;   float delayMix = 0.2f;  DelaySettings delay;
         bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
         bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
+        float delayLawMix = -1.0f, reverbLawMix = -1.0f;   // Mix for the dry gain on the true law (< 0: the Mix); set by macros
         DuckSettings delayDuck, reverbDuck;
         SmashSettings smash;
         ChoirSettings choir;
@@ -61,6 +63,9 @@ namespace velvox::dsp
         bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
         bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
         float delayIntoReverb = 0.0f; // 0..1, only when both are sends
+        // Mix that sets the insert's dry gain on the true law (< 0: the Mix). The macros add wet
+        // but never take the original away (DSP/MixLaw.h)
+        float delayLawMix = -1.0f, reverbLawMix = -1.0f;
 
         // 0.3 modules (all off by default)
         PulseSettings pulse;
@@ -73,7 +78,11 @@ namespace velvox::dsp
         DuckSettings delayDuck, reverbDuck;
         bool duckExternal = false;    // use the sidechain input when available
 
-        Routing routing = Routing::defaults();
+        Routing routing = Routing::legacyDefaults();   // the processor always sets it
+
+        // Mix law of every module instance (0.6). The DSP default is the 0.5 behaviour;
+        // the processor fills it from the instance state (fresh instances: true dry/wet).
+        MixLaws mixLaws = MixLaws::allLegacy();
 
         StereoSettings stereo;
 
@@ -210,6 +219,11 @@ namespace velvox::dsp
         std::array<juce::SmoothedValue<float>, numReverbs> reverbReturn;
         std::array<bool, numDelays> delayActive {};
         std::array<bool, numReverbs> reverbActive {};
+        // Law of each insert (a send always adds its return to the dry) and its smoothed dry gain
+        std::array<MixLaw, numDelays> delayLaw {};
+        std::array<MixLaw, numReverbs> reverbLaw {};
+        std::array<juce::SmoothedValue<float>, numDelays> delayDry;
+        std::array<juce::SmoothedValue<float>, numReverbs> reverbDry;
 
         juce::SmoothedValue<float> inputGain { 1.0f }, outputGain { 1.0f }, wetAmount { 1.0f };
         juce::SmoothedValue<float> delayIntoReverb { 0.0f };
