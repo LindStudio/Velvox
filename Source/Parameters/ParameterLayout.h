@@ -26,6 +26,8 @@ namespace velvox
         juce::StringArray choices {};
         const char* description = "";
         float interval = 0.0f;    // > 0: values snap to this step (e.g. 1 semitone)
+        bool automatable = true;  // false: the host may not automate it (internal state, legacy IDs)
+        bool hidden = false;      // not shown in the UI (still saved, still read by the DSP where used)
     };
 
     // Every parameter: the original table (instance 1 of every module), followed by the

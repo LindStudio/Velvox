@@ -35,6 +35,7 @@ set(VELVOX_SOURCES
     Source/Parameters/ParameterLayout.cpp
     Source/DSP/Filters.cpp
     Source/DSP/EqualizerModule.cpp
+    Source/DSP/EqDesign.cpp
     Source/DSP/CompressorModule.cpp
     Source/DSP/DeEsserModule.cpp
     Source/DSP/SaturationModule.cpp
@@ -76,6 +77,7 @@ set(VELVOX_SOURCES
     Source/UI/AnalysisOverlay.cpp
     Source/UI/TopBar.cpp
     Source/Parameters/SettingsReader.cpp
+    Source/Parameters/EqBands.cpp
     Source/Parameters/RoutingMigration.cpp
     Source/AutoMix/CaptureBuffer.cpp
     Source/AutoMix/VocalProfiler.cpp
@@ -167,7 +169,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/AbCompareTests.cpp Tests/VocalCheckTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/MixLawTests.cpp Tests/DynamicsQualityTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/AbCompareTests.cpp Tests/VocalCheckTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/MixLawTests.cpp Tests/EqTests.cpp Tests/EqModuleTests.cpp Tests/EqModelTests.cpp Tests/EqRoleTests.cpp Tests/DynamicsQualityTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)

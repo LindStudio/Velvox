@@ -25,6 +25,55 @@ namespace velvox::dsp
                 lawMix = on ? mix : 0.0f;
             addMix (on, mix, macroMix);
         }
+
+        // The EQ band a macro moves (spec 8, Q5): the band with its role, or - when there is none (a
+        // fresh state, or the user deleted it) - a new one in a free slot with the 0.5 default of the
+        // fixed band the macro used to move. A switched-off role band counts as 0 dB. User bands are
+        // never touched; without a free slot the macro leaves the EQ alone.
+        struct RoleBand
+        {
+            EqBand* band = nullptr;
+            float baseGain = 0.0f;
+
+            void add (float db) noexcept
+            {
+                if (band != nullptr)
+                    band->gain += db;
+            }
+
+            // The 0.5 clamp (+-18 dB), but a user setting beyond it is not pulled back
+            void clampGain() noexcept
+            {
+                if (band != nullptr)
+                    band->gain = clamp (band->gain, std::min (-18.0f, baseGain), std::max (18.0f, baseGain));
+            }
+        };
+
+        RoleBand roleBand (EqSettings& eq, EqRole role) noexcept
+        {
+            int i = eq.findRole (role);
+            if (i >= 0)
+            {
+                auto& b = eq.bands[(size_t) i];
+                if (! b.on)
+                {
+                    b.on = true;
+                    b.gain = 0.0f;
+                }
+                return { &b, b.gain };
+            }
+            i = eq.findFree();
+            if (i < 0)
+                return {};
+            auto& b = eq.bands[(size_t) i];
+            b = {};
+            b.on = true;
+            b.type = (int) (role == EqRole::air ? EqBandType::highShelf : EqBandType::lowShelf);
+            b.freq = role == EqRole::air ? 10000.0f : 150.0f;
+            b.q = 0.7071f;
+            b.role = (int) role;
+            return { &b, 0.0f };
+        }
     }
 
     ChainSettings applyMacros (const ChainSettings& base, const MacroValues& raw) noexcept
@@ -41,12 +90,14 @@ namespace velvox::dsp
         m.density    = clamp (raw.density, 0.0f, 1.0f);
 
         ChainSettings s = base;
+        RoleBand air, warmth;
 
-        // ---- Presence: brighter top end, de-esser keeps the extra S in check
+        // ---- Presence: brighter top end (the "air" band, 0.5: high shelf), de-esser keeps the extra S in check
         if (m.presence > 0.0f)
         {
             s.eqOn = true;
-            s.eq.highGain += 5.0f * m.presence;
+            air = roleBand (s.eq, EqRole::air);
+            air.add (5.0f * m.presence);
             s.deessOn = true;
             s.deess.rangeDb += 3.0f * m.presence;
         }
@@ -55,8 +106,11 @@ namespace velvox::dsp
         if (m.warmth > 0.0f)
         {
             s.eqOn = true;
-            s.eq.lowGain += 3.0f * m.warmth;
-            s.eq.highGain -= 1.5f * m.warmth;
+            warmth = roleBand (s.eq, EqRole::warmth);
+            warmth.add (3.0f * m.warmth);
+            if (air.band == nullptr)
+                air = roleBand (s.eq, EqRole::air);
+            air.add (-1.5f * m.warmth);
             addMix (s.sat.enabled, s.sat.mix, 0.5f * m.warmth);
             s.sat.driveDb += 6.0f * m.warmth;
         }
@@ -100,8 +154,8 @@ namespace velvox::dsp
         }
 
         // ---- Clamp to the parameter ranges
-        s.eq.highGain        = clamp (s.eq.highGain, -18.0f, 18.0f);
-        s.eq.lowGain         = clamp (s.eq.lowGain, -18.0f, 18.0f);
+        air.clampGain();
+        warmth.clampGain();
         s.deess.rangeDb      = clamp (s.deess.rangeDb, 0.0f, 24.0f);
         s.sat.driveDb        = clamp (s.sat.driveDb, 0.0f, 24.0f);
         s.comp.thresholdDb   = clamp (s.comp.thresholdDb, -60.0f, 0.0f);

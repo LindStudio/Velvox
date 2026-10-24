@@ -85,6 +85,8 @@ namespace velvox::automix
         // Candidate chains derived from a plan: each changes one interacting decision
         // (dynamics lighter / denser, saturation, tonal EQ after the dynamics as a second EQ
         // instance, effects drier / wetter, de-esser stronger). Bounded, deterministic.
-        static std::vector<std::pair<juce::String, MixPlan>> candidatesFor (const MixPlan& base, const VocalProfile& profile);
+        // `current`: the values the plan overlays (EQ role bands find free slots there; empty = defaults).
+        static std::vector<std::pair<juce::String, MixPlan>> candidatesFor (const MixPlan& base, const VocalProfile& profile,
+                                                                             const std::map<juce::String, float>& current = {});
     };
 }

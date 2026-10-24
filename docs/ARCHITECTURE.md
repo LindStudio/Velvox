@@ -23,6 +23,14 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 - Ein Makro darf ein ausgeschaltetes Modul anteilig zuschalten (z. B. Space → Reverb-Send). Die Pro-Ansicht zeigt das an.
 - Der Moduswechsel Beginner/Pro ändert **nur die Ansicht**, nie den Klang.
 
+## EQ-Bänder (0.6)
+
+- Bis zu **16 Bänder pro EQ-Instanz** (EQ 1-4): Parameter `eqBand{1..16}{On,Type,Freq,Gain,Q,Slope,Role}` (Instanz k >= 1: Suffix `_k+1`, z. B. `eqBand3Gain_2`) und `eqLegacyResponse`. Typen: Bell, Low Shelf, High Shelf, Low Cut, High Cut, Notch, Band Pass, Tilt; Cut-Flanken 6/12/18/24/36/48 dB/Okt. (Butterworth). Bänder sind standardmäßig aus.
+- DSP (`DSP/EqDesign.*`, `DSP/EqualizerModule.*`): minimalphasige Biquad-Kaskaden, **analog-gematcht** nach Vicanek (Pole impulsinvariant, Zähler über Betrag bei DC, Matchpunkt und Steigung) – kein Bilinear-Cramping nahe Nyquist (Bell 16 kHz @ 48 kHz <= 0,5 dB bis 20 kHz). Freq/Q multiplikativ, Gain linear geglättet (50 ms, Neuberechnung alle 16 Samples); Ein/Aus, Typ-, Flanken- und Designwechsel über 30-ms-Überblendung.
+- `Role` (versteckt, nicht automatisierbar): none (Nutzer), presence, warmth, air, lowcut, mud, auto, highcut. Makros (Presence -> air, Warmth -> warmth + air) und Auto-Mix (lowcut, warmth, auto, air, highcut) schreiben nur Bänder ihrer Rolle und legen fehlende in einem freien Slot an; Nutzerbänder werden nie verändert. Freier Slot = Band mit allen Werten auf Default (das "Löschen" im Panel setzt ein Band auf Default zurück).
+- Migration: Ein State/Preset ohne `eqBand*`-Werte wird beim Laden umgesetzt: HPF/Low/Mid/High/LPF -> Bänder 1-5 mit Rollen lowcut/warmth/auto/air/highcut und `eqLegacyResponse = 1` (alte RBJ-Bilinear-Designs, klingt identisch; Null-Test <= -120 dB). Die 17 alten Festband-IDs bleiben registriert, versteckt und nicht automatisierbar. Eine `LegacyBridge` leitet Änderungen dieser IDs im Message-Thread (altes EQ-Panel, Assistent) in die Rollenbänder.
+- APIs (`Parameters/EqBands.h`): `findOrCreateEqBand (apvts, role, type, freqHz, gainDb, q, instance = 0)` (Vocal Check, Message-Thread, gibt Band 0..15 oder -1), `eqbands::clearLegacyResponse (apvts, instance)`, `eqbands::accessFor/readBand/writeBand/findBand/findFreeBand`. Kurven fürs Panel: `EqualizerModule::responseDb / bandResponseDb / responseCurveDb` auf einer Kopie von `processor.readEffectiveSettings().instance (k).eq` (atomare Reads, thread-safe; enthält die von Makros erzeugten Bänder).
+
 ## Routing
 
 - Serielle Module (EQ, Comp, De-Ess, Sat, Doubler, Pitch) sind per Drag-and-drop sortierbar.
