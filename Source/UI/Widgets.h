@@ -120,9 +120,11 @@ namespace velvox::ui
         Toggle (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent = colours::accent);
         // Disabled switches fade back so they never read as "off but usable"
         void enablementChanged() override { setAlpha (isEnabled() ? 1.0f : 0.5f); }
+        const juce::String& getParamId() const noexcept { return paramId; }
 
     private:
         std::unique_ptr<APVTS::ButtonAttachment> attachment;
+        juce::String paramId;
     };
 
     // Drop-down bound to a choice parameter, with a small caption above

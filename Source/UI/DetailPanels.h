@@ -2,6 +2,7 @@
 
 #include "Widgets.h"
 #include "ModuleViews.h"
+#include "Segments.h"
 #include "../DSP/Instances.h"
 
 class VelvoxAudioProcessor;
@@ -44,11 +45,24 @@ namespace velvox::ui
         Knob& knob (const char* paramId, const juce::String& label);
         Toggle& toggle (const char* paramId, const juce::String& label);
         Choice& choice (const char* paramId, const juce::String& caption);
+        // Segment group (design): labels map onto the choices by name; none = the parameter's own
+        Segments& segments (const char* paramId, juce::StringArray labels = {});
 
         static void row (std::initializer_list<juce::Component*> items, juce::Rectangle<int> area);
-        void section (const juce::String& caption, juce::Rectangle<int> area); // labelled group behind controls
+        // Knobs in rows of `columns`, each cell centred (design knob grid)
+        static void knobGrid (const std::vector<juce::Component*>& items, juce::Rectangle<int> area, int columns);
+        void section (const juce::String& caption, juce::Rectangle<int> area); // caption over a control group
+        // Caption + control (segment bar, switch row) taken from the top of `area`
+        void placeGroup (const juce::String& caption, juce::Component& c, juce::Rectangle<int>& area, int height = 30);
+        // Switches side by side in one row taken from the top of `area`
+        void placeSwitches (std::initializer_list<juce::Component*> items, juce::Rectangle<int>& area);
 
-        int visualHeight = 172;
+        // Design layout: the visualizer sits top left (height visualHeight); when a panel has
+        // side controls (segments, switches) they get the area to its right (sideArea)
+        int visualHeight = 150;
+        bool hasSideControls = false;
+        float visualShare = 0.56f;
+        juce::Rectangle<int> sideArea;
         const LiveData* live = nullptr;
 
         VelvoxAudioProcessor& proc;
@@ -66,6 +80,10 @@ namespace velvox::ui
         juce::TextButton presetsButton { "Presets" }, helpButton { "?" };
         std::vector<std::unique_ptr<juce::Component>> owned;
         std::vector<Knob*> knobs;
+        std::vector<Toggle*> toggles;
+        std::vector<Segments*> segmentGroups;
+        juce::String slotInfo;   // "SLOT 3 · INSERT"
+        std::unique_ptr<juce::Drawable> icon;
         struct Section { juce::String caption; juce::Rectangle<int> area; };
         std::vector<Section> sections;
         juce::Rectangle<int> visualArea;

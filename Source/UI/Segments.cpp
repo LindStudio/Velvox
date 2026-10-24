@@ -45,6 +45,13 @@ namespace velvox::ui
         showValue ((float) choice);
     }
 
+    void Segments::setAccent (juce::Colour accent)
+    {
+        for (auto* b : buttons)
+            b->setColour (juce::TextButton::buttonOnColourId, accent);
+        repaint();
+    }
+
     void Segments::showValue (float value)
     {
         const int v = juce::roundToInt (value);

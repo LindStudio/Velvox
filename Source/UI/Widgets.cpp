@@ -355,6 +355,7 @@ namespace velvox::ui
     Toggle::Toggle (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent)
     {
         setButtonText (label);
+        this->paramId = paramId;
         if (accent != colours::accent)
             setColour (juce::ToggleButton::tickColourId, accent);
         attachment = std::make_unique<APVTS::ButtonAttachment> (state, paramId, *this);

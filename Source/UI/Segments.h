@@ -20,6 +20,7 @@ namespace velvox::ui
         int getSelectedSegment() const noexcept { return selectedSegment; }   // -1: value has no segment
         int getChoiceForSegment (int segment) const;                         // parameter index of a segment
         void clickSegment (int segment);
+        void setAccent (juce::Colour accent);
         const juce::String& getParamId() const noexcept { return paramId; }
 
     private:

@@ -11,9 +11,11 @@ namespace velvox::ui
 
     namespace
     {
-        constexpr int headerHeight = 74;
-        constexpr int padding = 22;
-        constexpr int captionH = 34;
+        // Design: panel 1180 x 460, padding 22 (vertical) / 28 (horizontal)
+        constexpr int headerHeight = 66;
+        constexpr int padding = 28;
+        constexpr int paddingY = 22;
+        constexpr int captionH = 18;
         constexpr int sectionGap = 12;
 
         void emphasise (std::initializer_list<Knob*> knobs, Knob::Prominence p)
@@ -63,8 +65,30 @@ namespace velvox::ui
     {
         const int id = selection < 0 ? selection : (int) dsp::selectionModule (selection);
         moduleId = id;
-        if (power != nullptr && id >= 0)
-            power->setHue (moduleColour ((ModuleId) id));
+        if (id >= 0)
+        {
+            // Every control of the panel glows in the module colour
+            const auto hue = moduleColour ((ModuleId) id);
+            if (power != nullptr)
+                power->setHue (hue);
+            for (auto* k : knobs)
+                k->slider.setColour (juce::Slider::rotarySliderFillColourId, hue);
+            for (auto* t : toggles)
+                t->setColour (juce::ToggleButton::tickColourId, hue);
+            for (auto* s : segmentGroups)
+                s->setAccent (hue);
+
+            const auto svg = moduleIconSvg ((ModuleId) id).replace ("#FFFFFF", "#" + hue.toDisplayString (false));
+            const auto utf8 = svg.toUTF8();
+            icon = juce::Drawable::createFromImageData (utf8.getAddress(), utf8.sizeInBytes() - 1);
+
+            // Slot info: position in the chain and how it runs
+            const auto& r = proc.getRouting();
+            const int index = r.indexOf ((ModuleId) id, instance);
+            if (index >= 0)
+                slotInfo = "SLOT " + juce::String (index + 1) + juce::String::fromUTF8 (" \xc2\xb7 ")
+                         + (r.isInsert ((ModuleId) id, instance) ? "INSERT" : "SEND");
+        }
         // Several instances of this module in the chain: the title says which one
         if (id >= 0 && (instance > 0 || proc.getRouting().countOf ((ModuleId) id) > 1))
             title << " " << (instance + 1);
@@ -101,7 +125,7 @@ namespace velvox::ui
     Knob& DetailPanel::knob (const char* paramId, const juce::String& label)
     {
         const auto mapped = pidFor (paramId);
-        auto k = std::make_unique<Knob> (apvts, mapped.toRawUTF8(), label);
+        auto k = std::make_unique<Knob> (apvts, mapped.toRawUTF8(), label, moduleId >= 0 ? moduleColour ((ModuleId) moduleId) : colours::teal);
         // Macro markers belong to the first instance only (macros never move the others)
         if (instance == 0 && proc.effectiveValueOf (paramId).has_value())
         {
@@ -120,9 +144,40 @@ namespace velvox::ui
     {
         auto t = std::make_unique<Toggle> (apvts, pidFor (paramId).toRawUTF8(), label);
         auto& ref = *t;
+        toggles.push_back (t.get());
         addAndMakeVisible (ref);
         owned.push_back (std::move (t));
         return ref;
+    }
+
+    Segments& DetailPanel::segments (const char* paramId, juce::StringArray labels)
+    {
+        const auto id = pidFor (paramId);
+        if (labels.isEmpty())
+        {
+            if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (id)))
+                labels = c->choices;
+            else
+                labels = { "Off", "On" };
+        }
+        auto s = std::make_unique<Segments> (apvts, id.toRawUTF8(), labels, colours::teal);
+        auto& ref = *s;
+        segmentGroups.push_back (s.get());
+        addAndMakeVisible (ref);
+        owned.push_back (std::move (s));
+        return ref;
+    }
+
+    void DetailPanel::knobGrid (const std::vector<juce::Component*>& items, juce::Rectangle<int> area, int columns)
+    {
+        const int n = (int) items.size();
+        if (n == 0 || columns <= 0)
+            return;
+        const int rows = (n + columns - 1) / columns;
+        const int w = area.getWidth() / columns, h = area.getHeight() / rows;
+        for (int i = 0; i < n; ++i)
+            if (auto* c = items[(size_t) i])
+                c->setBounds (area.getX() + (i % columns) * w, area.getY() + (i / columns) * h, w, h);
     }
 
     Choice& DetailPanel::choice (const char* paramId, const juce::String& caption)
@@ -154,110 +209,119 @@ namespace velvox::ui
         sections.push_back ({ caption, area });
     }
 
+    void DetailPanel::placeGroup (const juce::String& caption, juce::Component& c, juce::Rectangle<int>& area, int height)
+    {
+        auto group = area.removeFromTop (captionH + 4 + height);
+        section (caption, group);
+        c.setBounds (group.withTrimmedTop (captionH + 4));
+        area.removeFromTop (12);
+    }
+
+    void DetailPanel::placeSwitches (std::initializer_list<juce::Component*> items, juce::Rectangle<int>& area)
+    {
+        auto line = area.removeFromTop (26);
+        for (auto* c : items)
+            if (c != nullptr)
+            {
+                const int w = 30 + juce::GlyphArrangement::getStringWidthInt (medium (12.0f), dynamic_cast<juce::Button*> (c) != nullptr
+                                                                                                 ? dynamic_cast<juce::Button*> (c)->getButtonText() : juce::String()) + 22;
+                c->setBounds (line.removeFromLeft (w));
+            }
+        area.removeFromTop (12);
+    }
+
     void DetailPanel::paint (juce::Graphics& g)
     {
         const auto r = getLocalBounds().toFloat();
         const bool on = onParamId.isEmpty() || apvts.getRawParameterValue (onParamId)->load() > 0.5f;
         const auto hue = moduleId >= 0 && moduleId < dsp::numModules ? moduleColour ((ModuleId) moduleId) : colours::teal;
 
+        // Design panel: #07080D, border #161925, radius 12
         g.setColour (colours::panel);
-        g.fillRoundedRectangle (r, 16.0f);
-        if (on)
-        {
-            juce::Graphics::ScopedSaveState s (g);
-            juce::Path clip;
-            clip.addRoundedRectangle (r, 16.0f);
-            g.reduceClipRegion (clip);
-            drawGlow (g, { r.getX() + 80.0f, r.getY() }, 300.0f, 0.06f, hue);
-            drawGlow (g, { r.getRight() - 120.0f, r.getY() }, 280.0f, 0.045f, hue.interpolatedWith (colours::blue, 0.5f));
-        }
-        drawGlass (g, r, 16.0f, 0.012f);
+        g.fillRoundedRectangle (r, 12.0f);
+        g.setColour (colours::border);
+        g.drawRoundedRectangle (r.reduced (0.5f), 12.0f, 1.0f);
 
-        // Header
-        auto header = getLocalBounds().removeFromTop (headerHeight).reduced (padding, 0);
-        header.removeFromLeft (power != nullptr ? 50 : 0);
-        if (moduleId != -2)
+        // Header: neon icon 30 + NAME (SemiBold 15, tracking 2.5) + slot info, functions below
+        auto header = getLocalBounds().withTrimmedTop (paddingY - 6).removeFromTop (headerHeight - paddingY + 6).reduced (padding, 0);
+        header.removeFromLeft (power != nullptr ? 44 : 0);
+        if (icon != nullptr)
         {
-            const auto icon = header.removeFromLeft (26).toFloat().withSizeKeepingCentre (24.0f, 24.0f);
+            const auto iconArea = header.removeFromLeft (30).toFloat().withSizeKeepingCentre (30.0f, 30.0f).translated (0.0f, -6.0f);
             if (on)
-                drawGlow (g, icon.getCentre(), 22.0f, 0.4f, hue);
-            drawModuleIcon (g, moduleId, icon, on ? hue.interpolatedWith (colours::text, 0.15f) : colours::textDim);
+                drawGlow (g, iconArea.getCentre(), 24.0f, 0.25f, hue);
+            icon->drawWithin (g, iconArea, juce::RectanglePlacement::centred, on ? 1.0f : 0.4f);
             header.removeFromLeft (12);
         }
         header.removeFromRight (helpButton.getWidth() + 10);
         if (presetsButton.isVisible())
             header.removeFromRight (presetsButton.getWidth() + 12);
-        g.setColour (on ? colours::text : colours::textDim);
+        auto nameLine = header.removeFromTop (header.getHeight() / 2 + 4);
         const auto shownTitle = title.toUpperCase();
-        const auto titleFont = display (typesize::title - 2.0f, true).withExtraKerningFactor (0.04f);
+        const auto titleFont = semiBold (15.0f, 2.5f / 15.0f);
+        g.setColour (on ? colours::textStrong : colours::textMuted);
         g.setFont (titleFont);
-        const int titleW = juce::GlyphArrangement::getStringWidthInt (titleFont, shownTitle) + 18;
-        g.drawText (shownTitle, header.removeFromLeft (titleW), juce::Justification::centredLeft, false);
-        if (! on)
-        {
-            // Plain-language state next to the name
-            auto badge = header.removeFromLeft (52).toFloat().withSizeKeepingCentre (46.0f, 24.0f);
-            g.setColour (colours::line.brighter (0.4f));
-            g.drawRoundedRectangle (badge.reduced (0.5f), 12.0f, 1.0f);
-            g.setColour (colours::textDim);
-            g.setFont (medium (12.5f));
-            g.drawText ("Off", badge, juce::Justification::centred, false);
-            header.removeFromLeft (8);
-        }
-        g.setColour (colours::textDim);
-        g.setFont (font (typesize::body));
-        g.drawFittedText (subtitle, header, juce::Justification::centredLeft, 1, 0.9f);
+        const int titleW = juce::GlyphArrangement::getStringWidthInt (titleFont, shownTitle) + 16;
+        g.drawText (shownTitle, nameLine.removeFromLeft (titleW), juce::Justification::centredLeft, false);
+        g.setColour (on ? colours::textFaint : colours::textFaint.withAlpha (0.6f));
+        g.setFont (semiBold (10.0f, 0.12f));
+        g.drawText (on ? slotInfo : slotInfo + juce::String::fromUTF8 (" \xc2\xb7 ") + "OFF", nameLine, juce::Justification::centredLeft, false);
+        g.setColour (colours::textMuted);
+        g.setFont (font (11.0f / 0.93f));
+        g.drawFittedText (subtitle, header, juce::Justification::topLeft, 1, 0.9f);
 
-        // Stage for the module view: recessed, with the aurora catching its top edge
+        // Visualizer box: #040509, border #13161E, radius 8
         if (! visualArea.isEmpty())
         {
             const auto v = visualArea.toFloat();
-            g.setColour (colours::background.withAlpha (0.7f));
-            g.fillRoundedRectangle (v, 12.0f);
-            g.setColour (colours::lineSoft);
-            g.drawRoundedRectangle (v.reduced (0.5f), 12.0f, 1.0f);
-            g.setColour (hue.withAlpha (on ? 0.35f : 0.1f));
-            g.fillRect (v.reduced (24.0f, 0.0f).withHeight (1.0f));
+            g.setColour (colours::panelInset);
+            g.fillRoundedRectangle (v, 8.0f);
+            g.setColour (colours::borderInset);
+            g.drawRoundedRectangle (v.reduced (0.5f), 8.0f, 1.0f);
         }
 
-        // Sections: faint field with a caption and a hairline
+        // Section labels (RATE, MODE ...): Montserrat SemiBold 10, #5B6478
         for (const auto& s : sections)
         {
-            const auto a = s.area.toFloat();
-            g.setColour (colours::accent.withAlpha (0.022f));
-            g.fillRoundedRectangle (a, radius::card);
-            g.setColour (colours::lineSoft);
-            g.drawRoundedRectangle (a.reduced (0.5f), radius::card, 1.0f);
-            auto cap = a.reduced (16.0f, 0.0f).withHeight ((float) captionH).withTrimmedTop (2.0f);
-            const auto headingFont = caps (typesize::heading - 1.0f);
-            const auto heading = s.caption.toUpperCase();
-            const float w = (float) juce::GlyphArrangement::getStringWidthInt (headingFont, heading) + 12.0f;
-            g.setColour (colours::text.withAlpha (0.86f));
-            g.setFont (headingFont);
-            g.drawText (heading, cap, juce::Justification::centredLeft, false);
-            g.setGradientFill (juce::ColourGradient (colours::accent.withAlpha (0.10f), cap.getX() + w, 0.0f,
-                                                     colours::accent.withAlpha (0.0f), cap.getRight(), 0.0f, false));
-            g.fillRect (juce::Rectangle<float> (cap.getX() + w, cap.getCentreY(), cap.getWidth() - w, 1.0f));
+            g.setColour (colours::textFaint);
+            g.setFont (semiBold (10.0f, 0.15f));
+            g.drawText (s.caption.toUpperCase(), s.area.toFloat().withHeight ((float) captionH), juce::Justification::centredLeft, false);
         }
     }
 
     void DetailPanel::resized()
     {
         auto r = getLocalBounds();
-        auto header = r.removeFromTop (headerHeight).reduced (padding, 0);
+        auto header = r.removeFromTop (headerHeight).withTrimmedTop (paddingY - 6).reduced (padding, 0);
         if (power != nullptr)
-            power->setBounds (header.removeFromLeft (36).withSizeKeepingCentre (36, 36));
-        helpButton.setBounds (header.removeFromRight (36).withSizeKeepingCentre (36, 34));
+            power->setBounds (header.removeFromLeft (32).withSizeKeepingCentre (32, 32).translated (0, -4));
+        helpButton.setBounds (header.removeFromRight (32).withSizeKeepingCentre (32, 30).translated (0, -4));
         header.removeFromRight (10);
-        presetsButton.setBounds (header.removeFromRight (108).withSizeKeepingCentre (108, 34));
+        presetsButton.setBounds (header.removeFromRight (96).withSizeKeepingCentre (96, 30).translated (0, -4));
 
-        auto content = r.reduced (padding, 0).withTrimmedBottom (padding);
+        auto content = r.reduced (padding, 0).withTrimmedBottom (paddingY);
         visualArea = {};
+        sideArea = {};
         if (visual != nullptr && visualHeight > 0)
         {
-            visualArea = content.removeFromTop (visualHeight);
-            content.removeFromTop (16);
+            auto band = content.removeFromTop (visualHeight);
+            content.removeFromTop (14);
+            if (hasSideControls)
+            {
+                visualArea = band.removeFromLeft (juce::roundToInt ((float) band.getWidth() * visualShare));
+                band.removeFromLeft (24);
+                sideArea = band;
+            }
+            else
+            {
+                visualArea = band;
+            }
             visual->setBounds (visualArea.reduced (1));
+        }
+        else if (hasSideControls)
+        {
+            sideArea = content.removeFromTop (visualHeight);
+            content.removeFromTop (14);
         }
 
         sections.clear();
@@ -580,19 +644,20 @@ namespace velvox::ui
             juce::Label info;
         };
 
+        // STUTTER (chop): pattern grid, rate and mode as segments; gate and smoothing
         class ChopPanel final : public DetailPanel
         {
         public:
             explicit ChopPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Vocal chop", help::shortDescription ((int) ModuleId::chop), pid::chopOn)
+                : DetailPanel (p, "Stutter", help::shortDescription ((int) ModuleId::chop), pid::chopOn)
             {
-                visualHeight = 268;
-                pattern = &choice (pid::chopPattern, "Pattern");
-                rate = &choice (pid::chopRate, "Step length");
-                depth = &knob (pid::chopDepth, "Depth");
+                visualHeight = 200;
+                hasSideControls = true;
+                rate = &segments (pid::chopRate);
+                pattern = &choice (pid::chopPattern, {});
+                depth = &knob (pid::chopDepth, "Gate");
                 smooth = &knob (pid::chopSmooth, "Smooth");
                 depth->setProminence (Knob::Prominence::primary);
-                smooth->setMaxDialSize (88);
                 info.setText ("Steps follow the song position while FL Studio plays. R = repeat the previous slice (stutter).", juce::dontSendNotification);
                 addAndMakeVisible (noteLabel (info));
             }
@@ -600,44 +665,46 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                info.setBounds (r.removeFromBottom (22).withTrimmedLeft (6));
-                r.removeFromBottom (6);
-                section ("Pattern", r);
-                row ({ pattern, rate, depth, smooth }, inner (r));
+                auto side = sideArea;
+                placeGroup ("Rate", *rate, side);
+                placeGroup ("Pattern", *pattern, side, 32);
+                info.setBounds (r.removeFromBottom (20));
+                knobGrid ({ depth, smooth, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr }, r, 8);
             }
 
-            Choice *pattern, *rate;
+            Segments* rate;
+            Choice* pattern;
             Knob *depth, *smooth;
             juce::Label info;
         };
 
+        // DELAY: time divisions as segments, switches, echo + colour + ducking knobs
         class DelayPanel final : public DetailPanel
         {
         public:
             explicit DelayPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Delay", help::shortDescription ((int) ModuleId::delay), pid::delayOn)
             {
-                visualHeight = 128;
+                hasSideControls = true;
+                division = &segments (pid::delayDivision, { "1/4", "1/4D", "1/8", "1/8D", "1/8T", "1/16" });
+                source = &segments (pid::duckSource, { "Vocal", "Sidechain" });
+                sync = &toggle (pid::delaySync, "Tempo-Sync");
+                pingPong = &toggle (pid::delayPingPong, "Ping-Pong");
                 time = &knob (pid::delayTime, "Time");
-                division = &choice (pid::delayDivision, "Note");
-                sync = &toggle (pid::delaySync, "Sync");
-                pingPong = &toggle (pid::delayPingPong, "Ping-pong");
                 feedback = &knob (pid::delayFeedback, "Feedback");
-                mix = &knob (pid::delayMix, "Mix");
-                lowCut = &knob (pid::delayLowCut, "Low cut");
-                highCut = &knob (pid::delayHighCut, "High cut");
-                toReverb = &knob (pid::delayToReverb, "Into reverb");
-                spread = &knob (pid::delaySpread, "Spread");
+                spread = &knob (pid::delaySpread, "Offset");
+                lowCut = &knob (pid::delayLowCut, "Low Cut");
+                highCut = &knob (pid::delayHighCut, "High Cut");
+                modulation = &knob (pid::delayMod, "Wobble");
                 drive = &knob (pid::delayDrive, "Drive");
                 diffusion = &knob (pid::delayDiffusion, "Diffusion");
-                modulation = &knob (pid::delayMod, "Wow");
-                duckAmount = &knob (pid::delayDuckAmount, "Amount");
-                duckThreshold = &knob (pid::delayDuckThreshold, "Threshold");
-                duckAttack = &knob (pid::delayDuckAttack, "Attack");
-                duckRelease = &knob (pid::delayDuckRelease, "Release");
-                source = &choice (pid::duckSource, "Duck source");
-                emphasise ({ time, feedback, mix }, Knob::Prominence::primary);
-                emphasise ({ lowCut, highCut, toReverb, spread, drive, diffusion, modulation, duckAttack, duckRelease }, Knob::Prominence::detail);
+                toReverb = &knob (pid::delayToReverb, "Into Reverb");
+                mix = &knob (pid::delayMix, "Mix");
+                duckAmount = &knob (pid::delayDuckAmount, "Ducking");
+                duckThreshold = &knob (pid::delayDuckThreshold, "Duck Thresh");
+                duckAttack = &knob (pid::delayDuckAttack, "Duck Attack");
+                duckRelease = &knob (pid::delayDuckRelease, "Duck Release");
+                emphasise ({ feedback, mix }, Knob::Prominence::primary);
                 addAndMakeVisible (gr);
                 addAndMakeVisible (noteLabel (info));
             }
@@ -647,8 +714,8 @@ namespace velvox::ui
                 DetailPanel::refresh();
                 gr.push (grFrom (live, &LiveData::delayDuck));
                 const bool synced = apvts.getRawParameterValue (pidFor (pid::delaySync))->load() > 0.5f;
-                time->setVisible (! synced);
-                division->setVisible (synced);
+                time->setEnabled (! synced);
+                division->setEnabled (synced);
 
                 const auto& m = proc.getChain().meters;
                 juce::String text = synced ? (m.tempoSynced.load() ? juce::String (juce::roundToInt (m.effectiveDelayMs.load())) + " ms at host tempo"
@@ -663,61 +730,53 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                info.setBounds (r.removeFromBottom (20).withTrimmedLeft (6));
-                r.removeFromBottom (4);
-                auto [echo, colour, duck] = split3 (r, 0.36f, 0.32f);
-                section ("Echo", echo);
-                auto e = inner (echo);
-                auto toggles = e.removeFromLeft (136);
-                sync->setBounds (toggles.removeFromTop (toggles.getHeight() / 2).withSizeKeepingCentre (124, 30).translated (0, 3));
-                pingPong->setBounds (toggles.withSizeKeepingCentre (124, 30).translated (0, -3));
-                row ({ time, feedback, mix, spread }, e);
-                division->setBounds (time->getBounds());
+                auto side = sideArea;
+                placeGroup ("Time", *division, side);
+                placeSwitches ({ sync, pingPong }, side);
+                gr.setBounds (side.removeFromRight (44));
+                side.removeFromRight (12);
+                placeGroup ("Ducking source", *source, side);
+                info.setBounds (side);
 
-                section ("Character of the repeats", colour);
-                row ({ lowCut, highCut, drive, diffusion, modulation, toReverb }, inner (colour));
-
-                gr.setBounds (duck.removeFromRight (60));
-                duck.removeFromRight (sectionGap);
-                section ("Ducking", duck);
-                row ({ source, duckAmount, duckThreshold, duckAttack, duckRelease }, inner (duck));
+                knobGrid ({ time, feedback, spread, lowCut, highCut, modulation, drive, diffusion, toReverb,
+                            mix, duckAmount, duckThreshold, duckAttack, duckRelease }, r, 7);
             }
 
-            Knob *time, *feedback, *mix, *lowCut, *highCut, *toReverb, *spread, *drive, *diffusion, *modulation;
-            Knob *duckAmount, *duckThreshold, *duckAttack, *duckRelease;
-            Choice *division, *source;
+            Segments *division, *source;
             Toggle *sync, *pingPong;
+            Knob *time, *feedback, *spread, *lowCut, *highCut, *modulation, *drive, *diffusion, *toReverb, *mix;
+            Knob *duckAmount, *duckThreshold, *duckAttack, *duckRelease;
             GainReductionMeter gr { colours::accent, "Duck" };
             juce::Label info;
         };
 
+        // REVERB: room list (characters), tail and ducking knobs
         class ReverbPanel final : public DetailPanel
         {
         public:
             explicit ReverbPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Reverb", help::shortDescription ((int) ModuleId::reverb), pid::reverbOn)
             {
-                visualHeight = 128;
-                type = &choice (pid::reverbType, "Character");
-                mix = &knob (pid::reverbMix, "Mix");
-                decay = &knob (pid::reverbDecay, "Decay");
-                preDelay = &knob (pid::reverbPreDelay, "Pre-delay");
+                hasSideControls = true;
+                type = &segments (pid::reverbType);
+                source = &segments (pid::duckSource, { "Vocal", "Sidechain" });
                 size = &knob (pid::reverbSize, "Size");
-                tone = &knob (pid::reverbDamping, "Tone");
-                lowCut = &knob (pid::reverbLowCut, "Low cut");
+                decay = &knob (pid::reverbDecay, "Decay");
+                preDelay = &knob (pid::reverbPreDelay, "Pre-Delay");
+                tone = &knob (pid::reverbDamping, "Damping");
                 width = &knob (pid::reverbWidth, "Width");
+                lowCut = &knob (pid::reverbLowCut, "Low Cut");
+                highCut = &knob (pid::reverbHighCut, "High Cut");
+                movement = &knob (pid::reverbMod, "Modulation");
                 early = &knob (pid::reverbEarly, "Early");
                 diffusion = &knob (pid::reverbDiffusion, "Diffusion");
-                movement = &knob (pid::reverbMod, "Movement");
-                bass = &knob (pid::reverbBass, "Bass decay");
-                highCut = &knob (pid::reverbHighCut, "High cut");
-                duckAmount = &knob (pid::reverbDuckAmount, "Amount");
-                duckThreshold = &knob (pid::reverbDuckThreshold, "Threshold");
-                duckAttack = &knob (pid::reverbDuckAttack, "Attack");
-                duckRelease = &knob (pid::reverbDuckRelease, "Release");
-                source = &choice (pid::duckSource, "Duck source");
-                emphasise ({ mix, decay }, Knob::Prominence::primary);
-                emphasise ({ tone, lowCut, width, early, diffusion, movement, bass, highCut, duckAttack, duckRelease }, Knob::Prominence::detail);
+                bass = &knob (pid::reverbBass, "Bass Decay");
+                mix = &knob (pid::reverbMix, "Mix");
+                duckAmount = &knob (pid::reverbDuckAmount, "Ducking");
+                duckThreshold = &knob (pid::reverbDuckThreshold, "Duck Thresh");
+                duckAttack = &knob (pid::reverbDuckAttack, "Duck Attack");
+                duckRelease = &knob (pid::reverbDuckRelease, "Duck Release");
+                emphasise ({ decay, mix }, Knob::Prominence::primary);
                 addAndMakeVisible (gr);
             }
 
@@ -730,20 +789,18 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                auto [space, character, duck] = split3 (r, 0.36f, 0.32f);
-                section ("Space", space);
-                row ({ type, mix, decay, preDelay, size, width }, inner (space));
-                section ("Character of the tail", character);
-                row ({ early, diffusion, movement, tone, bass, lowCut, highCut }, inner (character));
-                gr.setBounds (duck.removeFromRight (60));
-                duck.removeFromRight (sectionGap);
-                section ("Ducking", duck);
-                row ({ source, duckAmount, duckThreshold, duckAttack, duckRelease }, inner (duck));
+                auto side = sideArea;
+                placeGroup ("Room", *type, side, 34);
+                gr.setBounds (side.removeFromRight (44));
+                side.removeFromRight (12);
+                placeGroup ("Ducking source", *source, side);
+                knobGrid ({ size, decay, preDelay, tone, width, lowCut, highCut, movement,
+                            early, diffusion, bass, mix, duckAmount, duckThreshold, duckAttack, duckRelease }, r, 8);
             }
 
-            Choice *type, *source;
-            Knob *mix, *decay, *preDelay, *size, *tone, *lowCut, *width, *duckAmount, *duckThreshold, *duckAttack, *duckRelease;
-            Knob *early, *diffusion, *movement, *bass, *highCut;
+            Segments *type, *source;
+            Knob *size, *decay, *preDelay, *tone, *width, *lowCut, *highCut, *movement, *early, *diffusion, *bass, *mix;
+            Knob *duckAmount, *duckThreshold, *duckAttack, *duckRelease;
             GainReductionMeter gr { colours::accent, "Duck" };
         };
 
@@ -826,24 +883,24 @@ namespace velvox::ui
         };
 
         //======================================================================
+        // PULSE: rate and curve as segments, depth / shape / smoothing knobs
         class PulsePanel final : public DetailPanel
         {
         public:
             explicit PulsePanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Pulse", help::shortDescription ((int) ModuleId::pulse), pid::pulseOn)
             {
-                visualHeight = 188;
-                rate = &choice (pid::pulseRate, "Cycle");
-                bpm = &knob (pid::pulseBpm, "Manual BPM");
+                hasSideControls = true;
+                rate = &segments (pid::pulseRate, pulseRateLabels (p));
+                interp = &segments (pid::pulseInterp);
                 depth = &knob (pid::pulseDepth, "Depth");
-                mix = &knob (pid::pulseMix, "Mix");
-                interp = &choice (pid::pulseInterp, "Curve");
                 tension = &knob (pid::pulseTension, "Shape");
+                smooth = &knob (pid::pulseSmooth, "Smooth");
                 attack = &knob (pid::pulseAttack, "Attack");
                 release = &knob (pid::pulseRelease, "Release");
-                smooth = &knob (pid::pulseSmooth, "Smooth");
+                bpm = &knob (pid::pulseBpm, "Manual BPM");
+                mix = &knob (pid::pulseMix, "Mix");
                 emphasise ({ depth }, Knob::Prominence::primary);
-                emphasise ({ bpm, attack, release, smooth }, Knob::Prominence::detail);
             }
 
             void refresh() override
@@ -855,32 +912,46 @@ namespace velvox::ui
             }
 
         private:
-            void layoutContent (juce::Rectangle<int> r) override
+            // The design's five rates, mapped onto the parameter's names where they exist
+            static juce::StringArray pulseRateLabels (VelvoxAudioProcessor& p)
             {
-                auto [a, b] = split (r);
-                section ("Rhythm", a);
-                section ("Shape and smoothing", b);
-                row ({ rate, depth, mix, bpm }, inner (a));
-                row ({ interp, tension, attack, release, smooth }, inner (b));
+                juce::StringArray out;
+                if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p.getState().getParameter (pid::pulseRate)))
+                    for (auto* name : { "1/2", "1/4", "1/8", "1/16", "1/32" })
+                        if (c->choices.contains (name))
+                            out.add (name);
+                return out;
             }
 
-            Choice *rate, *interp;
-            Knob *bpm, *depth, *mix, *tension, *attack, *release, *smooth;
+            void layoutContent (juce::Rectangle<int> r) override
+            {
+                auto side = sideArea;
+                placeGroup ("Rate", *rate, side);
+                placeGroup ("Curve", *interp, side);
+                knobGrid ({ depth, tension, smooth, attack, release, bpm, mix }, r, 7);
+            }
+
+            Segments *rate, *interp;
+            Knob *depth, *tension, *smooth, *attack, *release, *bpm, *mix;
         };
 
+        // VOCAL SMASH: big SMASH knob (150 px) with the GR meter, then the squash path
         class SmashPanel final : public DetailPanel
         {
         public:
             explicit SmashPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Vocal Smash", help::shortDescription ((int) ModuleId::smash), pid::smashOn)
             {
-                amount = &knob (pid::smashAmount, "Amount");
+                hasSideControls = true;
+                visualShare = 0.62f;
+                amount = &knob (pid::smashAmount, "Smash");
                 attack = &knob (pid::smashAttack, "Attack");
                 release = &knob (pid::smashRelease, "Release");
                 tone = &knob (pid::smashTone, "Tone");
-                blend = &knob (pid::smashBlend, "Blend");
                 output = &knob (pid::smashOutput, "Output");
-                emphasise ({ amount, blend }, Knob::Prominence::primary);
+                blend = &knob (pid::smashBlend, "Mix");
+                amount->setDialSize (dialsize::smash);
+                emphasise ({ blend }, Knob::Prominence::primary);
                 addAndMakeVisible (gr);
                 gr.setTooltip ("Gain reduction of the squashed path");
             }
@@ -894,26 +965,28 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                gr.setBounds (r.removeFromRight (60));
-                r.removeFromRight (sectionGap);
-                auto [a, b] = split (r);
-                section ("Squashed path", a);
-                section ("Blend and level", b);
-                row ({ amount, attack, release, tone }, inner (a));
-                row ({ blend, output }, inner (b).withSizeKeepingCentre (inner (b).getWidth() / 2, inner (b).getHeight()));
+                // The big knob needs more than the visualizer band: it spans band + knob row
+                auto side = sideArea.withBottom (r.getBottom());
+                gr.setBounds (side.removeFromRight (44).withTrimmedBottom (20));
+                side.removeFromRight (16);
+                amount->setBounds (side.withSizeKeepingCentre (side.getWidth(), std::min (side.getHeight(), dialsize::smash + 40)));
+                r.setRight (sideArea.getX() - 24);
+                knobGrid ({ attack, release, tone, output, blend }, r, 5);
             }
 
-            Knob *amount, *attack, *release, *tone, *blend, *output;
+            Knob *amount, *attack, *release, *tone, *output, *blend;
             GainReductionMeter gr { colours::accent, "GR" };
         };
 
+        // CHOIR: voices as segments, then detune / timing / width / blend
         class ChoirPanel final : public DetailPanel
         {
         public:
             explicit ChoirPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Choir", help::shortDescription ((int) ModuleId::choir), pid::choirOn)
             {
-                voices = &choice (pid::choirVoices, "Voices");
+                hasSideControls = true;
+                voices = &segments (pid::choirVoices);
                 detune = &knob (pid::choirDetune, "Detune");
                 timing = &knob (pid::choirTiming, "Timing");
                 humanize = &knob (pid::choirHumanize, "Humanize");
@@ -926,54 +999,50 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                auto [a, b] = split (r);
-                section ("Voices", a);
-                section ("Stereo and blend", b);
-                row ({ voices, detune, timing, humanize }, inner (a));
-                row ({ width, density, mix }, inner (b));
+                auto side = sideArea;
+                placeGroup ("Stimmen", *voices, side);
+                knobGrid ({ detune, timing, humanize, width, density, mix }, r, 6);
             }
 
-            Choice* voices;
+            Segments* voices;
             Knob *detune, *timing, *humanize, *width, *density, *mix;
         };
 
+        // SMOOTH: character as segments, Delta switch, detection and timing knobs
         class SmoothPanel final : public DetailPanel
         {
         public:
             explicit SmoothPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Smooth", help::shortDescription ((int) ModuleId::smooth), pid::smoothOn)
             {
+                hasSideControls = true;
+                mode = &segments (pid::smoothMode);
+                delta = &toggle (pid::smoothDelta, "Delta (nur Entferntes)");
                 amount = &knob (pid::smoothAmount, "Amount");
-                sensitivity = &knob (pid::smoothSensitivity, "Sensitivity");
-                low = &knob (pid::smoothLow, "From");
-                high = &knob (pid::smoothHigh, "To");
-                mode = &choice (pid::smoothMode, "Mode");
-                attack = &knob (pid::smoothAttack, "Attack");
+                sensitivity = &knob (pid::smoothSensitivity, "Sharpness");
+                low = &knob (pid::smoothLow, "Focus Low");
+                high = &knob (pid::smoothHigh, "Focus High");
+                attack = &knob (pid::smoothAttack, "Speed");
                 release = &knob (pid::smoothRelease, "Release");
                 output = &knob (pid::smoothOutput, "Output");
-                delta = &toggle (pid::smoothDelta, "Delta");
                 emphasise ({ amount }, Knob::Prominence::primary);
-                emphasise ({ attack, release }, Knob::Prominence::detail);
             }
 
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                auto [a, b] = split (r);
-                section ("Detection", a);
-                section ("Behaviour", b);
-                row ({ amount, sensitivity, low, high }, inner (a));
-                auto in = inner (b);
-                auto toggleArea = in.removeFromRight (in.getWidth() / 5);
-                delta->setBounds (toggleArea.withSizeKeepingCentre (112, 34));
-                row ({ mode, attack, release, output }, in);
+                auto side = sideArea;
+                placeGroup ("Charakter", *mode, side, 34);
+                placeSwitches ({ delta }, side);
+                knobGrid ({ amount, sensitivity, low, high, attack, release, output }, r, 7);
             }
 
-            Knob *amount, *sensitivity, *low, *high, *attack, *release, *output;
-            Choice* mode;
+            Segments* mode;
             Toggle* delta;
+            Knob *amount, *sensitivity, *low, *high, *attack, *release, *output;
         };
 
+        // LEVEL RIDE: rider view, target / range / speed / gate knobs
         class RidePanel final : public DetailPanel
         {
         public:
@@ -981,27 +1050,23 @@ namespace velvox::ui
                 : DetailPanel (p, "Level Ride", help::shortDescription ((int) ModuleId::ride), pid::rideOn)
             {
                 target = &knob (pid::rideTarget, "Target");
+                boost = &knob (pid::rideMaxBoost, "Max Boost");
+                cut = &knob (pid::rideMaxCut, "Max Cut");
+                response = &knob (pid::rideResponse, "Speed");
                 amount = &knob (pid::rideAmount, "Amount");
-                boost = &knob (pid::rideMaxBoost, "Max boost");
-                cut = &knob (pid::rideMaxCut, "Max cut");
-                response = &knob (pid::rideResponse, "Response");
                 phrase = &knob (pid::ridePhrase, "Phrase");
                 transient = &knob (pid::rideTransient, "Transients");
-                silence = &knob (pid::rideSilence, "Ignore below");
-                emphasise ({ target, amount }, Knob::Prominence::primary);
+                silence = &knob (pid::rideSilence, "Gate Floor");
+                emphasise ({ target }, Knob::Prominence::primary);
             }
 
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                auto [a, b] = split (r);
-                section ("Target", a);
-                section ("Behaviour", b);
-                row ({ target, amount, boost, cut }, inner (a));
-                row ({ response, phrase, transient, silence }, inner (b));
+                knobGrid ({ target, boost, cut, response, amount, phrase, transient, silence }, r, 8);
             }
 
-            Knob *target, *amount, *boost, *cut, *response, *phrase, *transient, *silence;
+            Knob *target, *boost, *cut, *response, *amount, *phrase, *transient, *silence;
         };
 
         //======================================================================
