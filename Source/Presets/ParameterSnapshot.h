@@ -20,6 +20,12 @@ namespace velvox
         // the inaudible ones are left out when applied (see RoutingMigration).
         juce::String routing;
 
+        // Mix law of the module instances (dsp::MixLaws string, 0.6). Empty = not specified
+        // (factory presets, presets from 0.5 and older): when applied, an instance whose Mix
+        // would sound different on the true law (additive Mix above 50 %) gets the legacy law,
+        // every other one the true law - the preset sounds exactly as it was made.
+        juce::String mixLaw;
+
         // File format: 1 = v0.1 (values only), 2 = v0.2 (+ routing)
         static constexpr int formatVersion = 2;
 

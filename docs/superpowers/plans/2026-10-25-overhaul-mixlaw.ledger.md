@@ -52,3 +52,17 @@ Task 5: Ruling: modules without a Mix control (De-Esser: forced 100 % so Listen 
 Task 5: Ruling: the pitch audit uses 440 Hz with formant preservation off — with "keep formants" a pure 1 kHz sine shifted +7 st comes out
   ~19 dB quieter (the preserved envelope of a single sine is a narrow peak at 1 kHz). Expected behaviour of formant preservation, not a
   mix issue; noted for the DSP-quality track.
+Task 6: complete (auto-mix regression: fresh true-law instance vs 0.5-like instance give identical parameters, routing and render;
+  planner keeps delay/reverb sends, doubler/smash <= 50 %; one-off vs the 0.5 build: digest equal, render max difference 0.000000000;
+  factory presets: none sounds different from 0.5; full suite 12016 checks, 0 failed; Velvox_VST3 target builds)
+Task 6: Ruling (found by the new tests): macros (WIDTH -> doubler, SPACE -> delay/reverb) ADD to the module Mix; on the true law that pushed
+  e.g. Doubler 50 % + WIDTH 100 % to 100 % and removed the lead vocal. Fix: the true-law dry gain follows the user's own Mix
+  ("lawMix", recorded by applyMacros; separate smoothed dry gains in VocalChain/Doubler) — macros only add wet. Both laws now render
+  WIDTH/SPACE identically. Cost if wrong: on the true law a macro can never fade the dry (that is the intent).
+Task 6: Ruling (found by the new tests): factory presets "Wide Festival Vocal" (Doubler 55 %) and "Wide Adlibs" (Doubler 70 %) would have
+  sounded different on a fresh instance. ParameterSnapshot now carries the law (optional "mixLaw" property; capture/applyTo/
+  to/fromValueTree, applied after the routing so undo/A-B restore it exactly). A snapshot without it (factory, 0.5 presets, old AutoMix
+  snapshots) marks legacy only the additive instances whose Mix is above 50 % and never clears flags. Presets themselves are not edited.
+  Cost if wrong: after loading those two presets the doubler's Mehr drawer shows "Alte Mix-Kurve – umstellen".
+Task 6: Ruling: the auto-mix offline render (AutoMixEngine) keeps the DSP-default legacy law — the planner only produces law-invariant
+  values (sends, <= 50 %), proven by the regression test. Cost if wrong: a future planner rule above 50 % would be evaluated on the wrong law.

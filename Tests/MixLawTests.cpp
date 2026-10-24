@@ -224,7 +224,145 @@ public:
         dspTests();
         processorTests();
         auditTests();
+        macroAndPresetTests();
+        autoMixTests();
         baselineTools();
+    }
+
+    // Every instance of every module on the legacy law (a 0.5-like instance)
+    static void makeAllLegacy (Harness& h)
+    {
+        for (int m = 0; m < dsp::numModules; ++m)
+            for (int k = 0; k < dsp::maxInstances ((ModuleId) m); ++k)
+                h.proc.setLegacyMixLaw ((ModuleId) m, k, true);
+    }
+
+    void macroAndPresetTests()
+    {
+        beginTest ("Macros add wet but never take the dry away: WIDTH / SPACE sound the same on both laws");
+        {
+            struct Case { const char* name; std::function<void (Harness&)> set; };
+            const std::vector<Case> cases {
+                { "WIDTH 100 % on a Doubler at 50 %", [] (Harness& h) {
+                      h.set (pid::doublerOn, 1.0f); h.set (pid::doublerMix, 50.0f); h.set (pid::macroWidth, 100.0f); } },
+                // Both effects switched on by the user (SPACE only adds to them, nothing becomes a send)
+                { "SPACE 100 % on a Reverb insert at 40 % and a Delay insert at 45 %", [] (Harness& h) {
+                      h.set (pid::reverbOn, 1.0f); h.set (pid::reverbMix, 40.0f);
+                      h.set (pid::delayOn, 1.0f); h.set (pid::delayMix, 45.0f); h.set (pid::macroSpace, 100.0f); } },
+            };
+            for (const auto& c : cases)
+            {
+                Harness t, l;
+                for (auto* h : { &t, &l })
+                {
+                    h->neutral();
+                    h->proc.setRouting (dsp::Routing::fromString ("v2,doubler,delay:insert,reverb:insert"));
+                }
+                makeAllLegacy (l);
+                for (auto* h : { &t, &l })
+                {
+                    c.set (*h);
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (2);
+                }
+                expect (l.proc.getMixLaws() == dsp::MixLaws::allLegacy() && t.proc.getMixLaws() == dsp::MixLaws::allTrue());
+                expect (t.proc.getRouting() == l.proc.getRouting(), c.name);
+                const auto in = fixedSignal (t);
+                expectEquals (maxAbsDiff (t.run (in), l.run (in)), 0.0f, c.name);
+            }
+        }
+
+        beginTest ("Presets: the law travels with snapshots; presets without it keep their sound (legacy only where Mix > 50 %)");
+        {
+            Harness h;
+            load (h, state05());
+            h.proc.switchToTrueMixLaw (ModuleId::reverb, 0);
+            const auto snap = ParameterSnapshot::capture (h.proc.getState(), "x");
+            expectEquals (snap.mixLaw, h.proc.getMixLaws().toString());
+            const auto restored = ParameterSnapshot::fromValueTree (snap.toValueTree());
+            expectEquals (restored.mixLaw, snap.mixLaw);
+
+            Harness other;
+            restored.applyTo (other.proc.getState());
+            expect (other.proc.getMixLaws() == h.proc.getMixLaws(), other.proc.getMixLaws().toString());
+
+            // A preset without a law (factory, 0.5 user preset): legacy exactly where it changes the sound
+            auto old = restored;
+            old.mixLaw = {};
+            old.values[pid::doublerMix] = 70.0f;
+            old.values[pid::smashBlend] = 30.0f;
+            old.values[pid::delayMix] = 100.0f;
+            old.values[pid::reverbMix] = 50.0f;
+            Harness fresh;
+            old.applyTo (fresh.proc.getState());
+            expect (fresh.proc.usesLegacyMixLaw (ModuleId::doubler, 0), "doubler 70 %");
+            expect (fresh.proc.usesLegacyMixLaw (ModuleId::delay, 0), "delay 100 %");
+            expect (! fresh.proc.usesLegacyMixLaw (ModuleId::smash, 0), "smash 30 % sounds the same on the true law");
+            expect (! fresh.proc.usesLegacyMixLaw (ModuleId::reverb, 0), "reverb 50 % sounds the same on the true law");
+        }
+
+        beginTest ("Factory presets are not converted: each sounds the same on the true and the legacy law");
+        {
+            juce::StringArray differing;
+            for (const auto& preset : getFactoryPresets())
+            {
+                Harness t, l;
+                makeAllLegacy (l);
+                preset.applyTo (t.proc.getState());
+                preset.applyTo (l.proc.getState());
+                makeAllLegacy (l);
+                expect (t.proc.getRouting() == l.proc.getRouting(), preset.name);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (2);
+                const auto in = fixedSignal (t);
+                if (maxAbsDiff (t.run (in), l.run (in)) > 0.0f)
+                    differing.add (preset.name);
+            }
+            logMessage ("factory presets that sound different on a fresh instance than in 0.5: "
+                        + (differing.isEmpty() ? juce::String ("none") : differing.joinIntoString (", ")));
+            expect (differing.isEmpty(), differing.joinIntoString (", "));
+        }
+    }
+
+    void autoMixTests()
+    {
+        beginTest ("Auto mix: same result in a fresh (true law, insert defaults) and a 0.5-like instance; additive mixes <= 50 %, sends kept");
+        {
+            Harness fresh, old;
+            old.proc.setRouting (dsp::Routing::legacyDefaults());
+            for (int m = 0; m < dsp::numModules; ++m)
+                for (int k = 0; k < dsp::maxInstances ((ModuleId) m); ++k)
+                    old.proc.setLegacyMixLaw ((ModuleId) m, k, true);
+
+            const auto vocal = autoMixVocal();
+            expect (runAutoMix (fresh, vocal), "fresh: mix finished");
+            expect (runAutoMix (old, vocal), "0.5-like: mix finished");
+            const auto d = digest (fresh);
+            expectEquals (d, digest (old), "identical parameters and routing");
+
+            const auto r = fresh.proc.getRouting();
+            for (auto id : { ModuleId::delay, ModuleId::reverb })
+                expect (! r.contains (id) || r.isSend (id), juce::String ("planner keeps the send: ") + r.toString());
+            expectLessOrEqual (fresh.get (pid::doublerMix), 50.0f);
+            expectLessOrEqual (fresh.get (pid::smashBlend), 50.0f);
+
+            const auto in = fixedSignal (fresh);
+            const auto outFresh = renderReloaded (fresh, in);
+            expectEquals (maxAbsDiff (outFresh, renderReloaded (old, in)), 0.0f, "identical sound");
+
+            if (const auto ref = juce::SystemStats::getEnvironmentVariable ("VELVOX_MIXLAW_BASELINE", {}); ref.isNotEmpty())
+            {
+                const auto base = juce::File (ref).getChildFile ("automix.txt").loadFileAsString().replace ("\r\n", "\n");
+                expectEquals (d, base, "same mix as the 0.5 build");
+                juce::MemoryBlock raw;
+                juce::File (ref).getChildFile ("automix.raw").loadFileAsData (raw);
+                const auto* f = static_cast<const float*> (raw.getData());
+                float diff = 0.0f;
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < outFresh.getNumSamples(); ++i)
+                        diff = std::max (diff, std::abs (outFresh.getSample (ch, i) - f[(size_t) ch * (size_t) outFresh.getNumSamples() + (size_t) i]));
+                logMessage ("auto mix vs the 0.5 build: max difference " + juce::String (diff, 9));
+                expectEquals (diff, 0.0f, "bit-exact with 0.5");
+            }
+        }
     }
 
     // Magnitude of `freq` in channel 0 over [start, start + len) (Hann window, normalised to a sine's amplitude)
