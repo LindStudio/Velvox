@@ -127,3 +127,10 @@ for SIMPEL/ADVANCED, tabs, tiles, gestures, undo, preset list; module pages no l
 tutorial steps: modes, analyse, macros, presets, tabs, chain, body, global, help; docs/STYLEGUIDE.md window, controls, gestures,
 panel frame. DesignTests "help and tutorial describe the new interface" extended (no VOCAL CONTROL / A/B / CHAIN tab; start page
 explains SIMPEL/ADVANCED; gestures in "controls").
+
+Merge 2: feature/automix with the EQ track (16 bands, LegacyBridge) and refhost merged (conflict only in the CMake test list).
+- Ruling: gestures that begin while another gesture is open are folded into it (one undo step, UndoHistory::ValueAction now holds
+  several parameters) — why: the EQ LegacyBridge answers a legacy band change with gestures on the eqBand* parameters, which made
+  one knob drag several steps. Test "Gestures started by code while a gesture is open belong to it" (written after the fix).
+- Ruling: PanelFrameTests treat eqBand{1..16}* and eqLegacyResponse as owned by the coming EQ panel (panels track); the old EQ
+  panel keeps editing the legacy bands, which reach the same filters through the bridge.

@@ -44,11 +44,13 @@ namespace velvox
         bool first = true;
     };
 
-    // One parameter (normalised values): a knob drag, a typed value, a reset
+    // Parameter values (normalised) changed by one gesture: a knob drag, a typed value, a reset - plus
+    // the parameters that code reacting to it changed meanwhile (e.g. the EQ's legacy bridge)
     class UndoHistory::ValueAction final : public juce::UndoableAction
     {
     public:
-        ValueAction (UndoHistory& h, int index, float b, float a) : owner (h), parameter (index), before (b), after (a) {}
+        struct Change { int index; float before, after; };
+        ValueAction (UndoHistory& h, std::vector<Change> c) : owner (h), changes (std::move (c)) {}
 
         bool perform() override
         {
@@ -57,29 +59,35 @@ namespace velvox
                 first = false;
                 return true;
             }
-            return apply (after);
-        }
-
-        bool undo() override { return apply (before); }
-        int getSizeInUnits() override { return 1; }
-
-    private:
-        bool apply (float value)
-        {
-            const auto& params = owner.apvts.processor.getParameters();
-            if (! juce::isPositiveAndBelow (parameter, params.size()))
-                return false;
-            const juce::ScopedValueSetter<bool> guard (owner.restoring, true);
-            auto* p = params[parameter];
-            p->beginChangeGesture();
-            p->setValueNotifyingHost (value);
-            p->endChangeGesture();
+            for (const auto& c : changes)
+                apply (c.index, c.after);
             return true;
         }
 
+        bool undo() override
+        {
+            for (auto it = changes.rbegin(); it != changes.rend(); ++it)
+                apply (it->index, it->before);
+            return true;
+        }
+
+        int getSizeInUnits() override { return 1; }
+
+    private:
+        void apply (int index, float value)
+        {
+            const auto& params = owner.apvts.processor.getParameters();
+            if (! juce::isPositiveAndBelow (index, params.size()))
+                return;
+            const juce::ScopedValueSetter<bool> guard (owner.restoring, true);
+            auto* p = params[index];
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (value);
+            p->endChangeGesture();
+        }
+
         UndoHistory& owner;
-        int parameter;
-        float before, after;
+        std::vector<Change> changes;
         bool first = true;
     };
 
@@ -99,7 +107,9 @@ namespace velvox
         transactionName = name;
         transactionBefore = ParameterSnapshot::capture (apvts, name);
         transactionPreset = apvts.state.getProperty (presetNameProperty);
-        openGestures.clear();   // gestures inside belong to the transaction
+        gestureBefore.clear();   // gestures inside belong to the transaction
+        gestureOrder.clear();
+        openGestures = 0;
     }
 
     void UndoHistory::endTransaction()
@@ -130,27 +140,42 @@ namespace velvox
         if (! juce::MessageManager::existsAndIsCurrentThread() || depth > 0 || ! isRecording())
             return;
         const auto& params = apvts.processor.getParameters();
-        if (juce::isPositiveAndBelow (index, params.size()))
-            openGestures[index] = params[index]->getValue();
+        if (! juce::isPositiveAndBelow (index, params.size()))
+            return;
+        // Gestures that start while another one is open belong to it (one step)
+        if (gestureBefore.count (index) == 0)
+        {
+            gestureBefore[index] = params[index]->getValue();
+            gestureOrder.push_back (index);
+        }
+        ++openGestures;
     }
 
     void UndoHistory::gestureEnded (int index)
     {
-        if (! juce::MessageManager::existsAndIsCurrentThread())
+        if (! juce::MessageManager::existsAndIsCurrentThread() || openGestures <= 0 || gestureBefore.count (index) == 0)
             return;
-        const auto it = openGestures.find (index);
-        if (it == openGestures.end())
-            return;
-        const float before = it->second;
-        openGestures.erase (it);
-        if (depth > 0 || ! isRecording())
+        if (--openGestures > 0)
             return;
 
-        auto* p = apvts.processor.getParameters()[index];
-        const float after = p->getValue();
-        if (std::abs (after - before) < 1.0e-7f)
+        // The outermost gesture ended: one step for everything it changed
+        std::vector<ValueAction::Change> changes;
+        juce::String name;
+        const auto& params = apvts.processor.getParameters();
+        for (auto i : gestureOrder)
+        {
+            const float before = gestureBefore[i], after = params[i]->getValue();
+            if (std::abs (after - before) < 1.0e-7f)
+                continue;
+            changes.push_back ({ i, before, after });
+            if (name.isEmpty())
+                name = params[i]->getName (64);
+        }
+        gestureBefore.clear();
+        gestureOrder.clear();
+        if (changes.empty() || depth > 0 || ! isRecording())
             return;
-        addStep (std::make_unique<ValueAction> (*this, index, before, after), p->getName (64));
+        addStep (std::make_unique<ValueAction> (*this, std::move (changes)), name);
     }
 
     void UndoHistory::addStep (std::unique_ptr<juce::UndoableAction> action, const juce::String& name)
@@ -164,7 +189,7 @@ namespace velvox
     bool UndoHistory::undo()
     {
         // A drag in progress: finish it first (never undo half a gesture)
-        if (! openGestures.empty() || depth > 0)
+        if (openGestures > 0 || depth > 0)
             return false;
         const bool done = manager.undo();
         if (done)
@@ -174,7 +199,7 @@ namespace velvox
 
     bool UndoHistory::redo()
     {
-        if (! openGestures.empty() || depth > 0)
+        if (openGestures > 0 || depth > 0)
             return false;
         const bool done = manager.redo();
         if (done)
@@ -195,7 +220,9 @@ namespace velvox
     void UndoHistory::clear()
     {
         manager.clearUndoHistory();
-        openGestures.clear();
+        gestureBefore.clear();
+        gestureOrder.clear();
+        openGestures = 0;
         sendChangeMessage();
     }
 }

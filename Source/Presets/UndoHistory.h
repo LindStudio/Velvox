@@ -72,7 +72,9 @@ namespace velvox
         juce::String transactionName;
         ParameterSnapshot transactionBefore;
         juce::var transactionPreset;
-        std::map<int, float> openGestures;   // parameter index -> normalised value when the gesture began
+        int openGestures = 0;                  // gestures begun and not ended yet (nested ones included)
+        std::map<int, float> gestureBefore;    // parameter index -> normalised value when its gesture began
+        std::vector<int> gestureOrder;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UndoHistory)
     };

@@ -89,7 +89,10 @@ public:
                         const bool isOnSwitch = pid == ui::ChainView::onParamFor ((ModuleId) id);
                         // The six Pulse curve points are the handles of the curve editor in the visual
                         const bool curveHandle = pid.startsWith ("pulseX") || pid.startsWith ("pulseY");
-                        expect (isOnSwitch || curveHandle || reached.contains (pid), name + ": reaches " + pid);
+                        // The 16 user bands of the 0.6 EQ belong to the EQ panel of the panels track (the legacy
+                        // bands reach the same filters through the bridge until then)
+                        const bool eqBand = pid.startsWith ("eqBand") || pid == "eqLegacyResponse";
+                        expect (isOnSwitch || curveHandle || eqBand || reached.contains (pid), name + ": reaches " + pid);
                     }
                 expect (panel->getMoreButton().isVisible() == ! panel->getMoreControls().empty(), name + ": Mehr only when there is more");
             }

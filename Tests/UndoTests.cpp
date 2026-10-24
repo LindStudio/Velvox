@@ -60,6 +60,20 @@ public:
             expectWithinAbsoluteError (h.get (pid::compThreshold), -30.0f, 1.0e-3f, "earlier step untouched");
         }
 
+        beginTest ("Gestures started by code while a gesture is open belong to it (one step)");
+        {
+            Harness h;
+            auto* outer = h.proc.getState().getParameter (pid::compRatio);
+            outer->beginChangeGesture();
+            outer->setValueNotifyingHost (outer->convertTo0to1 (6.0f));
+            gesture (h, pid::compThreshold, -40.0f);   // e.g. a bridge reacting to the change
+            outer->endChangeGesture();
+            expectEquals (h.proc.getUndo().getNumSteps(), 1);
+            h.proc.getUndo().undo();
+            expectWithinAbsoluteError (h.get (pid::compRatio), 3.0f, 1.0e-3f);
+            expectWithinAbsoluteError (h.get (pid::compThreshold), -18.0f, 1.0e-3f, "both undone");
+        }
+
         beginTest ("Host automation (no gesture) never records");
         {
             Harness h;
