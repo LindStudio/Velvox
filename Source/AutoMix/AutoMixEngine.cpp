@@ -268,6 +268,21 @@ namespace velvox::automix
             return true;
         });
 
+        // Softer highs: the planner only ever lifts the top end. On a take that is already
+        // brighter than the window (> -7 dB above 2 kHz against the core) a broad shelf from
+        // 5 kHz takes the edge off; the render decides whether that is worth it.
+        add (de ("Höhen sanfter"), [&] (MixPlan& c)
+        {
+            if (profile.topDb <= -7.0f || c.get (pid::highGain) > 0.2f || ! c.routing.contains (M::eq))
+                return false;
+            c.set (pid::eqOn, 1.0f);
+            c.set (pid::highType, 0.0f);
+            c.set (pid::highFreq, 5000.0f);
+            c.set (pid::highQ, 0.7071f);
+            c.set (pid::highGain, -juce::jlimit (1.5f, 4.0f, 1.0f + 0.4f * (profile.topDb + 7.0f)));
+            return true;
+        });
+
         // Tone after the dynamics: the high shelf (and a presence boost) moves into a second
         // EQ instance behind compressor, de-esser and resonance control. A boost before the
         // compressor makes it react to the highs and lifts the S sounds into the de-esser.

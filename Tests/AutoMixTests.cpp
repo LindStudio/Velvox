@@ -639,6 +639,36 @@ public:
             expect (evaluate (invalid, original, profile, -18.0f, true, false).total() > 1000.0f, "a failed render never wins");
         }
 
+        beginTest ("Optimizer: a bright take gets a softer-highs variant, a dark one never");
+        {
+            const auto softer = [] (const std::vector<std::pair<juce::String, MixPlan>>& cands)
+            {
+                return std::find_if (cands.begin(), cands.end(), [] (auto& c) { return c.first.startsWith (juce::String::fromUTF8 ("Höhen sanfter")); });
+            };
+
+            VocalSpec b; b.seconds = 12.0; b.tiltDb = 4.0f; b.sibilance = 1.6f; b.f0 = 300.0f;
+            const auto bright = profileFor (b);
+            logMessage ("    bright take: top " + juce::String (bright.topDb, 1) + " dB, presence " + juce::String (bright.presenceDb, 1) + " dB");
+            const auto baseB = AutoMixPlanner::plan (bright, defaults());
+            const auto candsB = AutoMixEngine::candidatesFor (baseB, bright);
+            const auto it = softer (candsB);
+            expect (bright.topDb > -9.0f, "the test take is bright");
+            expect (it != candsB.end(), "bright take -> softer-highs variant");
+            if (it != candsB.end())
+            {
+                const auto& c = it->second;
+                expect (c.on (pid::eqOn) && c.routing.contains (ModuleId::eq), "EQ engaged");
+                expectEquals (c.get (pid::highType), 0.0f, "shelf");
+                expect (c.get (pid::highGain) <= -1.0f && c.get (pid::highGain) >= -4.0f, "gentle cut: " + juce::String (c.get (pid::highGain), 1));
+                expect (c.get (pid::highFreq) <= 6000.0f, "shelf reaches into the upper mids");
+            }
+
+            VocalSpec d; d.seconds = 12.0; d.tiltDb = -5.0f; d.f0 = 120.0f;
+            const auto dark = profileFor (d);
+            const auto candsD = AutoMixEngine::candidatesFor (AutoMixPlanner::plan (dark, defaults()), dark);
+            expect (softer (candsD) == candsD.end(), "dark take -> no softer-highs variant");
+        }
+
         beginTest ("Optimizer: the EQ 2 variant moves the highs behind the dynamics");
         {
             VocalSpec s; s.seconds = 12.0;

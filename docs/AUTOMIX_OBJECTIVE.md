@@ -14,6 +14,7 @@ Tests: `Tests/AutoMixTests.cpp` → `optimizerTests()`.
    | Dynamik leichter | Ratio ×0,7, Threshold +2 dB, Makeup −1 dB, Smash aus | Kompressor aus |
    | Dynamik dichter | Ratio ×1,35, Threshold −2 dB, Makeup +1 dB, sanftes Smash | Kompressor aus, Take bereits stark komprimiert |
    | Mit / Ohne Sättigung | Sättigung umschalten (Tape-artig, Drive 4, Mix 25 %) | Verzerrung im Material erkannt |
+   | Höhen sanfter | High-Shelf 5 kHz, −1,5 … −4 dB (je heller, desto mehr) – der Planer selbst hebt Höhen nur an | Take nicht heller als −7 dB (über 2 kHz ggü. Kern), Höhenanhebung geplant |
    | Höhen nach der Dynamik (EQ 2) | High-Shelf und Präsenz-Boost wandern in eine zweite EQ-Instanz hinter Comp/Smash/De-Esser/Smooth | kein Boost vorhanden |
    | Effekte trockener | Reverb- und Delay-Mix ×0,65 | keine Effekte geplant |
    | Mehr Raum (bei getragenem Gesang: Large Hall) | Reverb-Mix ×1,35 (max. 28 %); getragen Large Hall, 2,6 s, Pre-Delay 40 ms (der Basisplan nutzt bei getragenem Gesang ohne Eigenraum bereits Large Hall 2,3 s) | Reverb aus, Sprache, Take schon hallig |
@@ -24,7 +25,7 @@ Tests: `Tests/AutoMixTests.cpp` → `optimizerTests()`.
 6. Gewählt wird der Kandidat mit der kleinsten Gesamtstrafe; der Bericht nennt die Variante
    („Variante gewählt: …“). Danach Ausgangspegel auf Ziel-Lautheit, Peaks unter −1 dBFS.
 
-Die Suche ist begrenzt (Basis + max. 7 Varianten + 1 Kombination) und deterministisch.
+Die Suche ist begrenzt (Basis + max. 8 Varianten + 1 Kombination) und deterministisch.
 
 ## Zielfunktion
 
@@ -61,3 +62,6 @@ Stil (`styleOf`): Anteil gepitchter Frames < 0,45 → Sprache; > 0,75 und Tonumf
 
 - Gewichte sind aus den 0.3-Schwellen abgeleitet, noch nicht gegen Hörtests kalibriert
   (Benchmark-Runner + Hörtest-Kit, siehe `CLAUDE_HANDOFF.md`).
+- Tonal-Fenster „Top“ (−16…−7 dB) im Hörtest prüfen: fertig gemischte Profi-Vocals (Stems aus
+  `Documents\Image-Line\FL Studio\Audio\Rendered`) messen −1,3 … −8,7 dB. „Höhen sanfter“ wurde
+  am 24.10. bei 4 von 5 davon gewählt (Höhen −1 … −1,4 dB) – Absicht oder zu dunkel kalibriert?
