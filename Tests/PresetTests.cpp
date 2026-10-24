@@ -129,7 +129,7 @@ public:
             expectWithinAbsoluteError (h.get (pid::reverbMix), 40.0f, 0.01f);
             expectEquals ((int) h.get (pid::doublerOn), 0, "unknown new modules reset to default (off)");
             expectWithinAbsoluteError (h.get (pid::inputGain), 0.0f, 0.01f, "input gain is not taken from presets");
-            expect (h.proc.getRouting() == dsp::Routing::defaults(), "format 1 -> default routing");
+            expect (h.proc.getRouting() == dsp::Routing::legacyDefaults(), "format 1 -> default routing");
             dir.deleteRecursively();
         }
 

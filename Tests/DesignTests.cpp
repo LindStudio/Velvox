@@ -200,7 +200,7 @@ public:
             for (juce::PopupMenu::MenuItemIterator it (delayMenu); it.next();)
                 items.add (it.getItem().text);
             const auto all = items.joinIntoString ("|");
-            for (auto* t : { "Bypass", "Duplizieren", "Entfernen", "Nach links", "Nach rechts", "Zurücksetzen", "Als Send", "Als Insert",
+            for (auto* t : { "Einschalten", "Duplizieren", "Entfernen", "Nach links", "Nach rechts", "Zurücksetzen", "Als Send", "Als Insert",
                              "Rückgängig", "Wiederholen" })
                 expect (all.contains (juce::String::fromUTF8 (t)), juce::String::fromUTF8 (t) + " in the menu: " + all);
             juce::StringArray compItems;

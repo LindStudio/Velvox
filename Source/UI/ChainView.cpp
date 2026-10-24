@@ -998,6 +998,7 @@ namespace velvox::ui
         auto r = routing;
         r.insertAt (r.indexOf (id, instance) + 1, id, k, r.isInsert (id, instance));
         applyRouting (r);
+        proc.setLegacyMixLaw (id, k, proc.usesLegacyMixLaw (id, instance));   // the copy sounds like the original
         setValue (apvts, onParamId (id, k), getValue (apvts, onParamId (id, instance)));
 
         const int code = dsp::selectionCode (id, k);

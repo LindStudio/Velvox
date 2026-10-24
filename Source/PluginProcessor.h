@@ -68,6 +68,19 @@ public:
     velvox::dsp::Routing getRouting() const noexcept;
     void setRouting (const velvox::dsp::Routing& routing);
 
+    // Mix law per module instance (0.6, spec Q1; see DSP/MixLaw.h). Projects from 0.5 and older
+    // load with every instance on the legacy law (Mix adds the wet to a unity dry), a new
+    // plugin and every instance that joins the chain while switched off (added through the
+    // browser) use the true dry/wet law. Message thread for the setters; the getters are lock-free.
+    velvox::dsp::MixLaws getMixLaws() const noexcept { return mixLawShared.load(); }
+    // True when this instance's Mix still uses the old law ("Alte Mix-Kurve"); only modules
+    // whose Mix depends on the law can be true (Delay, Reverb, Doubler, Smash)
+    bool usesLegacyMixLaw (velvox::dsp::ModuleId id, int instance = 0) const noexcept;
+    // "Alte Mix-Kurve - umstellen": this instance from now on uses the true dry/wet law
+    // (settings up to 50 % keep their sound, above it the dry fades out)
+    void switchToTrueMixLaw (velvox::dsp::ModuleId id, int instance = 0) { setLegacyMixLaw (id, instance, false); }
+    void setLegacyMixLaw (velvox::dsp::ModuleId id, int instance, bool legacy);
+
     // Listening aid: sums the output to mono. Deliberately not a parameter and
     // not saved, so a project can never be left in mono by accident.
     bool isMonoMonitor() const noexcept { return monoMonitor.load(); }
@@ -110,6 +123,11 @@ private:
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeRedirected (juce::ValueTree&) override;
     void syncRoutingFromState();
+    void syncMixLawFromState();
+    // Instances that joined the chain while switched off are fresh: true law
+    void markFreshInstances (const velvox::dsp::Routing& before, const velvox::dsp::Routing& after);
+    bool loadingState = false;
+    std::array<bool, velvox::dsp::numModules> macroEngaged {};   // modules the macros switched on (last check)
 
     // Latency follows the pitch module (on/off, quality); reported on the message thread
     void parameterChanged (const juce::String& parameterID, float newValue) override;
@@ -163,6 +181,8 @@ private:
 
     velvox::dsp::SeqLockValue<velvox::dsp::Routing> routingShared { velvox::dsp::Routing::defaults() };
     velvox::dsp::Routing audioRouting = velvox::dsp::Routing::defaults();   // audio thread's last good copy
+    velvox::dsp::SeqLockValue<velvox::dsp::MixLaws> mixLawShared { velvox::dsp::MixLaws::allTrue() };
+    velvox::dsp::MixLaws audioMixLaws = velvox::dsp::MixLaws::allTrue();   // audio thread's last good copy
 
     // Feeds the undo history with the plugin's own gestures (message thread)
     struct GestureListener final : juce::AudioProcessorListener

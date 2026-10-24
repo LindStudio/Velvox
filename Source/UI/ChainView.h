@@ -90,7 +90,7 @@ namespace velvox::ui
         juce::Rectangle<float> getPowerBounds (dsp::ModuleId id, int instance = 0);    // on/off of a tile
         juce::Rectangle<float> getAddCardBounds();
         juce::Rectangle<float> getOutputBounds() const { return outputArea(); }
-        juce::Rectangle<float> getLaneBounds() const { return laneArea(); }
+        juce::Rectangle<float> getLaneBounds() { layoutTiles(); return laneArea(); }
         juce::Rectangle<float> getRowViewport() const { return rowArea(); }
         juce::String getHint() const { return hint; }
 

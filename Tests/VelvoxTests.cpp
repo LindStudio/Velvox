@@ -171,6 +171,9 @@ public:
         {
             Harness h;
             h.neutral();
+            // As a send (the 0.5 default): the dry passes once, the return is added
+            // (the insert's true dry/wet law is covered in MixLawTests)
+            h.proc.setRouting (dsp::Routing::legacyDefaults());
             h.set (pid::delayOn, 1.0f);
             h.set (pid::delayMix, 100.0f);
             h.set (pid::delayFeedback, 0.0f);

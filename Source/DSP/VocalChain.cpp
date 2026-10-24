@@ -46,6 +46,7 @@ namespace velvox::dsp
         b.delayOn = delayOn;    b.delayMix = delayMix;  b.delay = delay;
         b.delaySync = delaySync; b.delayDivision = delayDivision; b.delayTimeMs = delayTimeMs;
         b.reverbOn = reverbOn;  b.reverbMix = reverbMix; b.reverb = reverb;
+        b.delayLawMix = delayLawMix; b.reverbLawMix = reverbLawMix;
         b.delayDuck = delayDuck; b.reverbDuck = reverbDuck;
         b.smash = smash;
         b.choir = choir;
@@ -64,6 +65,7 @@ namespace velvox::dsp
         delayOn = b.delayOn;    delayMix = b.delayMix;  delay = b.delay;
         delaySync = b.delaySync; delayDivision = b.delayDivision; delayTimeMs = b.delayTimeMs;
         reverbOn = b.reverbOn;  reverbMix = b.reverbMix; reverb = b.reverb;
+        delayLawMix = b.delayLawMix; reverbLawMix = b.reverbLawMix;
         delayDuck = b.delayDuck; reverbDuck = b.reverbDuck;
         smash = b.smash;
         choir = b.choir;
@@ -148,6 +150,16 @@ namespace velvox::dsp
             s.reset (sampleRate, 0.03);
         for (auto& s : reverbReturn)
             s.reset (sampleRate, 0.03);
+        for (auto& s : delayDry)
+        {
+            s.reset (sampleRate, 0.03);
+            s.setCurrentAndTargetValue (1.0f);
+        }
+        for (auto& s : reverbDry)
+        {
+            s.reset (sampleRate, 0.03);
+            s.setCurrentAndTargetValue (1.0f);
+        }
         for (auto* s : { &wetAmount, &delayIntoReverb })
             s->reset (sampleRate, 0.03);
         inputGain.reset (sampleRate, 0.03);
@@ -232,8 +244,18 @@ namespace velvox::dsp
             deessGate[(size_t) k].setTargets (b.deessOn, 1.0f);
         }
         if (at (ModuleId::sat))      saturation[(size_t) k].setSettings (b.sat);
-        if (at (ModuleId::doubler))  doubler[(size_t) k].setSettings (b.doubler);
-        if (at (ModuleId::smash))    smash[(size_t) k].setSettings (b.smash);
+        if (at (ModuleId::doubler))
+        {
+            auto d = b.doubler;
+            d.mixLaw = s.mixLaws.lawOf (ModuleId::doubler, k);
+            doubler[(size_t) k].setSettings (d);
+        }
+        if (at (ModuleId::smash))
+        {
+            auto sm = b.smash;
+            sm.mixLaw = s.mixLaws.lawOf (ModuleId::smash, k);
+            smash[(size_t) k].setSettings (sm);
+        }
         if (at (ModuleId::choir))    choir[(size_t) k].setSettings (b.choir);
         if (at (ModuleId::smooth))   smooth[(size_t) k].setSettings (b.smooth);
         if (at (ModuleId::ride))     ride[(size_t) k].setSettings (b.ride);
@@ -259,14 +281,18 @@ namespace velvox::dsp
                 meters.effectiveDelayMs.store (delaySettings.timeMs, std::memory_order_relaxed);
             }
             delay[(size_t) k].setSettings (delaySettings);
+            delayLaw[(size_t) k] = s.mixLaws.lawOf (ModuleId::delay, k);
             delayReturn[(size_t) k].setTargetValue (b.delayOn ? juce::jlimit (0.0f, 1.0f, b.delayMix) : 0.0f);
+            delayDry[(size_t) k].setTargetValue (b.delayOn ? additiveDryGain (b.delayLawMix >= 0.0f ? b.delayLawMix : b.delayMix, delayLaw[(size_t) k]) : 1.0f);
         }
 
         if (at (ModuleId::reverb))
         {
             reverbDucker[(size_t) k].setSettings (b.reverbDuck);
             reverb[(size_t) k].setSettings (b.reverb);
+            reverbLaw[(size_t) k] = s.mixLaws.lawOf (ModuleId::reverb, k);
             reverbReturn[(size_t) k].setTargetValue (b.reverbOn ? juce::jlimit (0.0f, 1.0f, b.reverbMix) : 0.0f);
+            reverbDry[(size_t) k].setTargetValue (b.reverbOn ? additiveDryGain (b.reverbLawMix >= 0.0f ? b.reverbLawMix : b.reverbMix, reverbLaw[(size_t) k]) : 1.0f);
         }
     }
 
@@ -540,11 +566,13 @@ namespace velvox::dsp
 
                 const bool isDelay = slot.id == ModuleId::delay;
                 auto& ret = isDelay ? delayReturn[k] : reverbReturn[k];
+                auto& dry = isDelay ? delayDry[k] : reverbDry[k];
                 auto& wet = isDelay ? delayWet[k] : reverbWet[k];
 
                 if (! wakeIfNeeded ((int) k, isDelay))
                 {
                     ret.skip (n);
+                    dry.skip (n);
                     break;
                 }
 
@@ -557,12 +585,29 @@ namespace velvox::dsp
                 else
                     reverb[k].process (io, wet.getArrayOfWritePointers(), numChannels, n);
 
-                // Insert: out = in + wet * mix (same law as the send)
-                for (int i = 0; i < n; ++i)
+                const auto law = isDelay ? delayLaw[k] : reverbLaw[k];
+                if (law == MixLaw::legacy)
                 {
-                    const float g = ret.getNextValue() * (duck != nullptr ? duck[i] : 1.0f);
-                    for (int ch = 0; ch < numChannels; ++ch)
-                        io[ch][i] += g * wet.getSample (ch, i);
+                    // Legacy insert (0.1-0.5): out = in + wet * mix (same law as the send)
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float g = ret.getNextValue() * (duck != nullptr ? duck[i] : 1.0f);
+                        for (int ch = 0; ch < numChannels; ++ch)
+                            io[ch][i] += g * wet.getSample (ch, i);
+                    }
+                    dry.skip (n);
+                }
+                else
+                {
+                    // True dry/wet: the dry fades out above 50 % of the user's Mix (see MixLaw.h);
+                    // ducking acts on the wet only
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float dryGain = dry.getNextValue();
+                        const float g = ret.getNextValue() * (duck != nullptr ? duck[i] : 1.0f);
+                        for (int ch = 0; ch < numChannels; ++ch)
+                            io[ch][i] = io[ch][i] * dryGain + g * wet.getSample (ch, i);
+                    }
                 }
                 break;
             }
@@ -666,6 +711,13 @@ namespace velvox::dsp
         for (int k = 0; k < numReverbs; ++k)
             if (! reverbNeeded[(size_t) k] && ! activeRouting.isInsert (ModuleId::reverb, k))
                 reverbReturn[(size_t) k].skip (n);
+        // The dry gain of an insert (unused by sends and absent instances) follows its target too
+        for (int k = 0; k < numDelays; ++k)
+            if (! activeRouting.isInsert (ModuleId::delay, k))
+                delayDry[(size_t) k].skip (n);
+        for (int k = 0; k < numReverbs; ++k)
+            if (! activeRouting.isInsert (ModuleId::reverb, k))
+                reverbDry[(size_t) k].skip (n);
         if (! reverbNeeded[0])
             delayIntoReverb.skip (n);
     }

@@ -180,6 +180,18 @@ public:
             expect (ed.getDetail() != nullptr, "panel after the undo");
         }
 
+        beginTest ("Chain edits keep the mix law: duplicates copy it, browser inserts use the true law");
+        {
+            Harness h;
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
+            const int code = view.insertModule (ModuleId::smash, 1);
+            expect (code >= 0 && ! h.proc.usesLegacyMixLaw (ModuleId::smash, 0), "added = true law");
+            h.proc.setLegacyMixLaw (ModuleId::smash, 0, true);
+            const int copy = view.duplicateInstance (ModuleId::smash, 0);
+            expect (copy >= 0 && h.proc.usesLegacyMixLaw (ModuleId::smash, dsp::selectionInstance (copy)), "the copy keeps the legacy law");
+        }
+
         beginTest ("A delay or reverb running as a send says SEND on its tile");
         {
             Harness h;

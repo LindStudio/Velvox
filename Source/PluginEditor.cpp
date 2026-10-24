@@ -211,7 +211,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     };
     browser.onChoose = [this] (dsp::ModuleId id, int insertIndex, bool atEnd)
     {
-        // Every module is added as an insert (spec 8 Q2); "Als Send" is in the tile menu
+        // 0.6 (spec Q2): delay and reverb join as inserts, so "Mix" is true dry/wet; "Als Send" stays in the menu
         chainView.insertModule (id, atEnd ? -1 : insertIndex, false);
     };
     help.onStartTutorial = [this] { startTutorial (false); };
@@ -248,6 +248,8 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     // ---- Window: resizable, fixed aspect ratio, remembered per project ("uiScale", a scale of
     // the design canvas). Never larger than the work area of the screen.
     const int minW = (int) std::ceil (baseWidth * minScale), maxW = juce::roundToInt (baseWidth * maxScale);
+    // Read before the limits are set: constraining the initial 0 x 0 size calls resized(), which stores a scale
+    const juce::var storedScale = state.getProperty (uiScaleProperty);
     setResizable (true, true);
     setResizeLimits (minW, (int) std::ceil (baseHeight * minScale), maxW, juce::roundToInt (baseHeight * maxScale));
     if (auto* c = getConstrainer())
@@ -260,7 +262,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
         fitW = (int) std::min (area.getWidth() * 0.94, area.getHeight() * 0.94 * baseWidth / (double) baseHeight);
     }
     const int defaultW = juce::jlimit (minW, std::max (minW, fitW), baseWidth);
-    const double savedScale = (double) state.getProperty (uiScaleProperty, defaultW / (double) baseWidth);
+    const double savedScale = storedScale.isVoid() ? defaultW / (double) baseWidth : (double) storedScale;
     const int w = juce::jlimit (minW, std::max (minW, std::min (maxW, fitW)), juce::roundToInt (savedScale * baseWidth));
     setSize (w, juce::roundToInt (w * (double) baseHeight / baseWidth));
 
