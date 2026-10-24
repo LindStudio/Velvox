@@ -58,6 +58,14 @@ namespace velvox::dsp
     Routing Routing::defaults() noexcept
     {
         Routing r;
+        for (auto id : { ModuleId::eq, ModuleId::comp, ModuleId::deess, ModuleId::delay, ModuleId::reverb })
+            r.insertAt (r.count, id, 0, true);
+        return r;
+    }
+
+    Routing Routing::legacyDefaults() noexcept
+    {
+        Routing r;
         for (auto id : { ModuleId::eq, ModuleId::comp, ModuleId::deess })
             r.insertAt (r.count, id, 0, true);
         r.insertAt (r.count, ModuleId::delay, 0, false);

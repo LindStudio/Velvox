@@ -15,4 +15,7 @@ namespace velvox::statekeys
     inline const juce::Identifier routing      { "routing" };
     inline const juce::Identifier uiMode       { "uiMode" };   // "beginner" / "pro" - view only, never affects audio
     inline const juce::Identifier uiHidden     { "uiHiddenModules" }; // module keys hidden from the chain view - view only
+    // 0.6: mix law per module instance (dsp::MixLaws string). Absent = a project from 0.5 or
+    // older: every instance on the legacy law. Does not need a new state version.
+    inline const juce::Identifier mixLaw       { "mixLaw" };
 }
