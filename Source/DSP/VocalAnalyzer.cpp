@@ -157,7 +157,7 @@ namespace velvox::dsp
             frames.pop_front();
     }
 
-    AnalysisResult VocalAnalyzer::analyse() const
+    AnalysisResult VocalAnalyzer::measure() const
     {
         AnalysisResult r;
         r.peakDb = juce::Decibels::gainToDecibels (check.peak.load(), -100.0f);
@@ -525,6 +525,24 @@ namespace velvox::dsp
                 return a.certainty == Finding::Certainty::sure;
             return a.severity > b.severity;
         });
+        return r;
+    }
+
+    AnalysisResult VocalAnalyzer::analyse() const
+    {
+        auto r = measure();
+        // 0.6 schema on the 0.4 rules (replaced by check::evaluate)
+        std::vector<Finding> shown;
+        for (auto& f : r.findings)
+        {
+            if (f.confidence < check::showThreshold)
+                continue;
+            f.id = f.module.has_value() ? juce::String (moduleKey (*f.module)) : juce::String ("level");
+            f.problem = f.title;
+            f.fix = juce::String::fromUTF8 ("\xe2\x86\x92 ") + f.advice;
+            shown.push_back (f);
+        }
+        r.findings = std::move (shown);
         return r;
     }
 }

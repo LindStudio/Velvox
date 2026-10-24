@@ -4,6 +4,7 @@
 #include <deque>
 #include "CheckModule.h"
 #include "Routing.h"
+#include "../Check/CheckTypes.h"
 
 namespace velvox::dsp
 {
@@ -25,6 +26,16 @@ namespace velvox::dsp
         float severity = 0.0f;       // for sorting (larger = more important)
         juce::String why;            // why it matters musically
         float confidence = 0.5f;     // 0..1 (see above)
+
+        // 0.6: stable id (e.g. "mud.315", "sibilance"; used for Ignorieren / Anwenden),
+        // category, severity, the short German texts of the tile and the fix
+        juce::String id;
+        check::Category category = check::Category::tonal;
+        check::Severity level = check::Severity::low;
+        juce::String problem;        // "Mulm um 300 Hz (+4 dB)"
+        juce::String fix;            // "→ EQ −3 dB bei 300 Hz"
+        check::FixAction action;     // empty = nothing Headliner can apply
+        float freqHz = 0.0f;         // where the problem sits (0 = not frequency specific)
 
         // Filled in by the processor from the chain around VOCAL CHECK
         enum class Handling { notHandled, handledLater, appliedBefore, autoMix };
@@ -87,6 +98,9 @@ namespace velvox::dsp
         void feed (const float* left, const float* right, int numSamples);
 
         AnalysisResult analyse() const;
+    private:
+        AnalysisResult measure() const;
+    public:
 
         static float bandCentre (int band) noexcept { return 40.0f * std::pow (2.0f, (float) band / 12.0f); }
 
