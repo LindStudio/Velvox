@@ -187,4 +187,18 @@ endif()
 if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Tests/RefHostTests.cpp)
     target_include_directories(VelvoxTests PRIVATE tools/refhost)
+
+    juce_add_console_app(HeadlinerRefHost PRODUCT_NAME "HeadlinerRefHost")
+    target_sources(HeadlinerRefHost PRIVATE ${VELVOX_SOURCES} tools/refhost/RefHostMain.cpp)
+    target_include_directories(HeadlinerRefHost PRIVATE Source tools/refhost ${VELVOX_THIRD_PARTY_INCLUDES})
+    if(MSVC)
+        target_compile_options(HeadlinerRefHost PRIVATE /bigobj /utf-8)
+    endif()
+    target_compile_definitions(HeadlinerRefHost PRIVATE ${VELVOX_COMMON_DEFINITIONS}
+        JUCE_PLUGINHOST_VST3=1 JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_link_libraries(HeadlinerRefHost
+        PRIVATE
+            ${VELVOX_COMMON_LIBS}
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags)
 endif()
