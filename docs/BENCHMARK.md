@@ -54,3 +54,35 @@ ist der Hörtest.
    scharf, zu weit hinten, pumpt …).
 2. Erst danach `ab_key.csv` / `listening_key.csv` öffnen und auflösen.
 3. Ergebnis hier eintragen – die Gewichte der Zielfunktion werden daran kalibriert.
+
+## Hörtest 2026-10-24 (Jakob, blind, gleiche Lautheit) – aufgelöst
+
+**0.3 vs 0.4:** 5 : 5, 3× unentschieden – kein hörbarer Fortschritt insgesamt.
+
+| Datei | Gewinner | Kommentar | 0.4 hatte |
+|---|---|---|---|
+| 01 DS_MT3 | 0.3 | verständlicher | kein Ride (LRA-Regel), De-Esser stärker |
+| 02 DS_MYRNE | 0.4 | Reverb | kein Ride |
+| 03 DS_VAH2 | 0.3 | verständlicher | kein Ride (Basisplan) |
+| 04 DYL | – | beide etwas harsch | |
+| 05 HAUSVERBOT | 0.3 | | Höhen sanfter + De-Esser |
+| 06 HDGDL | 0.3 | verständlicher | Dynamik dichter + De-Esser |
+| 07 Loona | 0.4 (knapp) | beide nicht gut | Höhen sanfter + De-Esser |
+| 08 MYLK | 0.4 | weniger harsch, cleaner | De-Esser + Höhen sanfter |
+| 09 GRÜNER SCHEIN | 0.3 (viel) | komprimierter, klarer | Basisplan |
+| 10 Taylor Swift | 0.4 | Reverb | De-Esser stärker |
+| 11 DIE NACHBARIN | – | 0.4 mehr Reverb, beide gut | |
+| 12 München | 0.4 | mehr upfront | Dynamik leichter + De-Esser |
+| 13 WIR SIND… | – | | |
+
+**Original vs 0.4:** Mix besser 7× (01, 03, 05, 06, 08, 09, 10 – „upfront“, „Kompression“, „Reverb und Delay besser“),
+Original besser 2× (04 DYL Lo-Fi, 11 DIE NACHBARIN mit Large Hall + Dynamik leichter), 4× gleich/beides schwach (02, 07, 12, 13).
+
+**Schlüsse:**
+- Gewünscht: dicht, upfront, verständlich. Die Zielfunktion bestraft genau das (Crest-Untergrenze 7 dB mit Gewicht 1,5,
+  Spitzen-Zuwachs). Bei gleicher Lautheit hört man Spitzen nicht – der Zuwachs-Term ist zu stark gewichtet.
+- Die LRA-Regel gegen Level Ride (2a5e379) hat bei 2 von 3 betroffenen Hooks hörbar verloren („verständlicher“ mit Ride).
+  Die leisen Stellen waren offenbar doch leise Silben, nicht nur Hallfahnen → Regel zurücknehmen, die Spitzen anders lösen
+  (Ausgangsstufe/Kompressor statt Ride abschalten).
+- Reverb/Delay von 0.4 kommen gut an; Large Hall + Dynamik leichter (11) verlor gegen das Original.
+- Harshness bleibt Thema (04, 08) – „Höhen sanfter“ half bei 08, bei 05 nicht.

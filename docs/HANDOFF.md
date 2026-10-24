@@ -34,14 +34,18 @@
 - **Volle Testsuite: 10263 Checks, 0 Fehler. pluginval Strenge 10 (mit GUI-Tests): SUCCESS.**
 
 ## Nächste Schritte
-1. **Stil-Feinschliff** (Snapshots: `VelvoxTests --snapshot out.png x 0 pro <sel> none` bzw. `x 0 beginner -1 mixed`):
-   - Settings-Icon in der Preset-Leiste (Guide) – es gibt noch kein Einstellungsmenü; evtl. Lade-/Startbildschirm (Guide Nr. 13).
-   - Meter-Werte größer/fetter; Kompakt-/Minimal-Ansicht (Guide Nr. 7) wäre neu.
-   - Optional: Voxity-artige große Neon-Icons pro Modul im Panel-Kopf.
-2. **Hörtest** mit den Kits (siehe `docs/BENCHMARK.md`) – danach Gewichte und Tonal-Fenster „Top“ kalibrieren.
-3. Auto-Mix: GRÜNER SCHEIN – lautere Stellen außerhalb des Analyse-Abschnitts (Spitze 0 dBFS auf der ganzen Datei); Kompressor mit 12 ms Attack hebt auf dichten Hooks die Spitzen an (MYRNE, GR 4,7 dB) – Attack an die Dichte koppeln?
-4. Datensatz VocalSet (lag auf dem anderen PC unter `%USERPROFILE%\dev\velvox-data`, hier nicht vorhanden). Split nach Sängern: dev f1–f6/m1–m7, val f7–f8/m8–m9, held-out f9/m10/m11.
-5. In FL Studio testen (neuer Look, Pops, Browser, Mausrad-Q), Hörtest.
+Design/UI ist NICHT Teil dieser Liste – dafür gibt Jakob eine eigene Anweisung.
+
+1. **Kalibrierung nach dem Hörtest vom 24.10.** (Auswertung in `docs/BENCHMARK.md`): 0.3 vs 0.4 stand 5 : 5.
+   - LRA-Regel gegen Level Ride zurücknehmen (verlor 2 von 3 Mal auf Verständlichkeit); die Spitzen am Wortanfang stattdessen
+     mit schnellerem Kompressor-Attack / der Ausgangsstufe abfangen.
+   - Zielfunktion Richtung „dicht, upfront, verständlich“: Crest-Untergrenze und Spitzen-Zuwachs schwächer gewichten.
+   - Large Hall + „Dynamik leichter“ verlor gegen das Original (DIE NACHBARIN) – „Dynamik leichter“ seltener wählen.
+   - Harshness (DYL, MYLK) weiter beobachten.
+   - Danach: neuer Benchmark + zweiter Hörtest (Kit 0.3 vs neu).
+2. GRÜNER SCHEIN: lautere Stellen außerhalb des Analyse-Abschnitts (Spitze 0 dBFS auf der ganzen Datei).
+3. Datensatz VocalSet (lag auf dem anderen PC unter `%USERPROFILE%\dev\velvox-data`, hier nicht vorhanden). Split nach Sängern: dev f1–f6/m1–m7, val f7–f8/m8–m9, held-out f9/m10/m11.
+4. In FL Studio testen (Pops, Modul-Browser, Mausrad-Q, Auto-Mix im echten Projekt).
 
 ## Hilfen
 - Build + alle Tests: `scripts\build.ps1`. Nur Tests bauen: VS-CMake (`vswhere` → `...\CMake\bin\cmake.exe`) `--build build --config Release --target VelvoxTests`.
