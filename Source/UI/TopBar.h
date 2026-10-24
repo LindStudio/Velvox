@@ -58,6 +58,7 @@ namespace velvox::ui
 
     private:
         void showPresetMenu();
+        void showPresetActions();
         void requestSave();
         void requestDelete();
 
@@ -65,7 +66,7 @@ namespace velvox::ui
         DialogOverlay& dialog;
 
         juce::TextButton presetButton, prev { juce::String::fromUTF8 ("\xe2\x80\xb9") }, next { juce::String::fromUTF8 ("\xe2\x80\xba") },
-                         save { "Save" }, remove { "Delete" };
+                         save, actions;   // icon buttons (drawn in paintOverChildren): save, menu
         juce::TextButton slotA { "A" }, slotB { "B" }, copy { "Copy A to B" };
         int abCheckCounter = 0;
         juce::TextButton beginner { "Auto Mix" }, pro { "Module" }, analyse { "Analysieren" };

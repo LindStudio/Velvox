@@ -127,7 +127,7 @@ namespace velvox::ui
     TopBar::TopBar (VelvoxAudioProcessor& p, DialogOverlay& d)
         : proc (p), dialog (d), bypass (p.getState(), pid::bypass, "Bypass")
     {
-        for (auto* c : std::initializer_list<juce::Component*> { &presetButton, &prev, &next, &save, &remove, &slotA, &slotB,
+        for (auto* c : std::initializer_list<juce::Component*> { &presetButton, &prev, &next, &save, &actions, &slotA, &slotB,
                                                                   &copy, &beginner, &pro, &analyse, &bypass, &help })
             addAndMakeVisible (c);
 
@@ -148,11 +148,11 @@ namespace velvox::ui
         prev.setTooltip ("Previous preset");
         next.setTooltip ("Next preset");
         save.setTooltip ("Save the current settings as a user preset");
-        remove.setTooltip ("Delete the selected user preset");
+        actions.setTooltip ("Preset menu: save as, delete, discard changes");
         prev.onClick = [this] { proc.getPresetManager().loadPrevious(); };
         next.onClick = [this] { proc.getPresetManager().loadNext(); };
         save.onClick = [this] { requestSave(); };
-        remove.onClick = [this] { requestDelete(); };
+        actions.onClick = [this] { showPresetActions(); };
 
         slotA.setTooltip ("Settings A - switch to compare two versions");
         slotB.setTooltip ("Settings B - switch to compare two versions");
@@ -251,6 +251,34 @@ namespace velvox::ui
                             });
     }
 
+    void TopBar::showPresetActions()
+    {
+        auto& pm = proc.getPresetManager();
+        const int current = pm.getCurrentIndex();
+        const bool isUser = current >= 0 && ! pm.getEntries()[current].isFactory;
+
+        enum { saveAsItem = 1, deleteItem, reloadItem };
+        juce::PopupMenu menu;
+        menu.addItem (saveAsItem, "Save preset as...");
+        menu.addItem (reloadItem, "Discard changes", current >= 0 && pm.isCurrentPresetModified());
+        menu.addSeparator();
+        menu.addItem (deleteItem, "Delete preset", isUser);
+
+        juce::Component::SafePointer<TopBar> safe (this);
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&actions),
+                            [safe, current] (int result)
+                            {
+                                if (safe == nullptr)
+                                    return;
+                                if (result == saveAsItem)
+                                    safe->requestSave();
+                                else if (result == deleteItem)
+                                    safe->requestDelete();
+                                else if (result == reloadItem)
+                                    safe->proc.getPresetManager().loadPreset (current);
+                            });
+    }
+
     void TopBar::refresh()
     {
         auto& pm = proc.getPresetManager();
@@ -262,9 +290,6 @@ namespace velvox::ui
             modifiedCheck = 6;   // re-check right away
             presetButton.setButtonText (name.isEmpty() ? juce::String ("No preset loaded") : name);
         }
-
-        const int idx = pm.getCurrentIndex();
-        remove.setEnabled (idx >= 0 && ! pm.getEntries()[idx].isFactory);
 
         // "edited" marker: comparing every parameter is cheap, but 10 times a second is plenty
         if (++modifiedCheck >= 6)
@@ -372,6 +397,43 @@ namespace velvox::ui
         arrow.lineTo (ax + 4.0f, ay - 2.0f);
         g.setColour (colours::textDim);
         g.strokePath (arrow, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        const auto iconColour = [] (const juce::Button& btn)
+        {
+            return btn.isEnabled() ? (btn.isMouseOver() ? colours::text : colours::textDim) : colours::textFaint;
+        };
+        const juce::PathStrokeType stroke (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+
+        // Save: floppy disk
+        {
+            const auto s = save.getBounds().toFloat().withSizeKeepingCentre (16.0f, 16.0f);
+            juce::Path p;
+            p.startNewSubPath (s.getX() + 2.0f, s.getY());
+            p.lineTo (s.getRight() - 3.5f, s.getY());
+            p.lineTo (s.getRight(), s.getY() + 3.5f);
+            p.lineTo (s.getRight(), s.getBottom() - 2.0f);
+            p.quadraticTo (s.getRight(), s.getBottom(), s.getRight() - 2.0f, s.getBottom());
+            p.lineTo (s.getX() + 2.0f, s.getBottom());
+            p.quadraticTo (s.getX(), s.getBottom(), s.getX(), s.getBottom() - 2.0f);
+            p.lineTo (s.getX(), s.getY() + 2.0f);
+            p.quadraticTo (s.getX(), s.getY(), s.getX() + 2.0f, s.getY());
+            p.closeSubPath();
+            p.addRectangle (s.getX() + 4.0f, s.getY(), 7.0f, 4.5f);           // shutter
+            p.addRectangle (s.getX() + 3.5f, s.getBottom() - 6.5f, 9.0f, 6.5f); // label
+            g.setColour (iconColour (save));
+            g.strokePath (p, stroke);
+        }
+
+        // Menu: three lines
+        {
+            const auto m = actions.getBounds().toFloat().withSizeKeepingCentre (16.0f, 12.0f);
+            g.setColour (iconColour (actions));
+            for (int i = 0; i < 3; ++i)
+            {
+                const float y = m.getY() + (float) i * 6.0f;
+                g.drawLine (m.getX(), y, m.getRight(), y, 1.5f);
+            }
+        }
     }
 
     void TopBar::resized()
@@ -395,11 +457,13 @@ namespace velvox::ui
         slotB.setBounds (right.removeFromRight (40));
         slotA.setBounds (right.removeFromRight (40));
 
-        // Preset browser in the middle
-        auto mid = r.withSizeKeepingCentre (std::min (r.getWidth() - 20, 580), r.getHeight());
-        remove.setBounds (mid.removeFromRight (76));
-        mid.removeFromRight (8);
-        save.setBounds (mid.removeFromRight (68));
+        // Preset browser in the middle: < name > centred, save and menu icons to its right
+        constexpr int iconsW = 12 + 40 + 6 + 40;
+        auto mid = r.withSizeKeepingCentre (std::min (r.getWidth() - 20, 380 + 2 * iconsW), r.getHeight());
+        mid.removeFromLeft (iconsW);   // keeps the name field centred
+        actions.setBounds (mid.removeFromRight (40));
+        mid.removeFromRight (6);
+        save.setBounds (mid.removeFromRight (40));
         mid.removeFromRight (12);
         prev.setBounds (mid.removeFromLeft (40));
         next.setBounds (mid.removeFromRight (40));
@@ -411,7 +475,7 @@ namespace velvox::ui
 {
     juce::Rectangle<int> TopBar::getPresetArea() const
     {
-        return prev.getBounds().getUnion (remove.getBounds());
+        return prev.getBounds().getUnion (actions.getBounds());
     }
 
     juce::Rectangle<int> TopBar::getCompareArea() const

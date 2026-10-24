@@ -46,7 +46,7 @@ namespace velvox::ui
             { "modes", "Auto Mix and Module",
               "Auto Mix: what the analysis found and set up, compare and fine-tuning. Module: every parameter of every module. Both control the same sound - switching never changes or resets a value." },
             { "presets", "Presets and saving",
-              "Save stores all settings and the module order as your own preset. The field shows 'edited' when you changed a preset. Your DAW project always remembers everything." },
+              "The disk icon saves all settings and the module order as your own preset; the menu icon next to it offers Save as and Delete. The field shows 'edited' when you changed a preset. Your DAW project always remembers everything." },
         };
         return s;
     }

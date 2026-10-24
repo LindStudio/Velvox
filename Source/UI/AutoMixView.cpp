@@ -103,9 +103,19 @@ namespace velvox::ui
                 // Module chip
                 const auto chip = juce::Rectangle<float> (r.getX() + 4.0f, r.getY() + 8.0f, 88.0f, 24.0f);
                 r.removeFromLeft (100.0f);
-                g.setGradientFill (auroraGradient (chip.getTopLeft(), chip.getBottomRight(), 0.18f));
-                g.fillRoundedRectangle (chip, 12.0f);
-                g.setColour (colours::teal.withAlpha (0.5f));
+                if (row.module >= 0 && row.module < dsp::numModules)
+                {
+                    const auto hue = moduleColour ((dsp::ModuleId) row.module);
+                    g.setColour (hue.withAlpha (0.16f));
+                    g.fillRoundedRectangle (chip, 12.0f);
+                    g.setColour (hue.withAlpha (0.65f));
+                }
+                else
+                {
+                    g.setGradientFill (auroraGradient (chip.getTopLeft(), chip.getBottomRight(), 0.18f));
+                    g.fillRoundedRectangle (chip, 12.0f);
+                    g.setColour (colours::teal.withAlpha (0.5f));
+                }
                 g.drawRoundedRectangle (chip.reduced (0.5f), 12.0f, 1.0f);
                 g.setColour (colours::text);
                 g.setFont (medium (12.5f));

@@ -141,8 +141,8 @@ Click the preset field at the top centre to open the browser. Factory presets ar
 As soon as you change a setting, the preset field shows "edited". Load the preset again to go back, or save your version.
 
 ## Your own presets
-- Save stores every setting and the module order as a user preset. Factory presets are never overwritten.
-- Delete removes the selected user preset file (factory presets cannot be deleted).
+- The disk icon next to the preset field saves every setting and the module order as a user preset. Factory presets are never overwritten.
+- The menu icon (three lines) offers Save as, Discard changes and Delete. Delete removes the selected user preset file (factory presets cannot be deleted).
 - User presets are files in your Documents folder (Lind Audio/Headliner/Presets), so you can back them up or share them.
 
 ## Module presets
