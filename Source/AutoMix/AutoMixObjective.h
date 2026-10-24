@@ -19,7 +19,8 @@ namespace velvox::automix
     //   stereo    mono-sum loss beyond 1 dB, correlation below 0.5
     //   space     effect level in the gaps after words, outside the window for the style
     //             (spoken: drier, sustained melodic: more room)
-    //   artifacts clipping runs, peak above -1 dBFS at the target loudness
+    //   artifacts clipping runs, peak-to-loudness growth over the original (> 1.5 dB),
+    //             and mildly the headroom: peak above -1 dBFS at the target loudness
     //   change    a small fixed cost for leaving the base plan - variants must earn it
     //
     // Loudness is never rewarded: every candidate is compared at the same target loudness.

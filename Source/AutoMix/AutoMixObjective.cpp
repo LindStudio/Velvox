@@ -86,9 +86,15 @@ namespace velvox::automix
                 b.space += 0.2f * window (m.gapDb, lo, 200.0f, 3.0f);
         }
 
-        // ---- Artifacts: clipping, and the peak at the loudness the output stage will set
+        // ---- Artifacts: clipping, and peaks that the chain made stick out further than in the
+        // original (peak-to-loudness growth). Headroom alone is a mild cost: the output stage
+        // only turns a dynamic take down a little. Measured against the original, so removing
+        // energy without touching the peaks (de-essing) is not mistaken for an artifact.
         const float peakAtTarget = m.peakDb + (targetLufs - m.lufs);
-        b.artifacts = 4.0f * (float) m.clipRuns + 1.0f * window (peakAtTarget, -100.0f, -1.0f, 1.0f);
+        const float peakGrowth = original.valid ? (m.peakDb - m.lufs) - (original.peakDb - original.lufs) : 0.0f;
+        b.artifacts = 4.0f * (float) m.clipRuns
+                    + 1.0f * window (peakGrowth, -100.0f, 1.5f, 1.0f)
+                    + 0.25f * window (peakAtTarget, -100.0f, -1.0f, 2.0f);
 
         // ---- Leaving the base plan has to be worth it
         b.change = isBasePlan ? 0.0f : 0.25f;

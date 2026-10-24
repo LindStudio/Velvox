@@ -8,7 +8,12 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 - **Neuer Look nach dem HEADLINER-Stilguide** (`docs/STYLEGUIDE.md`): Palette #0B1020 / #111827 / #1F2937 / #334155, Neon-Spektrum Cyan → Blau → Violett → Pink, matte Regler mit leuchtendem Verlaufsring und weißem Zeiger, aktive Buttons in Indigo mit Glow-Rahmen, Primärbutton als Blau→Violett-Pille, Überschriften und Reglernamen in Großbuchstaben, Schrift Montserrat (ersetzt Inter).
 - **Modulfarben** (Voxity-Stil): jedes Modul hat eine feste Neonfarbe für Icon, Power-Licht, Auswahlrahmen, Aktivitätsbalken und Panel-Kopf.
 - **Auto-Mix-Optimierer:** Kandidatensuche über eine dokumentierte Zielfunktion (`docs/AUTOMIX_OBJECTIVE.md`); Varianten werden durch die echte Kette gerendert und bewertet, die zwei besten kombiniert.
+- **Preset-Leiste nach dem Stilguide:** `‹ Name ›` mittig, daneben Icons für Speichern und ein Menü (Speichern als, Änderungen verwerfen, Löschen). Modul-Chips in der Auto-Mix-Liste in der jeweiligen Modulfarbe.
+- **Planer:** Getragener Gesang (viele gehaltene Töne, > 2 Halbtöne Umfang) bekommt im Basisplan direkt Large Hall (2,3 s, 40 ms Pre-Delay) statt Plate; Takes mit Eigenraum behalten die Plate.
 - Reverb 0.4 (16-Line-FDN, 8 Charaktere), Delay 0.4, Mehrfach-Instanzen mit Chain-Editor und Modul-Browser, Vocal-Check-Diagnosen, echtes A/B, EQ-Mausrad-Q (siehe `docs/HANDOFF.md`).
+
+### Geändert
+- **Zielfunktion, Term „artifacts“:** bestrafte bisher den Abstand Spitze–Lautheit absolut (bei dynamischen Takes 7–8 Punkte) und damit auch De-Essing (weniger Energie, gleiche Vokal-Spitzen). Jetzt zählt der *Zuwachs* gegenüber dem Original (> 1,5 dB), Headroom nur noch mild. Test: synthetischer heller Take 6,8 → 0,4.
 
 ### Behoben
 - Gelegentliche Knackser: Lesezugriff außerhalb der Delay-Linien (Reverb/Doubler).

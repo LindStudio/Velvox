@@ -367,8 +367,8 @@ namespace velvox::automix
                 d->title = de ("Kompressor ") + juce::String (plan.get (pid::compRatio), 1) + de (":1, Schwelle ") + db (plan.get (pid::compThreshold));
             if (auto* d = plan.find (M::reverb))
             {
-                static const char* types[] { "Room", "Plate", "Hall", "Large Hall", "Ambience", "Atmosphere", "Cinematic", "Ethereal" };
-                d->title = juce::String (types[juce::jlimit (0, 7, (int) plan.get (pid::reverbType))]) + "-Hall "
+                static const char* types[] { "Room-Hall", "Plate-Hall", "Hall", "Large Hall", "Ambience", "Atmosphere", "Cinematic", "Ethereal" };
+                d->title = juce::String (types[juce::jlimit (0, 7, (int) plan.get (pid::reverbType))]) + " "
                          + juce::String (juce::roundToInt (plan.get (pid::reverbMix))) + " %, "
                          + juce::String (plan.get (pid::reverbDecay), 1).replaceCharacter ('.', ',') + de (" s, geduckt");
             }

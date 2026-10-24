@@ -1,4 +1,4 @@
-# HEADLINER – Übergabe (Stand 2026-10-23, Branch `feature/automix`)
+# HEADLINER – Übergabe (Stand 2026-10-24, Branch `feature/automix`)
 
 ## Wo der Code liegt
 - Arbeitskopie: `%USERPROFILE%\dev\velvox`, Branch `feature/automix` (NICHT auf GitHub, nur lokal + Drive-Bundle).
@@ -21,17 +21,24 @@
 - Sporadischer Testfehler „original off“ behoben (Klickhelfer wartet 150 statt 10 ms).
 - CHANGELOG-Eintrag 0.4.0.
 
+## Erledigt am 24.10. (committed, getestet)
+- Preset-Leiste nach Guide: `‹ Name ›` mittig, Disketten-Icon (Speichern) + Menü-Icon (Speichern als / Änderungen verwerfen / Löschen) in `TopBar.cpp` (`paintOverChildren` zeichnet die Icons, `showPresetActions`). Hilfe- und Tutorial-Texte angepasst.
+- Modul-Chips der Auto-Mix-Liste in `moduleColour` (`AutoMixView.cpp`).
+- **„artifacts“ war hoch, weil der Term den absoluten Abstand Spitze–Lautheit bestrafte** (dynamischer Take mit 15–16 dB PLR bei Ziel −14 LUFS → ~7 Punkte), obwohl die Ausgangsstufe nur leiser dreht. Schlimmer: De-Essing senkt die Lautheit bei gleichen Vokal-Spitzen und wurde dafür bestraft. Neu: Zuwachs Spitze−Lautheit ggü. Original (> 1,5 dB, Gewicht 1) + Headroom mild (0,25, s = 2). Synthetischer heller Take: 6,8 → 0,4. Echtes Vocal (MYLK dry chorus) lag schon vorher bei 0,3.
+- Planer: getragener Gesang ohne Eigenraum → Large Hall 2,3 s / 40 ms im Basisplan (Test „Reverb character follows the style“).
+- Bugfix: Reverb-Schritt hieß „Hall-Hall“ / „Large Hall-Hall“ (`AutoMixEngine.cpp`).
+- **Volle Testsuite: 9863 Checks, 0 Fehler. pluginval Strenge 10: SUCCESS.**
+- Verbleibende hohe Strafen beim hellen synthetischen Take: tonal ~9 (Top/Air zu hell, EQ senkt nicht genug) und sibilance ~4–7 → nächster Ansatz: Kandidat „Höhen absenken“ (High-Shelf −2…−3 dB) bei hellem Material.
+
 ## Nächste Schritte
 1. **Stil-Feinschliff** (Snapshots: `VelvoxTests --snapshot out.png x 0 pro <sel> none` bzw. `x 0 beginner -1 mixed`):
-   - Modul-Chips in der Auto-Mix-Liste („EQ“, „Ride“, „Comp“) noch cyan → `moduleColour` verwenden.
-   - Preset-Leiste oben wie im Guide (`< Festival Punch >` mittig, Icons Settings/Menü), evtl. Lade-/Startbildschirm (Guide Nr. 13).
+   - Settings-Icon in der Preset-Leiste (Guide) – es gibt noch kein Einstellungsmenü; evtl. Lade-/Startbildschirm (Guide Nr. 13).
    - Meter-Werte größer/fetter; Kompakt-/Minimal-Ansicht (Guide Nr. 7) wäre neu.
    - Optional: Voxity-artige große Neon-Icons pro Modul im Panel-Kopf.
-2. **Auto-Mix:** Beim hellen/sibilanten Testmaterial bleiben hohe Strafen (tonal ~9, sibilance ~4–7, artifacts ~7–8) – prüfen, warum „artifacts“ (Peak bei Ziel-Lautheit) so hoch ist.
-3. Planer: neue Reverb-Charaktere direkt im Basisplan nutzen (getragen → Large Hall; bisher nur als Variante).
-4. Benchmark-Runner `--bench <dir> <out>` + Baseline 0.3 (Commit ab2e014) + Hörtest-Kit.
-5. Datensatz VocalSet (lag auf dem anderen PC unter `%USERPROFILE%\dev\velvox-data`, hier nicht vorhanden). Split nach Sängern: dev f1–f6/m1–m7, val f7–f8/m8–m9, held-out f9/m10/m11.
-6. In FL Studio testen (neuer Look, Pops, Browser, Mausrad-Q), Hörtest.
+2. **Auto-Mix:** Kandidat „Höhen absenken“ für helles Material (siehe oben), dann gegen echte Vocals prüfen (`VelvoxTests --automix <wav> <dir>`; Vocals z. B. unter `Documents\Image-Line\FL Studio\Audio\Rendered`).
+3. Benchmark-Runner `--bench <dir> <out>` + Baseline 0.3 (Commit ab2e014) + Hörtest-Kit.
+4. Datensatz VocalSet (lag auf dem anderen PC unter `%USERPROFILE%\dev\velvox-data`, hier nicht vorhanden). Split nach Sängern: dev f1–f6/m1–m7, val f7–f8/m8–m9, held-out f9/m10/m11.
+5. In FL Studio testen (neuer Look, Pops, Browser, Mausrad-Q), Hörtest.
 
 ## Hilfen
 - Build + alle Tests: `scripts\build.ps1`. Nur Tests bauen: VS-CMake (`vswhere` → `...\CMake\bin\cmake.exe`) `--build build --config Release --target VelvoxTests`.

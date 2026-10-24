@@ -434,19 +434,22 @@ namespace velvox::automix
         else
         {
             // Character from the pitch measurement: rhythmic speech / rap (few pitched
-            // frames) stays drier and closer, long sung notes get a longer plate
+            // frames) stays drier and closer, long sung melodies get the Large Hall (a take
+            // with some room of its own keeps the shorter plate)
             const bool spoken = p.pitchedShare < 0.45f;
             const bool sustained = p.pitchedShare > 0.75f && p.pitchSpreadSemitones > 2.0f;
+            const bool largeHall = sustained && ! someRoom;
             float revMix = someRoom ? 7.0f : (plan.conservative ? 10.0f : 14.0f);
-            float decay = 1.6f;
+            float decay = 1.6f, preDelay = 30.0f;
             int type = 1;   // plate
             if (spoken)         { revMix = std::min (revMix, 8.0f); decay = 1.0f; type = 0; }
+            else if (largeHall) { decay = 2.3f; preDelay = 40.0f; type = 3; }   // the long tail already reads wetter
             else if (sustained) { revMix = std::min (revMix + 2.0f, 16.0f); decay = 1.9f; }
             plan.set (pid::reverbOn, 1.0f);
             plan.set (pid::reverbType, (float) type);
             plan.set (pid::reverbMix, revMix);
             plan.set (pid::reverbDecay, decay);
-            plan.set (pid::reverbPreDelay, 30.0f);
+            plan.set (pid::reverbPreDelay, preDelay);
             plan.set (pid::reverbSize, 55.0f);
             plan.set (pid::reverbDamping, harsh ? 5500.0f : 6500.0f);
             plan.set (pid::reverbLowCut, 300.0f);
@@ -455,10 +458,11 @@ namespace velvox::automix
             plan.set (pid::reverbDuckThreshold, duckThreshold);
             plan.set (pid::reverbDuckAttack, 20.0f);
             plan.set (pid::reverbDuckRelease, 500.0f);
-            decide (M::reverb, (type == 1 ? de ("Plate-Hall ") : de ("Room-Hall ")) + juce::String ((int) revMix) + " %, "
+            decide (M::reverb, (type == 3 ? de ("Large Hall ") : type == 1 ? de ("Plate-Hall ") : de ("Room-Hall ")) + juce::String ((int) revMix) + " %, "
                                    + juce::String (decay, 1).replaceCharacter ('.', ',') + de (" s, geduckt"),
                     someRoom ? de ("Die Aufnahme hat etwas Raum - deshalb nur wenig Hall.")
                              : spoken ? de ("Sprechgesang/Rap (wenig gehaltene Töne gemessen): kurzer, trockener Raum, damit der Text vorne bleibt.")
+                                      : largeHall ? de ("Lange, gehaltene Melodiebögen: Large Hall mit 40 ms Pre-Delay trägt die Töne; Ducking hält die Wörter vorne.")
                                       : sustained ? de ("Viele gehaltene Töne: etwas längere Plate für Tiefe; Ducking hält die Wörter vorne.")
                                                   : de ("Räumliche Tiefe; 30 ms Pre-Delay und Ducking halten die Wörter vorne."), true);
 

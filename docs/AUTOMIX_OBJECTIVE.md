@@ -16,7 +16,7 @@ Tests: `Tests/AutoMixTests.cpp` → `optimizerTests()`.
    | Mit / Ohne Sättigung | Sättigung umschalten (Tape-artig, Drive 4, Mix 25 %) | Verzerrung im Material erkannt |
    | Höhen nach der Dynamik (EQ 2) | High-Shelf und Präsenz-Boost wandern in eine zweite EQ-Instanz hinter Comp/Smash/De-Esser/Smooth | kein Boost vorhanden |
    | Effekte trockener | Reverb- und Delay-Mix ×0,65 | keine Effekte geplant |
-   | Mehr Raum (bei getragenem Gesang: Large Hall) | Reverb-Mix ×1,35 (max. 28 %); getragen zusätzlich Large Hall, 2,6 s, Pre-Delay 40 ms | Reverb aus, Sprache, Take schon hallig |
+   | Mehr Raum (bei getragenem Gesang: Large Hall) | Reverb-Mix ×1,35 (max. 28 %); getragen Large Hall, 2,6 s, Pre-Delay 40 ms (der Basisplan nutzt bei getragenem Gesang ohne Eigenraum bereits Large Hall 2,3 s) | Reverb aus, Sprache, Take schon hallig |
    | De-Esser stärker | Threshold −3 dB, Range +2 dB (max. 12) | De-Esser aus, S-Laute nicht messbar oder unauffällig (< −8 dB) |
 4. Jeder Kandidat wird **komplett durch die echte DSP-Kette gerendert** und mit `evaluate` bewertet.
 5. Die zwei besten Einzeländerungen, die beide besser als der Basisplan sind, werden zusätzlich
@@ -39,7 +39,7 @@ Standard s = 2 dB, d. h. 2 dB außerhalb kosten 1.
 | harshness | 2–5 kHz relativ zum Kern | ≤ −4 dB (1,0) |
 | stereo | Mono-Verlust, Korrelation | Verlust ≤ 1 dB (2,0, s = 1); Korrelation ≥ 0,5 (1,0, s = 0,25) |
 | space | Effektpegel in den Lücken nach Wörtern | Stil-abhängig: Sprache −40…−24, Gesang −34…−17, getragen −30…−13 dB; zu trocken kostet nur, wenn der Plan Effekte vorsieht; ein schon halliger Take behält seinen Raum |
-| artifacts | Clipping-Runs, Peak bei Ziel-Lautheit | 4 je Run; Peak ≤ −1 dBFS (1,0, s = 1); fehlgeschlagener Render = 10⁶ |
+| artifacts | Clipping-Runs, Zuwachs Spitze−Lautheit gegenüber dem Original, Peak bei Ziel-Lautheit | 4 je Run; Zuwachs ≤ 1,5 dB (1,0, s = 1); Peak ≤ −1 dBFS nur mild (0,25, s = 2) – die Ausgangsstufe dreht einen dynamischen Take bloß etwas leiser, und De-Essing (weniger Energie, gleiche Vokal-Spitzen) gilt nicht als Artefakt; fehlgeschlagener Render = 10⁶ |
 | change | Abweichung vom Basisplan | fest 0,25 – eine Variante muss sich lohnen |
 
 **Lautheit wird nie belohnt:** Peaks werden auf die Ziel-Lautheit umgerechnet; eine nur lautere

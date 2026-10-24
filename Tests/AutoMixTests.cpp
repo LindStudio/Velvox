@@ -419,6 +419,26 @@ public:
             expect (ps.conservative, "little material -> conservative");
             expect (! ps.on (pid::delayOn) && ! ps.on (pid::doublerOn), "no extras on little material");
 
+            // Reverb character follows the style: rap stays in a short room, sung lines get a
+            // plate, long sustained melodies the Large Hall of the 0.4 reverb engine
+            {
+                VocalSpec styled; styled.seconds = 14.0;
+                auto prof = VocalProfiler::analyse (makeVocal (styled));
+                prof.reverberant = false;
+                const auto typeFor = [&] (float pitchedShare, float spread)
+                {
+                    auto p = prof;
+                    p.pitchedShare = pitchedShare;
+                    p.pitchSpreadSemitones = spread;
+                    const auto plan = AutoMixPlanner::plan (p, defaults());
+                    expect (plan.on (pid::reverbOn), "reverb planned");
+                    return (int) plan.get (pid::reverbType);
+                };
+                expectEquals (typeFor (0.30f, 1.0f), 0, "spoken -> Room");
+                expectEquals (typeFor (0.60f, 3.0f), 1, "sung -> Plate");
+                expectEquals (typeFor (0.90f, 5.0f), 3, "sustained -> Large Hall");
+            }
+
             // Different recordings -> different configurations
             int differences = 0;
             for (auto& [id, v] : pd.values)
@@ -590,6 +610,24 @@ public:
             clipped.clipRuns = 2;
             expect (evaluate (clipped, original, profile, -18.0f, true, false).artifacts >= 8.0f, "clipping costs");
 
+            // Headroom: a dynamic take (peak 15.6 dB over its loudness) is only turned down a
+            // little by the output stage - that is not an artifact. A de-esser that takes the
+            // S energy out (loudness -0.8 dB, vowel peaks unchanged) must not be punished.
+            auto dynamicTake = m;
+            dynamicTake.lufs = -14.0f; dynamicTake.peakDb = 1.6f;
+            const auto dynOriginal = dynamicTake;
+            const float headroomCost = evaluate (dynamicTake, dynOriginal, profile, -14.0f, true, false).artifacts;
+            expect (headroomCost < 1.0f, "a dynamic take's headroom is a small cost: " + juce::String (headroomCost, 2));
+            auto deEssed = dynamicTake;
+            deEssed.lufs -= 0.8f;
+            expect (evaluate (deEssed, dynOriginal, profile, -14.0f, true, false).artifacts - headroomCost < 0.5f,
+                    "removing S energy is not punished as an artifact");
+
+            // ... but a chain that makes the peaks stick out further than in the original does cost
+            auto spiky = dynamicTake;
+            spiky.peakDb += 4.0f;
+            expect (evaluate (spiky, dynOriginal, profile, -14.0f, true, false).artifacts >= 4.0f, "peaks sticking out cost");
+
             auto louder = m;
             louder.lufs = -12.0f;
             louder.peakDb = -6.0f + 6.0f;
@@ -682,7 +720,10 @@ public:
             expect (am.hasMix() && am.getReport().valid);
             expect (am.getReport().steps.size() >= 3);
             for (auto& st : am.getReport().steps)
+            {
                 logMessage ("    step: " + st.title + " | " + st.reason);
+                expect (! st.title.contains ("Hall-Hall"), "reverb title reads naturally: " + st.title);
+            }
             expect (am.getReport().steps.size() > 0 && am.getReport().steps[0].title.startsWith ("Low Cut"), "low cut decided by the analysis");
             expect (h.get (pid::hpfOn) > 0.5f, "low cut on");
             expect (h.get (pid::levelMatchMode) > 0.5f, "fair compare enabled");
