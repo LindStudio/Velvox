@@ -55,6 +55,7 @@ set(VELVOX_SOURCES
     Source/DSP/CheckModule.cpp
     Source/DSP/VocalAnalyzer.cpp
     Source/Check/CheckTargets.cpp
+    Source/Check/CheckRules.cpp
     Source/DSP/RideModule.cpp
     Source/DSP/Macros.cpp
     Source/Presets/ParameterSnapshot.cpp

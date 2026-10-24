@@ -7,6 +7,7 @@
 #include "CheckModule.h"
 #include "Routing.h"
 #include "../Check/CheckTypes.h"
+#include "../Check/CheckTargets.h"
 
 namespace velvox::dsp
 {
@@ -43,6 +44,12 @@ namespace velvox::dsp
         enum class Handling { notHandled, handledLater, appliedBefore, autoMix };
         Handling handling = Handling::notHandled;
         juce::String handlingText;   // e.g. "De-esser is on after this point"
+    };
+
+    struct Resonance
+    {
+        float hz = 0.0f;
+        float excessDb = 0.0f;   // above the +-1/2 octave surroundings of the long-term spectrum
     };
 
     struct AnalysisResult
@@ -86,9 +93,27 @@ namespace velvox::dsp
         float sibilanceHz = 0.0f;         // centre of the S energy (0 = not measured)
         float monoLossDb = 0.0f;          // stereo loudness minus the loudness of the mono sum
         float sideToMidDb = -100.0f;
+        // Band levels relative to the 300 Hz - 2 kHz core (the auto-mix profile bands)
+        float rumbleDb = -60.0f;          // 40 - 90 Hz
+        float bodyDb = -60.0f;            // 100 - 300 Hz
+        float lowMidDb = -60.0f;          // 250 - 500 Hz
+        float presenceDb = -60.0f;        // 2 - 5 kHz
+        float airDb = -60.0f;             // 10 - 16 kHz
+        float topDb = -60.0f;             // above 2 kHz
+        bool sibilanceValid = false;
+        float sibilancePeakDb = -100.0f;  // 95th percentile of the 5-10 kHz frame level minus the vowel level
+        bool sibilancePeakValid = false;
+        bool phraseValid = false;         // loudnessRangeDb measured (enough 400 ms voice windows)
+        std::vector<Resonance> resonances;
+        float tailSeconds = 0.0f;         // median 30 dB decay after words (0 = not measured)
+        int tailCount = 0;
         // 1/3-octave smoothed long-term spectrum (1/12-octave grid, dB, -200 = no bins) and its
         // deviation from the voice template (median-normalised over 150 Hz - 8 kHz; empty = not measured)
         std::vector<float> smoothDb, deviationDb;
+        // Curve the deviation is taken from: the averaged spectral envelope of the pitched
+        // frames (toneFromEnvelope) or, without a clear pitch, smoothDb (1/3-octave smoothed)
+        std::vector<float> toneDb;
+        bool toneFromEnvelope = false;
         int hiddenFindings = 0;           // findings below the confidence threshold (not shown)
         int score = -1;                   // 0..100, -1 = not enough material
     };
@@ -127,7 +152,8 @@ namespace velvox::dsp
         // Direct feeding (tests, offline use)
         void feed (const float* left, const float* right, int numSamples);
 
-        AnalysisResult analyse() const;
+        // Measures the stored frames and applies the rules for the genre (check::evaluate)
+        AnalysisResult analyse (check::Genre genre = check::Genre::party) const;
     private:
         AnalysisResult measure() const;
         void measureExtras (AnalysisResult& r, const std::vector<bool>& voiced, float gate) const;
@@ -144,6 +170,7 @@ namespace velvox::dsp
             float f0 = 0.0f;                         // Hz, 0 = no clear pitch
             float lfDb = -200.0f;                    // 40-150 Hz level (dBFS)
             float kPower = 0.0f;                     // K-weighted mean square of the mid signal
+            std::array<float, numBands> env {};      // spectral envelope of a pitched frame (dB, -300 = none)
         };
 
         void analyseFrame();

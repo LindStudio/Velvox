@@ -32,7 +32,59 @@ namespace
 
     juce::String describe (const Finding& f)
     {
-        return f.id + " [" + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %] " + f.problem + " | " + f.fix;
+        return f.id + " [" + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %, f " + juce::String (juce::roundToInt (f.freqHz))
+             + "] " + f.problem + " | " + f.fix;
+    }
+
+    // First finding whose id starts with `prefix` ("mud", "resonance." ...)
+    const Finding* findId (const AnalysisResult& r, const juce::String& prefix)
+    {
+        for (auto& f : r.findings)
+            if (f.id.startsWith (prefix))
+                return &f;
+        return nullptr;
+    }
+
+    bool withinThirdOctave (float a, float b) { return a > 0.0f && b > 0.0f && std::abs (std::log2 (a / b)) <= 1.0f / 3.0f + 1.0e-3f; }
+
+    void applyPeak (automix::CapturedAudio& v, double freq, double q, double gainDb)
+    {
+        for (auto& ch : v.vocal)
+        {
+            dsp::Biquad f;
+            f.setCoeffs (dsp::design::peak (v.sampleRate, freq, q, gainDb));
+            for (auto& x : ch)
+                x = f.process (x, 0);
+        }
+    }
+
+    // The synthetic voice (saw + vowel formants) has a different long-term spectrum than a real
+    // voice. A 1/3-octave graphic EQ moves it onto the voice template, so "clean" means
+    // "typical voice" for the tonal rules too.
+    automix::CapturedAudio matchTemplate (automix::CapturedAudio v)
+    {
+        for (int pass = 0; pass < 4; ++pass)
+        {
+            const auto r = analyseVocal (v, v.sampleRate);
+            if (r.deviationDb.empty())
+                break;
+            for (float c : { 160.0f, 200.0f, 250.0f, 315.0f, 400.0f, 500.0f, 630.0f, 800.0f, 1000.0f, 1250.0f, 1600.0f, 2000.0f })
+            {
+                const int b = (int) std::lround (12.0 * std::log2 (c / 40.0));
+                const float g = juce::jlimit (-12.0f, 12.0f, -0.7f * r.deviationDb[(size_t) b]);
+                if (std::abs (g) > 0.5f)
+                    applyPeak (v, c, 4.3, g);
+            }
+        }
+        return v;
+    }
+
+    void logFindings (juce::UnitTest& t, const juce::String& label, const AnalysisResult& r)
+    {
+        t.logMessage ("  " + label + ": score " + juce::String (r.score) + ", " + juce::String ((int) r.findings.size()) + " shown, "
+                      + juce::String (r.hiddenFindings) + " hidden");
+        for (auto& f : r.findings)
+            t.logMessage ("    " + describe (f));
     }
 }
 
@@ -45,6 +97,7 @@ public:
     {
         constexpr double fs = 48000.0;
         targetsAndTemplate();
+        rules();
 
         beginTest ("Finding schema: id, category, German problem / fix text, confidence above the threshold");
         {
@@ -207,6 +260,144 @@ public:
                 }
                 expectGreaterThan (at (500.0f) - at (6000.0f), 10.0f, "the voice falls towards the highs");
             }
+        }
+    }
+
+    void rules()
+    {
+        constexpr double fs = 48000.0;
+        VocalSpec spec;
+        spec.seconds = 16.0;
+        spec.sampleRate = fs;
+        spec.levelDb = -24.0f;
+        spec.sibilance = 0.15f;
+        const auto cleanVocal = matchTemplate (makeVocal (spec));
+        const auto clean = analyseVocal (cleanVocal, fs);
+        {
+            juce::String dev;
+            for (float c : { 200.0f, 315.0f, 500.0f, 800.0f, 1250.0f, 2000.0f })
+                dev << juce::String (c, 0) << ": " << juce::String (clean.deviationDb[(size_t) std::lround (12.0 * std::log2 (c / 40.0))], 1) << "  ";
+            logMessage ("  template-matched synthetic voice, deviation " + dev);
+        }
+
+        beginTest ("Rules: a clean take raises none of the problems below and scores high");
+        {
+            logFindings (*this, "clean", clean);
+            for (auto* id : { "rumble", "plosives", "mud", "boxy", "resonance.", "harsh", "sibilance" })
+                expect (findId (clean, id) == nullptr, juce::String ("no ") + id);
+            expectGreaterOrEqual (clean.score, 70);
+        }
+
+        beginTest ("Rules: mud (+6 dB at 300 Hz) is found at its frequency, with an EQ cut there");
+        {
+            auto v = cleanVocal;
+            applyPeak (v, 300.0, 1.4, 6.0);
+            const auto r = analyseVocal (v, fs);
+            logFindings (*this, "mud 300", r);
+            const auto* f = findId (r, "mud");
+            expect (f != nullptr, "mud found");
+            if (f != nullptr)
+            {
+                expect (withinThirdOctave (f->freqHz, 300.0f), "at 300 Hz +-1/3 octave: " + juce::String (f->freqHz));
+                expect (f->category == check::Category::tonal);
+                expectEquals ((int) f->action.eq.size(), 1);
+                if (! f->action.eq.empty())
+                {
+                    const auto& e = f->action.eq.front();
+                    expect (e.role == check::EqRole::mud && e.shape == check::EqShape::bell);
+                    expect (withinThirdOctave (e.freqHz, 300.0f));
+                    expect (e.gainDb <= -1.5f && e.gainDb >= -6.0f, "a moderate cut: " + juce::String (e.gainDb));
+                }
+                expect (f->problem.startsWith ("Mulm um "), f->problem);
+                expect (f->fix.contains ("EQ"), f->fix);
+            }
+            expectLessThan (r.score, clean.score, "a problem lowers the score");
+        }
+
+        beginTest ("Rules: a narrow 3.5 kHz resonance is a harsh resonance at its frequency");
+        {
+            auto v = cleanVocal;
+            applyPeak (v, 3500.0, 8.0, 10.0);
+            const auto r = analyseVocal (v, fs);
+            logFindings (*this, "resonance 3.5k", r);
+            for (auto& res : r.resonances)
+                logMessage ("    peak " + juce::String (res.hz, 0) + " Hz +" + juce::String (res.excessDb, 1) + " dB");
+            for (int b = 70; b < 90; ++b)
+                logMessage ("    band " + juce::String (VocalAnalyzer::bandCentre (b), 0) + ": " + juce::String (r.spectrumDb[(size_t) b], 1) + " / clean " + juce::String (clean.spectrumDb[(size_t) b], 1));
+            const auto* f = findId (r, "resonance.");
+            expect (f != nullptr, "resonance found");
+            if (f != nullptr)
+            {
+                expect (withinThirdOctave (f->freqHz, 3500.0f), "at 3.5 kHz: " + juce::String (f->freqHz));
+                expect (f->category == check::Category::harshness);
+                expect (! f->action.eq.empty() && f->action.eq.front().q >= 3.0f, "a narrow cut");
+            }
+        }
+
+        beginTest ("Rules: rumble, plosives and sibilance");
+        {
+            auto spec2 = spec;
+            spec2.rumbleDb = -36.0f;
+            const auto rumble = analyseVocal (makeVocal (spec2), fs);
+            logFindings (*this, "rumble", rumble);
+            const auto* fr = findId (rumble, "rumble");
+            expect (fr != nullptr, "rumble found");
+            if (fr != nullptr)
+            {
+                expect (fr->category == check::Category::lowEnd);
+                expect (! fr->action.eq.empty() && fr->action.eq.front().shape == check::EqShape::lowCut
+                        && fr->action.eq.front().role == check::EqRole::lowcut);
+                if (! fr->action.eq.empty())
+                    expect (fr->action.eq.front().freqHz >= 60.0f && fr->action.eq.front().freqHz <= 150.0f);
+            }
+
+            auto pv = cleanVocal;
+            addPlosives (pv, 6, 0.5f);
+            const auto plosives = analyseVocal (pv, fs);
+            logFindings (*this, "plosives", plosives);
+            expect (findId (plosives, "plosives") != nullptr, "plosives found");
+
+            auto sv = cleanVocal;
+            applyPeak (sv, 7000.0, 1.0, 8.0);
+            const auto sib = analyseVocal (sv, fs);
+            logMessage ("  S vs vowels: clean " + juce::String (clean.sibilanceVsVowelDb, 1) + " dB, boosted " + juce::String (sib.sibilanceVsVowelDb, 1) + " dB");
+            logFindings (*this, "sibilance", sib);
+            const auto* fs1 = findId (sib, "sibilance");
+            expect (fs1 != nullptr, "sibilance found");
+            if (fs1 != nullptr)
+            {
+                expect (fs1->category == check::Category::sibilance);
+                bool deess = false;
+                for (auto m : fs1->action.modules)
+                    deess = deess || m == ModuleId::deess;
+                expect (deess, "the fix switches the de-esser on");
+            }
+        }
+
+        beginTest ("Rules: confidence grows with the size of the problem");
+        {
+            auto mild = spec, strong = spec;
+            mild.rumbleDb = -40.0f;
+            strong.rumbleDb = -30.0f;
+            const auto rm = analyseVocal (makeVocal (mild), fs), rs = analyseVocal (makeVocal (strong), fs);
+            const auto* fm = findId (rm, "rumble");
+            const auto* fs2 = findId (rs, "rumble");
+            expect (fs2 != nullptr);
+            if (fm != nullptr && fs2 != nullptr)
+                expectGreaterThan (fs2->confidence, fm->confidence);
+            if (fs2 != nullptr)
+                expect (fs2->level != check::Severity::low, "a strong problem is not low severity");
+        }
+
+        beginTest ("Rules: too little material gives no findings and no score");
+        {
+            auto shortSpec = spec;
+            shortSpec.seconds = 2.5;
+            const auto r = analyseVocal (makeVocal (shortSpec), fs);
+            expect (! r.enoughMaterial);
+            expectEquals (r.score, -1);
+            for (auto& f : r.findings)
+                expect (f.category == check::Category::level, "only level facts: " + f.id);
         }
     }
 

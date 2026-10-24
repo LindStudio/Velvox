@@ -1,5 +1,6 @@
 #include "VocalAnalyzer.h"
 #include "../Check/CheckTargets.h"
+#include "../Check/CheckRules.h"
 
 namespace velvox::dsp
 {
@@ -209,6 +210,44 @@ namespace velvox::dsp
                 lf += p;
         }
         f.kPower = (float) (k * toMeanSquare);
+
+        // Spectral envelope of pitched frames: the harmonic peaks, interpolated (log
+        // frequency, dB) onto the band grid between the fundamental and the last harmonic
+        // below 8 kHz. Unlike the plain spectrum it does not depend on which notes were sung,
+        // only on the sound of the voice and the chain (what an EQ changes).
+        f.env.fill (-300.0f);
+        if (f.f0 > 0.0f)
+        {
+            const double binHz = fs / fftSize;
+            std::array<float, 160> hx {}, hy {};
+            int nh = 0;
+            const int search = std::max (1, (int) (0.3 * f.f0 / binHz));
+            for (int h = 1; nh < (int) hx.size() && h * f.f0 < std::min (8000.0, 0.45 * fs); ++h)
+            {
+                const int centre = (int) std::lround (h * f.f0 / binHz);
+                int best = centre;
+                for (int j = std::max (1, centre - search); j <= std::min (fftSize / 2 - 2, centre + search); ++j)
+                    if (work[(size_t) j] > work[(size_t) best])
+                        best = j;
+                best = juce::jlimit (1, fftSize / 2 - 2, best);
+                const double p = (double) work[(size_t) best - 1] * work[(size_t) best - 1] + (double) work[(size_t) best] * work[(size_t) best]
+                               + (double) work[(size_t) best + 1] * work[(size_t) best + 1];
+                hx[(size_t) nh] = (float) std::log2 (h * f.f0);
+                hy[(size_t) nh] = toDb (p);
+                ++nh;
+            }
+            int i = 0;
+            for (int b = 0; b < numBands && nh >= 2; ++b)
+            {
+                const float x = std::log2 (bandCentre (b));
+                if (x < hx[0] || x > hx[(size_t) nh - 1])
+                    continue;
+                while (i + 2 < nh && hx[(size_t) i + 1] < x)
+                    ++i;
+                const float t = (x - hx[(size_t) i]) / std::max (1.0e-6f, hx[(size_t) i + 1] - hx[(size_t) i]);
+                f.env[(size_t) b] = hy[(size_t) i] + juce::jlimit (0.0f, 1.0f, t) * (hy[(size_t) i + 1] - hy[(size_t) i]);
+            }
+        }
         f.lfDb = toDb (lf * toMeanSquare);
 
         frames.push_back (f);
@@ -274,42 +313,6 @@ namespace velvox::dsp
         r.analysedSeconds = (float) (frames.size() * hop / fs);
         r.generation = generation;
 
-        using C = Finding::Certainty;
-        // Material factor: little voice material lowers every spectral / dynamic confidence
-        float material = 1.0f;
-        const auto add = [&r, &material] (C c, juce::String title, juce::String detail, juce::String advice,
-                                          std::optional<ModuleId> module, float severity, juce::String why, float margin01)
-        {
-            Finding f;
-            f.certainty = c;
-            f.title = std::move (title);
-            f.detail = std::move (detail);
-            f.advice = std::move (advice);
-            f.module = module;
-            f.severity = severity;
-            f.why = std::move (why);
-            // 0.5 at the threshold, up to 0.95 when the measurement is far beyond it
-            f.confidence = juce::jlimit (0.05f, 0.99f, (0.5f + 0.45f * juce::jlimit (0.0f, 1.0f, margin01)) * material);
-            r.findings.push_back (std::move (f));
-        };
-        // How far `v` lies beyond `threshold`, relative to `span` (0..1)
-        const auto beyond = [] (float v, float threshold, float span) { return juce::jlimit (0.0f, 1.0f, (v - threshold) / span); };
-
-        // ---- Level problems: measured sample-accurately in the audio thread
-        if (r.clipEvents > 0)
-            add (C::sure, "Clipping detected",
-                 juce::String (r.clipEvents) + " run(s) of samples at full scale reached this point of the chain.",
-                 "Lower the gain before this point (Input gain or the module that boosts), or keep Clip guard on.",
-                 std::nullopt, 100.0f, "Clipped samples are distortion that no later module can remove - it sounds crunchy and harsh.", 1.2f);
-        else if (r.peakDb > -0.3f)
-            add (C::sure, "Peaks hit the ceiling", "Highest peak: " + juce::String (r.peakDb, 1) + " dBFS - no headroom left.",
-                 "Reduce the level before this point; a few dB of headroom keep the vocal clean.", std::nullopt, 60.0f,
-                 "Without headroom any boost later in the chain or on the master clips.", 1.0f);
-        else if (r.peakDb > -1.0f)
-            add (C::possible, "Very little headroom", "Highest peak: " + juce::String (r.peakDb, 1) + " dBFS.",
-                 "Leave about 1-3 dB of headroom before the output stage.", std::nullopt, 20.0f,
-                 "It works, but there is no safety margin for louder takes or later boosts.", 0.3f);
-
         if (frames.empty())
             return r;
 
@@ -330,27 +333,19 @@ namespace velvox::dsp
         }
         r.voicedSeconds = (float) (voicedCount * hop / fs);
         r.enoughMaterial = r.voicedSeconds >= minVoicedSeconds;
-        material = juce::jlimit (0.6f, 1.0f, 0.6f + 0.4f * (r.voicedSeconds - minVoicedSeconds) / 11.0f);
 
         // Noise floor: frames at least 25 dB below the loud parts of the voice are pauses
         // (breaths, gaps between phrases). With less than 1 s of them nothing is claimed;
         // digital silence does not count.
         {
-            std::vector<float> audible;
+            std::vector<float> pauses;
             for (auto& f : frames)
-                if (f.rmsDb > -110.0f)
-                    audible.push_back (f.rmsDb);
-            if (! audible.empty())
+                if (f.rmsDb > -110.0f && f.rmsDb < loud - 25.0f)
+                    pauses.push_back (f.rmsDb);
+            if ((float) pauses.size() * hop / fs >= 1.0f)
             {
-                std::vector<float> pauses;
-                for (float l : audible)
-                    if (l < loud - 25.0f)
-                        pauses.push_back (l);
-                if ((float) pauses.size() * hop / fs >= 1.0f)
-                {
-                    r.noiseFloorDb = percentile (pauses, 0.5f);
-                    r.snrDb = loud - r.noiseFloorDb;
-                }
+                r.noiseFloorDb = percentile (pauses, 0.5f);
+                r.snrDb = loud - r.noiseFloorDb;
             }
         }
 
@@ -383,130 +378,102 @@ namespace velvox::dsp
         const double ePres = energy (2000, 5000), eSib = energy (5000, 10000), eAir = energy (10000, 16000);
         const float midDb = toDb (eMid);
         r.bandDb = { toDb (eRumble) - midDb, toDb (eBody) - midDb, 0.0f, toDb (ePres) - midDb, toDb (eSib) - midDb, toDb (eAir) - midDb };
+        // The bands of the auto-mix profile / objective (relative to the 300 Hz - 2 kHz core)
+        r.rumbleDb = toDb (energy (40, 90)) - midDb;
+        r.bodyDb = r.bandDb[1];
+        r.lowMidDb = toDb (energy (250, 500)) - midDb;
+        r.presenceDb = r.bandDb[3];
+        r.airDb = r.bandDb[5];
+        r.topDb = toDb (ePres + eSib + eAir) - midDb;
 
         measureExtras (r, voiced, gate);
 
-        if (! r.enoughMaterial)
-            return r;
-
-        // ---- Frequency balance (relative to the 300 Hz - 2 kHz core of the voice)
-        const float presence = r.bandDb[3];
-        if (presence > -2.0f)
-            add (C::sure, "Upper mids are aggressive",
-                 "The 2-5 kHz range is " + db (presence) + " against the core of the voice (usually about -10 to -5 dB).",
-                 "SMOOTH can tame it dynamically; or pull the EQ mid / high band down around 3 kHz.", ModuleId::smooth, 40.0f + presence,
-                 "The ear is most sensitive at 2-5 kHz: too much there sounds piercing and tiring at club volume. A bright lead can be intended - judge by ear.",
-                 beyond (presence, -2.0f, 6.0f));
-        else if (presence > -5.0f)
-            add (C::possible, "Upper mids may sound harsh",
-                 "The 2-5 kHz range is " + db (presence) + " against the core of the voice.",
-                 "Listen for harshness; if so, try SMOOTH or a gentle EQ cut around 3 kHz.", ModuleId::smooth, 15.0f + presence,
-                 "Slightly forward upper mids help a vocal cut through a dense EDM mix; they only become a problem if it sounds harsh.",
-                 beyond (presence, -5.0f, 3.0f));
-
-        const float top = toDb (ePres + eSib + eAir) - midDb;
-        if (top < -20.0f)
-            add (C::sure, "The vocal sounds dull",
-                 "Everything above 2 kHz is " + db (top) + " against the core of the voice - very little presence and air.",
-                 "Raise the EQ high band (shelf around 8-10 kHz) or use the Presence macro.", ModuleId::eq, 30.0f - top * 0.5f,
-                 "Consonants and air carry intelligibility; a dull vocal sinks behind synths and hats.", beyond (-top, 20.0f, 8.0f));
-        else if (top < -16.0f)
-            add (C::possible, "The vocal may lack presence",
-                 "Everything above 2 kHz is " + db (top) + " against the core of the voice.",
-                 "A small high-shelf boost or the Presence macro can open it up.", ModuleId::eq, 10.0f - top * 0.3f,
-                 "A darker vocal can be a style choice; in a bright EDM mix it may need a little more top to stay clear.", beyond (-top, 16.0f, 4.0f));
-
-        if (r.bandDb[0] > -10.0f)
-            add (C::sure, "Too much low end / rumble",
-                 "Below 100 Hz is " + db (r.bandDb[0]) + " against the core of the voice - a vocal rarely needs that.",
-                 "Switch on the EQ low cut (about 80-120 Hz).", ModuleId::eq, 35.0f + r.bandDb[0],
-                 "Rumble and handling noise fill the low end that belongs to kick and bass, and make compressors pump.", beyond (r.bandDb[0], -10.0f, 8.0f));
-        else if (r.bandDb[0] > -16.0f)
-            add (C::possible, "Noticeable low end below 100 Hz",
-                 "Below 100 Hz is " + db (r.bandDb[0]) + " against the core of the voice.",
-                 "Check the EQ low cut - it often cleans up the mix.", ModuleId::eq, 12.0f + r.bandDb[0] * 0.5f,
-                 "Deep voices have real energy here; only cut what does not belong to the voice.", beyond (r.bandDb[0], -16.0f, 6.0f));
-        if (r.bandDb[1] < -18.0f)
-            add (C::possible, "The vocal may sound thin",
-                 "100-300 Hz is " + db (r.bandDb[1]) + " against the core of the voice.",
-                 "Less low cut or a little low shelf / the Warmth macro add body.", ModuleId::eq, 8.0f,
-                 "The 100-300 Hz range gives a vocal weight and warmth; without it the voice can sound small. Thin can also be intended (telephone, lo-fi).",
-                 beyond (-r.bandDb[1], 18.0f, 8.0f));
-
         // ---- Sibilance: level of S-frames against vowel frames
-        std::vector<float> sibLevels, vowelLevels;
-        for (size_t i = 0; i < frames.size(); ++i)
         {
-            const auto& f = frames[i];
-            const double total = energy (100, 16000, &f.bands);
-            if (total <= 0.0 || f.rmsDb < gate - 15.0f)
-                continue;
-            const double sibShare = energy (4500, 11000, &f.bands) / total;
-            const double vowelShare = energy (100, 2500, &f.bands) / total;
-            if (sibShare > 0.5)
-                sibLevels.push_back (f.rmsDb);
-            else if (vowelShare > 0.75 && voiced[i])
-                vowelLevels.push_back (f.rmsDb);
-        }
-        if (sibLevels.size() >= 8 && vowelLevels.size() >= 20)
-        {
-            const float diff = percentile (sibLevels, 0.5f) - percentile (vowelLevels, 0.5f);
-            r.sibilanceVsVowelDb = diff;
-            if (diff > -3.0f)
-                add (C::sure, "S sounds stick out clearly",
-                     "S / T sounds are " + db (diff) + " against the vowels (natural is about -10 to -6 dB).",
-                     "Switch on the DE-ESSER and lower its threshold carefully.", ModuleId::deess, 45.0f + diff,
-                     "Loud S / T sounds hurt at high volume and get even sharper with compression, saturation and reverb.", beyond (diff, -3.0f, 6.0f));
-            else if (diff > -6.0f)
-                add (C::possible, "S sounds are quite present",
-                     "S / T sounds are " + db (diff) + " against the vowels.",
-                     "A little more DE-ESSER range may help - listen on headphones.", ModuleId::deess, 18.0f + diff,
-                     "Clear consonants help the words; they only need control if they start to hiss.", beyond (diff, -6.0f, 3.0f));
+            std::vector<float> sibLevels, vowelLevels, hfLevels;
+            const double toMeanSquare = 2.0 / ((double) fftSize * 0.375 * (double) fftSize);
+            for (size_t i = 0; i < frames.size(); ++i)
+            {
+                const auto& f = frames[i];
+                const double total = energy (100, 16000, &f.bands);
+                if (total <= 0.0 || f.rmsDb < gate - 15.0f)
+                    continue;
+                hfLevels.push_back (toDb (energy (5000, 10000, &f.bands) * toMeanSquare));
+                const double sibShare = energy (4500, 11000, &f.bands) / total;
+                const double vowelShare = energy (100, 2500, &f.bands) / total;
+                if (sibShare > 0.45)
+                    sibLevels.push_back (f.rmsDb);
+                else if (vowelShare > 0.75 && voiced[i])
+                    vowelLevels.push_back (f.rmsDb);
+            }
+            if (sibLevels.size() >= 6 && vowelLevels.size() >= 20)
+            {
+                r.sibilanceVsVowelDb = percentile (sibLevels, 0.5f) - percentile (vowelLevels, 0.5f);
+                r.sibilanceValid = true;
+            }
+            // The loudest moments of the S band (5-10 kHz, 95th percentile of the frames)
+            // against the level of the vowels: independent of how frames are classified
+            if (vowelLevels.size() >= 20 && hfLevels.size() >= 40)
+            {
+                r.sibilancePeakDb = percentile (hfLevels, 0.95f) - percentile (vowelLevels, 0.5f);
+                r.sibilancePeakValid = true;
+            }
         }
 
-        // ---- Resonances: narrow peaks of the long-term spectrum over their octave
+        // ---- Resonances: narrow peaks of the long-term spectrum over their +-1/2 octave
+        // (the next bands excluded), 250 Hz - 8 kHz. A peak on a harmonic of the sung notes is
+        // the voice itself (held notes put their partials into the long-term spectrum).
         {
-            struct Peak { int band; float excess; };
-            std::vector<Peak> peaks;
-            for (int b = 0; b < numBands; ++b)
+            for (int b = 1; b + 1 < numBands; ++b)
             {
                 const float c = bandCentre (b);
-                if (c < 400.0f || c > 8000.0f || binsPerBand[(size_t) b] < 2)
+                if (c < 250.0f || c > 8000.0f || binsPerBand[(size_t) b] < 2)
                     continue;
-                float sum = 0.0f;
+                // Surroundings: the bands 3..7 away on both sides (outside the skirts of a
+                // narrow peak); a straight line through them gives the level under the peak,
+                // also on a sloping spectrum
+                double sx = 0.0, sy = 0.0, sxx = 0.0, sxy = 0.0;
                 int count = 0;
-                for (int j = b - 6; j <= b + 6; ++j)
-                    if (j != b && j >= 0 && j < numBands && binsPerBand[(size_t) j] > 0)
+                for (int j = b - 7; j <= b + 7; ++j)
+                    if (std::abs (j - b) >= 3 && j >= 0 && j < numBands && binsPerBand[(size_t) j] > 0)
                     {
-                        sum += r.spectrumDb[(size_t) j];
+                        const double x = j - b, y = r.spectrumDb[(size_t) j];
+                        sx += x; sy += y; sxx += x * x; sxy += x * y;
                         ++count;
                     }
                 if (count < 6)
                     continue;
+                const double slope = (count * sxy - sx * sy) / std::max (1.0e-9, count * sxx - sx * sx);
+                const float base = (float) ((sy - slope * sx) / count);
                 const float s = r.spectrumDb[(size_t) b];
-                const bool localMax = s >= r.spectrumDb[(size_t) b - 1] && s >= r.spectrumDb[(size_t) b + 1];
-                const float excess = s - sum / (float) count;
-                if (localMax && excess > 8.0f)
-                    peaks.push_back ({ b, excess });
+                const float sl = r.spectrumDb[(size_t) b - 1], sr = r.spectrumDb[(size_t) b + 1];
+                const bool localMax = s >= sl && s >= sr;
+                if (! localMax)
+                    continue;
+                // A peak between two bands splits its energy: the pair with the stronger
+                // neighbour counts as well (frequency: power-weighted centre of the pair)
+                const float neighbour = std::max (sl, sr);
+                const int nb = sl >= sr ? b - 1 : b + 1;
+                const float ps = std::pow (10.0f, s / 10.0f), pn = std::pow (10.0f, neighbour / 10.0f);
+                const float pairDb = 10.0f * std::log10 ((ps + pn) * 0.5f) + 1.5f;
+                const float excess = std::max (s, pairDb) - base;
+                if (excess <= 5.0f)
+                    continue;
+                const float hz = pairDb > s ? std::pow (2.0f, (ps * std::log2 (c) + pn * std::log2 (bandCentre (nb))) / (ps + pn)) : c;
+                bool harmonic = false;
+                if (r.pitchValid)
+                    for (float f0 : r.sungNotesHz)
+                        for (int k = 1; k <= 4 && ! harmonic; ++k)
+                            harmonic = std::abs (std::log2 (hz / (f0 * (float) k))) < 0.06f;   // +-70 cents
+                if (! harmonic)
+                    r.resonances.push_back ({ hz, excess });
             }
-            std::sort (peaks.begin(), peaks.end(), [] (const Peak& a, const Peak& b) { return a.excess > b.excess; });
-            for (size_t i = 0; i < std::min<size_t> (2, peaks.size()); ++i)
-            {
-                const float f = bandCentre (peaks[i].band);
-                const juce::String region = f < 1000.0f ? "low mids (boxy)" : f < 2500.0f ? "mids (nasal)" : f < 5000.0f ? "upper mids (harsh)" : "highs (piercing)";
-                const bool sure = peaks[i].excess > 12.0f;
-                add (sure ? C::sure : C::possible,
-                     juce::String (sure ? "Strong" : "Possible") + " resonance in the " + region,
-                     "Narrow peak around " + hz (f) + ", " + db (peaks[i].excess) + " above its surroundings.",
-                     "SMOOTH reduces it only when it rings; or cut with the EQ mid band at " + hz (f) + ".",
-                     ModuleId::smooth, (sure ? 30.0f : 12.0f) + peaks[i].excess,
-                     "A narrow peak rings on every word that hits it (room, mic or voice) - it sounds " + region.fromFirstOccurrenceOf ("(", false, false).upToFirstOccurrenceOf (")", false, false)
-                         + " and draws attention away from the performance.",
-                     beyond (peaks[i].excess, 8.0f, 8.0f));
-            }
+            std::sort (r.resonances.begin(), r.resonances.end(), [] (const Resonance& a, const Resonance& b) { return a.excessDb > b.excessDb; });
+            if (r.resonances.size() > 3)
+                r.resonances.resize (3);
         }
 
-        // ---- Dynamics: loudness range of 400 ms windows of the voice
+        // ---- Dynamics: spread of 400 ms windows of the voice, crest factor
         {
             const int perWindow = std::max (1, (int) std::lround (0.4 * fs / hop));
             std::vector<float> windowLevels;
@@ -526,32 +493,15 @@ namespace velvox::dsp
             for (size_t i = 0; i < frames.size(); ++i)
                 if (voiced[i])
                     crests.push_back (frames[i].peakDb - frames[i].rmsDb);
-
+            r.crestDb = percentile (crests, 0.5f);
             if (windowLevels.size() >= 8)
             {
                 r.loudnessRangeDb = percentile (windowLevels, 0.95f) - percentile (windowLevels, 0.10f);
-                r.crestDb = percentile (crests, 0.5f);
-                const float lra = r.loudnessRangeDb;
-                if (lra > 16.0f)
-                    add (C::sure, "Very large level differences",
-                         "Loud and quiet passages are " + juce::String (lra, 1) + " dB apart (10th to 95th percentile).",
-                         "LEVEL RIDE evens out words and phrases without squashing them.", ModuleId::ride, 30.0f + lra,
-                         "Quiet words disappear behind the beat, loud ones jump out; a compressor alone would have to work too hard.", beyond (lra, 16.0f, 8.0f));
-                else if (lra > 12.0f)
-                    add (C::possible, "Noticeable level differences",
-                         "Loud and quiet passages are " + juce::String (lra, 1) + " dB apart.",
-                         "LEVEL RIDE (moderate Amount) keeps the vocal steadier in the mix.", ModuleId::ride, 10.0f + lra,
-                         "Some movement is musical; in a loud EDM mix a steadier vocal stays on top.", beyond (lra, 12.0f, 4.0f));
-                else if (lra < 3.0f && r.crestDb < 8.0f)
-                    add (C::possible, "Possibly over-compressed",
-                         "Only " + juce::String (lra, 1) + " dB level range and " + juce::String (r.crestDb, 1) + " dB crest factor left.",
-                         "If it sounds flat, reduce Compressor ratio or VOCAL SMASH blend.", ModuleId::comp, 9.0f,
-                         "Already very even material: more compression adds pumping and breath noise, not loudness. Heavy density can be intended.",
-                         beyond (3.0f - lra, 0.0f, 3.0f));
+                r.phraseValid = true;
             }
         }
 
-        // ---- Stereo compatibility
+        // ---- Stereo correlation of the voice
         if (r.stereo)
         {
             double lr = 0.0, ll = 0.0, rr = 0.0;
@@ -563,22 +513,10 @@ namespace velvox::dsp
                     rr += frames[i].rr;
                 }
             if (ll > 0.0 && rr > 0.0)
-            {
                 r.correlation = (float) (lr / std::sqrt (ll * rr));
-                if (r.correlation < 0.0f)
-                    add (C::sure, "Mono compatibility problem",
-                         "Left / right correlation is " + juce::String (r.correlation, 2) + " - parts of the vocal cancel in mono.",
-                         "Reduce Width, CHOIR width or raise the Doubler's Mono safe.", ModuleId::choir, 50.0f,
-                         "Club systems and phones are often mono: a vocal with negative correlation loses level or tone there.", beyond (-r.correlation, 0.0f, 0.3f));
-                else if (r.correlation < 0.3f)
-                    add (C::possible, "Weak mono compatibility",
-                         "Left / right correlation is " + juce::String (r.correlation, 2) + ".",
-                         "Check with Mono; narrow the widest module if the vocal loses level.", ModuleId::choir, 14.0f,
-                         "Wide vocals sound big on headphones but can thin out in mono.", beyond (0.3f - r.correlation, 0.0f, 0.3f));
-            }
         }
 
-        // ---- Long tails (effects): time from the end of a word until it has decayed by 30 dB
+        // ---- Tails: time from the end of a word until it has decayed by 30 dB
         {
             std::vector<float> decays;
             const double frameSeconds = hop / fs;
@@ -604,38 +542,10 @@ namespace velvox::dsp
                     }
                 }
             }
+            r.tailCount = (int) decays.size();
             if (decays.size() >= 5)
-            {
-                const float decay = percentile (decays, 0.5f);
-                if (decay > 0.9f)
-                    add (C::possible, "The vocal may sound washed out",
-                         "After words the sound takes about " + juce::String (decay, 1) + " s to fade by 30 dB - long effect tails.",
-                         "Lower Reverb / Delay mix or add ducking so the words stay clear.", ModuleId::reverb, 8.0f + decay,
-                         "Long effect tails between words blur the next syllables. Big spaces can be intended - ducking keeps both.", beyond (decay, 0.9f, 1.5f));
-            }
+                r.tailSeconds = percentile (decays, 0.5f);
         }
-
-        // ---- Background noise in the pauses (only with enough pause material)
-        if (r.noiseFloorDb > -199.0f)
-        {
-            if (r.snrDb < 30.0f)
-                add (r.snrDb < 22.0f ? C::sure : C::possible,
-                     r.snrDb < 22.0f ? "Noisy recording" : "Audible background noise in the pauses",
-                     "The pauses sit at " + juce::String (r.noiseFloorDb, 1) + " dBFS, only " + juce::String (r.snrDb, 1)
-                         + " dB below the loud parts of the voice (clean studio takes: more than 40 dB).",
-                     "Compression and LEVEL RIDE bring the noise up; keep RIDE's 'Ignore below' above the noise and use gentle compression.",
-                     ModuleId::ride, 20.0f + (30.0f - r.snrDb),
-                     "Noise, room or bleed between the words is lifted by every dynamics module and gets louder in the final mix. "
-                     "The analysis of tone is also less reliable on noisy material.",
-                     beyond (30.0f - r.snrDb, 0.0f, 12.0f));
-        }
-
-        std::stable_sort (r.findings.begin(), r.findings.end(), [] (const Finding& a, const Finding& b)
-        {
-            if (a.certainty != b.certainty)
-                return a.certainty == Finding::Certainty::sure;
-            return a.severity > b.severity;
-        });
         return r;
     }
 
@@ -848,37 +758,72 @@ namespace velvox::dsp
                 if (k > 0)
                     r.smoothDb[(size_t) b] = toDb (p / k);
             }
+            // Tone curve: the averaged spectral envelope of the pitched frames where enough of
+            // them reach a band (sung / spoken voice), else the long-term spectrum
+            r.toneDb = r.smoothDb;
+            if (r.pitchValid)
+            {
+                std::array<double, numBands> ep {};
+                std::array<int, numBands> en {};
+                int pitched = 0;
+                for (size_t i = 0; i < frames.size(); ++i)
+                {
+                    if (! voiced[i] || frames[i].f0 <= 0.0f)
+                        continue;
+                    ++pitched;
+                    for (int b = 0; b < numBands; ++b)
+                        if (frames[i].env[(size_t) b] > -290.0f)
+                        {
+                            ep[(size_t) b] += std::pow (10.0, frames[i].env[(size_t) b] / 10.0);
+                            ++en[(size_t) b];
+                        }
+                }
+                std::vector<float> env ((size_t) numBands, -200.0f);
+                int defined = 0;
+                for (int b = 0; b < numBands; ++b)
+                    if (en[(size_t) b] > 0 && (float) en[(size_t) b] >= 0.3f * (float) pitched)
+                    {
+                        env[(size_t) b] = toDb (ep[(size_t) b] / en[(size_t) b]);
+                        ++defined;
+                    }
+                if (defined > 30)
+                {
+                    r.toneFromEnvelope = true;
+                    for (int b = 0; b < numBands; ++b)
+                    {
+                        double p = 0.0;
+                        int k = 0;
+                        for (int j = b - 2; j <= b + 2; ++j)
+                            if (j >= 0 && j < numBands && env[(size_t) j] > -190.0f)
+                            {
+                                p += std::pow (10.0, env[(size_t) j] / 10.0);
+                                ++k;
+                            }
+                        r.toneDb[(size_t) b] = env[(size_t) b] > -190.0f && k > 0 ? toDb (p / k) : -200.0f;
+                    }
+                }
+            }
+
             const auto& tpl = check::voiceTemplate (r.highVoice);
             std::vector<float> d;
             for (int b = 0; b < numBands; ++b)
-                if (bandCentre (b) >= 150.0f && bandCentre (b) <= 8000.0f && r.smoothDb[(size_t) b] > -190.0f)
-                    d.push_back (r.smoothDb[(size_t) b] - tpl[(size_t) b]);
+                if (bandCentre (b) >= 150.0f && bandCentre (b) <= 8000.0f && r.toneDb[(size_t) b] > -190.0f)
+                    d.push_back (r.toneDb[(size_t) b] - tpl[(size_t) b]);
             if (d.size() > 20)
             {
                 const float offset = percentile (d, 0.5f);
                 r.deviationDb.assign ((size_t) numBands, 0.0f);
                 for (int b = 0; b < numBands; ++b)
-                    if (r.smoothDb[(size_t) b] > -190.0f)
-                        r.deviationDb[(size_t) b] = r.smoothDb[(size_t) b] - tpl[(size_t) b] - offset;
+                    if (r.toneDb[(size_t) b] > -190.0f)
+                        r.deviationDb[(size_t) b] = r.toneDb[(size_t) b] - tpl[(size_t) b] - offset;
             }
         }
     }
 
-    AnalysisResult VocalAnalyzer::analyse() const
+    AnalysisResult VocalAnalyzer::analyse (check::Genre genre) const
     {
         auto r = measure();
-        // 0.6 schema on the 0.4 rules (replaced by check::evaluate)
-        std::vector<Finding> shown;
-        for (auto& f : r.findings)
-        {
-            if (f.confidence < check::showThreshold)
-                continue;
-            f.id = f.module.has_value() ? juce::String (moduleKey (*f.module)) : juce::String ("level");
-            f.problem = f.title;
-            f.fix = juce::String::fromUTF8 ("\xe2\x86\x92 ") + f.advice;
-            shown.push_back (f);
-        }
-        r.findings = std::move (shown);
+        check::evaluate (r, genre);
         return r;
     }
 }
