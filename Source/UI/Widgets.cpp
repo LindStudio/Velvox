@@ -2,6 +2,7 @@
 #include "VelvoxLookAndFeel.h"
 #include "Spectrum.h"
 #include "../Parameters/ParameterLayout.h"
+#include "ValueText.h"
 
 namespace velvox::ui
 {
@@ -126,16 +127,124 @@ namespace velvox::ui
     }
 
     //==========================================================================
+    HoverInfo::HoverInfo (juce::Component& c, std::function<juce::String()> t, std::function<juce::String()> v, std::function<juce::String()> d)
+        : anchor (c), title (std::move (t)), value (std::move (v)), description (std::move (d))
+    {
+        anchor.addMouseListener (this, true);
+    }
+
+    HoverInfo::~HoverInfo()
+    {
+        // The info card notices on its own when its anchor goes away
+        anchor.removeMouseListener (this);
+    }
+
+    void HoverInfo::mouseEnter (const juce::MouseEvent& e)
+    {
+        if (! e.mods.isAnyMouseButtonDown())
+            startTimer (motion::hoverInfoDelayMs);
+    }
+
+    void HoverInfo::mouseExit (const juce::MouseEvent&)
+    {
+        if (anchor.isMouseOver (true))
+            return;
+        stopTimer();
+        hide();
+    }
+
+    void HoverInfo::mouseDown (const juce::MouseEvent&)
+    {
+        stopTimer();
+        hide();
+    }
+
+    void HoverInfo::hide()
+    {
+        if (! shown)
+            return;
+        shown = false;
+        if (auto* host = anchor.findParentComponentOfClass<InfoPopupHost>())
+            host->hideInfo (anchor);
+    }
+
+    void HoverInfo::timerCallback()
+    {
+        stopTimer();
+        if (juce::ModifierKeys::currentModifiers.isAnyMouseButtonDown() || ! anchor.isMouseOver (true))
+            return;
+        if (auto* host = anchor.findParentComponentOfClass<InfoPopupHost>())
+        {
+            shownValue = value ? value() : juce::String();
+            shown = true;
+            host->showInfo (anchor, title ? title() : juce::String(), shownValue, description ? description() : juce::String());
+        }
+    }
+
+    void HoverInfo::refresh()
+    {
+        // Keep the read-out of an open card current (wheel, keys, automation)
+        if (! shown || ! value)
+            return;
+        const auto v = value();
+        if (v != shownValue)
+            if (auto* host = anchor.findParentComponentOfClass<InfoPopupHost>())
+            {
+                shownValue = v;
+                host->showInfo (anchor, title ? title() : juce::String(), v, description ? description() : juce::String());
+            }
+    }
+
+    //==========================================================================
+    void FineSlider::bindParameter (juce::RangedAudioParameter* p)
+    {
+        parameter = p;
+        if (p == nullptr)
+            return;
+        // Default (double-click and Alt+click, see juce::Slider) and typed values with units
+        setDoubleClickReturnValue (true, (double) p->convertFrom0to1 (p->getDefaultValue()), juce::ModifierKeys::altModifier);
+        valueFromTextFunction = [this] (const juce::String& text)
+        {
+            if (parameter != nullptr)
+                if (const auto v = parseValueText (text, *parameter))
+                    return (double) *v;
+            return getValue();   // not a value: keep it
+        };
+        setPopupMenuEnabled (false);   // our own menu (below)
+    }
+
     void FineSlider::mouseDown (const juce::MouseEvent& e)
     {
+        ignoreDrag = false;
+        if (e.mods.isPopupMenu())
+        {
+            ignoreDrag = true;
+            if (parameter != nullptr && isEnabled())
+            {
+                juce::Component::SafePointer<FineSlider> safe (this);
+                gestures::showMenu (*this, *parameter, [safe] { if (safe != nullptr) safe->showTextBox(); });
+            }
+            return;
+        }
+        if (e.mods.isAltDown())
+            ignoreDrag = true;   // Alt+click = default (juce::Slider), never a drag after it
+
         juce::Slider::mouseDown (e);   // gesture start, Alt-click reset, text box handling
         lastPos = e.position;
         dragProportion = valueToProportionOfLength (getValue());
     }
 
+    void FineSlider::mouseUp (const juce::MouseEvent& e)
+    {
+        if (e.mods.isPopupMenu())
+            return;
+        juce::Slider::mouseUp (e);
+        ignoreDrag = false;
+    }
+
     void FineSlider::mouseDrag (const juce::MouseEvent& e)
     {
-        if (! isEnabled() || e.mods.isPopupMenu() || getRange().getLength() <= 0.0)
+        if (ignoreDrag || ! isEnabled() || e.mods.isPopupMenu() || getRange().getLength() <= 0.0)
             return;
 
         // Up / right raises the value. Measured from the last event (not the
@@ -159,7 +268,6 @@ namespace velvox::ui
         slider.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
         slider.setMouseDragSensitivity (FineSlider::normalPixels);   // also used by the mouse wheel
         slider.setVelocityModeParameters (0.9, 1, 0.08, false);     // fine mode is handled by FineSlider
-        slider.addMouseListener (this, true);
         addAndMakeVisible (slider);
 
         name.setText (label.toUpperCase(), juce::dontSendNotification);
@@ -168,25 +276,20 @@ namespace velvox::ui
 
         attachment = std::make_unique<APVTS::SliderAttachment> (state, paramId, slider);
         this->paramId = paramId;
+        slider.bindParameter (state.getParameter (paramId));
 
+        // Hover card: name, short description, value with unit (the gestures are in the help)
         if (const auto* spec = findParameterSpec (paramId))
-        {
-            slider.setDoubleClickReturnValue (true, spec->defaultValue);
             description = spec->description;
-            if (const auto role = autoMixRole (paramId); role.isNotEmpty())
-                description << "\n\n" << role;
-            description << juce::String::fromUTF8 ("\n\nDoppelklick: Standardwert. Shift/Strg: fein.");
-        }
+        info = std::make_unique<HoverInfo> (*this, [this] { return name.getText(); },
+                                            [this] { return slider.getTextFromValue (slider.getValue()); },
+                                            [this] { return description; });
 
         shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
         slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
     }
 
-    Knob::~Knob()
-    {
-        // The info card notices on its own when its anchor goes away
-        slider.removeMouseListener (this);
-    }
+    Knob::~Knob() = default;
 
     void Knob::setHero (bool isHero)
     {
@@ -223,7 +326,7 @@ namespace velvox::ui
     {
         // Design: dial on top, value (Roboto Mono) and name below, one block centred in the cell
         auto r = getLocalBounds();
-        const int dial = juce::jlimit (24, maxDial, std::min (r.getWidth() - 8, r.getHeight() - knobValueH - knobLabelH - knobGap));
+        const int dial = juce::jlimit (16, maxDial, std::min (r.getWidth() - 8, r.getHeight() - knobValueH - knobLabelH - knobGap));
         auto block = r.withSizeKeepingCentre (r.getWidth(), dial + knobGap + knobValueH + knobLabelH);
 
         valueBoxH = knobGap + knobValueH;
@@ -265,55 +368,8 @@ namespace velvox::ui
             slider.getProperties().set (VelvoxLookAndFeel::hoverProperty, hover.current);
             slider.repaint();
         }
-
-        // Keep the read-out of an open info card current (wheel, keys, automation)
-        if (infoShown)
-        {
-            const auto v = slider.getTextFromValue (slider.getValue());
-            if (v != shownValue)
-                if (auto* host = findParentComponentOfClass<InfoPopupHost>())
-                {
-                    shownValue = v;
-                    host->showInfo (*this, name.getText(), v, description);
-                }
-        }
-    }
-
-    void Knob::mouseEnter (const juce::MouseEvent&)
-    {
-        if (description.isNotEmpty() && ! slider.isMouseButtonDown())
-            startTimer (motion::hoverInfoDelayMs);
-    }
-
-    void Knob::mouseExit (const juce::MouseEvent&)
-    {
-        if (isMouseOver (true))
-            return;
-        stopTimer();
-        infoShown = false;
-        if (auto* host = findParentComponentOfClass<InfoPopupHost>())
-            host->hideInfo (*this);
-    }
-
-    void Knob::mouseDown (const juce::MouseEvent&)
-    {
-        stopTimer();
-        infoShown = false;
-        if (auto* host = findParentComponentOfClass<InfoPopupHost>())
-            host->hideInfo (*this);
-    }
-
-    void Knob::timerCallback()
-    {
-        stopTimer();
-        if (slider.isMouseButtonDown() || ! isMouseOver (true))
-            return;
-        if (auto* host = findParentComponentOfClass<InfoPopupHost>())
-        {
-            shownValue = slider.getTextFromValue (slider.getValue());
-            infoShown = true;
-            host->showInfo (*this, name.getText(), shownValue, description);
-        }
+        if (info != nullptr)
+            info->refresh();
     }
 
     void Knob::refreshEffective()
@@ -349,6 +405,48 @@ namespace velvox::ui
         drawGlow (g, p, 8.0f, 0.5f, colours::teal);
         g.setColour (colours::text);
         g.fillEllipse (juce::Rectangle<float> (4.5f, 4.5f).withCentre (p));
+    }
+
+    //==========================================================================
+    HSlider::HSlider (APVTS& state, const char* id, const juce::String& text, juce::Colour accentColour)
+        : paramId (id), label (text), accent (accentColour)
+    {
+        slider.setSliderStyle (juce::Slider::LinearHorizontal);
+        slider.setSliderSnapsToMousePosition (false);   // a click never jumps: drag moves from where it is
+        slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 64, 20);
+        slider.setColour (juce::Slider::trackColourId, accent);
+        slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
+        slider.setMouseDragSensitivity (FineSlider::normalPixels);
+        addAndMakeVisible (slider);
+
+        attachment = std::make_unique<APVTS::SliderAttachment> (state, id, slider);
+        slider.bindParameter (state.getParameter (id));
+        if (const auto* spec = findParameterSpec (id))
+            description = spec->description;
+        info = std::make_unique<HoverInfo> (*this, [this] { return label; },
+                                            [this] { return slider.getTextFromValue (slider.getValue()); },
+                                            [this] { return description; });
+    }
+
+    HSlider::~HSlider() = default;
+
+    void HSlider::resized()
+    {
+        auto r = getLocalBounds();
+        nameArea = r.removeFromLeft (std::min (104, r.getWidth() / 3));
+        slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 64, std::min (22, r.getHeight()));
+        slider.setBounds (r);
+    }
+
+    void HSlider::paint (juce::Graphics& g)
+    {
+        // Macro colour dot + name in capitals (design label style)
+        const auto dot = juce::Rectangle<float> (6.0f, 6.0f).withCentre ({ (float) nameArea.getX() + 4.0f, (float) nameArea.getCentreY() });
+        g.setColour (accent);
+        g.fillEllipse (dot);
+        g.setColour (colours::textSoft);
+        g.setFont (semiBold (10.0f, 0.12f));
+        g.drawText (label.toUpperCase(), nameArea.withTrimmedLeft (14), juce::Justification::centredLeft, true);
     }
 
     //==========================================================================

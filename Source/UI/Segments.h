@@ -10,6 +10,9 @@ namespace velvox::ui
     // labels (off, on). Host automation and presets update the selection.
     // With `withOverflow`, a last "…" segment opens a menu with every choice; when the value
     // has no segment of its own, that segment lights up and shows the value's name.
+    // Gestures (spec 2.6, like every control): click = choose, double-click or Alt+click = default,
+    // wheel = previous / next segment, right-click = menu (reset, copy, paste, module items),
+    // hover = info card with name, description and value.
     class Segments final : public juce::Component
     {
     public:
@@ -21,6 +24,7 @@ namespace velvox::ui
 
         int getSelectedSegment() const noexcept { return selectedSegment; }   // -1: value has no segment
         int getChoiceForSegment (int segment) const;                         // parameter index of a segment
+        int getNumSegments() const noexcept { return (int) choiceIndex.size(); }
         void clickSegment (int segment);
         void setAccent (juce::Colour accent);
         const juce::String& getParamId() const noexcept { return paramId; }
@@ -29,17 +33,25 @@ namespace velvox::ui
         juce::String getOverflowText() const { return overflow != nullptr ? overflow->getButtonText() : juce::String(); }
         void chooseFromOverflow (int choice);
 
+        // Gestures (also called by the segment buttons)
+        void resetToDefault();
+        void step (int direction);   // +1 = next segment, -1 = previous
+        void showMenu (juce::Component& target);
+
     private:
+        class SegmentButton;
         void showValue (float denormalisedValue);
         void showOverflowMenu();
 
         juce::String paramId;
+        juce::RangedAudioParameter* parameter = nullptr;
         juce::StringArray allChoices;
         juce::OwnedArray<juce::TextButton> buttons;
         juce::TextButton* overflow = nullptr;   // owned by buttons (last)
         std::vector<int> choiceIndex;
         std::unique_ptr<juce::ParameterAttachment> attachment;
         int selectedSegment = -1;
+        std::unique_ptr<HoverInfo> info;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Segments)
     };

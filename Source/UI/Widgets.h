@@ -37,26 +37,61 @@ namespace velvox::ui
         juce::VBlankAttachment vblank { this, [this] { tick(); } };
     };
 
-    // Rotary slider with incremental dragging: holding Shift or Ctrl switches to
-    // fine adjustment at any moment without the value jumping.
+    // Shows the info card of a control (name, short description, current value with unit) after the
+    // pointer has rested on it for motion::hoverInfoDelayMs. Attach one to any control; the value stays
+    // current while the card is open (call refresh() once per frame or from a VBlank).
+    class HoverInfo final : private juce::MouseListener, private juce::Timer
+    {
+    public:
+        HoverInfo (juce::Component& anchor, std::function<juce::String()> title,
+                   std::function<juce::String()> value, std::function<juce::String()> description);
+        ~HoverInfo() override;
+        void refresh();
+        bool isShown() const noexcept { return shown; }
+
+    private:
+        void mouseEnter (const juce::MouseEvent&) override;
+        void mouseExit (const juce::MouseEvent&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override {}
+        void timerCallback() override;
+        void hide();
+
+        juce::Component& anchor;
+        std::function<juce::String()> title, value, description;
+        bool shown = false;
+        juce::String shownValue;
+    };
+
+    // The slider of every knob and fader (spec 2.6 gestures, shared by all controls):
+    //   drag (incremental: pressing Shift or Ctrl switches to fine = 1/10 at any moment without a jump),
+    //   double-click or Alt+click = default, wheel = step, click on the value = type a value (units
+    //   accepted, see parseValueText), right-click = menu (reset, enter, copy, paste, module items).
     class FineSlider final : public juce::Slider
     {
     public:
         static constexpr int normalPixels = 220;   // pixels for the full range
-        static constexpr int fineFactor = 8;       // Shift / Ctrl: this many times finer
+        static constexpr int fineFactor = 10;      // Shift / Ctrl: this many times finer
+
+        // Binds the gestures to a parameter: typed values, default, menu
+        void bindParameter (juce::RangedAudioParameter* p);
+        juce::RangedAudioParameter* getParameter() const noexcept { return parameter; }
 
         void mouseDown (const juce::MouseEvent&) override;
         void mouseDrag (const juce::MouseEvent&) override;
+        void mouseUp (const juce::MouseEvent&) override;
 
     private:
+        juce::RangedAudioParameter* parameter = nullptr;
         juce::Point<float> lastPos;
         double dragProportion = 0.0;   // unsnapped, so stepped parameters still move in fine mode
+        bool ignoreDrag = false;       // after a reset click or a menu
     };
 
     // Rotary control with caption and value read-out. The dial glides to new
     // values (presets, automation), lights up on hover, and after resting the
-    // mouse on it for a second, shows its description in an info card.
-    class Knob : public juce::Component, private juce::Timer
+    // mouse on it shows its info card (name, description, value).
+    class Knob : public juce::Component
     {
     public:
         Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent = colours::accent);
@@ -72,14 +107,20 @@ namespace velvox::ui
         // Visual weight: primary controls get the large dial and a brighter name
         enum class Prominence { primary, secondary, detail };
         void setProminence (Prominence p);
+        Prominence getProminence() const noexcept { return prominence; }
         void setMaxDialSize (int px) { maxDial = px; resized(); }
         // Design layout: dial (this diameter) on top, value (Roboto Mono) and name below
         void setDialSize (int px) { maxDial = px; resized(); }
+        int getDialSize() const noexcept { return maxDial; }
         juce::Rectangle<int> getDialArea() const noexcept { return dialArea; }
         juce::Rectangle<int> getValueArea() const noexcept { return valueArea; }
         juce::Rectangle<int> getNameArea() const noexcept { return name.getBounds(); }
         void setDescription (const juce::String& text) { description = text; }
+        const juce::String& getDescription() const noexcept { return description; }
         const juce::String& getParamId() const noexcept { return paramId; }
+        // The caption under the dial (e.g. "MIX", or "SEND" while a delay runs as a send)
+        void setLabel (const juce::String& text) { name.setText (text.toUpperCase(), juce::dontSendNotification); }
+        juce::String getLabel() const { return name.getText(); }
 
         // Returns the processed value in parameter units; empty = no marker
         std::function<float()> effectiveValue;
@@ -94,15 +135,9 @@ namespace velvox::ui
         juce::Rectangle<float> dialBounds() const;
         void applyLabelStyle();
         void tick();
-        void timerCallback() override;
-        void mouseEnter (const juce::MouseEvent&) override;
-        void mouseExit (const juce::MouseEvent&) override;
-        void mouseDown (const juce::MouseEvent&) override;
 
         std::unique_ptr<APVTS::SliderAttachment> attachment;
         juce::String paramId, description;
-        bool infoShown = false;
-        juce::String shownValue;
         float lastEffective = std::numeric_limits<float>::quiet_NaN();
         int maxDial = dialsize::secondary;
         int valueBoxH = 25;
@@ -110,7 +145,36 @@ namespace velvox::ui
         bool hero = false;
         Prominence prominence = Prominence::secondary;
         Smoothed shownPos, hover;
+        std::unique_ptr<HoverInfo> info;
         juce::VBlankAttachment vblank { this, [this] { tick(); } };
+    };
+
+    // Horizontal fader with name and value text (Simple mode macros): the same gestures as a knob,
+    // dragged along its axis.   NAME  [=========o------]  25 %
+    class HSlider final : public juce::Component
+    {
+    public:
+        HSlider (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent);
+        ~HSlider() override;
+        void resized() override;
+        void paint (juce::Graphics&) override;
+        void parentHierarchyChanged() override { slider.sendLookAndFeelChange(); }
+        const juce::String& getParamId() const noexcept { return paramId; }
+        juce::String getLabel() const { return label; }
+        juce::Colour getAccent() const noexcept { return accent; }
+
+        // Processed value marker (macros), like Knob::effectiveValue
+        std::function<float()> effectiveValue;
+
+        FineSlider slider;
+
+    private:
+        std::unique_ptr<APVTS::SliderAttachment> attachment;
+        juce::String paramId, label, description;
+        juce::Colour accent;
+        juce::Rectangle<int> nameArea;
+        std::unique_ptr<HoverInfo> info;
+        juce::VBlankAttachment vblank { this, [this] { if (info != nullptr) info->refresh(); } };
     };
 
     // Pill toggle bound to a bool parameter

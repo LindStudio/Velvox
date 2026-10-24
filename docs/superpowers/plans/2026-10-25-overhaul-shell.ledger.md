@@ -28,3 +28,18 @@ Tests/AbCompareTests.cpp replaced by Tests/CompareTests.cpp, 15 checks)
 - Finding for the eq track (not fixed here, DSP): switching hpfSlope while audio runs makes a step of ~0.16 on a 0.3 sine
   (EqualizerModule slope change without crossfade). Seen when Vorher/Nachher swaps a mix whose low-cut slope differs.
   CompareTests pins hpfSlope so the compare-switch test stays about the switch.
+
+Task 3: complete (ValueText.{h,cpp}: parseValueText + gestures:: reset/step/copy/paste/menu; FineSlider binds a parameter:
+fine 1/10, Alt+click and double-click default, own right-click menu, typed values with units; HoverInfo helper; HSlider;
+Segments with double-click/Alt reset, wheel step, right-click menu, hover card; LookAndFeel::drawLinearSlider; tooltip delay 600.
+GestureTests 66 checks)
+
+- Ruling: copy/paste of values uses a plugin-internal clipboard shared by all Headliner instances of the process, not the system
+  clipboard — why: copying a knob value must never wipe what the user copied elsewhere. Cost: values cannot be pasted into other
+  apps (they are visible in the menu item text instead).
+- Ruling: clicking on a horizontal slider's track does not jump the value (relative drag like the knobs) — why: one gesture
+  model for all controls, no accidental jumps. Cost: no "click to position".
+- Ruling: the hover card shows name, the parameter's short description and the value with unit; the old appended lines
+  ("Doppelklick: Standardwert. Shift/Strg: fein." and the auto-mix role) are gone — why: spec 2.5/2.6 "name, short description,
+  value"; gestures are explained in the help page "controls".
+- Ruling: switches (Toggle) keep click-only behaviour — spec 2.6 lists knobs, sliders, graph handles and segment controls.

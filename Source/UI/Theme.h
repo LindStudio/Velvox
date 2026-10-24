@@ -93,7 +93,7 @@ namespace velvox::ui
     {
         inline constexpr int revealMs = 260;     // panels sliding in
         inline constexpr float fadeRate = 0.2f;  // per-frame approach for Smoothed fades
-        inline constexpr int hoverInfoDelayMs = 450;
+        inline constexpr int hoverInfoDelayMs = 600;   // spec 8: tooltip delay 600 ms
     }
 
     namespace colours

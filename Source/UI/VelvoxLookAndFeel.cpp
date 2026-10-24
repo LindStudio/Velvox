@@ -151,13 +151,57 @@ namespace velvox::ui
         }
     }
 
+    void VelvoxLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+                                              float, float, juce::Slider::SliderStyle style, juce::Slider& slider)
+    {
+        if (style != juce::Slider::LinearHorizontal)
+        {
+            LookAndFeel_V4::drawLinearSlider (g, x, y, width, height, sliderPos, 0.0f, 0.0f, style, slider);
+            return;
+        }
+
+        const auto area = juce::Rectangle<int> (x, y, width, height).toFloat();
+        const bool enabled = slider.isEnabled();
+        const auto accent = slider.findColour (juce::Slider::trackColourId);
+        const bool hover = slider.isMouseOverOrDragging() && enabled;
+        const float cy = area.getCentreY();
+        const auto track = juce::Rectangle<float> (area.getX(), cy - 2.0f, area.getWidth(), 4.0f);
+
+        g.setColour (colours::tickOff);
+        g.fillRoundedRectangle (track, 2.0f);
+
+        // Lit part: from the left end, or from 0 for bipolar parameters (VOCAL LEVEL)
+        const auto range = slider.getRange();
+        const bool bipolar = range.getStart() < 0.0 && range.getEnd() > 0.0;
+        const float originX = bipolar ? area.getX() + area.getWidth() * (float) slider.valueToProportionOfLength (0.0) : area.getX();
+        const float x0 = std::min (originX, sliderPos), x1 = std::max (originX, sliderPos);
+        if (enabled && x1 - x0 > 0.5f)
+        {
+            const auto lit = juce::Rectangle<float> (x0, track.getY(), x1 - x0, track.getHeight());
+            g.setColour (accent.withAlpha (hover ? 0.32f : 0.22f));
+            g.fillRoundedRectangle (lit.expanded (0.0f, 2.0f), 3.0f);
+            g.setColour (accent);
+            g.fillRoundedRectangle (lit, 2.0f);
+        }
+
+        // Thumb: dark body, accent ring, glowing centre
+        const auto thumb = juce::Rectangle<float> (14.0f, 14.0f).withCentre ({ sliderPos, cy });
+        drawGlow (g, thumb.getCentre(), hover ? 16.0f : 12.0f, enabled ? 0.35f : 0.0f, accent);
+        g.setGradientFill (juce::ColourGradient (colours::knobTop, thumb.getX(), thumb.getY(),
+                                                 colours::knobBottom, thumb.getX(), thumb.getBottom(), false));
+        g.fillEllipse (thumb);
+        g.setColour (enabled ? accent : colours::tickOff);
+        g.drawEllipse (thumb.reduced (0.6f), 1.2f);
+        g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre (thumb.getCentre()));
+    }
+
     juce::Label* VelvoxLookAndFeel::createSliderTextBox (juce::Slider& slider)
     {
         // Design: value in Roboto Mono 11.5 px, #E8EBF2 (editable on click)
         auto* l = LookAndFeel_V4::createSliderTextBox (slider);
         l->setHasFocusOutline (false);
         l->setFont (monoFont (11.5f));
-        l->setJustificationType (juce::Justification::centredBottom);
+        l->setJustificationType (slider.isHorizontal() ? juce::Justification::centredRight : juce::Justification::centredBottom);
         l->setColour (juce::Label::textColourId, colours::text);
         l->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
         l->setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
