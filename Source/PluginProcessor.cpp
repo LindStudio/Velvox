@@ -173,7 +173,7 @@ bool VelvoxAudioProcessor::isInstanceAudible (dsp::ModuleId id, int k) const
 
 void VelvoxAudioProcessor::refreshAnalysis()
 {
-    latestAnalysis = analyzer.analyse();
+    latestAnalysis = analyzer.analyse (vocalCheck.getGenre());
     lastAnalysisMs = juce::Time::getMillisecondCounterHiRes();
 
     // Does the chain already take care of a finding? VOCAL CHECK measures at its own

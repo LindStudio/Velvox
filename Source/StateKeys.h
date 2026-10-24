@@ -18,4 +18,9 @@ namespace velvox::statekeys
     // 0.6: mix law per module instance (dsp::MixLaws string). Absent = a project from 0.5 or
     // older: every instance on the legacy law. Does not need a new state version.
     inline const juce::Identifier mixLaw       { "mixLaw" };
+    // 0.6: VOCAL CHECK - finding ids the user ignored ("rumble,resonance.3150") and the genre
+    // of the targets (check::Genre as int). Absent = nothing ignored / party. View settings
+    // of the analysis: never affect audio, not in the undo history.
+    inline const juce::Identifier checkIgnored { "checkIgnored" };
+    inline const juce::Identifier checkGenre   { "checkGenre" };
 }

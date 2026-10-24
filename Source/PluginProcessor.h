@@ -5,6 +5,7 @@
 #include "DSP/VocalChain.h"
 #include "DSP/Macros.h"
 #include "DSP/VocalAnalyzer.h"
+#include "Check/VocalCheckController.h"
 #include "DSP/SeqLockValue.h"
 #include "Parameters/ParameterLayout.h"
 #include "Parameters/SettingsReader.h"
@@ -117,6 +118,8 @@ public:
     // Latest findings (recomputed about twice a second while the module is on)
     const velvox::dsp::AnalysisResult& getLatestAnalysis() const noexcept { return latestAnalysis; }
     void refreshAnalysis();
+    // VOCAL CHECK findings, score, Anwenden / Alles anwenden / Ignorieren for the UI
+    velvox::check::VocalCheckController& getVocalCheck() noexcept { return vocalCheck; }
     // True when that module instance is in the chain and audible with the current settings
     bool isInstanceAudible (velvox::dsp::ModuleId id, int instance) const;
 
@@ -171,6 +174,11 @@ private:
 
     velvox::dsp::VocalAnalyzer analyzer { chain.getCheck() };
     velvox::dsp::AnalysisResult latestAnalysis;
+    velvox::check::VocalCheckController vocalCheck { apvts, analyzer,
+        { [this]() -> const velvox::dsp::AnalysisResult& { return latestAnalysis; },
+          [this] { refreshAnalysis(); },
+          [this] { return getRouting(); },
+          [this] (velvox::dsp::ModuleId id, int k) { return isInstanceAudible (id, k); } } };
     double lastAnalysisMs = 0.0;
     struct AnalyzerTimer final : juce::Timer
     {

@@ -103,6 +103,7 @@ public:
         targetsAndTemplate();
         rules();
         fixModel();
+        controller();
 
         beginTest ("Finding schema: id, category, German problem / fix text, confidence above the threshold");
         {
@@ -597,6 +598,148 @@ public:
             expectEquals (host.value (pid::eqOn), 0.0f, "... the switch");
             expectEquals (host.apvts.state.getProperty (statekeys::routing).toString(), routingBefore, "... and the routing");
             expect (! host.undo.canUndo(), "it was a single step");
+        }
+    }
+
+    static void runThroughPlugin (Harness& h, const automix::CapturedAudio& v)
+    {
+        juce::AudioBuffer<float> block (2, 512);
+        juce::MidiBuffer midi;
+        for (int start = 0; start + 512 <= v.numSamples(); start += 512)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                block.copyFrom (ch, 0, v.vocal[(size_t) std::min (ch, (int) v.vocal.size() - 1)].data() + start, 512);
+            h.proc.processBlock (block, midi);
+            if ((start / 512) % 8 == 0)
+                h.proc.pumpAnalyzer();
+        }
+        h.proc.pumpAnalyzer();
+        h.proc.refreshAnalysis();
+    }
+
+    void controller()
+    {
+        constexpr double fs = 48000.0;
+        VocalSpec spec;
+        spec.seconds = 14.0;
+        spec.sampleRate = fs;
+        spec.levelDb = -24.0f;
+        spec.rumbleDb = -40.0f;
+        spec.channels = 2;
+        auto v = matchTemplate (makeVocal (spec));
+        addPlosives (v, 6, 0.3f);
+
+        const auto prepare = [] (Harness& h, bool capture)
+        {
+            h.neutral();
+            h.set (pid::checkOn, 1.0f);
+            h.set (pid::checkMode, capture ? 1.0f : 0.0f);
+            h.set (pid::eqOn, 0.0f);
+            h.proc.setRouting (Routing::fromString ("v2,comp,check"));
+            h.proc.pumpAnalyzer();
+            if (capture)
+                h.proc.getAnalyzer().startCapture();
+        };
+
+        beginTest ("Controller: Anwenden inserts the EQ and sets the low cut; a second Anwenden on the same measurement does nothing");
+        {
+            Harness h;
+            prepare (h, true);
+            runThroughPlugin (h, v);
+            h.proc.getAnalyzer().stopCapture();
+            h.proc.refreshAnalysis();
+            auto& vc = h.proc.getVocalCheck();
+            for (auto* f : vc.visibleFindings())
+                logMessage ("  " + describe (*f));
+            const auto* rumble = vc.finding ("rumble");
+            expect (rumble != nullptr, "rumble found");
+            expect (vc.canApply ("rumble"));
+            expect (vc.apply ("rumble"));
+            expect (h.proc.getRouting().contains (ModuleId::eq), "EQ inserted");
+            expectEquals (h.get (pid::eqOn), 1.0f);
+            expectEquals (h.get (pid::hpfOn), 1.0f);
+            const float hpf = h.get (pid::hpfFreq);
+            expect (hpf >= 60.0f && hpf <= 150.0f);
+            expect (! vc.canApply ("rumble"), "applied on this measurement");
+            expect (! vc.apply ("rumble"));
+            expectEquals (h.get (pid::hpfFreq), hpf, "unchanged");
+            expect (! vc.canApply ("nothing-like-this"));
+        }
+
+        beginTest ("Controller: continuous mode measures afresh after Anwenden");
+        {
+            Harness h;
+            prepare (h, false);
+            runThroughPlugin (h, v);
+            auto& vc = h.proc.getVocalCheck();
+            expect (vc.finding ("rumble") != nullptr);
+            const auto generation = h.proc.getLatestAnalysis().generation;
+            expect (vc.apply ("rumble"));
+            expectGreaterThan ((int) (h.proc.getLatestAnalysis().generation - generation), 0, "new measurement");
+            expect (! h.proc.getLatestAnalysis().enoughMaterial, "collecting again");
+            expectEquals (vc.score(), -1);
+        }
+
+        beginTest ("Controller: Alles anwenden applies every applicable finding at once");
+        {
+            Harness h;
+            prepare (h, true);
+            runThroughPlugin (h, v);
+            h.proc.getAnalyzer().stopCapture();
+            h.proc.refreshAnalysis();
+            auto& vc = h.proc.getVocalCheck();
+            int applicable = 0;
+            for (auto* f : vc.visibleFindings())
+                applicable += vc.canApply (f->id) ? 1 : 0;
+            expectGreaterThan (applicable, 1);
+            expectEquals (vc.applyAll(), applicable);
+            expectEquals (h.get (pid::hpfSlope), 1.0f, "plosives: the steeper cut won");
+            expectEquals (vc.applyAll(), 0, "nothing left on this measurement");
+        }
+
+        beginTest ("Controller: Ignorieren hides a finding, leaves the score, persists in the project, restore brings it back");
+        {
+            Harness h;
+            prepare (h, true);
+            runThroughPlugin (h, v);
+            h.proc.getAnalyzer().stopCapture();
+            h.proc.refreshAnalysis();
+            auto& vc = h.proc.getVocalCheck();
+            const int before = vc.score();
+            const auto visible = vc.visibleFindings().size();
+            vc.ignore ("rumble");
+            expect (vc.isIgnored ("rumble"));
+            expectEquals (vc.visibleFindings().size(), visible - 1);
+            expectEquals ((int) vc.ignoredFindings().size(), 1);
+            expectGreaterThan (vc.score(), before, "an ignored finding does not cost points");
+            expect (! vc.canApply ("rumble"));
+            vc.ignore ("resonance.3150");   // ids that are not present now are kept as well
+
+            juce::MemoryBlock state;
+            h.proc.getStateInformation (state);
+            Harness reloaded;
+            reloaded.proc.setStateInformation (state.getData(), (int) state.getSize());
+            auto& rc = reloaded.proc.getVocalCheck();
+            expect (rc.isIgnored ("rumble") && rc.isIgnored ("resonance.3150"), "ignored after reload");
+
+            vc.restore ("rumble");
+            expect (! vc.isIgnored ("rumble"));
+            expectEquals (vc.visibleFindings().size(), visible);
+            vc.restoreAll();
+            expect (vc.getIgnoredIds().isEmpty());
+        }
+
+        beginTest ("Controller: genre is stored and changes the targets");
+        {
+            Harness h;
+            auto& vc = h.proc.getVocalCheck();
+            expect (vc.getGenre() == check::Genre::party, "default");
+            vc.setGenre (check::Genre::acoustic);
+            juce::MemoryBlock state;
+            h.proc.getStateInformation (state);
+            Harness reloaded;
+            reloaded.proc.setStateInformation (state.getData(), (int) state.getSize());
+            expect (reloaded.proc.getVocalCheck().getGenre() == check::Genre::acoustic);
         }
     }
 
