@@ -35,7 +35,7 @@
 
 ## Neue Oberfläche (0.5, 24./25.10.)
 Umgesetzt nach Jakobs Design-Paket (`docs/design/`), Plan `docs/superpowers/plans/2026-10-24-headliner-ui-redesign.md`,
-Entscheidungen im Ledger `.superpowers/sdd/2026-10-24-headliner-ui-redesign/progress.md` (nicht im Repo) und unten in CHANGELOG 0.5.0.
+Entscheidungen und offene Kleinigkeiten: `docs/design/UI_REDESIGN_DECISIONS.md`, Änderungen: CHANGELOG 0.5.0.
 Stil: `docs/STYLEGUIDE.md`; was mangels DSP fehlt: `docs/DESIGN_MAPPING.md` (eigenes DSP-Projekt, wenn gewünscht).
 Screenshots zum Abgleich: `%USERPROFILE%\dev\velvox-bench\ui-2026-10-24\`.
 
