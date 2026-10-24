@@ -48,14 +48,14 @@ public:
     velvox::ui::ModuleBrowser& getBrowser() noexcept { return browser; }
     velvox::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return analysis; }
     velvox::ui::DetailPanel* getDetail() noexcept { return detail.get(); }
-    bool isProMode() const noexcept { return proMode; }
+    bool isProMode() const noexcept { return proMode; }   // the CHAIN view (module panel) is open
     void selectModule (int moduleIdOrOutput) { select (moduleIdOrOutput); }
 
 private:
     void timerCallback() override;
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
     void updateLiveData();
-    void setProMode (bool pro);
+    void setView (velvox::ui::TopBar::View v);
     void select (int moduleIdOrOutput);
     void openModule (int moduleIdOrOutput);
     void raiseOverlays();
@@ -73,6 +73,7 @@ private:
         void hideInfoIfAnchorGone();
 
         bool bypassed = false;  // amber frame and label while the global bypass is on
+        bool showMeterPanel = false;   // frame of the IN / OUT meters (CHAIN view only)
         velvox::ui::InfoPopup info;
 
     private:
@@ -107,6 +108,7 @@ private:
     velvox::ui::CorrelationView correlation;
 
     bool proMode = false;
+    velvox::ui::TopBar::View view = velvox::ui::TopBar::View::autoMix;
     bool constructed = false;
     int selected = 0;
     int frame = 0;

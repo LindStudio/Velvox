@@ -124,11 +124,56 @@ namespace velvox::ui
 
 
     //==========================================================================
+    namespace
+    {
+        // Header tab of the design: capitals, active = 2 px underline in the accent colour
+        class TabButton final : public juce::Button
+        {
+        public:
+            TabButton (const juce::String& text, juce::Colour accentColour) : juce::Button (text), accent (accentColour) {}
+
+            void paintButton (juce::Graphics& g, bool highlighted, bool) override
+            {
+                const auto r = getLocalBounds().toFloat();
+                const bool on = getToggleState();
+                g.setColour (on ? colours::textStrong : (highlighted ? colours::textSoft : colours::textMuted));
+                g.setFont (semiBold (11.5f, 0.12f));
+                g.drawText (getButtonText(), r, juce::Justification::centred, false);
+                if (on)
+                {
+                    const float w = std::min (r.getWidth() - 12.0f, (float) juce::GlyphArrangement::getStringWidthInt (semiBold (11.5f, 0.12f), getButtonText()) + 8.0f);
+                    const auto line = juce::Rectangle<float> (w, 2.0f).withCentre ({ r.getCentreX(), r.getBottom() - 6.0f });
+                    g.setColour (accent.withAlpha (0.35f));
+                    g.fillRoundedRectangle (line.expanded (1.5f), 2.0f);
+                    g.setColour (accent);
+                    g.fillRoundedRectangle (line, 1.0f);
+                }
+            }
+
+        private:
+            juce::Colour accent;
+        };
+    }
+
     TopBar::TopBar (VelvoxAudioProcessor& p, DialogOverlay& d)
         : proc (p), dialog (d), bypass (p.getState(), pid::bypass, "Bypass")
     {
+        tabs.add (new TabButton ("CHAIN", colours::teal));
+        tabs.add (new TabButton ("AUTO MIX", colours::blue));
+        tabs.add (new TabButton ("VOCAL CHECK", colours::violet));
+        const View tabViews[] { View::chain, View::autoMix, View::vocalCheck };
+        for (int i = 0; i < tabs.size(); ++i)
+        {
+            const auto v = tabViews[i];
+            tabs[i]->onClick = [this, v] { selectView (v); };
+            addAndMakeVisible (tabs[i]);
+        }
+        tabs[0]->setTooltip (juce::String::fromUTF8 ("Die Modul-Kette mit allen Reglern des gewählten Moduls"));
+        tabs[1]->setTooltip (juce::String::fromUTF8 ("Automatischer Mix: analysieren, Ergebnis, Vergleich"));
+        tabs[2]->setTooltip (juce::String::fromUTF8 ("Vocal Check: Diagnose der Aufnahme mit Vorschlägen"));
+
         for (auto* c : std::initializer_list<juce::Component*> { &presetButton, &prev, &next, &save, &actions, &slotA, &slotB,
-                                                                  &copy, &beginner, &pro, &analyse, &bypass, &help })
+                                                                  &copy, &bypass, &help })
             addAndMakeVisible (c);
 
         // Segmented groups
@@ -137,8 +182,6 @@ namespace velvox::ui
         next.setConnectedEdges (juce::Button::ConnectedOnLeft);
         slotA.setConnectedEdges (juce::Button::ConnectedOnRight);
         slotB.setConnectedEdges (juce::Button::ConnectedOnLeft);
-        beginner.setConnectedEdges (juce::Button::ConnectedOnRight);
-        pro.setConnectedEdges (juce::Button::ConnectedOnLeft);
 
         presetButton.setColour (juce::TextButton::textColourOffId, colours::text);
         presetButton.setColour (juce::TextButton::buttonColourId, colours::accent.withAlpha (0.025f));
@@ -161,34 +204,30 @@ namespace velvox::ui
         slotB.onClick = [this] { proc.selectSlot (1); };
         copy.onClick = [this] { proc.copyActiveSlotToOther(); };
 
-        beginner.setTooltip (juce::String::fromUTF8 ("Übersicht des automatischen Mixes, Vergleich und Feinschliff"));
-        pro.setTooltip (juce::String::fromUTF8 ("Alle Parameter des gewählten Moduls"));
-        beginner.onClick = [this] { setProMode (false); if (onModeChange) onModeChange (false); };
-        pro.onClick = [this] { setProMode (true); if (onModeChange) onModeChange (true); };
-        analyse.getProperties().set ("primary", true);
-        analyse.setTooltip (juce::String::fromUTF8 ("Vocal während der Wiedergabe analysieren und automatisch mischen. Der bisherige Zustand bleibt wiederherstellbar."));
-        analyse.onClick = [this] { if (onAnalyse) onAnalyse(); };
-
         bypass.setTooltip ("Hear the unprocessed vocal (latency compensated). For a fair comparison set Level match to Bypass match.");
         bypass.getProperties().set ("danger", true);   // drawn in the bypass colour while on
 
         help.setTooltip ("Help: how Headliner works and every module explained (offline)");
         help.onClick = [this] { if (onHelp) onHelp(); };
+        setView (view);
         refresh();
     }
 
-    void TopBar::setProMode (bool isPro)
+    TopBar::~TopBar() = default;
+
+    void TopBar::setView (View v)
     {
-        proMode = isPro;
-        pro.setToggleState (isPro, juce::dontSendNotification);
-        beginner.setToggleState (! isPro, juce::dontSendNotification);
+        view = v;
+        tabs[0]->setToggleState (v == View::chain, juce::dontSendNotification);
+        tabs[1]->setToggleState (v == View::autoMix, juce::dontSendNotification);
+        tabs[2]->setToggleState (v == View::vocalCheck, juce::dontSendNotification);
     }
 
-    void TopBar::setHasMix (bool hasMix)
+    void TopBar::selectView (View v)
     {
-        const juce::String text (hasMix ? "Neu analysieren" : "Analysieren");
-        if (analyse.getButtonText() != text)
-            analyse.setButtonText (text);
+        setView (v);
+        if (onViewChange)
+            onViewChange (v);
     }
 
     void TopBar::showPresetMenu()
@@ -376,14 +415,29 @@ namespace velvox::ui
         g.setGradientFill (line);
         g.fillRect (r.withTop (r.getBottom() - 1.0f));
 
-        // Brand: HEADLINER icon and word mark (by Lind Audio)
-        auto brand = getLocalBounds().reduced (20, 0).removeFromLeft (230).toFloat();
-        const auto iconArea = brand.removeFromLeft (brand.getHeight() * 0.62f).withSizeKeepingCentre (brand.getHeight() * 0.62f, brand.getHeight() * 0.62f);
-        drawGlow (g, iconArea.getCentre(), 26.0f, 0.22f, colours::blue);
-        drawBrand (g, Brand::icon, iconArea);
-        brand.removeFromLeft (10.0f);
-        drawBrand (g, Brand::wordmark, brand.withSizeKeepingCentre (brand.getWidth(), std::min (brand.getHeight() * 0.62f, 34.0f)),
-                   juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid);
+        // Logo: icon, "HEADLINER" (bold 20) + "VOCAL" (light, #A78BFA), "BY LIND AUDIO" below
+        const auto big = display (20.0f / 0.93f, true).withExtraKerningFactor (0.04f);
+        const auto light = font (20.0f / 0.93f).withExtraKerningFactor (0.04f);
+        const auto small = semiBold (8.0f, 0.35f);
+        const float wHead = (float) juce::GlyphArrangement::getStringWidthInt (big, "HEADLINER");
+        const float wVocal = (float) juce::GlyphArrangement::getStringWidthInt (light, " VOCAL");
+        const float iconW = 26.0f, gapW = 10.0f;
+        const auto area = logoArea.toFloat();
+        float x = area.getCentreX() - (iconW + gapW + wHead + wVocal) * 0.5f;
+        const auto icon = juce::Rectangle<float> (iconW, iconW).withPosition (x, area.getCentreY() - iconW * 0.5f);
+        drawGlow (g, icon.getCentre(), 24.0f, 0.22f, colours::blue);
+        drawBrand (g, Brand::icon, icon);
+        x += iconW + gapW;
+        const auto textTop = area.getCentreY() - 15.0f;
+        g.setColour (colours::textStrong);
+        g.setFont (big);
+        g.drawText ("HEADLINER", juce::Rectangle<float> (wHead + 2.0f, 24.0f).withPosition (x, textTop), juce::Justification::centredLeft, false);
+        g.setColour (juce::Colour (0xffa78bfa));
+        g.setFont (light);
+        g.drawText (" VOCAL", juce::Rectangle<float> (wVocal + 2.0f, 24.0f).withPosition (x + wHead, textTop), juce::Justification::centredLeft, false);
+        g.setColour (colours::textFaint);
+        g.setFont (small);
+        g.drawText ("BY LIND AUDIO", juce::Rectangle<float> (wHead + wVocal, 10.0f).withPosition (x, textTop + 24.0f), juce::Justification::centred, false);
     }
 
     void TopBar::paintOverChildren (juce::Graphics& g)
@@ -438,36 +492,37 @@ namespace velvox::ui
 
     void TopBar::resized()
     {
-        auto r = getLocalBounds().reduced (24, 0).withSizeKeepingCentre (getWidth() - 48, 38);
-        r.removeFromLeft (184);
+        auto r = getLocalBounds().reduced (16, 0).withSizeKeepingCentre (getWidth() - 32, 36);
 
-        // Global switches on the right: A/B, view (Auto Mix | Module), analyse, bypass, help
-        auto right = r.removeFromRight (742);
-        help.setBounds (right.removeFromRight (64));
-        right.removeFromRight (10);
-        bypass.setBounds (right.removeFromRight (110));
-        right.removeFromRight (12);
-        analyse.setBounds (right.removeFromRight (148));
-        right.removeFromRight (12);
-        pro.setBounds (right.removeFromRight (84));
-        beginner.setBounds (right.removeFromRight (96));
-        right.removeFromRight (16);
-        copy.setBounds (right.removeFromRight (112));
+        // Left: preset box 290 x 36 (< name >), then the save and menu icons
+        auto preset = r.removeFromLeft (290);
+        prev.setBounds (preset.removeFromLeft (32));
+        next.setBounds (preset.removeFromRight (32));
+        presetButton.setBounds (preset);
+        r.removeFromLeft (10);
+        save.setBounds (r.removeFromLeft (36));
+        r.removeFromLeft (4);
+        actions.setBounds (r.removeFromLeft (36));
+        r.removeFromLeft (12);
+
+        // Right: tabs, A/B with copy, bypass, help
+        auto right = r.removeFromRight (612);
+        help.setBounds (right.removeFromRight (36));
         right.removeFromRight (8);
-        slotB.setBounds (right.removeFromRight (40));
-        slotA.setBounds (right.removeFromRight (40));
+        bypass.setBounds (right.removeFromRight (92));
+        right.removeFromRight (10);
+        copy.setBounds (right.removeFromRight (100));
+        right.removeFromRight (6);
+        slotB.setBounds (right.removeFromRight (34));
+        slotA.setBounds (right.removeFromRight (34));
+        right.removeFromRight (18);
+        const auto tabRow = right.withSizeKeepingCentre (right.getWidth(), getHeight());
+        auto tabArea = tabRow;
+        tabs[2]->setBounds (tabArea.removeFromRight (116));
+        tabs[1]->setBounds (tabArea.removeFromRight (92));
+        tabs[0]->setBounds (tabArea.removeFromRight (72));
 
-        // Preset browser in the middle: < name > centred, save and menu icons to its right
-        constexpr int iconsW = 12 + 40 + 6 + 40;
-        auto mid = r.withSizeKeepingCentre (std::min (r.getWidth() - 20, 380 + 2 * iconsW), r.getHeight());
-        mid.removeFromLeft (iconsW);   // keeps the name field centred
-        actions.setBounds (mid.removeFromRight (40));
-        mid.removeFromRight (6);
-        save.setBounds (mid.removeFromRight (40));
-        mid.removeFromRight (12);
-        prev.setBounds (mid.removeFromLeft (40));
-        next.setBounds (mid.removeFromRight (40));
-        presetButton.setBounds (mid);
+        logoArea = r.withSizeKeepingCentre (r.getWidth(), getHeight());
     }
 }
 
@@ -485,6 +540,6 @@ namespace velvox::ui
 
     juce::Rectangle<int> TopBar::getModeArea() const
     {
-        return beginner.getBounds().getUnion (pro.getBounds());
+        return tabs[0]->getBounds().getUnion (tabs[2]->getBounds());
     }
 }

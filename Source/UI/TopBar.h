@@ -33,28 +33,34 @@ namespace velvox::ui
         std::function<void (const juce::String&)> callback;
     };
 
-    // Product name, preset browser (by category), A/B, Beginner/Pro and bypass
+    // Header of the HEADLINER VOCAL design (height 56): preset box with < > on the left,
+    // the logo in the middle, on the right the tabs CHAIN | AUTO MIX | VOCAL CHECK
+    // (active = underline in colour), A/B, copy, bypass and help.
     class TopBar final : public juce::Component
     {
     public:
+        static constexpr int height = 56;
+        enum class View { chain, autoMix, vocalCheck };
+
         TopBar (VelvoxAudioProcessor& processor, DialogOverlay& dialog);
+        ~TopBar() override;
 
         void paint (juce::Graphics&) override;
         void paintOverChildren (juce::Graphics&) override;
         void resized() override;
         void refresh();
 
-        std::function<void (bool pro)> onModeChange;
-        std::function<void()> onAnalyse;       // "Analysieren": start an automatic mix (always available)
-        juce::TextButton& getAnalyseButton() noexcept { return analyse; }
-        void setHasMix (bool hasMix);
+        std::function<void (View)> onViewChange;
+        void setView (View v);                 // shows the tab as active (no callback)
+        void selectView (View v);              // as a click on the tab
+        View getView() const noexcept { return view; }
+
         std::function<void()> onHelp;
         juce::TextButton& getHelpButton() noexcept { return help; }
         juce::Rectangle<int> getPresetArea() const;
         juce::Rectangle<int> getCompareArea() const;   // A / B and copy
-        juce::Rectangle<int> getModeArea() const;
+        juce::Rectangle<int> getModeArea() const;      // the three tabs
         juce::Rectangle<int> getBypassArea() const { return bypass.getBounds(); }
-        void setProMode (bool pro);
 
     private:
         void showPresetMenu();
@@ -69,10 +75,11 @@ namespace velvox::ui
                          save, actions;   // icon buttons (drawn in paintOverChildren): save, menu
         juce::TextButton slotA { "A" }, slotB { "B" }, copy { "Copy A to B" };
         int abCheckCounter = 0;
-        juce::TextButton beginner { "Auto Mix" }, pro { "Module" }, analyse { "Analysieren" };
-        bool proMode = false;
+        juce::OwnedArray<juce::Button> tabs;   // CHAIN, AUTO MIX, VOCAL CHECK
+        View view = View::autoMix;
         Toggle bypass;
-        juce::TextButton help { "Help" };
+        juce::TextButton help { "?" };
+        juce::Rectangle<int> logoArea;
         bool shownModified = false;
         int modifiedCheck = 0;
 

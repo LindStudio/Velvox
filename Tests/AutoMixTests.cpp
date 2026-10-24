@@ -978,8 +978,9 @@ public:
             std::unique_ptr<juce::AudioProcessorEditor> again (h.proc.createEditor());
             expect (! asVelvox (*again).getAnalysisOverlay().isOpen(), "not again after Später");
 
-            // "Neu analysieren" is always there and opens the progress card
-            click (asVelvox (*again).getTopBar().getAnalyseButton());
+            // The AUTO MIX view (opened by default) has the analyse button; it opens the progress card
+            expect (asVelvox (*again).getAutoMixView().isVisible() && asVelvox (*again).getAutoMixView().getAnalyseButton().isVisible(), "analyse visible in the AUTO MIX view");
+            click (asVelvox (*again).getAutoMixView().getAnalyseButton());
             auto& ov = asVelvox (*again).getAnalysisOverlay();
             expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::listening);
             click (ov.getSecondaryButton());   // Abbrechen

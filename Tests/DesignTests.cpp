@@ -95,6 +95,37 @@ public:
             expect (k.slider.isDoubleClickReturnEnabled());
             expectWithinAbsoluteError ((float) k.slider.getDoubleClickReturnValue(), 3.0f, 1.0e-4f, "double-click value = default 3:1");
         }
+
+        beginTest ("Design: 1384 x 1040 canvas, header tabs switch the three views");
+        {
+            expectEquals (ui::baseWidth, 1384);
+            expectEquals (ui::baseHeight, 1040);
+
+            Harness h;
+            h.proc.getAutoMix().dismissPrompt();
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
+            auto& top = ed.getTopBar();
+            expectEquals (top.getHeight(), 56, "header 56");
+
+            top.selectView (ui::TopBar::View::autoMix);
+            expect (ed.getAutoMixView().isVisible(), "AUTO MIX view");
+            expect (! ed.isProMode());
+
+            top.selectView (ui::TopBar::View::vocalCheck);
+            expect (ed.getDetail() != nullptr && ed.getDetail()->isVisible(), "VOCAL CHECK view shows the check panel");
+            expect (! ed.getAutoMixView().isVisible());
+            expectEquals (h.proc.getState().state.getProperty ("uiMode").toString(), juce::String ("check"), "view stored with the project");
+
+            top.selectView (ui::TopBar::View::chain);
+            expect (ed.isProMode() && ed.getChainView().isVisible(), "CHAIN view");
+            expect (ed.getDetail() != nullptr, "module panel in the chain view");
+            expect (top.getView() == ui::TopBar::View::chain);
+
+            // The AUTO MIX view owns the analyse button
+            top.selectView (ui::TopBar::View::autoMix);
+            expect (ed.getAutoMixView().isVisible() && ed.getAutoMixView().getAnalyseButton().isVisible(), "analyse in the AUTO MIX view");
+        }
     }
 };
 

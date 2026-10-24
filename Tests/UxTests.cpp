@@ -181,7 +181,7 @@ public:
             expectEquals (ed.getHelp().getCurrentKey(), juce::String ("ride"));
             ed.getHelp().close();
 
-            ed.getTopBar().onModeChange (false);
+            ed.getTopBar().selectView (ui::TopBar::View::autoMix);
             ed.getTopBar().getHelpButton().triggerClick();
             juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
             expectEquals (ed.getHelp().getCurrentKey(), juce::String ("start"));

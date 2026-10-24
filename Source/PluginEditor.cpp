@@ -15,25 +15,35 @@ namespace
     // "Remind me later" hides the welcome card until the plugin is loaded again
     bool tutorialPostponedThisSession = false;
 
-    // Canvas layout (design units): header, module navigation, then the body
-    // with the input rail, the main view and the output rail
-    constexpr int topBarH = 68;
-    constexpr int margin = 16;
-    constexpr int chainTop = topBarH + 8;
-    constexpr int chainH = ChainView::preferredHeight;
-    constexpr int bodyTop = chainTop + chainH + 8;
-    constexpr int leftW = 150;
-    constexpr int rightW = 150;
-    constexpr int gap = 14;
-    constexpr int railCaptionH = 40;
+    // Canvas layout of the design (1384 x 1040): header 56, module chain 330, detail area
+    // 460 (module panel 1180 wide, IN/OUT meters to its right), Vocal Control below
+    constexpr int topBarH = TopBar::height;
+    constexpr int margin = 12;
+    constexpr int gap = 8;
+    constexpr int chainTop = topBarH + gap;
+    constexpr int chainH = 330;
+    constexpr int bodyTop = chainTop + chainH + gap;
+    constexpr int bodyH = 460;
+    constexpr int panelW = 1180;
+    constexpr int controlTop = bodyTop + bodyH + gap;
     constexpr int frameRate = 60;
 
     // Window size limits relative to the design canvas
-    constexpr double minScale = 0.7, maxScale = 1.6;
+    constexpr double minScale = 0.6, maxScale = 1.4;
 
-    juce::Rectangle<int> leftRail()  { return { margin, bodyTop, leftW, baseHeight - bodyTop - margin }; }
-    juce::Rectangle<int> rightRail() { return { baseWidth - margin - rightW, bodyTop, rightW, baseHeight - bodyTop - margin }; }
-    juce::Rectangle<int> bodyArea()  { return { margin + leftW + gap, bodyTop, baseWidth - 2 * margin - leftW - rightW - 2 * gap, baseHeight - bodyTop - margin }; }
+    juce::Rectangle<int> chainArea()   { return { margin, chainTop, baseWidth - 2 * margin, chainH }; }
+    juce::Rectangle<int> bodyArea()    { return { margin, bodyTop, panelW, bodyH }; }
+    juce::Rectangle<int> meterArea()   { return { margin + panelW + gap, bodyTop, baseWidth - 2 * margin - panelW - gap, bodyH }; }
+    juce::Rectangle<int> controlArea() { return { margin, controlTop, baseWidth - 2 * margin, baseHeight - controlTop - margin }; }
+    juce::Rectangle<int> wideArea()    { return chainArea().getUnion (bodyArea()).getUnion (meterArea()); }   // AUTO MIX, VOCAL CHECK
+
+    void drawDesignPanel (juce::Graphics& g, juce::Rectangle<float> r)
+    {
+        g.setColour (colours::panel);
+        g.fillRoundedRectangle (r, 12.0f);
+        g.setColour (colours::border);
+        g.drawRoundedRectangle (r.reduced (0.5f), 12.0f, 1.0f);
+    }
 
     // Fade in and lift a freshly shown view into place
     void reveal (juce::Component& c, juce::Rectangle<int> finalBounds)
@@ -62,23 +72,13 @@ void VelvoxAudioProcessorEditor::Canvas::paint (juce::Graphics& g)
         backdrop = juce::Image (juce::Image::RGB, juce::roundToInt (baseWidth * scale), juce::roundToInt (baseHeight * scale), false);
         juce::Graphics b (backdrop);
         b.addTransform (juce::AffineTransform::scale (scale));
-        b.fillAll (colours::background);
-        drawGlow (b, { -60.0f, 420.0f }, 620.0f, 0.20f, colours::blue);
-        drawGlow (b, { 1380.0f, 160.0f }, 700.0f, 0.15f, colours::violet);
-        drawGlow (b, { 1240.0f, 980.0f }, 620.0f, 0.09f, colours::pink);
-        drawGlow (b, { 300.0f, -80.0f }, 520.0f, 0.10f, colours::teal);
-
-        for (auto rail : { leftRail(), rightRail() })
-            drawGlassPanel (b, rail.toFloat(), radius::panel, colours::teal, 0.04f);
-
-        for (auto [rail, text] : { std::pair (leftRail(), "INPUT"), std::pair (rightRail(), "OUTPUT") })
-        {
-            b.setColour (colours::text);
-            b.setFont (caps (14.5f));
-            b.drawText (text, rail.toFloat().withHeight ((float) railCaptionH).withTrimmedTop (4.0f), juce::Justification::centred, false);
-        }
+        b.fillAll (colours::windowBg);
+        drawGlow (b, { 690.0f, -120.0f }, 640.0f, 0.07f, colours::blue);
+        drawDesignPanel (b, controlArea().toFloat());
     }
     g.drawImage (backdrop, juce::Rectangle<float> ((float) baseWidth, (float) baseHeight));
+    if (showMeterPanel)
+        drawDesignPanel (g, meterArea().toFloat());
 }
 
 void VelvoxAudioProcessorEditor::Canvas::paintOverChildren (juce::Graphics& g)
@@ -164,15 +164,14 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     inputGain.setMaxDialSize (dialsize::rail);
     outputGain.setMaxDialSize (dialsize::rail);
 
-    topBar.onModeChange = [this] (bool pro) { setProMode (pro); };
-    topBar.onAnalyse = [this] { startAnalysis(); };
+    topBar.onViewChange = [this] (TopBar::View v) { setView (v); };
     topBar.onHelp = [this]
     {
         showHelp (detail != nullptr && proMode ? help::keyForModule (selected < 0 ? selected : (int) dsp::selectionModule (selected)) : juce::String ("start"));
     };
     mixView.onAnalyse = [this] { startAnalysis(); };
     mixView.onOpenModule = [this] (int id) { openModule (id); };
-    analysis.onFinished = [this] { if (proMode) setProMode (false); };
+    analysis.onFinished = [this] { setView (TopBar::View::autoMix); };
 
     chainView.onSelect = [this] (int id)
     {
@@ -206,32 +205,32 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
 
     // ---- Layout on the design canvas
     topBar.setBounds (0, 0, baseWidth, topBarH);
-    chainView.setBounds (margin, chainTop, baseWidth - 2 * margin, chainH);
+    chainView.setBounds (chainArea());
 
-    auto left = leftRail().reduced (14, 0).withTrimmedTop (railCaptionH).withTrimmedBottom (12);
-    inputGain.setBounds (left.removeFromBottom (128));
-    left.removeFromBottom (12);
-    inputMeter.setBounds (left);
-
-    auto right = rightRail().reduced (14, 0).withTrimmedTop (railCaptionH).withTrimmedBottom (12);
-    outputGain.setBounds (right.removeFromBottom (128));
-    right.removeFromBottom (12);
-    safetyClip.setBounds (right.removeFromBottom (34));
-    right.removeFromBottom (8);
-    monoCheck.setBounds (right.removeFromBottom (34));
-    right.removeFromBottom (16);
-    correlation.setBounds (right.removeFromBottom (32).reduced (4, 0));
-    right.removeFromBottom (14);
-    outputMeter.setBounds (right);
+    // IN / OUT meters next to the module panel, the gains, clip guard, mono and correlation below
+    auto meters = meterArea().reduced (10, 12);
+    correlation.setBounds (meters.removeFromBottom (24));
+    meters.removeFromBottom (6);
+    auto switches = meters.removeFromBottom (26);
+    safetyClip.setBounds (switches.removeFromLeft (switches.getWidth() / 2 + 14));
+    monoCheck.setBounds (switches.reduced (4, 0));
+    meters.removeFromBottom (6);
+    auto gains = meters.removeFromBottom (84);
+    inputGain.setBounds (gains.removeFromLeft (gains.getWidth() / 2));
+    outputGain.setBounds (gains);
+    meters.removeFromBottom (8);
+    inputMeter.setBounds (meters.removeFromLeft (meters.getWidth() / 2).reduced (4, 0));
+    outputMeter.setBounds (meters.reduced (4, 0));
 
     for (auto* overlay : std::initializer_list<juce::Component*> { &analysis, &dialog, &help, &tutorial, &browser })
         overlay->setBounds (0, 0, baseWidth, baseHeight);
 
     // ---- View state (stored with the project, never affects audio)
+    // uiMode: "beginner" (stored by 0.3 / 0.4) = AUTO MIX, "pro" = CHAIN, "check" = VOCAL CHECK
     const auto mode = proc.getState().state.getProperty (statekeys::uiMode, "beginner").toString();
     selected = (int) proc.getState().state.getProperty (uiSelectionProperty, 0);
     chainView.setSelected (selected);
-    setProMode (mode == "pro");
+    setView (mode == "pro" ? TopBar::View::chain : (mode == "check" ? TopBar::View::vocalCheck : TopBar::View::autoMix));
     constructed = true;
 
     // ---- Window: resizable, fixed aspect ratio, remembered per project.
@@ -258,7 +257,6 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     auto& autoMix = proc.getAutoMix();
     autoMix.addChangeListener (this);
     chainView.setAutoMixModules (autoMix.getReport().changedModules);
-    topBar.setHasMix (autoMix.hasMix());
 
     startTimerHz (frameRate);
 
@@ -291,7 +289,6 @@ void VelvoxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster
     // A new mix, a restored state or a compare switch: every view follows at once
     auto& autoMix = proc.getAutoMix();
     chainView.setAutoMixModules (autoMix.getReport().changedModules);
-    topBar.setHasMix (autoMix.hasMix());
     if (detail != nullptr)
         detail->refresh();
 }
@@ -309,20 +306,30 @@ void VelvoxAudioProcessorEditor::startAnalysis()
 void VelvoxAudioProcessorEditor::openModule (int id)
 {
     selected = id;
-    setProMode (true);
+    setView (TopBar::View::chain);
 }
 
-void VelvoxAudioProcessorEditor::setProMode (bool pro)
+void VelvoxAudioProcessorEditor::setView (TopBar::View v)
 {
-    const bool changed = pro != proMode;
-    proMode = pro;
-    topBar.setProMode (pro);
-    proc.getState().state.setProperty (statekeys::uiMode, pro ? "pro" : "beginner", nullptr);
-    mixView.setVisible (! pro);
-    mixView.setBounds (bodyArea());
-    if (! pro && changed && constructed)
-        reveal (mixView, bodyArea());
-    chainView.setSelected (pro ? selected : -2);   // no module card is "open" in the overview
+    const bool changed = v != view;
+    view = v;
+    proMode = v == TopBar::View::chain;
+    topBar.setView (v);
+    proc.getState().state.setProperty (statekeys::uiMode,
+                                       v == TopBar::View::chain ? "pro" : (v == TopBar::View::vocalCheck ? "check" : "beginner"), nullptr);
+
+    // CHAIN: module columns, module panel, meters. AUTO MIX and VOCAL CHECK use the whole area.
+    for (auto* c : std::initializer_list<juce::Component*> { &chainView, &inputMeter, &outputMeter, &inputGain, &outputGain,
+                                                              &safetyClip, &monoCheck, &correlation })
+        c->setVisible (proMode);
+    canvas.showMeterPanel = proMode;
+    canvas.repaint();
+
+    mixView.setVisible (v == TopBar::View::autoMix);
+    mixView.setBounds (wideArea());
+    if (v == TopBar::View::autoMix && changed && constructed)
+        reveal (mixView, wideArea());
+    chainView.setSelected (proMode ? selected : -2);
     select (selected);
 }
 
@@ -343,6 +350,20 @@ void VelvoxAudioProcessorEditor::select (int id)
         canvas.removeChildComponent (detail.get());
     }
     detail.reset();
+
+    // VOCAL CHECK shows the check panel over the whole area
+    if (view == TopBar::View::vocalCheck)
+    {
+        detail = createDetailPanel (proc, (int) dsp::ModuleId::check, &spectrum, &live);
+        detail->onOpenModule = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)] (int moduleId)
+        {
+            juce::MessageManager::callAsync ([safe, moduleId] { if (safe != nullptr) safe->openModule (moduleId); });
+        };
+        detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };
+        canvas.addAndMakeVisible (*detail);
+        detail->setBounds (wideArea());
+        detail->refresh();
+    }
 
     if (proMode)
     {
@@ -396,7 +417,7 @@ juce::Rectangle<int> VelvoxAudioProcessorEditor::tutorialTarget (const juce::Str
     if (key == "compare") return topBar.getCompareArea().getUnion (topBar.getBypassArea());
     if (key == "modes")   return topBar.getModeArea();
     if (key == "help")    return topBar.getHelpButton().getBounds();
-    if (key == "body")    return bodyArea();
+    if (key == "body")    return proMode ? bodyArea() : wideArea();
     return chainView.getBounds();   // "chain", "chainAndModules"
 }
 

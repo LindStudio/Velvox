@@ -309,6 +309,6 @@ namespace velvox::ui
     }
 
     // Base design size; the editor scales this canvas uniformly
-    inline constexpr int baseWidth = 1440;
-    inline constexpr int baseHeight = 900;
+    inline constexpr int baseWidth = 1384;
+    inline constexpr int baseHeight = 1040;
 }
