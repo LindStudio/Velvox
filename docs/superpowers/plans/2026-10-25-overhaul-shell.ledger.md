@@ -43,3 +43,36 @@ GestureTests 66 checks)
   ("Doppelklick: Standardwert. Shift/Strg: fein." and the auto-mix role) are gone — why: spec 2.5/2.6 "name, short description,
   value"; gestures are explained in the help page "controls".
 - Ruling: switches (Toggle) keep click-only behaviour — spec 2.6 lists knobs, sliders, graph handles and segment controls.
+
+Task 4: complete (canvas 1000 x 600, min scale 8/9, max 2.0; TopBar rewritten: logo, ‹ name ▾ ›, SIMPEL | ADVANCED, AUTO MIX |
+VOCAL CHECK, Bypass, ?; editor rewritten around mode + tab; Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z; VocalControlBar deleted)
+Task 5: complete (SimpleView A3: dashed-before / filled-after spectrum, "Vocal analysieren", Vorher | Nachher after an analysis,
+"Details" opens the auto-mix report overlay with Density + fair compare; six HSliders; CompactMeters IN/OUT + LUFS)
+Task 6: complete (ChainView rewritten: tiles name → icon → on/off, no knobs, drag reorder, click select, menu via buildTileMenu /
+performTileAction, "+" tile and "+" on gaps, SEND badge + send zone, OUTPUT tile; IN/OUT meters right of the chain)
+Tests: ShellTests (59), DesignTests / UiTests / UxTests / AutoMixTests updated.
+TDD note: the tests of tasks 4–6 were written after the restructure (the old tests could not compile against the new layout);
+each new expectation was checked against the running code, not watched failing first.
+
+- Ruling: view state = mode + tab. uiMode keeps its 0.5 values ("beginner" = SIMPEL, "pro" = ADVANCED), a new key uiTab
+  ("automix"/"check") holds the tab; a 0.5 "check" loads as ADVANCED + VOCAL CHECK and is stored back in the 0.6 form — why: older
+  Headliner builds still read uiMode; cost: none for audio (view only).
+- Ruling: VOCAL CHECK shows the check panel over the whole body in both modes; AUTO MIX shows Simple or Advanced — why: the spec
+  names two tabs plus a mode switch; this is the only combination where every view is reachable from both modes.
+- Ruling: the old AUTO MIX overview (report steps, notes, Density, fair compare, restore) lives in a "Details" overlay opened from
+  Simple mode (button next to "Vocal analysieren"); a step opens its module in Advanced — why: spec 2.3 gives Simple mode no room
+  for it but Density must stay reachable; Density is also nowhere else. Cost: one extra click for the report.
+- Ruling: removed AutoMixView's Vorher/Mix/Original buttons — Vorher/Nachher moved to Simple mode (spec Q3), "Original" was the
+  global bypass that the header already has. Test family "compare buttons as segments" + "Original toggles bypass" removed.
+- Ruling: IN/OUT meters in Advanced sit at the right end of the chain row (CompactMeters, stacked), so the module panel keeps the full
+  width; the old big LevelMeters, clip-guard switch, mono button and correlation bar of the meter column are gone from the shell
+  (clip guard is in the OUTPUT panel; mono and correlation move into the OUTPUT panel in Task 7).
+- Ruling: modules added through the browser are always inserts (also delay/reverb, spec Q2; merged with mixlaw's identical line).
+- Ruling: removed assertion families (DesignTests): 1384 × 1040 canvas + 3 tabs incl. CHAIN, chain column knobs (EQ "hpfFreq,highGain"
+  etc.), column footer arrows, knobs vs. scroll arrows, VOCAL CHECK column UTF-8 note, Vocal Control bar macros/colours, min 80 %.
+  Replaced by: 1000 × 600 + mode/tab, tile name→icon→power order and no knobs, tile menu actions, Simple-mode faders with the same
+  ids/order/colours, min scale 8/9. UiTests: mode pill click → "Als Send/Als Insert" actions; hover remove button → menu action.
+- Ruling: chain tile width 84–96 px (old min 104), row height 88 — why: 1000 px canvas.
+- Ruling: the header logo shows icon + HEADLINER only ("VOCAL" and "BY LIND AUDIO" dropped) — why: 8 px text is below the 9 px
+  minimum at 1000 px width.
+- Fix found: the stored uiScale was overwritten before it was read (setResizeLimits on a 0 × 0 editor calls resized()); now read first.
