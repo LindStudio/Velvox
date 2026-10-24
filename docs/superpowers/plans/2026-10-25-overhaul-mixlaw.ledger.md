@@ -44,3 +44,11 @@ Task 4: Ruling: ChainSettings::routing default and MixPlan::routing default -> R
 Task 4: Ruling: tests that encoded the old default were re-pointed, not weakened: VelvoxTests "Delay: echo ... dry once" and RoutingTests
   "Delay into reverb" now set legacyDefaults() (they test the send path); v0.1 migration / format-1 preset expectations now compare with
   legacyDefaults() (old content must keep sends); UiTests: reverb mode switch now insert->send, "+" index 5, browser reverb #2 is an insert.
+Task 5: complete (audit tests for all 15 modules; no further violation found: choir 100 % -309 dB, pitch +7 st 100 % -150 dB at the input
+  frequency, pulse closed segment and chop muted step -282 dB, Mix 0 % bit-exact (latency-aligned) for eq/comp/sat/pitch/choir/pulse/chop/
+  delay/reverb/doubler/smash under both laws, Vocal Check bit-exact pass-through)
+Task 5: Ruling: modules without a Mix control (De-Esser: forced 100 % so Listen works; Smooth: Amount = depth; Ride: Amount = correction
+  share; Check: read-only) are documented, not changed. Chop has "Depth" (gate + repeat amount), audited as its crossfade.
+Task 5: Ruling: the pitch audit uses 440 Hz with formant preservation off — with "keep formants" a pure 1 kHz sine shifted +7 st comes out
+  ~19 dB quieter (the preserved envelope of a single sine is a narrow peak at 1 kHz). Expected behaviour of formant preservation, not a
+  mix issue; noted for the DSP-quality track.
