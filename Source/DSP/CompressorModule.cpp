@@ -5,6 +5,7 @@ namespace velvox::dsp
     void CompressorModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
+        peakHold.prepare ((int) std::ceil (holdMs * 0.001 * sampleRate));
         makeup.reset (sampleRate, 0.05);
         setSettings (settings);
         makeup.setCurrentAndTargetValue (dbToGain (settings.makeupDb));
@@ -16,6 +17,7 @@ namespace velvox::dsp
         envDb = 0.0f;
         rmsState = 0.0f;
         sidechainHpf.reset();
+        peakHold.reset();
     }
 
     void CompressorModule::setSettings (const CompSettings& s) noexcept
@@ -66,7 +68,7 @@ namespace velvox::dsp
                 power = std::max (power, d * d);
             }
 
-            float level = peak;
+            float level = peakHold.push (peak);
             if (settings.detector == 1)
             {
                 // RMS: mean square (10 ms), scaled so a sine reads its peak level
