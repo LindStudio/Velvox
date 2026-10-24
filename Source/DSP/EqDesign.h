@@ -48,7 +48,12 @@ namespace velvox::dsp
         EqRole bandRole() const noexcept { return (EqRole) (role < 0 || role >= numEqRoles ? 0 : role); }
         bool isCut() const noexcept { return bandType() == EqBandType::lowCut || bandType() == EqBandType::highCut; }
         // A slot that holds nothing: off, no role, every value at its default (the panel's "delete")
-        bool isFree() const noexcept { return *this == EqBand {}; }
+        // (tolerant: values that went through a normalised host parameter may be off by an ulp)
+        bool isFree() const noexcept
+        {
+            return ! on && type == (int) EqBandType::bell && role == (int) EqRole::none && slope == 3
+                && std::abs (freq - 1000.0f) < 0.05f && std::abs (gain) < 1.0e-3f && std::abs (q - 1.0f) < 1.0e-4f;
+        }
         bool operator== (const EqBand&) const = default;
     };
 

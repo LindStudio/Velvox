@@ -1,31 +1,14 @@
 // EQ 0.6: band designs (analog-matched / legacy bilinear), band processing, parameters,
 // migration of 0.5 states, role bands for macros and the automatic mix.
 
-#include "TestHelpers.h"
-#include "LegacyEqV05.h"
-#include "DSP/EqDesign.h"
+#include "EqTestHelpers.h"
 
 using namespace velvox;
 using namespace velvox::test;
-using dsp::EqBand;
-using dsp::EqBandType;
+using namespace velvox::test::eq;
 
 namespace
 {
-    EqBand makeBand (EqBandType type, float freq, float gain, float q, int slope = 3)
-    {
-        EqBand b;
-        b.on = true;
-        b.type = (int) type;
-        b.freq = freq;
-        b.gain = gain;
-        b.q = q;
-        b.slope = slope;
-        return b;
-    }
-
-    double dbOf (double lin) { return 20.0 * std::log10 (std::max (lin, 1.0e-12)); }
-
     // Largest deviation (dB) of the digital design from its analog prototype on a log grid up to fMax,
     // ignoring points where the prototype is below `floorDb` (deep stop bands)
     double maxDeviationDb (const EqBand& b, bool legacy, double fs, double fMax, double floorDb = -40.0)
