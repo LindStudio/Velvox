@@ -33,14 +33,16 @@ namespace velvox::ui
         std::function<void (const juce::String&)> callback;
     };
 
-    // Header of the HEADLINER VOCAL design (height 56): preset box with < > on the left,
-    // the logo in the middle, on the right the tabs CHAIN | AUTO MIX | VOCAL CHECK
-    // (active = underline in colour), A/B, copy, bypass and help.
+    // Header of Headliner 0.6 (height 44), left to right:
+    //   logo · preset selector ‹ name ▾ › · SIMPEL | ADVANCED · tabs AUTO MIX | VOCAL CHECK · … · Bypass · ?
+    // The mode decides how the AUTO MIX tab looks (Simple: spectrum + six macros; Advanced: chain +
+    // module panel); VOCAL CHECK shows the check panel in both modes.
     class TopBar final : public juce::Component
     {
     public:
-        static constexpr int height = 56;
-        enum class View { chain, autoMix, vocalCheck };
+        static constexpr int height = 44;
+        enum class Mode { simple, advanced };
+        enum class Tab { autoMix, vocalCheck };
 
         TopBar (VelvoxAudioProcessor& processor, DialogOverlay& dialog);
         ~TopBar() override;
@@ -50,31 +52,45 @@ namespace velvox::ui
         void resized() override;
         void refresh();
 
-        std::function<void (View)> onViewChange;
-        void setView (View v);                 // shows the tab as active (no callback)
-        void selectView (View v);              // as a click on the tab
-        View getView() const noexcept { return view; }
+        std::function<void (Mode)> onModeChange;
+        std::function<void (Tab)> onTabChange;
+        void setMode (Mode m);                 // shows the state (no callback)
+        void selectMode (Mode m);              // as a click
+        void setTab (Tab t);
+        void selectTab (Tab t);
+        Mode getMode() const noexcept { return mode; }
+        Tab getTab() const noexcept { return tab; }
 
+        // Clicking the preset name opens the preset list (the editor shows it); without a
+        // handler a plain menu opens
+        std::function<void()> onPresetList;
         std::function<void()> onHelp;
+
         juce::TextButton& getHelpButton() noexcept { return help; }
+        juce::TextButton& getPresetButton() noexcept { return presetButton; }
+        juce::TextButton& getPrevButton() noexcept { return prev; }
+        juce::TextButton& getNextButton() noexcept { return next; }
+        juce::Button& getModeButton (Mode m) noexcept { return m == Mode::simple ? *modeButtons[0] : *modeButtons[1]; }
+        juce::Button& getTabButton (Tab t) noexcept { return t == Tab::autoMix ? *tabs[0] : *tabs[1]; }
         juce::Rectangle<int> getPresetArea() const;
-        juce::Rectangle<int> getCompareArea() const;   // A / B and copy
-        juce::Rectangle<int> getModeArea() const;      // the three tabs
+        juce::Rectangle<int> getModeArea() const;      // SIMPEL | ADVANCED
+        juce::Rectangle<int> getTabArea() const;       // AUTO MIX | VOCAL CHECK
         juce::Rectangle<int> getBypassArea() const { return bypass.getBounds(); }
+
+        // Save the current settings as a user preset (asks for a name)
+        void requestSave();
 
     private:
         void showPresetMenu();
-        void showPresetActions();
-        void requestSave();
-        void requestDelete();
 
         VelvoxAudioProcessor& proc;
         DialogOverlay& dialog;
 
-        juce::TextButton presetButton, prev { juce::String::fromUTF8 ("\xe2\x80\xb9") }, next { juce::String::fromUTF8 ("\xe2\x80\xba") },
-                         save, actions;   // icon buttons (drawn in paintOverChildren): save, menu
-        juce::OwnedArray<juce::Button> tabs;   // CHAIN, AUTO MIX, VOCAL CHECK
-        View view = View::autoMix;
+        juce::TextButton presetButton, prev { juce::String::fromUTF8 ("\xe2\x80\xb9") }, next { juce::String::fromUTF8 ("\xe2\x80\xba") };
+        juce::OwnedArray<juce::Button> modeButtons;   // SIMPEL, ADVANCED
+        juce::OwnedArray<juce::Button> tabs;          // AUTO MIX, VOCAL CHECK
+        Mode mode = Mode::simple;
+        Tab tab = Tab::autoMix;
         Toggle bypass;
         juce::TextButton help { "?" };
         juce::Rectangle<int> logoArea;

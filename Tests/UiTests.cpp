@@ -52,7 +52,7 @@ namespace
     {
         Harness h;
         ui::ChainView view { h.proc };
-        ViewFixture() { view.setBounds (0, 0, 1408, ui::ChainView::preferredHeight); }
+        ViewFixture() { view.setBounds (0, 0, 886, ui::ChainView::preferredHeight); }
     };
 
     float value (Harness& h, const juce::String& id) { return h.proc.getState().getRawParameterValue (id)->load(); }
@@ -108,18 +108,21 @@ public:
             const auto comp = f.view.getTileBounds (ModuleId::comp);
             drag (f.view, comp.getCentre(), f.view.getLaneBounds().getCentre());
             expect (f.h.proc.getRouting() == before, "routing unchanged");
-            expect (f.view.getHint().contains ("Only Delay and Reverb"), "explains why");
+            expect (f.view.getHint().contains ("nur Delay und Reverb"), "explains why");
         }
 
-        beginTest ("Power dot bypasses the instance, send/insert switch toggles the mode");
+        beginTest ("Power switch bypasses the instance, \"Als Insert\" / \"Als Send\" switch the mode");
         {
             ViewFixture f;
             const float before = f.h.get (pid::compOn);
             click (f.view, f.view.getPowerBounds (ModuleId::comp).getCentre());
             expectEquals (f.h.get (pid::compOn), 1.0f - before);
 
-            click (f.view, f.view.getModeBounds (ModuleId::reverb).getCentre());
-            expect (f.h.proc.getRouting().isInsert (ModuleId::reverb), "reverb switched to insert");
+            const int reverb = dsp::selectionCode (ModuleId::reverb, 0);
+            const bool wasSend = f.h.proc.getRouting().isSend (ModuleId::reverb);
+            expect (f.view.performTileAction (reverb, wasSend ? ui::ChainView::TileAction::asInsert : ui::ChainView::TileAction::asSend));
+            expect (f.h.proc.getRouting().isSend (ModuleId::reverb) != wasSend, "reverb switched");
+            expect (! f.view.performTileAction ((int) ModuleId::comp, ui::ChainView::TileAction::asSend), "only delay / reverb can be sends");
         }
 
         beginTest ("Add, duplicate, remove, undo and redo instances");
@@ -145,10 +148,8 @@ public:
             expectEquals (r.indexOf (ModuleId::eq, 2), r.indexOf (ModuleId::eq, 1) + 1);
             expectWithinAbsoluteError (value (f.h, "midGain_3"), 6.0f, 0.01f, "settings copied");
 
-            // Remove via the hover button (mouse moves over the card first, like a real user)
-            const auto card = f.view.getTileBounds (ModuleId::eq, 1);
-            f.view.mouseMove (mouse (f.view, card.getCentre(), card.getCentre(), false));
-            click (f.view, f.view.getRemoveBounds (ModuleId::eq, 1).getCentre());
+            // Remove through the tile menu action
+            expect (f.view.performTileAction (dsp::selectionCode (ModuleId::eq, 1), ui::ChainView::TileAction::remove));
             expect (! f.h.proc.getRouting().contains (ModuleId::eq, 1), "EQ 2 removed");
             expect (value (f.h, "eqOn_2") < 0.5f, "removed instance is switched off");
 
@@ -163,7 +164,7 @@ public:
             f.view.insertModule (ModuleId::eq);
             expectEquals (f.h.proc.getRouting().countOf (ModuleId::eq), 4);
             expectEquals (f.view.insertModule (ModuleId::eq), -1, "no fifth EQ");
-            expect (f.view.getHint().contains ("All 4"));
+            expect (f.view.getHint().contains ("Alle 4"));
         }
 
         beginTest ("\"+\" between two cards and the add card open the browser for that position");
@@ -196,7 +197,7 @@ public:
 
             for (const auto& s : r0)
                 if (s.insert)
-                    expect (f.view.getTileBounds (s.id, s.instance).getWidth() >= ui::ChainView::minCardW - 0.01f,
+                    expect (f.view.getTileBounds (s.id, s.instance).getWidth() >= ui::ChainView::minTileW - 0.01f,
                             juce::String ("card width ") + dsp::moduleDisplayName (s.id));
             expect (f.view.getMaxScroll() > 0.0f, "13 modules do not fit: the row scrolls");
 
@@ -308,9 +309,9 @@ public:
             expectEquals (ed.getChainView().getSelected(), dsp::selectionCode (ModuleId::comp, 1), "its controls are open");
             expect (ed.getDetail() != nullptr);
 
-            // Reverb added at the end runs as a send
+            // Modules from the browser are inserts, also delay / reverb (spec 8 Q2; "Als Send" is in the tile menu)
             ed.getBrowser().onChoose (ModuleId::reverb, 99, true);
-            expect (h.proc.getRouting().isSend (ModuleId::reverb, 1), "reverb 2 is a send");
+            expect (h.proc.getRouting().isInsert (ModuleId::reverb, 1), "reverb 2 is an insert");
         }
 
         beginTest ("Selecting tiles opens the matching Pro panel (every module and repeated instances)");

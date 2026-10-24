@@ -978,9 +978,9 @@ public:
             std::unique_ptr<juce::AudioProcessorEditor> again (h.proc.createEditor());
             expect (! asVelvox (*again).getAnalysisOverlay().isOpen(), "not again after Später");
 
-            // The AUTO MIX view (opened by default) has the analyse button; it opens the progress card
-            expect (asVelvox (*again).getAutoMixView().isVisible() && asVelvox (*again).getAutoMixView().getAnalyseButton().isVisible(), "analyse visible in the AUTO MIX view");
-            click (asVelvox (*again).getAutoMixView().getAnalyseButton());
+            // Simple mode (opened by default) has "Vocal analysieren" under the spectrum; it opens the progress card
+            expect (asVelvox (*again).getSimpleView().isVisible() && asVelvox (*again).getSimpleView().getAnalyseButton().isVisible(), "analyse visible in Simple mode");
+            click (asVelvox (*again).getSimpleView().getAnalyseButton());
             auto& ov = asVelvox (*again).getAnalysisOverlay();
             expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::listening);
             click (ov.getSecondaryButton());   // Abbrechen
@@ -999,29 +999,26 @@ public:
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = asVelvox (*e);
             expect (! ed.getAnalysisOverlay().isOpen(), "overlay closed");
-            expect (! ed.isProMode(), "beginner");
+            expect (! ed.isAdvanced(), "Simple mode");
             const auto& report = h.proc.getAutoMix().getReport();
             expectEquals (ed.getAutoMixView().getNumStepRows(),
                           (int) (report.steps.size() + (size_t) report.notes.size() + (size_t) report.adjustments.size()));
-            expect (ed.getAutoMixView().getPreviousButton().isVisible(), "compare available");
+            expect (ed.getSimpleView().getBeforeButton().isVisible(), "Vorher / Nachher available");
             for (auto& key : report.changedModules)
                 if (auto m = dsp::moduleFromKey (key))
                     expect (ed.getChainView().isAutoMixModule (*m), "auto badge on " + key);
 
-            // Compare buttons switch the real parameters
-            click (ed.getAutoMixView().getPreviousButton());
+            // Vorher / Nachher switch the real parameters
+            click (ed.getSimpleView().getBeforeButton());
             expect (h.proc.getAutoMix().isShowingPrevious(), "previous");
-            click (ed.getAutoMixView().getMixButton());
+            click (ed.getSimpleView().getAfterButton());
             expect (! h.proc.getAutoMix().isShowingPrevious(), "mix");
 
-            // "Original" is the latency-compensated, level-matched bypass
-            click (ed.getAutoMixView().getOriginalButton());
-            expect (h.get (pid::bypass) > 0.5f, "original on");
-            click (ed.getAutoMixView().getOriginalButton());
-            expect (h.get (pid::bypass) < 0.5f, "original off");
-
-            ed.getChainView().onSelect ((int) ModuleId::comp);
-            expect (ed.isProMode() && ed.getDetail() != nullptr, "module card opens the module");
+            // A step of the report opens its module in Advanced mode
+            ed.showMixDetails();
+            expect (ed.isMixDetailsOpen());
+            ed.getAutoMixView().onOpenModule ((int) ModuleId::comp);
+            expect (ed.isAdvanced() && ed.getDetail() != nullptr && ! ed.isMixDetailsOpen(), "a step opens the module");
         }
     }
 };

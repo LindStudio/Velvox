@@ -15,4 +15,5 @@ namespace velvox::statekeys
     inline const juce::Identifier routing      { "routing" };
     inline const juce::Identifier uiMode       { "uiMode" };   // "beginner" / "pro" - view only, never affects audio
     inline const juce::Identifier uiHidden     { "uiHiddenModules" }; // module keys hidden from the chain view - view only
+    inline const juce::Identifier uiTab        { "uiTab" };    // 0.6: "automix" / "check" - view only (uiMode then is the Simple / Advanced mode)
 }

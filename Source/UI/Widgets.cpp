@@ -549,6 +549,81 @@ namespace velvox::ui
         repaint();
     }
 
+    //==========================================================================
+    void CompactMeters::setLevels (float inDb, float outDb, float inLufs, float outLufs, bool clipped)
+    {
+        // Peaks fall back smoothly (about 20 dB per second at 60 frames)
+        const float in[2] { inDb, outDb };
+        bool changed = clipped && ! clipLatched;
+        for (int i = 0; i < 2; ++i)
+        {
+            const float next = std::max (in[i], level[(size_t) i] - 0.35f);
+            changed = changed || std::abs (next - level[(size_t) i]) > 0.1f;
+            level[(size_t) i] = next;
+        }
+        changed = changed || std::abs (inLufs - lufs[0]) > 0.05f || std::abs (outLufs - lufs[1]) > 0.05f;
+        lufs = { inLufs, outLufs };
+        clipLatched = clipLatched || clipped;
+        if (changed)
+            repaint();
+    }
+
+    void CompactMeters::paint (juce::Graphics& g)
+    {
+        const auto lufsText = [] (float v) { return v <= -70.0f ? juce::String ("-") : juce::String (v, 1); };
+        const auto drawBar = [&] (juce::Rectangle<float> track, float db, bool isOut)
+        {
+            g.setColour (colours::tickOff);
+            g.fillRoundedRectangle (track, track.getHeight() * 0.5f);
+            const float fraction = juce::jlimit (0.0f, 1.0f, juce::jmap (db, -60.0f, 0.0f, 0.0f, 1.0f));
+            if (fraction > 0.0f)
+            {
+                g.setGradientFill (auroraGradient (track.getTopLeft(), track.getTopRight(), 0.9f));
+                g.fillRoundedRectangle (track.withWidth (std::max (track.getHeight(), track.getWidth() * fraction)), track.getHeight() * 0.5f);
+            }
+            if (isOut && clipLatched)
+            {
+                g.setColour (colours::warning);
+                g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre ({ track.getRight() + 5.0f, track.getCentreY() }));
+            }
+        };
+
+        auto r = getLocalBounds().toFloat();
+        if (stacked)
+        {
+            // IN / OUT one above the other: name and LUFS on a line, the bar under it
+            const float rowH = r.getHeight() / 2.0f;
+            for (int i = 0; i < 2; ++i)
+            {
+                auto row = r.removeFromTop (rowH).reduced (0.0f, 6.0f);
+                auto line = row.removeFromTop (16.0f);
+                g.setColour (colours::textFaint);
+                g.setFont (semiBold (9.0f, 0.15f));
+                g.drawText (i == 0 ? "IN" : "OUT", line, juce::Justification::centredLeft, false);
+                g.setColour (colours::textSoft);
+                g.setFont (monoFont (11.0f));
+                g.drawText (lufsText (lufs[(size_t) i]), line, juce::Justification::centredRight, false);
+                drawBar (row.withSizeKeepingCentre (row.getWidth() - 10.0f, 5.0f).withX (row.getX()), level[(size_t) i], i == 1);
+            }
+            return;
+        }
+
+        // Side by side: IN [bar] -23.4 LUFS     OUT [bar] -14.2 LUFS
+        const float half = r.getWidth() / 2.0f;
+        for (int i = 0; i < 2; ++i)
+        {
+            auto area = r.removeFromLeft (half).reduced (i == 0 ? 0.0f : 12.0f, 0.0f).withTrimmedRight (i == 0 ? 12.0f : 0.0f);
+            g.setColour (colours::textFaint);
+            g.setFont (semiBold (9.5f, 0.15f));
+            g.drawText (i == 0 ? "IN" : "OUT", area.removeFromLeft (34.0f), juce::Justification::centredLeft, false);
+            auto text = area.removeFromRight (84.0f);
+            g.setColour (colours::textSoft);
+            g.setFont (monoFont (11.0f));
+            g.drawText (lufsText (lufs[(size_t) i]) + (lufs[(size_t) i] > -70.0f ? " LUFS" : ""), text, juce::Justification::centredRight, false);
+            drawBar (area.reduced (4.0f, 0.0f).withSizeKeepingCentre (area.getWidth() - 18.0f, 6.0f), level[(size_t) i], i == 1);
+        }
+    }
+
     float LevelMeter::getPeakDb() const noexcept
     {
         return juce::Decibels::gainToDecibels (std::max (hold[0], hold[1]), -100.0f);

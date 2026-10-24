@@ -218,6 +218,26 @@ namespace velvox::ui
         juce::Colour hue = colours::teal;
     };
 
+    // Small IN / OUT meters of the 0.6 shell: peak bar + short-term loudness for the input and the
+    // output, a clip lamp on the output (click resets it). Laid out side by side (Simple mode, bottom
+    // strip) or stacked (Advanced, end of the chain row).
+    class CompactMeters final : public juce::Component, public juce::SettableTooltipClient
+    {
+    public:
+        void setStacked (bool shouldStack) { stacked = shouldStack; repaint(); }
+        // Peak levels in dBFS, loudness in LUFS; `clipped` latches the lamp
+        void setLevels (float inDb, float outDb, float inLufs, float outLufs, bool clipped);
+        float getInputDb() const noexcept { return level[0]; }
+        float getOutputDb() const noexcept { return level[1]; }
+        bool isClipLatched() const noexcept { return clipLatched; }
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override { clipLatched = false; repaint(); }
+
+    private:
+        std::array<float, 2> level { -100.0f, -100.0f }, lufs { -100.0f, -100.0f };
+        bool clipLatched = false, stacked = false;
+    };
+
     // Stereo peak meter with hold, clip lamp and an optional LUFS read-out
     class LevelMeter final : public juce::Component, public juce::SettableTooltipClient
     {

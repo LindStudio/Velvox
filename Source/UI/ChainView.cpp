@@ -3,7 +3,6 @@
 #include "../StateKeys.h"
 #include "UserSettings.h"
 #include "Icons.h"
-#include <set>
 
 namespace velvox::ui
 {
@@ -11,18 +10,21 @@ namespace velvox::ui
 
     namespace
     {
-        constexpr float corner = radius::tile;
-        constexpr float arrowW = 36.0f;
-        constexpr float edgeFade = 44.0f;
-        constexpr float plusR = 11.0f;
-        constexpr int hitLeftArrow = -3, hitRightArrow = -4, hitAddCard = -5, hitOutput = -100, hitInput = -101, hitNothing = -2;
+        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
+
+        constexpr float corner = 10.0f;
+        constexpr float plusR = 9.0f;
+        constexpr float tileGap = 4.0f;
+        constexpr int hitAddCard = -5, hitOutput = -100, hitNothing = -2;
 
         bool canBeSend (ModuleId id) { return dsp::Routing::canBeSend (id); }
 
-        void drawPowerGlyph (juce::Graphics& g, juce::Rectangle<float> r, bool on, float hover, juce::Colour hue = colours::cyan)
+        void drawPowerGlyph (juce::Graphics& g, juce::Rectangle<float> r, bool on, float hover, juce::Colour hue)
         {
             const float size = std::min (r.getWidth(), r.getHeight());
             r = r.withSizeKeepingCentre (size, size);
+            if (on)
+                drawGlow (g, r.getCentre(), size * 0.9f, 0.3f, hue);
             g.setColour (colours::background.withAlpha (0.9f));
             g.fillEllipse (r);
             g.setColour (on ? hue.withAlpha (0.75f) : colours::line.brighter (0.35f + 0.4f * hover));
@@ -35,18 +37,7 @@ namespace velvox::ui
             p.startNewSubPath (c.x, c.y - rad * 1.3f);
             p.lineTo (c.x, c.y - rad * 0.2f);
             g.setColour (on ? hue : colours::textFaint.brighter (0.3f * hover));
-            g.strokePath (p, juce::PathStrokeType (1.7f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        }
-
-        void drawChevron (juce::Graphics& g, juce::Point<float> c, bool pointsRight, juce::Colour colour)
-        {
-            juce::Path p;
-            const float s = pointsRight ? 1.0f : -1.0f;
-            p.startNewSubPath (c.x - 3.5f * s, c.y - 7.0f);
-            p.lineTo (c.x + 3.5f * s, c.y);
-            p.lineTo (c.x - 3.5f * s, c.y + 7.0f);
-            g.setColour (colour);
-            g.strokePath (p, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath (p, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
         void drawPlus (juce::Graphics& g, juce::Point<float> c, float size, juce::Colour colour, float thickness = 1.8f)
@@ -56,6 +47,36 @@ namespace velvox::ui
             g.fillRoundedRectangle (juce::Rectangle<float> (thickness, size).withCentre (c), thickness * 0.5f);
         }
 
+        void setValue (juce::AudioProcessorValueTreeState& apvts, const juce::String& id, float value)
+        {
+            if (auto* p = apvts.getParameter (id))
+            {
+                const float n = p->convertTo0to1 (value);
+                if (std::abs (n - p->getValue()) < 1.0e-7f)
+                    return;
+                p->beginChangeGesture();
+                p->setValueNotifyingHost (n);
+                p->endChangeGesture();
+            }
+        }
+
+        float getValue (juce::AudioProcessorValueTreeState& apvts, const juce::String& id)
+        {
+            auto* v = apvts.getRawParameterValue (id);
+            return v != nullptr ? v->load() : 0.0f;
+        }
+
+        // Instance-1 IDs of every parameter of a module
+        juce::StringArray moduleBaseIds (ModuleId id)
+        {
+            juce::StringArray ids;
+            for (const auto& spec : getParameterSpecs())
+                if (moduleOfParameter (spec) == id && dsp::splitInstanceParamId (spec.id).second == 0)
+                    ids.add (spec.id);
+            return ids;
+        }
+
+        const juce::String chainEdit = de ("Kette bearbeiten");
     }
 
     const char* ChainView::onParamFor (ModuleId id)
@@ -81,35 +102,15 @@ namespace velvox::ui
         return pid::eqOn;
     }
 
-    juce::String ChainView::cardName (const dsp::Routing& routing, ModuleId id, int instance)
+    juce::String ChainView::cardName (const dsp::Routing& r, ModuleId id, int instance)
     {
         const juce::String name (dsp::moduleDisplayName (id));
-        return instance > 0 || routing.countOf (id) > 1 ? name + " " + juce::String (instance + 1) : name;
+        return instance > 0 || r.countOf (id) > 1 ? name + " " + juce::String (instance + 1) : name;
     }
 
     ChainView::ChainView (VelvoxAudioProcessor& p) : proc (p)
     {
         routing = proc.getRouting();
-        setTooltip ("Click a module to open it, drag it to change the order. Hover between two modules and click + to insert one there. "
-                    "Drag Delay or Reverb onto the lower lane to run them in parallel. Right-click for more options.");
-
-        addButton.setButtonText ("+  Add module");
-        addButton.setTooltip ("Open the module browser and add a module at the end of the chain. "
-                              "The same module can be used several times - each instance has its own settings.");
-        addButton.onClick = [this] { if (onAddModule) onAddModule (numSerial, true); };
-        addAndMakeVisible (addButton);
-
-        undoButton.setButtonText ("Undo");
-        undoButton.setTooltip ("Undo the last chain change (add, remove, duplicate, move)");
-        undoButton.onClick = [this] { undo(); };
-        redoButton.setButtonText ("Redo");
-        redoButton.setTooltip ("Redo");
-        redoButton.onClick = [this] { redo(); };
-        chainMenuButton.setButtonText (juce::String::fromUTF8 ("\xe2\x8b\xaf"));   // midline ellipsis
-        chainMenuButton.setTooltip ("Chain options: usual order, personal default chain");
-        chainMenuButton.onClick = [this] { showChainMenu(); };
-        for (auto* b : { &undoButton, &redoButton, &chainMenuButton })
-            addAndMakeVisible (*b);
     }
 
     bool ChainView::isOn (ModuleId id, int instance) const
@@ -119,65 +120,40 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    // Geometry
+    // Geometry: [ serial tiles | + ] ¦ [ send tiles ]  ...  [ OUTPUT ]
+
+    juce::Rectangle<float> ChainView::outputArea() const
+    {
+        return getLocalBounds().toFloat().removeFromRight (outputW);
+    }
 
     juce::Rectangle<float> ChainView::rowArea() const
     {
-        return getLocalBounds().toFloat().reduced (endW + 6.0f, 0.0f).withHeight (cardH);
+        return getLocalBounds().toFloat().withTrimmedRight (outputW + tileGap * 2.0f);
     }
 
-    // Send zone at the end of the row (behind the add column and a divider); at least one
-    // column wide, so a column can always be dropped there
+    juce::Rectangle<float> ChainView::addCardArea() const
+    {
+        const auto row = rowArea();
+        return { row.getX() + (float) numSerial * (serialW + tileGap) - scroll.current, row.getY(), addTileW, row.getHeight() };
+    }
+
+    // Send zone behind the add tile and a divider; at least one tile wide, so a tile can always be dropped there
     juce::Rectangle<float> ChainView::laneArea() const
     {
-        const auto row = rowArea();
-        const float x = row.getX() + (float) numSerial * (serialW + gap) + addCardW + sendGap * 0.5f - scroll.current;
-        return { x, row.getY(), sendGap * 0.5f + (float) std::max (1, numSends) * (serialW + gap), row.getHeight() };
-    }
-
-    juce::Rectangle<float> ChainView::leftArrowArea() const  { return rowArea().withWidth (arrowW); }
-    juce::Rectangle<float> ChainView::rightArrowArea() const { return rowArea().withTrimmedLeft (rowArea().getWidth() - arrowW); }
-
-    juce::Rectangle<float> ChainView::scrollTrack() const
-    {
-        const auto row = rowArea();
-        return { row.getX(), row.getBottom() + 5.0f, row.getWidth(), 4.0f };
-    }
-
-    float ChainView::cardWidth (int n) const
-    {
-        // Serial columns and the send zone (at least one column) share the row equally
-        const int columns = n + std::max (1, numSends);
-        const float vw = rowArea().getWidth() - addCardW - sendGap;
-        const float fit = vw / (float) std::max (1, columns);
-        return juce::jlimit (minCardW, maxCardW, fit);
+        const auto add = addCardArea();
+        return { add.getRight() + tileGap, add.getY(), sendGap + (float) std::max (1, numSends) * (serialW + tileGap), add.getHeight() };
     }
 
     float ChainView::contentWidth() const
     {
-        return (float) numSerial * (serialW + gap) + addCardW + sendGap + (float) std::max (1, numSends) * (serialW + gap);
+        return (float) numSerial * (serialW + tileGap) + addTileW + tileGap + sendGap + (float) std::max (1, numSends) * (serialW + tileGap);
     }
 
     float ChainView::getMaxScroll()
     {
         layoutTiles();
         return std::max (0.0f, contentWidth() - rowArea().getWidth());
-    }
-
-    juce::Rectangle<float> ChainView::scrollThumb()
-    {
-        const auto track = scrollTrack();
-        const float content = std::max (1.0f, contentWidth());
-        const float maxScroll = std::max (0.0f, content - rowArea().getWidth());
-        const float w = std::max (48.0f, track.getWidth() * rowArea().getWidth() / content);
-        const float x = maxScroll > 0.0f ? track.getX() + (track.getWidth() - w) * scroll.current / maxScroll : track.getX();
-        return track.withX (x).withWidth (w);
-    }
-
-    juce::Rectangle<float> ChainView::addCardArea() const
-    {
-        const auto row = rowArea();
-        return { row.getX() + (float) numSerial * (serialW + gap) - scroll.current, row.getY(), addCardW, row.getHeight() };
     }
 
     juce::Rectangle<float> ChainView::getAddCardBounds()
@@ -197,7 +173,11 @@ namespace velvox::ui
 
         numSerial = (int) serial.size();
         numSends = (int) sends.size();
-        serialW = cardWidth (numSerial);
+        // Tiles shrink a little before the row starts to scroll
+        const int columns = numSerial + std::max (1, numSends);
+        const float fit = (row.getWidth() - addTileW - sendGap - tileGap * (float) (columns + 1)) / (float) std::max (1, columns);
+        serialW = juce::jlimit (minTileW, tileW, fit);
+
         const float maxScroll = std::max (0.0f, contentWidth() - row.getWidth());
         if (scroll.target > maxScroll || scroll.current > maxScroll)
         {
@@ -207,19 +187,15 @@ namespace velvox::ui
 
         for (int i = 0; i < numSerial; ++i)
             tiles.push_back ({ serial[(size_t) i]->id, serial[(size_t) i]->instance,
-                               { row.getX() + (float) i * (serialW + gap) - scroll.current, row.getY(), serialW, row.getHeight() },
+                               { row.getX() + (float) i * (serialW + tileGap) - scroll.current, row.getY(), serialW, row.getHeight() },
                                false, i + 1 });
 
-        // Sends: columns in the send zone behind the divider
-        float x = laneArea().getX() + sendGap * 0.5f;
+        float x = laneArea().getX() + sendGap;
         for (auto* s : sends)
         {
             tiles.push_back ({ s->id, s->instance, { x, row.getY(), serialW, row.getHeight() }, true, 0 });
-            x += serialW + gap;
+            x += serialW + tileGap;
         }
-
-        inBox = { 0.0f, row.getY(), endW, row.getHeight() };
-        outBox = { (float) getWidth() - endW, row.getY(), endW, row.getHeight() };
     }
 
     const ChainView::Tile* ChainView::findTile (ModuleId id, int instance) const
@@ -230,6 +206,22 @@ namespace velvox::ui
         return nullptr;
     }
 
+    // Tile: name (top), icon (middle), on/off (bottom) - in this order
+    juce::Rectangle<float> ChainView::nameBounds (const Tile& t) const
+    {
+        return t.bounds.withHeight (nameH).reduced (6.0f, 0.0f).translated (0.0f, 4.0f);
+    }
+
+    juce::Rectangle<float> ChainView::iconBounds (const Tile& t) const
+    {
+        return juce::Rectangle<float> (iconH - 6.0f, iconH - 6.0f).withCentre ({ t.bounds.getCentreX(), t.bounds.getY() + 4.0f + nameH + iconH * 0.5f });
+    }
+
+    juce::Rectangle<float> ChainView::powerBounds (const Tile& t) const
+    {
+        return juce::Rectangle<float> (18.0f, 18.0f).withCentre ({ t.bounds.getCentreX(), t.bounds.getY() + 4.0f + nameH + iconH + powerH * 0.5f });
+    }
+
     juce::Rectangle<float> ChainView::getTileBounds (ModuleId id, int instance)
     {
         layoutTiles();
@@ -238,210 +230,34 @@ namespace velvox::ui
         return {};
     }
 
+    juce::Rectangle<float> ChainView::getNameBounds (ModuleId id, int instance)
+    {
+        layoutTiles();
+        if (auto* t = findTile (id, instance))
+            return nameBounds (*t);
+        return {};
+    }
+
+    juce::Rectangle<float> ChainView::getIconBounds (ModuleId id, int instance)
+    {
+        layoutTiles();
+        if (auto* t = findTile (id, instance))
+            return iconBounds (*t);
+        return {};
+    }
+
     juce::Rectangle<float> ChainView::getPowerBounds (ModuleId id, int instance)
     {
         layoutTiles();
         if (auto* t = findTile (id, instance))
-            return dotBounds (*t);
+            return powerBounds (*t);
         return {};
-    }
-
-    juce::Rectangle<float> ChainView::getModeBounds (ModuleId id, int instance)
-    {
-        layoutTiles();
-        if (auto* t = findTile (id, instance); t != nullptr && canBeSend (id))
-            return modeBounds (*t);
-        return {};
-    }
-
-    juce::Rectangle<float> ChainView::getRemoveBounds (ModuleId id, int instance)
-    {
-        layoutTiles();
-        if (auto* t = findTile (id, instance))
-            return removeBounds (*t);
-        return {};
-    }
-
-    juce::Rectangle<float> ChainView::getDuplicateBounds (ModuleId id, int instance)
-    {
-        layoutTiles();
-        if (auto* t = findTile (id, instance))
-            return duplicateBounds (*t);
-        return {};
-    }
-
-    // Column geometry: power + name row, icon, two knob cells, footer
-    juce::Rectangle<float> ChainView::dotBounds (const Tile& t) const
-    {
-        return juce::Rectangle<float> (24.0f, 24.0f).withCentre ({ t.bounds.getX() + 20.0f, t.bounds.getY() + nameH * 0.5f });
-    }
-
-    juce::Rectangle<float> ChainView::modeBounds (const Tile& t) const
-    {
-        // SEND / INSERT pill of delay and reverb, top right of the icon area
-        return { t.bounds.getRight() - 8.0f - 48.0f, t.bounds.getY() + nameH + 4.0f, 48.0f, 18.0f };
-    }
-
-    juce::Rectangle<float> ChainView::footerButton (const Tile& t, int slot) const
-    {
-        const auto footer = t.bounds.withTrimmedTop (t.bounds.getHeight() - footerH).reduced (6.0f, 5.0f);
-        const float w = footer.getWidth() / 4.0f;
-        return juce::Rectangle<float> (w, footer.getHeight()).withX (footer.getX() + w * (float) slot).withY (footer.getY())
-                   .withSizeKeepingCentre (std::min (w, 24.0f), 22.0f);
-    }
-
-    juce::Rectangle<float> ChainView::removeBounds (const Tile& t) const    { return footerButton (t, 2); }
-    juce::Rectangle<float> ChainView::duplicateBounds (const Tile& t) const { return footerButton (t, 1); }
-
-    juce::Rectangle<float> ChainView::getMoveLeftBounds (ModuleId id, int instance)
-    {
-        layoutTiles();
-        if (auto* t = findTile (id, instance))
-            return footerButton (*t, 0);
-        return {};
-    }
-
-    juce::Rectangle<float> ChainView::getMoveRightBounds (ModuleId id, int instance)
-    {
-        layoutTiles();
-        if (auto* t = findTile (id, instance))
-            return footerButton (*t, 3);
-        return {};
-    }
-
-    std::pair<const char*, const char*> ChainView::columnParams (ModuleId id)
-    {
-        switch (id)
-        {
-            case ModuleId::ride:    return { pid::rideTarget, pid::rideResponse };
-            case ModuleId::smooth:  return { pid::smoothAmount, pid::smoothSensitivity };
-            case ModuleId::smash:   return { pid::smashAmount, pid::smashBlend };
-            case ModuleId::choir:   return { pid::choirMix, pid::choirWidth };
-            case ModuleId::pulse:   return { pid::pulseDepth, pid::pulseRate };
-            case ModuleId::chop:    return { pid::chopDepth, pid::chopRate };
-            case ModuleId::delay:   return { pid::delayFeedback, pid::delayMix };
-            case ModuleId::reverb:  return { pid::reverbDecay, pid::reverbMix };
-            case ModuleId::eq:      return { pid::hpfFreq, pid::highGain };
-            case ModuleId::comp:    return { pid::compThreshold, pid::compRatio };
-            case ModuleId::deess:   return { pid::deessThreshold, pid::deessRange };
-            case ModuleId::sat:     return { pid::satDrive, pid::satMix };
-            case ModuleId::doubler: return { pid::doublerWidth, pid::doublerMix };
-            case ModuleId::pitch:   return { pid::pitchSemitones, pid::pitchMix };
-            case ModuleId::check:   return { nullptr, nullptr };
-        }
-        return { nullptr, nullptr };
-    }
-
-    std::pair<juce::String, juce::String> ChainView::columnLabels (ModuleId id)
-    {
-        switch (id)
-        {
-            case ModuleId::ride:    return { "Target", "Speed" };
-            case ModuleId::smooth:  return { "Amount", "Sharpness" };
-            case ModuleId::smash:   return { "Smash", "Mix" };
-            case ModuleId::choir:   return { "Blend", "Width" };
-            case ModuleId::pulse:   return { "Depth", "Rate" };
-            case ModuleId::chop:    return { "Gate", "Rate" };
-            case ModuleId::delay:   return { "Feedback", "Mix" };
-            case ModuleId::reverb:  return { "Decay", "Mix" };
-            case ModuleId::eq:      return { "Low Cut", "Highs" };
-            case ModuleId::comp:    return { "Threshold", "Ratio" };
-            case ModuleId::deess:   return { "Threshold", "Range" };
-            case ModuleId::sat:     return { "Drive", "Mix" };
-            case ModuleId::doubler: return { "Width", "Mix" };
-            case ModuleId::pitch:   return { "Pitch", "Mix" };
-            case ModuleId::check:   return {};
-        }
-        return {};
-    }
-
-    juce::Rectangle<float> ChainView::getArrowBounds (bool right)
-    {
-        layoutTiles();
-        const float maxScroll = std::max (0.0f, contentWidth() - rowArea().getWidth());
-        if (right)
-            return scroll.target < maxScroll - 0.5f ? rightArrowArea() : juce::Rectangle<float>();
-        return scroll.target > 0.5f ? leftArrowArea() : juce::Rectangle<float>();
-    }
-
-    juce::String ChainView::checkColumnNote()
-    {
-        return juce::String::fromUTF8 ("Diagnose\nohne Klang-\nver\xc3\xa4nderung");
-    }
-
-    Knob* ChainView::getColumnKnob (ModuleId id, int instance, int which)
-    {
-        updateColumnKnobs();
-        const auto it = columnKnobs.find (dsp::selectionCode (id, instance));
-        return it != columnKnobs.end() && juce::isPositiveAndBelow (which, 2) ? it->second[(size_t) which].get() : nullptr;
-    }
-
-    void ChainView::updateColumnKnobs()
-    {
-        layoutTiles();
-        const auto row = rowArea();
-        const float maxScroll = std::max (0.0f, contentWidth() - row.getWidth());
-        const float visibleLeft = row.getX() + (scroll.current > 0.5f ? arrowW : 0.0f);
-        const float visibleRight = row.getRight() - (scroll.current < maxScroll - 0.5f ? arrowW : 0.0f);
-
-        // Knobs for every column in the chain, none for columns that left it
-        std::set<int> present;
-        for (const auto& t : tiles)
-        {
-            present.insert (t.code());
-            auto& pair = columnKnobs[t.code()];
-            if (pair[0] == nullptr && columnParams (t.id).first != nullptr)
-            {
-                const auto params = columnParams (t.id);
-                const auto labels = columnLabels (t.id);
-                const auto hue = moduleColour (t.id);
-                pair[0] = std::make_unique<Knob> (proc.getState(), dsp::instanceParamId (params.first, t.instance).toRawUTF8(), labels.first, hue);
-                pair[1] = std::make_unique<Knob> (proc.getState(), dsp::instanceParamId (params.second, t.instance).toRawUTF8(), labels.second, hue);
-                for (auto& k : pair)
-                {
-                    k->setDialSize (48);
-                    // The wheel scrolls the chain (the slider passes it on to its parents)
-                    k->slider.setScrollWheelEnabled (false);
-                    addChildComponent (*k);
-                }
-            }
-
-            const auto onIt = onState.find (t.code());
-            const bool on = (onIt == onState.end() ? isOn (t.id, t.instance) : onIt->second)
-                            || (t.instance == 0 && macroEngaged[(size_t) t.id]);
-            // Only fully visible columns show their knobs, and never under a scroll arrow
-            // (the arrows are drawn by this component, the knobs would cover and catch them)
-            const bool shown = visibleLeft - 0.5f <= t.bounds.getX() && t.bounds.getRight() <= visibleRight + 0.5f
-                               && ! (dragging && dragTile >= 0 && tiles[(size_t) dragTile].code() == t.code());
-            for (int k = 0; k < 2; ++k)
-                if (auto& knob = pair[(size_t) k])
-                {
-                    const auto cell = juce::Rectangle<float> (t.bounds.getX() + 8.0f, t.bounds.getY() + nameH + iconH + knobCellH * (float) k,
-                                                              t.bounds.getWidth() - 16.0f, knobCellH);
-                    knob->setBounds (cell.toNearestInt());
-                    knob->setVisible (shown);
-                    knob->setAlpha (on ? 1.0f : 0.3f);
-                }
-        }
-        for (auto it = columnKnobs.begin(); it != columnKnobs.end();)
-            it = present.count (it->first) == 0 ? columnKnobs.erase (it) : std::next (it);
-
-        // Undo / redo / chain menu under the round "+" (they scroll with the add column)
-        const auto add = addCardArea();
-        const bool addShown = row.getX() - 0.5f <= add.getX() && add.getRight() <= row.getRight() + 0.5f;
-        auto stack = juce::Rectangle<float> (add.getCentreX() - 28.0f, add.getY() + nameH + iconH + 30.0f, 56.0f, 24.0f).toNearestInt();
-        for (auto* b : { &undoButton, &redoButton, &chainMenuButton })
-        {
-            b->setBounds (stack);
-            b->setVisible (addShown);
-            stack.translate (0, 30);
-        }
     }
 
     juce::Point<float> ChainView::gapCentre (int insertIndex) const
     {
         const auto row = rowArea();
-        const float x = row.getX() + (float) insertIndex * (serialW + gap) - gap * 0.5f - scroll.current;
+        const float x = row.getX() + (float) insertIndex * (serialW + tileGap) - tileGap * 0.5f - scroll.current;
         return { x, row.getCentreY() };
     }
 
@@ -450,12 +266,10 @@ namespace velvox::ui
         const auto row = rowArea();
         if (! row.contains (p) || dragging)
             return -1;
-        for (int i = 0; i <= numSerial; ++i)
+        for (int i = 1; i < numSerial; ++i)   // between two tiles (the ends have the + tile)
         {
             const auto c = gapCentre (i);
-            if (c.x < row.getX() - 1.0f || c.x > row.getRight() + 1.0f)
-                continue;
-            if (std::abs (p.x - c.x) <= 6.0f && std::abs (p.y - c.y) <= plusR + 6.0f)
+            if (std::abs (p.x - c.x) <= 5.0f && std::abs (p.y - c.y) <= plusR + 4.0f)
                 return i;
         }
         return -1;
@@ -464,28 +278,15 @@ namespace velvox::ui
     int ChainView::tileAt (juce::Point<float> p) const
     {
         const auto row = rowArea();
-        const float maxScroll = std::max (0.0f, contentWidth() - row.getWidth());
-
-        if (row.contains (p))
-        {
-            if (scroll.target > 0.5f && leftArrowArea().contains (p))
-                return hitLeftArrow;
-            if (scroll.target < maxScroll - 0.5f && rightArrowArea().contains (p))
-                return hitRightArrow;
-        }
-
-        for (int i = 0; i < (int) tiles.size(); ++i)
-        {
-            const auto& t = tiles[(size_t) i];
-            if (t.bounds.contains (p) && (t.inLane || row.contains (p)))
-                return i;
-        }
-        if (row.contains (p) && addCardArea().contains (p))
-            return hitAddCard;
-        if (outBox.contains (p))
+        if (outputArea().contains (p))
             return hitOutput;
-        if (inBox.contains (p))
-            return hitInput;
+        if (! row.contains (p))
+            return hitNothing;
+        for (int i = 0; i < (int) tiles.size(); ++i)
+            if (tiles[(size_t) i].bounds.contains (p))
+                return i;
+        if (addCardArea().contains (p))
+            return hitAddCard;
         return hitNothing;
     }
 
@@ -537,18 +338,15 @@ namespace velvox::ui
     {
         layoutTiles();
         const auto* t = findTile (id, instance);
-        if (t == nullptr || t->inLane)
+        if (t == nullptr)
             return;
-
-        // Content position of the card; keep a margin so it does not sit under the arrows
         const auto row = rowArea();
         const float x = t->bounds.getX() + scroll.current - row.getX();
-        const float margin = getMaxScroll() > 0.0f ? arrowW : 0.0f;
         float target = scroll.target;
-        if (x - margin < target)
-            target = x - margin;
-        else if (x + serialW + margin > target + row.getWidth())
-            target = x + serialW + margin - row.getWidth();
+        if (x < target)
+            target = x;
+        else if (x + serialW > target + row.getWidth())
+            target = x + serialW - row.getWidth();
         if (std::abs (target - scroll.target) > 0.5f)
             scrollTo (target, animate);
     }
@@ -565,7 +363,7 @@ namespace velvox::ui
         if (code >= 0)
         {
             if (getWidth() > 0)
-                scrollToShow (dsp::selectionModule (code), dsp::selectionInstance (code), isShowing());   // glide when visible
+                scrollToShow (dsp::selectionModule (code), dsp::selectionInstance (code), isShowing());
             else
                 pendingReveal = true;
         }
@@ -580,13 +378,13 @@ namespace velvox::ui
             return;
         }
         const float delta = std::abs (wheel.deltaX) > std::abs (wheel.deltaY) ? wheel.deltaX : wheel.deltaY;
-        scrollTo (scroll.target - delta * 420.0f * (wheel.isReversed ? -1.0f : 1.0f));
+        scrollTo (scroll.target - delta * 360.0f * (wheel.isReversed ? -1.0f : 1.0f));
     }
 
     void ChainView::showHint (const juce::String& text)
     {
         hint = text;
-        hintUntil = juce::Time::getMillisecondCounter() + 4500;
+        hintUntil = juce::Time::getMillisecondCounter() + 3500;
         repaint();
     }
 
@@ -599,22 +397,15 @@ namespace velvox::ui
     void ChainView::refresh()
     {
         const bool bypassedNow = proc.getState().getRawParameterValue (pid::bypass)->load() > 0.5f;
-        if (bypassedNow != globalBypass)
-        {
-            globalBypass = bypassedNow;
-            repaint();
-        }
+        bool changed = bypassedNow != globalBypass;
+        globalBypass = bypassedNow;
 
-        bool changed = false;
         const auto r = proc.getRouting();
         if (r != routing)
         {
             routing = r;
             changed = true;
         }
-
-        undoButton.setEnabled (canUndo());
-        redoButton.setEnabled (canRedo());
 
         const auto engaged = dsp::modulesEngagedByMacros (proc.readSettings(), proc.readMacros());
         for (int i = 0; i < dsp::numModules; ++i)
@@ -644,11 +435,8 @@ namespace velvox::ui
             changed = true;
         }
 
-        if (changed || columnKnobs.size() != routing.size())
-        {
-            updateColumnKnobs();
+        if (changed)
             repaint();
-        }
     }
 
     void ChainView::tick()
@@ -662,11 +450,11 @@ namespace velvox::ui
                 scrollToShow (dsp::selectionModule (selected), dsp::selectionInstance (selected), false);
         }
 
-        // Dragging a card close to an edge of the row scrolls it along
-        if (dragging && dragTile >= 0 && ! laneArea().expanded (0.0f, 10.0f).contains (dragPos))
+        // Dragging a tile close to an edge of the row scrolls it along
+        if (dragging && dragTile >= 0)
         {
             const auto row = rowArea();
-            constexpr float zone = 64.0f, maxSpeed = 16.0f;
+            constexpr float zone = 48.0f, maxSpeed = 12.0f;
             float speed = 0.0f;
             if (dragPos.x < row.getX() + zone)
                 speed = -maxSpeed * juce::jlimit (0.0f, 1.0f, (row.getX() + zone - dragPos.x) / zone);
@@ -696,65 +484,11 @@ namespace velvox::ui
         moved = gapGlow.tick (0.22f) || moved;
 
         if (moved)
-        {
-            updateColumnKnobs();
             repaint();
-        }
     }
 
     //==========================================================================
     // Drawing
-
-    void ChainView::drawPort (juce::Graphics& g, juce::Rectangle<float> box, bool isOutput) const
-    {
-        // Input and output: slim end caps of the signal path with a direction arrow
-        const bool isSel = isOutput && selected == outputTile;
-        const bool hov = isOutput && hovered == hitOutput;
-        g.setColour (isSel ? colours::teal.withAlpha (0.10f) : colours::panelInset);
-        g.fillRoundedRectangle (box, 8.0f);
-        g.setColour (isSel ? colours::teal.withAlpha (0.7f) : (hov ? colours::border.brighter (0.5f) : colours::border));
-        g.drawRoundedRectangle (box.reduced (0.5f), 8.0f, 1.0f);
-
-        const auto c = juce::Point<float> (box.getCentreX(), box.getY() + 22.0f);
-        juce::Path arrow;
-        arrow.startNewSubPath (c.x - 6.0f, c.y);
-        arrow.lineTo (c.x + 5.0f, c.y);
-        arrow.startNewSubPath (c.x + 1.0f, c.y - 4.0f);
-        arrow.lineTo (c.x + 5.0f, c.y);
-        arrow.lineTo (c.x + 1.0f, c.y + 4.0f);
-        g.setColour (isSel ? colours::teal : colours::textMuted);
-        g.strokePath (arrow, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-        // Vertical caption
-        juce::Graphics::ScopedSaveState s (g);
-        g.addTransform (juce::AffineTransform::rotation (-juce::MathConstants<float>::halfPi, box.getCentreX(), box.getCentreY()));
-        g.setColour (isSel ? colours::textStrong : colours::textMuted);
-        g.setFont (semiBold (10.0f, 0.3f));
-        g.drawText (isOutput ? "OUTPUT" : "INPUT", juce::Rectangle<float> (box.getHeight() - 80.0f, box.getWidth()).withCentre (box.getCentre()),
-                    juce::Justification::centred, false);
-    }
-
-    void ChainView::drawAddCard (juce::Graphics& g, juce::Rectangle<float> r) const
-    {
-        // Round dashed "+" (opens the module browser with all modules)
-        const auto it = hoverGlow.find (-77);
-        const float hov = it != hoverGlow.end() ? it->second.current : 0.0f;
-        const auto c = juce::Point<float> (r.getCentreX(), r.getY() + nameH + iconH * 0.5f);
-        const auto circle = juce::Rectangle<float> (44.0f, 44.0f).withCentre (c);
-        g.setColour (colours::teal.withAlpha (0.04f + 0.06f * hov));
-        g.fillEllipse (circle);
-        juce::Path outline;
-        outline.addEllipse (circle.reduced (0.75f));
-        juce::Path dashed;
-        const float dashes[] { 4.0f, 4.0f };
-        juce::PathStrokeType (1.3f).createDashedStroke (dashed, outline, dashes, 2);
-        g.setColour ((hov > 0.5f ? colours::teal : colours::textDim).withAlpha (0.6f + 0.4f * hov));
-        g.fillPath (dashed);
-        drawPlus (g, c, 16.0f, hov > 0.5f ? colours::teal : colours::textSoft, 2.0f);
-        g.setColour (colours::textFaint);
-        g.setFont (semiBold (9.0f, 0.2f));
-        g.drawText ("ADD", juce::Rectangle<float> (r.getWidth(), 14.0f).withCentre ({ c.x, circle.getBottom() + 12.0f }), juce::Justification::centred, false);
-    }
 
     void ChainView::drawIcon (juce::Graphics& g, ModuleId id, juce::Rectangle<float> area, float alpha) const
     {
@@ -767,8 +501,7 @@ namespace velvox::ui
         }
         if (d == nullptr)
             return;
-        // Neon: a soft halo in the module colour, then the line art
-        drawGlow (g, area.getCentre(), area.getWidth() * 0.62f, 0.20f * alpha, moduleColour (id));
+        drawGlow (g, area.getCentre(), area.getWidth() * 0.62f, 0.18f * alpha, moduleColour (id));
         d->drawWithin (g, area, juce::RectanglePlacement::centred, alpha);
     }
 
@@ -776,153 +509,109 @@ namespace velvox::ui
     {
         const auto code = t.code();
         const auto onIt = onState.find (code);
-        const bool switchedOn = onIt != onState.end() && onIt->second;
+        const bool switchedOn = onIt != onState.end() ? onIt->second : isOn (t.id, t.instance);
         const bool engagedOnly = t.instance == 0 && macroEngaged[(size_t) t.id] && ! switchedOn;
         const bool on = switchedOn || engagedOnly;
         const bool isSelected = code == selected && ! ghost;
         const auto glowIt = hoverGlow.find (code);
         const float hov = ghost ? 0.0f : (glowIt != hoverGlow.end() ? glowIt->second.current : 0.0f);
         const auto hue = moduleColour (t.id);
-        const float content = on ? 1.0f : 0.3f;   // bypassed: content at 30 %
+        const float content = on ? 1.0f : 0.35f;   // bypassed: content dimmed, the switch stays clear
 
-        if (ghost)
-        {
-            drawGlow (g, r.getCentre().translated (0.0f, 10.0f), r.getWidth() * 0.7f, 0.6f, juce::Colours::black);
-            g.setColour (colours::raisedHi);
-            g.fillRoundedRectangle (r, 10.0f);
-            g.setColour (hue.withAlpha (0.6f));
-            g.drawRoundedRectangle (r.reduced (0.5f), 10.0f, 1.0f);
-        }
-
-        // Selected: wash of the module colour, 14 % at the top -> 2 % at the bottom
+        // Body
+        g.setColour (ghost ? colours::raisedHi : colours::panel);
+        g.fillRoundedRectangle (r, corner);
         if (isSelected)
         {
-            g.setGradientFill (juce::ColourGradient (hue.withAlpha (0.14f), r.getX(), r.getY(), hue.withAlpha (0.02f), r.getX(), r.getBottom(), false));
-            g.fillRect (r);
-            g.setColour (hue);
-            g.fillRect (r.withHeight (2.0f).reduced (10.0f, 0.0f));
+            g.setGradientFill (juce::ColourGradient (hue.withAlpha (0.18f), r.getX(), r.getY(), hue.withAlpha (0.03f), r.getX(), r.getBottom(), false));
+            g.fillRoundedRectangle (r, corner);
         }
         if (hov > 0.01f)
         {
-            g.setColour (juce::Colours::white.withAlpha (0.025f * hov));
-            g.fillRect (r);
+            g.setColour (juce::Colours::white.withAlpha (0.03f * hov));
+            g.fillRoundedRectangle (r, corner);
         }
-
-        // Divider to the next column
-        if (! ghost)
-        {
-            g.setColour (colours::borderSoft);
-            g.fillRect (juce::Rectangle<float> (r.getRight() - 1.0f, r.getY() + 10.0f, 1.0f, r.getHeight() - 20.0f));
-        }
+        g.setColour (isSelected ? hue.withAlpha (0.8f) : (ghost ? hue.withAlpha (0.6f) : colours::border.brighter (0.15f * hov)));
+        g.drawRoundedRectangle (r.reduced (0.5f), corner, isSelected ? 1.3f : 1.0f);
 
         Tile shifted = t;
         shifted.bounds = r;
 
-        // Power + name (44)
-        drawPowerGlyph (g, dotBounds (shifted), switchedOn, hov, hue);
-        const auto nameArea = juce::Rectangle<float> (dotBounds (shifted).getRight() + 6.0f, r.getY(), r.getRight() - 8.0f - dotBounds (shifted).getRight() - 6.0f, nameH);
+        // 1) Name
+        const auto nameArea = nameBounds (shifted);
         g.setColour ((on ? colours::textStrong : colours::textMuted));
-        g.setFont (semiBold (11.5f, 0.15f));
-        g.drawFittedText (cardName (routing, t.id, t.instance).toUpperCase(), nameArea.toNearestInt(), juce::Justification::centredLeft, 1, 0.75f);
+        g.setFont (semiBold (9.5f, 0.12f));
+        g.drawFittedText (cardName (routing, t.id, t.instance).toUpperCase(), nameArea.toNearestInt(), juce::Justification::centred, 1, 0.7f);
 
-        // Neon icon (78)
-        const auto iconArea = juce::Rectangle<float> (56.0f, 56.0f).withCentre ({ r.getCentreX(), r.getY() + nameH + iconH * 0.5f });
+        // 2) Icon (with a SEND badge on sends)
+        const auto iconArea = iconBounds (shifted);
         drawIcon (g, t.id, iconArea, content);
-
-        // Status under the icon: bypass / macro / auto-mix
-        juce::String status;
-        if (switchedOn && globalBypass)  status = "BYPASS";
-        else if (engagedOnly)            status = "MACRO";
-        else if (! switchedOn)           status = "OFF";
-        else if (autoKeys.contains (dsp::moduleKey (t.id))) status = "AUTO";
-        if (status.isNotEmpty())
+        if (t.inLane)
         {
-            g.setColour (status == "BYPASS" ? colours::bypass : (status == "AUTO" ? hue : colours::textFaint));
-            g.setFont (semiBold (8.5f, 0.25f));
-            g.drawText (status, juce::Rectangle<float> (r.getWidth(), 12.0f).withPosition (r.getX(), r.getY() + nameH + iconH - 12.0f),
-                        juce::Justification::centred, false);
+            const auto badge = juce::Rectangle<float> (30.0f, 12.0f).withPosition (r.getRight() - 33.0f, iconArea.getY() - 1.0f);
+            g.setColour (hue.withAlpha (0.18f));
+            g.fillRoundedRectangle (badge, 6.0f);
+            g.setColour (colours::textStrong.withAlpha (content));
+            g.setFont (semiBold (7.5f, 0.15f));
+            g.drawText ("SEND", badge, juce::Justification::centred, false);
         }
 
-        // VOCAL CHECK has no knobs: its place shows what it does
-        if (columnParams (t.id).first == nullptr)
-        {
-            g.setColour (colours::textFaint.withAlpha (content));
-            g.setFont (font (10.5f));
-            g.drawFittedText ("Diagnose\nohne Klang-\nveränderung", juce::Rectangle<float> (r.getX() + 8.0f, r.getY() + nameH + iconH + 20.0f,
-                                                                                       r.getWidth() - 16.0f, knobCellH).toNearestInt(),
-                              juce::Justification::centredTop, 3, 0.9f);
-        }
+        // 3) On / off
+        drawPowerGlyph (g, powerBounds (shifted), switchedOn, hov, hue);
 
-        // Send / insert pill for delay and reverb
-        if (canBeSend (t.id))
-        {
-            const auto m = modeBounds (shifted);
-            const bool send = ! routing.isInsert (t.id, t.instance);
-            g.setColour (send ? hue.withAlpha (0.16f) : colours::control);
-            g.fillRoundedRectangle (m, m.getHeight() * 0.5f);
-            g.setColour (send ? hue.withAlpha (0.7f) : colours::border.brighter (0.4f));
-            g.drawRoundedRectangle (m.reduced (0.5f), m.getHeight() * 0.5f, 1.0f);
-            g.setColour (send ? colours::textStrong : colours::textMuted);
-            g.setFont (semiBold (9.0f, 0.15f));
-            g.drawText (send ? "SEND" : "INSERT", m, juce::Justification::centred, false);
-        }
-
-        // Activity line above the footer (gain reduction, ducking, movement)
+        // Activity line along the bottom edge (gain reduction, ducking, movement)
         const float act = activityOf (t);
-        const auto footerTop = r.getBottom() - footerH;
-        if (switchedOn && act > 0.01f)
+        if (switchedOn && act > 0.01f && ! ghost)
         {
-            const auto bar = juce::Rectangle<float> (r.getX() + 12.0f, footerTop - 3.0f, r.getWidth() - 24.0f, 2.0f);
+            const auto bar = juce::Rectangle<float> (r.getX() + 10.0f, r.getBottom() - 3.0f, r.getWidth() - 20.0f, 1.5f);
             g.setColour (hue.withAlpha (0.9f));
-            g.fillRoundedRectangle (bar.withWidth (std::max (3.0f, bar.getWidth() * act)), 1.0f);
+            g.fillRoundedRectangle (bar.withWidth (std::max (3.0f, bar.getWidth() * act)), 0.75f);
         }
-
-        // Footer: < duplicate remove >
-        g.setColour (colours::borderSoft);
-        g.fillRect (juce::Rectangle<float> (r.getX() + 8.0f, footerTop, r.getWidth() - 16.0f, 1.0f));
-        const bool canMoveLeft = ! t.inLane && t.position > 1;
-        const bool canMoveRight = ! t.inLane && t.position < numSerial;
-        const bool canDuplicate = routing.nextFreeInstance (t.id) >= 0;
-        for (int slot = 0; slot < 4; ++slot)
+        if (switchedOn && globalBypass && ! ghost)
         {
-            const auto b = footerButton (shifted, slot);
-            const bool enabled = slot == 0 ? canMoveLeft : (slot == 3 ? canMoveRight : (slot == 1 ? canDuplicate : true));
-            const bool hot = hov > 0.3f && b.contains (lastMouse);
-            const auto colour = ! enabled ? colours::textFaint.withAlpha (0.35f)
-                                          : (hot ? (slot == 2 ? colours::warning : colours::textStrong) : colours::textMuted);
-            if (hot && enabled)
-            {
-                g.setColour (juce::Colours::white.withAlpha (0.05f));
-                g.fillRoundedRectangle (b, 5.0f);
-            }
-            const auto c = b.getCentre();
-            if (slot == 0 || slot == 3)
-            {
-                juce::Path p;
-                const float s = slot == 3 ? 1.0f : -1.0f;
-                p.startNewSubPath (c.x - 2.5f * s, c.y - 5.0f);
-                p.lineTo (c.x + 2.5f * s, c.y);
-                p.lineTo (c.x - 2.5f * s, c.y + 5.0f);
-                g.setColour (colour);
-                g.strokePath (p, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            }
-            else if (slot == 1)
-            {
-                g.setColour (colour);
-                g.drawRoundedRectangle (juce::Rectangle<float> (7.0f, 7.0f).withCentre (c.translated (-1.5f, -1.5f)), 1.5f, 1.2f);
-                g.drawRoundedRectangle (juce::Rectangle<float> (7.0f, 7.0f).withCentre (c.translated (1.8f, 1.8f)), 1.5f, 1.2f);
-            }
-            else
-            {
-                juce::Path x;
-                x.startNewSubPath (c.x - 3.5f, c.y - 3.5f);
-                x.lineTo (c.x + 3.5f, c.y + 3.5f);
-                x.startNewSubPath (c.x + 3.5f, c.y - 3.5f);
-                x.lineTo (c.x - 3.5f, c.y + 3.5f);
-                g.setColour (colour);
-                g.strokePath (x, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            }
+            g.setColour (colours::bypass.withAlpha (0.6f));
+            g.drawRoundedRectangle (r.reduced (2.0f), corner - 2.0f, 1.0f);
         }
+    }
+
+    void ChainView::drawAddCard (juce::Graphics& g, juce::Rectangle<float> r) const
+    {
+        const auto it = hoverGlow.find (-77);
+        const float hov = it != hoverGlow.end() ? it->second.current : 0.0f;
+        juce::Path outline;
+        outline.addRoundedRectangle (r.reduced (1.0f), corner);
+        juce::Path dashed;
+        const float dashes[] { 4.0f, 4.0f };
+        juce::PathStrokeType (1.2f).createDashedStroke (dashed, outline, dashes, 2);
+        g.setColour (colours::teal.withAlpha (0.03f + 0.06f * hov));
+        g.fillRoundedRectangle (r.reduced (1.0f), corner);
+        g.setColour ((hov > 0.5f ? colours::teal : colours::textDim).withAlpha (0.5f + 0.4f * hov));
+        g.fillPath (dashed);
+        drawPlus (g, r.getCentre(), 16.0f, hov > 0.5f ? colours::teal : colours::textSoft, 2.0f);
+    }
+
+    void ChainView::drawOutput (juce::Graphics& g) const
+    {
+        const auto r = outputArea();
+        const bool isSel = selected == outputTile;
+        const bool hov = hovered == hitOutput;
+        g.setColour (isSel ? colours::teal.withAlpha (0.10f) : colours::panel);
+        g.fillRoundedRectangle (r, corner);
+        g.setColour (isSel ? colours::teal.withAlpha (0.7f) : (hov ? colours::border.brighter (0.5f) : colours::border));
+        g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
+
+        g.setColour (isSel ? colours::textStrong : colours::textMuted);
+        g.setFont (semiBold (9.0f, 0.12f));
+        g.drawText ("OUTPUT", r.withHeight (nameH).translated (0.0f, 4.0f), juce::Justification::centred, false);
+        const auto c = juce::Point<float> (r.getCentreX(), r.getY() + 4.0f + nameH + iconH * 0.5f);
+        juce::Path arrow;
+        arrow.startNewSubPath (c.x - 9.0f, c.y);
+        arrow.lineTo (c.x + 7.0f, c.y);
+        arrow.startNewSubPath (c.x + 2.0f, c.y - 5.0f);
+        arrow.lineTo (c.x + 7.0f, c.y);
+        arrow.lineTo (c.x + 2.0f, c.y + 5.0f);
+        g.setColour (isSel ? colours::teal : colours::textDim);
+        g.strokePath (arrow, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
     void ChainView::paint (juce::Graphics& g)
@@ -930,67 +619,49 @@ namespace velvox::ui
         layoutTiles();
         const auto row = rowArea();
         const auto lane = laneArea();
-        const float maxScroll = std::max (0.0f, contentWidth() - row.getWidth());
-
-        // Panel behind the columns
-        g.setColour (colours::panel);
-        g.fillRoundedRectangle (row.expanded (0.0f, 0.0f), 12.0f);
-        g.setColour (colours::border);
-        g.drawRoundedRectangle (row.reduced (0.5f), 12.0f, 1.0f);
-
-        drawPort (g, inBox, false);
-        drawPort (g, outBox, true);
-
         const bool draggingSendable = dragging && dragTile >= 0 && canBeSend (tiles[(size_t) dragTile].id);
 
+        drawOutput (g);
         {
             juce::Graphics::ScopedSaveState s (g);
-            juce::Path clip;
-            clip.addRoundedRectangle (row, 12.0f);
-            g.reduceClipRegion (clip);
+            g.reduceClipRegion (row.toNearestInt());
 
             for (int i = 0; i < (int) tiles.size(); ++i)
                 if (! (dragging && i == dragTile))
                     drawTile (g, tiles[(size_t) i], tiles[(size_t) i].bounds, false);
             drawAddCard (g, addCardArea());
 
-            // Send zone: divider and caption
+            // Send zone: dashed divider; empty: a faint caption only while a sendable tile is dragged
             {
-                const float x = lane.getX();
-                g.setColour (colours::border.brighter (0.2f));
-                const float dashes[] { 3.0f, 4.0f };
+                const float x = lane.getX() + sendGap * 0.5f;
                 juce::Path line, dashed;
-                line.startNewSubPath (x, row.getY() + 12.0f);
-                line.lineTo (x, row.getBottom() - 12.0f);
+                line.startNewSubPath (x, row.getY() + 10.0f);
+                line.lineTo (x, row.getBottom() - 10.0f);
+                const float dashes[] { 3.0f, 4.0f };
                 juce::PathStrokeType (1.0f).createDashedStroke (dashed, line, dashes, 2);
+                g.setColour (colours::border.brighter (0.25f));
                 g.fillPath (dashed);
-                if (numSends == 0)
+                if (draggingSendable)
                 {
-                    g.setColour (colours::textFaint);
-                    g.setFont (semiBold (9.0f, 0.25f));
-                    g.drawFittedText ("SENDS\nDelay / Reverb\nhierher ziehen", lane.withTrimmedLeft (sendGap * 0.5f).reduced (8.0f, 0.0f).toNearestInt(),
-                                      juce::Justification::centred, 3, 0.85f);
+                    const bool over = lane.contains (dragPos);
+                    g.setColour (colours::teal.withAlpha (over ? 0.10f : 0.04f));
+                    g.fillRoundedRectangle (lane.withTrimmedLeft (sendGap), corner);
+                    g.setColour (colours::textMuted);
+                    g.setFont (semiBold (9.0f, 0.2f));
+                    g.drawText ("SEND", lane.withTrimmedLeft (sendGap), juce::Justification::centred, false);
                 }
             }
 
-            // Drop zone while Delay or Reverb is dragged
-            if (draggingSendable)
-            {
-                const bool over = lane.contains (dragPos);
-                g.setColour (colours::teal.withAlpha (over ? 0.10f : 0.04f));
-                g.fillRect (lane.withTrimmedLeft (sendGap * 0.5f));
-            }
-
-            // "+" on a divider: insert a module exactly there
+            // "+" on a gap: insert a module exactly there
             if (hoveredGap >= 0 && gapGlow.current > 0.01f)
             {
                 const auto c = gapCentre (hoveredGap);
-                drawGlow (g, c, 20.0f, 0.35f * gapGlow.current, colours::teal);
+                drawGlow (g, c, 18.0f, 0.35f * gapGlow.current, colours::teal);
                 g.setColour (colours::raisedHi.withAlpha (gapGlow.current));
                 g.fillEllipse (juce::Rectangle<float> (2.0f * plusR, 2.0f * plusR).withCentre (c));
                 g.setColour (colours::teal.withAlpha (0.9f * gapGlow.current));
-                g.drawEllipse (juce::Rectangle<float> (2.0f * plusR, 2.0f * plusR).withCentre (c), 1.3f);
-                drawPlus (g, c, 10.0f, colours::text.withAlpha (gapGlow.current));
+                g.drawEllipse (juce::Rectangle<float> (2.0f * plusR, 2.0f * plusR).withCentre (c), 1.2f);
+                drawPlus (g, c, 9.0f, colours::text.withAlpha (gapGlow.current));
             }
 
             // Insertion marker while dragging
@@ -998,61 +669,36 @@ namespace velvox::ui
             {
                 const auto& t = tiles[(size_t) dragTile];
                 const int idx = insertIndexForX (dragPos.x);
-                float markerX = row.getX() - scroll.current + 1.5f;
+                float markerX = row.getX() - scroll.current + 1.0f;
                 int count = 0;
                 for (auto& other : tiles)
                 {
                     if (other.inLane || (other.id == t.id && other.instance == t.instance))
                         continue;
                     if (count++ < idx)
-                        markerX = other.bounds.getRight();
+                        markerX = other.bounds.getRight() + tileGap * 0.5f;
                 }
-                markerX = juce::jlimit (row.getX() + 2.0f, row.getRight() - 2.0f, markerX);
-                drawGlow (g, { markerX, row.getCentreY() }, 22.0f, 0.35f, colours::teal);
+                markerX = juce::jlimit (row.getX() + 1.5f, row.getRight() - 1.5f, markerX);
+                drawGlow (g, { markerX, row.getCentreY() }, 18.0f, 0.35f, colours::teal);
                 g.setColour (colours::teal);
-                g.fillRoundedRectangle (markerX - 1.5f, row.getY() + 8.0f, 3.0f, row.getHeight() - 16.0f, 1.5f);
+                g.fillRoundedRectangle (markerX - 1.5f, row.getY() + 6.0f, 3.0f, row.getHeight() - 12.0f, 1.5f);
             }
 
-            // More columns beyond the edges: fade and arrows
+            // More tiles beyond the edges: soft fades
+            const float maxScroll = std::max (0.0f, contentWidth() - row.getWidth());
             if (scroll.current > 0.5f)
             {
-                const auto a = leftArrowArea();
-                g.setGradientFill (juce::ColourGradient (colours::panel, a.getX(), 0.0f,
-                                                         colours::panel.withAlpha (0.0f), a.getX() + edgeFade + arrowW * 0.5f, 0.0f, false));
-                g.fillRect (a.withWidth (edgeFade + arrowW * 0.5f));
-                const bool hov = hovered == hitLeftArrow;
-                g.setColour (colours::raisedHi.withAlpha (hov ? 1.0f : 0.9f));
-                g.fillEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (a.getCentre()));
-                g.setColour (colours::border.brighter (hov ? 0.7f : 0.3f));
-                g.drawEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (a.getCentre()), 1.0f);
-                drawChevron (g, a.getCentre(), false, hov ? colours::text : colours::textDim);
+                g.setGradientFill (juce::ColourGradient (colours::windowBg, row.getX(), 0.0f, colours::windowBg.withAlpha (0.0f), row.getX() + 28.0f, 0.0f, false));
+                g.fillRect (row.withWidth (28.0f));
             }
             if (scroll.current < maxScroll - 0.5f)
             {
-                const auto a = rightArrowArea();
-                g.setGradientFill (juce::ColourGradient (colours::panel.withAlpha (0.0f), a.getRight() - edgeFade - arrowW * 0.5f, 0.0f,
-                                                         colours::panel, a.getRight(), 0.0f, false));
-                g.fillRect (a.withLeft (a.getRight() - edgeFade - arrowW * 0.5f));
-                const bool hov = hovered == hitRightArrow;
-                g.setColour (colours::raisedHi.withAlpha (hov ? 1.0f : 0.9f));
-                g.fillEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (a.getCentre()));
-                g.setColour (colours::border.brighter (hov ? 0.7f : 0.3f));
-                g.drawEllipse (juce::Rectangle<float> (30.0f, 30.0f).withCentre (a.getCentre()), 1.0f);
-                drawChevron (g, a.getCentre(), true, hov ? colours::text : colours::textDim);
+                g.setGradientFill (juce::ColourGradient (colours::windowBg.withAlpha (0.0f), row.getRight() - 28.0f, 0.0f, colours::windowBg, row.getRight(), 0.0f, false));
+                g.fillRect (row.withLeft (row.getRight() - 28.0f));
             }
         }
 
-        // Scroll bar (only when the row scrolls)
-        if (maxScroll > 0.5f)
-        {
-            const auto track = scrollTrack();
-            g.setColour (colours::accent.withAlpha (0.05f));
-            g.fillRoundedRectangle (track, 2.0f);
-            g.setColour (draggingThumb ? colours::teal.withAlpha (0.8f) : colours::accent.withAlpha (0.28f));
-            g.fillRoundedRectangle (scrollThumb(), 2.0f);
-        }
-
-        // Dragged column follows the mouse
+        // Dragged tile follows the mouse
         if (dragging && dragTile >= 0)
         {
             const auto& t = tiles[(size_t) dragTile];
@@ -1068,14 +714,14 @@ namespace velvox::ui
 
         if (hint.isNotEmpty())
         {
-            const auto area = row.withTrimmedTop (row.getHeight() - 74.0f).reduced (40.0f, 18.0f);
-            g.setColour (colours::raisedHi.withAlpha (0.96f));
+            const auto area = row.withSizeKeepingCentre (std::min (row.getWidth() - 40.0f, 560.0f), 30.0f);
+            g.setColour (colours::raisedHi.withAlpha (0.97f));
             g.fillRoundedRectangle (area, 8.0f);
-            g.setColour (colours::warning.withAlpha (0.6f));
+            g.setColour (colours::cyan.withAlpha (0.5f));
             g.drawRoundedRectangle (area.reduced (0.5f), 8.0f, 1.0f);
             g.setColour (colours::text);
-            g.setFont (medium (13.0f));
-            g.drawFittedText (hint, area.reduced (12.0f, 2.0f).toNearestInt(), juce::Justification::centred, 2, 0.9f);
+            g.setFont (medium (12.0f));
+            g.drawFittedText (hint, area.reduced (12.0f, 2.0f).toNearestInt(), juce::Justification::centred, 1, 0.85f);
         }
     }
 
@@ -1088,7 +734,6 @@ namespace velvox::ui
         const int i = tileAt (e.position);
         dragTile = -1;
         dragging = false;
-        draggingThumb = false;
 
         if (e.mods.isPopupMenu())
         {
@@ -1099,25 +744,6 @@ namespace velvox::ui
             return;
         }
 
-        // Arrows: one page of cards
-        if (i == hitLeftArrow || i == hitRightArrow)
-        {
-            const float page = (serialW + gap) * (float) std::max (1, (int) (rowArea().getWidth() / (serialW + gap)) - 1);
-            scrollTo (scroll.target + (i == hitLeftArrow ? -page : page));
-            return;
-        }
-
-        // Scroll bar: grab the thumb or jump to the clicked position
-        if (getMaxScroll() > 0.0f && scrollTrack().expanded (0.0f, 5.0f).contains (e.position))
-        {
-            const auto thumb = scrollThumb();
-            draggingThumb = true;
-            thumbGrabOffset = thumb.contains (e.position.withY (thumb.getCentreY())) ? e.position.x - thumb.getX() : thumb.getWidth() * 0.5f;
-            mouseDrag (e);
-            return;
-        }
-
-        // "+" between two cards, and the add card at the end
         if (const int g = gapAt (e.position); g >= 0)
         {
             if (onAddModule)
@@ -1130,7 +756,6 @@ namespace velvox::ui
                 onAddModule (numSerial, true);
             return;
         }
-
         if (i == hitOutput)
         {
             selected = outputTile;
@@ -1143,33 +768,9 @@ namespace velvox::ui
             return;
 
         const auto t = tiles[(size_t) i];
-
-        if (dotBounds (t).expanded (3.0f).contains (e.position))
+        if (powerBounds (t).expanded (4.0f).contains (e.position))
         {
             toggleOn (t.id, t.instance);
-            return;
-        }
-        // Footer: < duplicate remove >
-        if (removeBounds (t).expanded (2.0f).contains (e.position))
-        {
-            removeInstance (t.id, t.instance);
-            return;
-        }
-        if (duplicateBounds (t).expanded (2.0f).contains (e.position))
-        {
-            if (routing.nextFreeInstance (t.id) >= 0)
-                duplicateInstance (t.id, t.instance);
-            return;
-        }
-        if (footerButton (t, 0).expanded (2.0f).contains (e.position) || footerButton (t, 3).expanded (2.0f).contains (e.position))
-        {
-            if (! t.inLane)
-                moveBy (t.id, t.instance, footerButton (t, 0).expanded (2.0f).contains (e.position) ? -1 : 1);
-            return;
-        }
-        if (canBeSend (t.id) && modeBounds (t).expanded (2.0f).contains (e.position))
-        {
-            setSendMode (t.id, t.instance, routing.isInsert (t.id, t.instance));
             return;
         }
 
@@ -1184,16 +785,6 @@ namespace velvox::ui
 
     void ChainView::mouseDrag (const juce::MouseEvent& e)
     {
-        if (draggingThumb)
-        {
-            const auto track = scrollTrack();
-            const auto thumb = scrollThumb();
-            const float travel = std::max (1.0f, track.getWidth() - thumb.getWidth());
-            const float maxScroll = getMaxScroll();
-            scrollTo ((e.position.x - thumbGrabOffset - track.getX()) / travel * maxScroll, false);
-            return;
-        }
-
         if (dragTile < 0)
             return;
         if (! dragging && e.getDistanceFromDragStart() < 6)
@@ -1208,12 +799,6 @@ namespace velvox::ui
     void ChainView::mouseUp (const juce::MouseEvent& e)
     {
         setMouseCursor (juce::MouseCursor::NormalCursor);
-        if (draggingThumb)
-        {
-            draggingThumb = false;
-            repaint();
-            return;
-        }
         if (! dragging || dragTile < 0)
         {
             dragTile = -1;
@@ -1231,11 +816,11 @@ namespace velvox::ui
             if (canBeSend (t.id))
                 r.setInsert (t.id, t.instance, false);
             else
-                showHint (cardName (routing, t.id, t.instance) + " shapes the vocal itself, so it stays in the series chain. Only Delay and Reverb can run in parallel.");
+                showHint (cardName (routing, t.id, t.instance) + de (" bleibt in der Kette - nur Delay und Reverb laufen als Send."));
         }
         else
         {
-            // Serial position among the visible serial cards -> routing index
+            // Serial position among the visible serial tiles -> routing index
             const int serialIndex = insertIndexForX (e.position.x);
             r.setInsert (t.id, t.instance, true);
             const int target = serialIndexToRoutingIndex (r, serialIndex, t.id, t.instance);
@@ -1247,7 +832,7 @@ namespace velvox::ui
         dragging = false;
         if (r != routing)
         {
-            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
             applyRouting (r);
         }
         scrollToShow (t.id, t.instance);
@@ -1257,19 +842,22 @@ namespace velvox::ui
     void ChainView::mouseMove (const juce::MouseEvent& e)
     {
         layoutTiles();
-        if (lastMouse != e.position)
-        {
-            lastMouse = e.position;
-            repaint();   // footer button highlight
-        }
         const int i = tileAt (e.position);
         const int g = gapAt (e.position);
         if (i != hovered || g != hoveredGap)
         {
             hovered = i;
             hoveredGap = g;
-            const bool clickable = g >= 0 || i >= 0 || i == hitOutput || i == hitLeftArrow || i == hitRightArrow || i == hitAddCard;
+            const bool clickable = g >= 0 || i >= 0 || i == hitOutput || i == hitAddCard;
             setMouseCursor (clickable ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+            if (i >= 0)
+                setTooltip (juce::String (dsp::moduleDisplayName (tiles[(size_t) i].id)) + de (" - Klick öffnet, Ziehen ordnet um, Rechtsklick: Menü"));
+            else if (i == hitAddCard || g >= 0)
+                setTooltip (de ("Modul hinzufügen"));
+            else if (i == hitOutput)
+                setTooltip (de ("Ausgang: Eingangs-Gain, Stereo, Level Match, Clip Guard"));
+            else
+                setTooltip ({});
             repaint();
         }
     }
@@ -1287,17 +875,15 @@ namespace velvox::ui
 
     void ChainView::resized()
     {
-        addButton.setVisible (false);   // the round "+" column replaces it (kept for its callback)
         pendingReveal = false;
         if (selected >= 0)
             scrollToShow (dsp::selectionModule (selected), dsp::selectionInstance (selected), false);
-        updateColumnKnobs();
     }
 
-    void ChainView::moveBy (ModuleId id, int instance, int steps)
+    bool ChainView::moveBy (ModuleId id, int instance, int steps)
     {
         // One serial position earlier / later (sends are not counted)
-        auto r = routing;
+        auto r = proc.getRouting();
         int serialPos = -1, count = 0;
         for (const auto& s : r)
             if (s.insert)
@@ -1308,16 +894,16 @@ namespace velvox::ui
             }
         const int target = serialPos + steps;
         if (serialPos < 0 || target < 0 || target >= count)
-            return;
+            return false;
         const int routingIndex = serialIndexToRoutingIndex (r, target, id, instance);
         const int from = r.indexOf (id, instance);
         r.moveTo (id, instance, from < routingIndex ? routingIndex - 1 : routingIndex);
-        if (r != routing)
-        {
-            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
-            applyRouting (r);
-            scrollToShow (id, instance);
-        }
+        if (r == routing)
+            return false;
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
+        applyRouting (r);
+        scrollToShow (id, instance);
+        return true;
     }
 
     void ChainView::toggleOn (ModuleId id, int instance)
@@ -1334,42 +920,23 @@ namespace velvox::ui
     {
         proc.setRouting (r);
         routing = proc.getRouting();
-        undoButton.setEnabled (canUndo());
-        redoButton.setEnabled (canRedo());
         if (message.isNotEmpty())
             showHint (message);
         repaint();
     }
 
-    namespace
+    void ChainView::resetInstance (VelvoxAudioProcessor& p, ModuleId id, int instance)
     {
-        void setValue (juce::AudioProcessorValueTreeState& apvts, const juce::String& id, float value)
+        auto& apvts = p.getState();
+        const auto onBase = juce::String (onParamFor (id));
+        UndoHistory::ScopedTransaction undoStep (p.getUndo(), juce::String (dsp::moduleDisplayName (id)) + de (" zurücksetzen"));
+        for (const auto& base : moduleBaseIds (id))
         {
-            if (auto* p = apvts.getParameter (id))
-            {
-                const float n = p->convertTo0to1 (value);
-                if (std::abs (n - p->getValue()) < 1.0e-7f)
-                    return;
-                p->beginChangeGesture();
-                p->setValueNotifyingHost (n);
-                p->endChangeGesture();
-            }
-        }
-
-        float getValue (juce::AudioProcessorValueTreeState& apvts, const juce::String& id)
-        {
-            auto* v = apvts.getRawParameterValue (id);
-            return v != nullptr ? v->load() : 0.0f;
-        }
-
-        // Instance-1 IDs of every parameter of a module
-        juce::StringArray moduleBaseIds (ModuleId id)
-        {
-            juce::StringArray ids;
-            for (const auto& spec : getParameterSpecs())
-                if (moduleOfParameter (spec) == id && dsp::splitInstanceParamId (spec.id).second == 0)
-                    ids.add (spec.id);
-            return ids;
+            if (base == onBase)
+                continue;
+            const auto pidK = dsp::instanceParamId (base, instance);
+            if (auto* param = apvts.getParameter (pidK))
+                setValue (apvts, pidK, param->convertFrom0to1 (param->getDefaultValue()));
         }
     }
 
@@ -1379,10 +946,10 @@ namespace velvox::ui
         const int k = routing.nextFreeInstance (id);
         if (k < 0)
         {
-            showHint ("All " + juce::String (dsp::maxInstances (id)) + " " + dsp::moduleDisplayName (id) + " instances are already in the chain.");
+            showHint (de ("Alle ") + juce::String (dsp::maxInstances (id)) + " " + dsp::moduleDisplayName (id) + de (" sind schon in der Kette."));
             return -1;
         }
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String (dsp::moduleDisplayName (id)) + de (" hinzufügen"));
 
         // A fresh instance: default settings, still off while it joins the chain
         auto& apvts = proc.getState();
@@ -1398,7 +965,7 @@ namespace velvox::ui
         auto r = routing;
         const int at = index < 0 ? r.size() : serialIndexToRoutingIndex (r, index, id, k);
         r.insertAt (at, id, k, ! (asSend && canBeSend (id)));
-        applyRouting (r, cardName (r, id, k) + " added - it has its own settings. Undo removes it again.");
+        applyRouting (r);
 
         // ...then switched on: it fades in (no click)
         setValue (apvts, onId, 1.0f);
@@ -1416,10 +983,10 @@ namespace velvox::ui
         const int k = routing.nextFreeInstance (id);
         if (k < 0 || ! routing.contains (id, instance))
         {
-            showHint ("All " + juce::String (dsp::maxInstances (id)) + " " + dsp::moduleDisplayName (id) + " instances are already in the chain.");
+            showHint (de ("Alle ") + juce::String (dsp::maxInstances (id)) + " " + dsp::moduleDisplayName (id) + de (" sind schon in der Kette."));
             return -1;
         }
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String (dsp::moduleDisplayName (id)) + " duplizieren");
 
         auto& apvts = proc.getState();
         const auto onBase = juce::String (onParamFor (id));
@@ -1430,7 +997,7 @@ namespace velvox::ui
 
         auto r = routing;
         r.insertAt (r.indexOf (id, instance) + 1, id, k, r.isInsert (id, instance));
-        applyRouting (r, cardName (r, id, k) + " is a copy of " + cardName (r, id, instance) + " - change it independently.");
+        applyRouting (r);
         setValue (apvts, onParamId (id, k), getValue (apvts, onParamId (id, instance)));
 
         const int code = dsp::selectionCode (id, k);
@@ -1446,15 +1013,14 @@ namespace velvox::ui
         routing = proc.getRouting();
         if (! routing.contains (id, instance))
             return false;
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
-        const auto name = cardName (routing, id, instance);
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String (dsp::moduleDisplayName (id)) + " entfernen");
 
         // Off first (automation of an instance outside the chain would add it back)
         setValue (proc.getState(), onParamId (id, instance), 0.0f);
         auto r = routing;
         const int at = r.indexOf (id, instance);
         r.remove (id, instance);
-        applyRouting (r, name + " removed. Undo brings it back with its settings.");
+        applyRouting (r);
 
         if (selected == dsp::selectionCode (id, instance))
         {
@@ -1471,7 +1037,7 @@ namespace velvox::ui
         auto r = proc.getRouting();
         if (! r.moveTo (id, instance, newIndex))
             return false;
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
         applyRouting (r);
         return true;
     }
@@ -1481,7 +1047,7 @@ namespace velvox::ui
         auto r = proc.getRouting();
         if (! r.setInsert (id, instance, ! send))
             return false;
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), send ? de ("Als Send") : de ("Als Insert"));
         applyRouting (r);
         return true;
     }
@@ -1517,15 +1083,15 @@ namespace velvox::ui
                     sorted.insertAt (sorted.size(), slot.id, slot.instance, slot.insert);
         if (sorted != current)
         {
-            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
-            applyRouting (sorted, "Modules sorted into the usual order.");
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
+            applyRouting (sorted);
         }
     }
 
     void ChainView::saveLayoutAsDefault()
     {
         settings::set (settings::myLayoutOrder, proc.getRouting().toString());
-        showHint ("Chain saved as your default. Load it in any project from the chain menu.");
+        showHint (de ("Kette als dein Standard gespeichert."));
     }
 
     bool ChainView::loadDefaultLayout()
@@ -1536,99 +1102,102 @@ namespace velvox::ui
         const auto r = dsp::Routing::fromString (dsp::Routing::fromString (order).toString());
         if (r != proc.getRouting())
         {
-            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String::fromUTF8 ("Kette bearbeiten"));
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
             applyRouting (r);
         }
         return true;
     }
 
-    namespace
+    //==========================================================================
+    // Menus
+
+    bool ChainView::performTileAction (int code, TileAction action)
     {
-        enum MenuAction { actOpen = 1, actToggle, actDuplicate, actRemove, actToStart, actToEnd, actHelp, actSend, actInsert };
-        enum GlobalAction { actAdd = 90001, actSort, actUndo, actRedo, actSaveLayout, actLoadLayout };
-        int menuId (MenuAction a, int code) { return (int) a * 10000 + code; }
+        routing = proc.getRouting();
+        if (code < 0)
+            return false;
+        const auto id = dsp::selectionModule (code);
+        const int k = dsp::selectionInstance (code);
+        if (! routing.contains (id, k) && action != TileAction::undo && action != TileAction::redo)
+            return false;
+        switch (action)
+        {
+            case TileAction::toggle:    toggleOn (id, k); return true;
+            case TileAction::duplicate: return duplicateInstance (id, k) >= 0;
+            case TileAction::remove:    return removeInstance (id, k);
+            case TileAction::moveLeft:  return moveBy (id, k, -1);
+            case TileAction::moveRight: return moveBy (id, k, 1);
+            case TileAction::reset:     resetInstance (proc, id, k); return true;
+            case TileAction::asSend:    return canBeSend (id) && setSendMode (id, k, true);
+            case TileAction::asInsert:  return canBeSend (id) && setSendMode (id, k, false);
+            case TileAction::undo:      return undo();
+            case TileAction::redo:      return redo();
+            case TileAction::help:      if (onHelp) onHelp (code); return true;
+        }
+        return false;
+    }
+
+    juce::PopupMenu ChainView::buildTileMenu (int code)
+    {
+        routing = proc.getRouting();
+        const auto id = dsp::selectionModule (code);
+        const int k = dsp::selectionInstance (code);
+        const bool on = isOn (id, k);
+        const bool insert = routing.isInsert (id, k);
+        int serialPos = -1, serialCount = 0;
+        for (const auto& s : routing)
+            if (s.insert)
+            {
+                if (s.sameInstance (id, k))
+                    serialPos = serialCount;
+                ++serialCount;
+            }
+
+        juce::Component::SafePointer<ChainView> safe (this);
+        const auto act = [safe, code] (TileAction a) { return [safe, code, a] { if (safe != nullptr) safe->performTileAction (code, a); }; };
+
+        juce::PopupMenu menu;
+        menu.addSectionHeader (cardName (routing, id, k));
+        menu.addItem (on ? "Bypass" : "Einschalten", act (TileAction::toggle));
+        menu.addItem (de ("Duplizieren"), routing.nextFreeInstance (id) >= 0, false, act (TileAction::duplicate));
+        menu.addItem (de ("Entfernen"), act (TileAction::remove));
+        menu.addSeparator();
+        menu.addItem (de ("Nach links"), insert && serialPos > 0, false, act (TileAction::moveLeft));
+        menu.addItem (de ("Nach rechts"), insert && serialPos >= 0 && serialPos < serialCount - 1, false, act (TileAction::moveRight));
+        menu.addItem (de ("Zurücksetzen"), act (TileAction::reset));
+        if (canBeSend (id))
+        {
+            menu.addSeparator();
+            menu.addItem ("Als Send", true, ! insert, act (TileAction::asSend));
+            menu.addItem ("Als Insert", true, insert, act (TileAction::asInsert));
+        }
+        menu.addSeparator();
+        menu.addItem (de ("Rückgängig") + (canUndo() ? "  (" + proc.getUndo().getUndoName() + ")" : juce::String()), canUndo(), false, act (TileAction::undo));
+        menu.addItem (de ("Wiederholen"), canRedo(), false, act (TileAction::redo));
+        menu.addSeparator();
+        menu.addItem ("Hilfe: " + juce::String (dsp::moduleDisplayName (id)), act (TileAction::help));
+        return menu;
     }
 
     void ChainView::showTileMenu (const Tile& t)
     {
-        const int code = t.code();
-        const bool on = isOn (t.id, t.instance);
-        juce::PopupMenu menu;
-        menu.addSectionHeader (cardName (routing, t.id, t.instance));
-        menu.addItem (menuId (actOpen, code), "Open");
-        menu.addItem (menuId (actToggle, code), on ? "Bypass (switch off)" : "Switch on");
-        menu.addItem (menuId (actDuplicate, code), "Duplicate (new instance, same settings)", routing.nextFreeInstance (t.id) >= 0);
-        menu.addItem (menuId (actRemove, code), "Remove from chain");
-        if (canBeSend (t.id))
-        {
-            menu.addSeparator();
-            const bool send = ! routing.isInsert (t.id, t.instance);
-            menu.addItem (menuId (actSend, code), "Run as parallel send", true, send);
-            menu.addItem (menuId (actInsert, code), "Run as insert in the chain", true, ! send);
-        }
-        if (routing.isInsert (t.id, t.instance))
-        {
-            menu.addSeparator();
-            menu.addItem (menuId (actToStart, code), "Move to the start of the chain", routing.indexOf (t.id, t.instance) > 0);
-            menu.addItem (menuId (actToEnd, code), "Move to the end of the chain", routing.indexOf (t.id, t.instance) < routing.size() - 1);
-        }
-        menu.addSeparator();
-        menu.addItem (menuId (actHelp, code), "Help for " + juce::String (dsp::moduleDisplayName (t.id)));
-
-        juce::Component::SafePointer<ChainView> safe (this);
-        menu.showMenuAsync (juce::PopupMenu::Options().withMinimumWidth (240),
-                            [safe] (int result)
-                            {
-                                if (safe == nullptr || result <= 0)
-                                    return;
-                                const int action = result / 10000, c = result % 10000;
-                                const auto id = dsp::selectionModule (c);
-                                const int k = dsp::selectionInstance (c);
-                                switch (action)
-                                {
-                                    case actOpen:      safe->selected = c; if (safe->onSelect) safe->onSelect (c); break;
-                                    case actToggle:    safe->toggleOn (id, k); break;
-                                    case actDuplicate: safe->duplicateInstance (id, k); break;
-                                    case actRemove:    safe->removeInstance (id, k); break;
-                                    case actSend:      safe->setSendMode (id, k, true); break;
-                                    case actInsert:    safe->setSendMode (id, k, false); break;
-                                    case actToStart:   safe->moveInstance (id, k, 0); break;
-                                    case actToEnd:     safe->moveInstance (id, k, safe->routing.size() - 1); break;
-                                    case actHelp:      if (safe->onHelp) safe->onHelp (c); break;
-                                    default: break;
-                                }
-                                safe->repaint();
-                            });
+        buildTileMenu (t.code()).showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (200)
+                                                     .withTargetScreenArea (localAreaToGlobal (t.bounds.toNearestInt())));
     }
 
     void ChainView::showChainMenu()
     {
-        juce::PopupMenu menu;
-        menu.addSectionHeader ("Chain");
-        menu.addItem (actAdd, "Add module...");
-        menu.addItem (actUndo, "Undo", canUndo());
-        menu.addItem (actRedo, "Redo", canRedo());
-        menu.addSeparator();
-        menu.addItem (actSort, "Sort into the usual order");
-        menu.addItem (actSaveLayout, "Save this chain as my default");
-        menu.addItem (actLoadLayout, "Load my default chain", settings::getString (settings::myLayoutOrder).isNotEmpty());
-
         juce::Component::SafePointer<ChainView> safe (this);
-        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&chainMenuButton).withMinimumWidth (240),
-                            [safe] (int result)
-                            {
-                                if (safe == nullptr)
-                                    return;
-                                switch (result)
-                                {
-                                    case actAdd:        if (safe->onAddModule) safe->onAddModule (safe->numSerial, true); break;
-                                    case actUndo:       safe->undo(); break;
-                                    case actRedo:       safe->redo(); break;
-                                    case actSort:       safe->restoreDefaultChain(); break;
-                                    case actSaveLayout: safe->saveLayoutAsDefault(); break;
-                                    case actLoadLayout: safe->loadDefaultLayout(); break;
-                                    default: break;
-                                }
-                            });
+        juce::PopupMenu menu;
+        menu.addSectionHeader ("Kette");
+        menu.addItem (de ("Modul hinzufügen …"), [safe] { if (safe != nullptr && safe->onAddModule) safe->onAddModule (safe->numSerial, true); });
+        menu.addItem (de ("Rückgängig"), canUndo(), false, [safe] { if (safe != nullptr) safe->undo(); });
+        menu.addItem (de ("Wiederholen"), canRedo(), false, [safe] { if (safe != nullptr) safe->redo(); });
+        menu.addSeparator();
+        menu.addItem (de ("In die übliche Reihenfolge sortieren"), [safe] { if (safe != nullptr) safe->restoreDefaultChain(); });
+        menu.addItem (de ("Diese Kette als meinen Standard speichern"), [safe] { if (safe != nullptr) safe->saveLayoutAsDefault(); });
+        menu.addItem (de ("Meine Standard-Kette laden"), settings::getString (settings::myLayoutOrder).isNotEmpty(), false,
+                      [safe] { if (safe != nullptr) safe->loadDefaultLayout(); });
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (220));
     }
 }

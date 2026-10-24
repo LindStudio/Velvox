@@ -123,7 +123,7 @@ public:
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = asVelvox (*e);
             const juce::Rectangle<int> canvas (0, 0, ui::baseWidth, ui::baseHeight);
-            for (auto* key : { "chain", "presets", "global", "help", "chainAndModules", "body", "compare", "modes" })
+            for (auto* key : { "chain", "presets", "global", "help", "chainAndModules", "body", "modes", "tabs", "macros", "analyse" })
             {
                 // tutorialTarget is private; the overlay resolves it through targetFor
                 const auto r = ed.getTutorial().targetFor (key);
@@ -181,30 +181,30 @@ public:
                 ed.getHelp().close();
             }
 
-            // The header button opens the page of the open module in CHAIN, the start page in AUTO MIX
+            // The header button opens the page of the open module in Advanced, the start page in Simple
             ed.selectModule ((int) ModuleId::ride);
             ed.getTopBar().getHelpButton().triggerClick();
             waitForHelp();
             expectEquals (ed.getHelp().getCurrentKey(), juce::String ("ride"));
             ed.getHelp().close();
 
-            ed.getTopBar().selectView (ui::TopBar::View::autoMix);
+            ed.getTopBar().selectMode (ui::TopBar::Mode::simple);
             ed.getTopBar().getHelpButton().triggerClick();
             waitForHelp();
             expectEquals (ed.getHelp().getCurrentKey(), juce::String ("start"));
         }
 
-        beginTest ("Auto Mix view: clicking a module card opens it with all its controls");
+        beginTest ("Simple mode: opening a module (report step, check finding) switches to Advanced with its panel");
         {
             Harness h;
             h.proc.getState().state.setProperty ("uiMode", "beginner", nullptr);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = asVelvox (*e);
             const auto before = h.proc.readSettings();
-            expect (! ed.isProMode());
+            expect (! ed.isAdvanced());
 
-            ed.getChainView().onSelect ((int) ModuleId::deess);
-            expect (ed.isProMode());
+            ed.openModule ((int) ModuleId::deess);
+            expect (ed.isAdvanced() && ed.isModulePanelShown());
             expect (ed.getDetail() != nullptr);
             expectEquals (ed.getChainView().getSelected(), (int) ModuleId::deess);
 
