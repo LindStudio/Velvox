@@ -7,3 +7,13 @@ Task 1: Ruling: no real DAW project with a Headliner/Velvox state exists on this
   RoutingTests already build — cost if wrong: a real-world 0.5 state with unusual content is not covered.
 Task 1: Ruling: no committed golden numbers — other tracks change module DSP in parallel, so goldens would break at merge. Committed tests
   compare law-equivalent configurations inside one build; the comparison with the 0.5 build is a one-off (env VELVOX_MIXLAW_BASELINE).
+Task 2: complete (dsp::MixLaws + additiveDryGain + hasAdditiveMix; tests "MixLaws: ..." red (missing header) -> green, 91 checks)
+Task 2: Ruling: the flag is PER MODULE INSTANCE, not per plugin — spec Q1 puts the "Alte Mix-Kurve – umstellen" action in each module's
+  Mehr drawer and says modules added later are fresh; a per-plugin flag could not express "old delay legacy, newly added delay true" —
+  cost if wrong: slightly larger state string ("v1,..." list) than a single int.
+Task 2: Ruling: law = "dry-hold" for additive modules (dry 1 up to 50 %, then linear to 0 at 100 %; wet = mix unchanged), not
+  plain linear or equal-power — every setting <= 50 % (all auto-mix, SPACE and WIDTH values, factory presets) is bit-identical to the
+  legacy law, so the auto-mix/SPACE calibration and the switch "Alte Mix-Kurve – umstellen" keep the sound of normal settings, while
+  100 % is wet only (the bug). At the top end it is an equal-gain crossfade. Correlated modules (EQ, Comp, Sat, Pitch, Choir, Pulse)
+  keep their existing linear (equal-gain) crossfade. Cost if wrong: 50 % sounds "dry + half wet" instead of a 50/50 blend; changing
+  additiveDryGain() is a one-line change.

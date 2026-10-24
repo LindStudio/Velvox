@@ -42,6 +42,7 @@ set(VELVOX_SOURCES
     Source/DSP/ReverbModule.cpp
     Source/DSP/VocalChain.cpp
     Source/DSP/Routing.cpp
+    Source/DSP/MixLaw.cpp
     Source/DSP/Loudness.cpp
     Source/DSP/StereoStage.cpp
     Source/DSP/DoublerModule.cpp

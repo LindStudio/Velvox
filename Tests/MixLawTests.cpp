@@ -6,6 +6,7 @@
 #include "SyntheticVocal.h"
 #include "MixLawFixtures.h"
 #include "StateKeys.h"
+#include "DSP/MixLaw.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -125,7 +126,54 @@ public:
     void runTest() override
     {
         bugTests();
+        lawTypeTests();
         baselineTools();
+    }
+
+    void lawTypeTests()
+    {
+        using dsp::MixLaw;
+        using dsp::MixLaws;
+
+        beginTest ("MixLaws: fresh = all true, unknown text = all legacy, string round trip");
+        {
+            const auto fresh = MixLaws::allTrue();
+            const auto old = MixLaws::allLegacy();
+            for (int m = 0; m < dsp::numModules; ++m)
+                for (int k = 0; k < dsp::maxInstances ((ModuleId) m); ++k)
+                {
+                    expect (! fresh.isLegacy ((ModuleId) m, k));
+                    expect (old.isLegacy ((ModuleId) m, k));
+                }
+            expectEquals (fresh.toString(), juce::String ("v1"));
+            expect (MixLaws::fromString ({}) == old, "absent flag = every instance legacy");
+            expect (MixLaws::fromString ("garbage") == old);
+            expect (MixLaws::fromString (old.toString()) == old);
+            expect (MixLaws::fromString ("v1") == fresh);
+
+            auto mixed = fresh;
+            mixed.setLegacy (ModuleId::delay, 1, true);
+            mixed.setLegacy (ModuleId::doubler, 0, true);
+            expectEquals (mixed.toString(), juce::String ("v1,doubler,delay#2"));
+            expect (MixLaws::fromString (mixed.toString()) == mixed);
+            expect (MixLaws::fromString ("v1, delay#2 ,nonsense,eq#9,doubler") == mixed, "tolerant parser");
+            expect (mixed.lawOf (ModuleId::delay, 1) == MixLaw::legacy && mixed.lawOf (ModuleId::delay, 0) == MixLaw::trueDryWet);
+        }
+
+        beginTest ("MixLaws: dry gain of an additive Mix - legacy unity, true law holds the dry up to 50 % and reaches 0 at 100 %");
+        {
+            for (float m : { 0.0f, 0.2f, 0.5f, 0.8f, 1.0f })
+                expectEquals (dsp::additiveDryGain (m, MixLaw::legacy), 1.0f);
+            expectEquals (dsp::additiveDryGain (0.0f, MixLaw::trueDryWet), 1.0f);
+            expectEquals (dsp::additiveDryGain (0.35f, MixLaw::trueDryWet), 1.0f);
+            expectEquals (dsp::additiveDryGain (0.5f, MixLaw::trueDryWet), 1.0f);
+            expectWithinAbsoluteError (dsp::additiveDryGain (0.75f, MixLaw::trueDryWet), 0.5f, 1.0e-6f);
+            expectEquals (dsp::additiveDryGain (1.0f, MixLaw::trueDryWet), 0.0f);
+            for (auto id : { ModuleId::delay, ModuleId::reverb, ModuleId::doubler, ModuleId::smash })
+                expect (dsp::hasAdditiveMix (id));
+            for (auto id : { ModuleId::eq, ModuleId::comp, ModuleId::sat, ModuleId::choir, ModuleId::pitch, ModuleId::pulse })
+                expect (! dsp::hasAdditiveMix (id));
+        }
     }
 
     void bugTests()
