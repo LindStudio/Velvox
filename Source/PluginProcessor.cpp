@@ -23,8 +23,11 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
 {
     cacheParameterPointers();
     apvts.state.setProperty (statekeys::routing, dsp::Routing::defaults().toString(), nullptr);
+    // A new plugin: every module instance on the true dry/wet law (a loaded project replaces this)
+    apvts.state.setProperty (statekeys::mixLaw, dsp::MixLaws::allTrue().toString(), nullptr);
     apvts.state.addListener (this);
     syncRoutingFromState();
+    syncMixLawFromState();
 
     // On-switches of every module instance and the macros can change which instances
     // must be in the chain (and the latency): watched, handled on the message thread
@@ -111,6 +114,17 @@ void VelvoxAudioProcessor::insertEngagedInstances()
             engage (dsp::ModuleId::check, e.checkOn);
         }
     }
+
+    // SPACE keeps its sends (its calibration, spec Q2): when the macros switch on a delay /
+    // reverb that a fresh chain holds as an (unused) insert, it becomes a send. Only at that
+    // moment - a later "Als Insert" by the user stays. Instances on the legacy law are left
+    // alone - an old project keeps its chain.
+    const auto engaged = dsp::modulesEngagedByMacros (readSettings(), readMacros());
+    const auto laws = getMixLaws();
+    for (auto id : { dsp::ModuleId::delay, dsp::ModuleId::reverb })
+        if (! loadingState && engaged[(size_t) id] && ! macroEngaged[(size_t) id] && routing.isInsert (id, 0) && ! laws.isLegacy (id, 0))
+            changed = routing.setInsert (id, 0, false) || changed;
+    macroEngaged = engaged;
 
     if (changed)
         setRouting (routing);
@@ -216,7 +230,9 @@ void VelvoxAudioProcessor::cacheParameterPointers()
 
 dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
 {
-    return reader.read (getRouting(), monoMonitor.load (std::memory_order_relaxed));
+    auto s = reader.read (getRouting(), monoMonitor.load (std::memory_order_relaxed));
+    s.mixLaws = getMixLaws();
+    return s;
 }
 
 std::optional<float> VelvoxAudioProcessor::effectiveValueOf (const juce::String& id) const
@@ -266,15 +282,65 @@ void VelvoxAudioProcessor::syncRoutingFromState()
         triggerAsyncUpdate();   // latency follows the saturation / pitch instances in the chain
 }
 
+void VelvoxAudioProcessor::syncMixLawFromState()
+{
+    // Absent (projects from 0.5 and older) = every instance on the legacy law
+    mixLawShared.store (dsp::MixLaws::fromString (apvts.state.getProperty (statekeys::mixLaw).toString()));
+}
+
+bool VelvoxAudioProcessor::usesLegacyMixLaw (dsp::ModuleId id, int instance) const noexcept
+{
+    return dsp::hasAdditiveMix (id) && getMixLaws().isLegacy (id, instance);
+}
+
+void VelvoxAudioProcessor::setLegacyMixLaw (dsp::ModuleId id, int instance, bool legacy)
+{
+    auto laws = dsp::MixLaws::fromString (apvts.state.getProperty (statekeys::mixLaw).toString());
+    if (laws.isLegacy (id, instance) == legacy)
+        return;
+    laws.setLegacy (id, instance, legacy);
+    // The state property is the source of truth; the listener updates the lock-free copy
+    apvts.state.setProperty (statekeys::mixLaw, laws.toString(), nullptr);
+}
+
+void VelvoxAudioProcessor::markFreshInstances (const dsp::Routing& before, const dsp::Routing& after)
+{
+    // The browser adds an instance with default settings while it is off and switches it on
+    // afterwards; automation, macros and undo bring an instance back while it is on. Only the
+    // fresh ones change their law - an old project keeps its sound.
+    const auto e = readEffectiveSettings();
+    for (const auto& slot : after)
+    {
+        if (! dsp::hasAdditiveMix (slot.id) || before.contains (slot.id, slot.instance))
+            continue;
+        const auto b = e.instance (slot.instance);
+        const bool on = slot.id == dsp::ModuleId::delay   ? b.delayOn
+                      : slot.id == dsp::ModuleId::reverb  ? b.reverbOn
+                      : slot.id == dsp::ModuleId::doubler ? b.doubler.enabled
+                                                          : b.smash.enabled;
+        if (! on)
+            setLegacyMixLaw (slot.id, slot.instance, false);
+    }
+}
+
 void VelvoxAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& property)
 {
+    if (tree == apvts.state && property == statekeys::mixLaw)
+        syncMixLawFromState();
+
     if (tree == apvts.state && property == statekeys::routing)
+    {
+        const auto before = getRouting();
         syncRoutingFromState();
+        if (! loadingState)
+            markFreshInstances (before, getRouting());
+    }
 }
 
 void VelvoxAudioProcessor::valueTreeRedirected (juce::ValueTree&)
 {
     syncRoutingFromState();
+    syncMixLawFromState();
 }
 
 //==============================================================================
@@ -339,7 +405,9 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     // Routing: lock-free copy; while the message thread is writing it, the previous one stays
     routingShared.tryLoad (audioRouting);
+    mixLawShared.tryLoad (audioMixLaws);
     auto settings = dsp::applyMacros (reader.read (audioRouting, monoMonitor.load (std::memory_order_relaxed)), reader.readMacros());
+    settings.mixLaws = audioMixLaws;
 
     if (auto* hostPlayHead = getPlayHead())
         if (const auto position = hostPlayHead->getPosition())
@@ -512,6 +580,10 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
     const auto savedRouting = tree.getProperty (statekeys::routing).toString();
 
     tree.setProperty (statekeys::stateVersion, statekeys::currentStateVersion, nullptr);
+    // Mix law: a state without it (0.5 and older) keeps the legacy law on every instance;
+    // written explicitly so the next save carries it. Loading never marks instances fresh.
+    const juce::ScopedValueSetter<bool> loading (loadingState, true);
+    tree.setProperty (statekeys::mixLaw, dsp::MixLaws::fromString (tree.getProperty (statekeys::mixLaw).toString()).toString(), nullptr);
     apvts.replaceState (tree);
 
     for (auto* p : getParameters())
@@ -523,6 +595,8 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
     apvts.state.setProperty (statekeys::routing, migrateRoutingString (savedRouting, apvts), nullptr);
 
     syncRoutingFromState();
+    syncMixLawFromState();
+    macroEngaged = dsp::modulesEngagedByMacros (readSettings(), readMacros());   // a loaded chain is taken as it is
     autoMix.readState (autoMixHolder, savedVersion < 3);
 }
 

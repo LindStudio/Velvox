@@ -40,7 +40,8 @@ namespace velvox::dsp
     // Signal routing (0.4): an ordered list of module instances.
     //  - The serial chain runs the entries in order; delay / reverb entries in send mode
     //    are skipped there and run in parallel from the end of the serial chain
-    //    (wet return only). Both forms use out = dry + wet * mix.
+    //    (wet return only, out = dry + wet * mix). An insert uses its instance's mix law
+    //    (DSP/MixLaw.h): legacy = like the send, true = dry/wet.
     //  - A module may appear several times (different instances, each with its own
     //    parameters). Instances that are not in the list do not process at all.
     //  - Plain value type with a fixed capacity: copied lock-free to the audio thread.
@@ -51,8 +52,10 @@ namespace velvox::dsp
         std::array<ChainSlot, capacity> slots {};
         int count = 0;
 
-        // A new plugin instance: EQ, compressor, de-esser, delay and reverb as sends
+        // A new plugin instance (0.6): EQ, compressor, de-esser, delay and reverb, all inserts
         static Routing defaults() noexcept;
+        // The default of 0.1-0.5: EQ, compressor, de-esser, delay and reverb as sends
+        static Routing legacyDefaults() noexcept;
         // Every module once in the 0.3 default order (what a 0.2 / 0.3 project contains)
         static Routing legacyFull() noexcept;
 
@@ -79,7 +82,8 @@ namespace velvox::dsp
         bool setInsert (ModuleId id, int instance, bool insertMode) noexcept;
         // Adds an instance where it usually belongs: after the other instances of the same
         // module, else after the module that precedes it in the default order (delay and
-        // reverb join as sends)
+        // reverb join as sends: used when automation / macros switch an instance on, so the
+        // SPACE calibration keeps its sends; the browser adds inserts itself)
         bool insertDefault (ModuleId id, int instance) noexcept;
 
         // Instance-0 shorthands (the API of 0.2 / 0.3)

@@ -87,6 +87,8 @@ public:
         beginTest ("Drag the delay from the parallel lane into the chain (becomes an insert) and back");
         {
             ViewFixture f;
+            f.h.proc.setRouting (dsp::Routing::legacyDefaults());   // delay / reverb as sends (a 0.5 project)
+            f.view.refresh();
             expect (f.h.proc.getRouting().isSend (ModuleId::delay));
             const auto delay = f.view.getTileBounds (ModuleId::delay);
             const auto deess = f.view.getTileBounds (ModuleId::deess);
@@ -118,8 +120,9 @@ public:
             click (f.view, f.view.getPowerBounds (ModuleId::comp).getCentre());
             expectEquals (f.h.get (pid::compOn), 1.0f - before);
 
+            // A fresh chain holds the reverb as an insert (0.6): the switch makes it a send
             click (f.view, f.view.getModeBounds (ModuleId::reverb).getCentre());
-            expect (f.h.proc.getRouting().isInsert (ModuleId::reverb), "reverb switched to insert");
+            expect (f.h.proc.getRouting().isSend (ModuleId::reverb), "reverb switched to send");
         }
 
         beginTest ("Add, duplicate, remove, undo and redo instances");
@@ -180,7 +183,7 @@ public:
             expect (! atEnd);
 
             click (f.view, f.view.getAddCardBounds().getCentre());
-            expectEquals (index, 3, "behind the three serial modules");
+            expectEquals (index, 5, "behind the five serial modules (delay and reverb are inserts in a fresh chain)");
             expect (atEnd);
         }
 
@@ -308,9 +311,10 @@ public:
             expectEquals (ed.getChainView().getSelected(), dsp::selectionCode (ModuleId::comp, 1), "its controls are open");
             expect (ed.getDetail() != nullptr);
 
-            // Reverb added at the end runs as a send
+            // Reverb added at the end is an insert (0.6, spec Q2) on the true dry/wet law
             ed.getBrowser().onChoose (ModuleId::reverb, 99, true);
-            expect (h.proc.getRouting().isSend (ModuleId::reverb, 1), "reverb 2 is a send");
+            expect (h.proc.getRouting().isInsert (ModuleId::reverb, 1), "reverb 2 is an insert");
+            expect (! h.proc.usesLegacyMixLaw (ModuleId::reverb, 1));
         }
 
         beginTest ("Selecting tiles opens the matching Pro panel (every module and repeated instances)");

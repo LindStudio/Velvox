@@ -37,7 +37,7 @@ namespace velvox::dsp
         voices[1].phase1 = 1.7; // start out of phase
         voices[1].phase2 = 0.6;
 
-        for (auto* s : { &amount, &width, &monoSafe, &delayMs, &detune })
+        for (auto* s : { &amount, &width, &monoSafe, &delayMs, &detune, &dryGain })
         {
             s->reset (sampleRate, s == &delayMs ? 0.2 : 0.05);
             s->setCurrentAndTargetValue (s->getTargetValue());
@@ -68,6 +68,9 @@ namespace velvox::dsp
         delayMs.setTargetValue (juce::jlimit (1.0f, maxDelayMs, s.delayMs));
         detune.setTargetValue (juce::jlimit (0.0f, maxDetuneCents, s.detuneCents));
         tone.setTargetValue (juce::jlimit (1000.0f, 20000.0f, s.toneHz));
+        law = s.mixLaw;
+        // True law: the original follows the user's Mix (macros only add voices); off = unity
+        dryGain.setTargetValue (s.enabled ? additiveDryGain (s.lawMix >= 0.0f ? s.lawMix : s.mix, law) : 1.0f);
     }
 
     void DoublerModule::updateFilters() noexcept
@@ -92,6 +95,7 @@ namespace velvox::dsp
         if (! active)
         {
             wasActive = false;
+            dryGain.setCurrentAndTargetValue (dryGain.getTargetValue());
             return;
         }
         if (! wasActive)
@@ -160,14 +164,31 @@ namespace velvox::dsp
                 const float side = 0.5f * (left - right);
                 const float a = amount.getNextValue();
 
-                if (numChannels > 1)
+                if (law == MixLaw::legacy)
                 {
-                    ch[0][i] += a * (mid + side);
-                    ch[1][i] += a * (mid - side);
+                    if (numChannels > 1)
+                    {
+                        ch[0][i] += a * (mid + side);
+                        ch[1][i] += a * (mid - side);
+                    }
+                    else
+                    {
+                        ch[0][i] += a * mid;
+                    }
                 }
                 else
                 {
-                    ch[0][i] += a * mid;
+                    // True dry/wet: the original fades out above 50 % of the user's Mix
+                    const float dg = dryGain.getNextValue();
+                    if (numChannels > 1)
+                    {
+                        ch[0][i] = ch[0][i] * dg + a * (mid + side);
+                        ch[1][i] = ch[1][i] * dg + a * (mid - side);
+                    }
+                    else
+                    {
+                        ch[0][i] = ch[0][i] * dg + a * mid;
+                    }
                 }
             }
         }
