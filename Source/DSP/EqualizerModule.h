@@ -1,11 +1,14 @@
 #pragma once
 
 #include "DspUtilities.h"
+#include "EqDesign.h"
 
 namespace velvox::dsp
 {
     struct EqSettings
     {
+        // ---- 0.1-0.5 fixed bands. Still read from their (hidden) parameters, but NOT processed since
+        //      0.6: a state that has no band values is migrated into bands 1-5 on load (legacyBands()).
         bool hpfOn = true;
         float hpfFreq = 80.0f;
         int hpfSlope = 1;          // 0 = 12, 1 = 24, 2 = 48 dB/oct
@@ -17,45 +20,68 @@ namespace velvox::dsp
         bool lpfOn = false;
         float lpfFreq = 18000.0f;
         int lpfSlope = 1;          // 0 = 12, 1 = 24, 2 = 48 dB/oct
+
+        // ---- 0.6: up to 16 bands, processed in this order
+        std::array<EqBand, maxEqBands> bands {};
+        bool legacyResponse = false;   // migrated 0.5 state: RBJ bilinear designs (sound-identical)
+
+        // First band with `role` (role none: never searched), -1 if there is none
+        int findRole (EqRole role) const noexcept;
+        // First free slot (EqBand::isFree), -1 if all 16 are used
+        int findFree() const noexcept;
     };
 
-    // Low cut (Butterworth, up to 8th order) -> low band (shelf/bell) -> mid bell
-    // -> high band (shelf/bell) -> high cut (Butterworth, up to 8th order).
+    // Up to 16 bands of minimum-phase biquad cascades (see EqDesign.h). Per band: frequency and Q
+    // smoothed multiplicatively, gain linearly (50 ms), coefficients redesigned every 16 samples while
+    // they move; on/off and changes of type, slope or design through a 30 ms crossfade. With
+    // `legacyResponse` and the migrated bands 1-5 the output is bit-identical to the 0.5 EQ.
     class EqualizerModule
     {
     public:
-        static constexpr int maxCutSections = 4; // 48 dB/oct
-        enum Section
-        {
-            hp1 = 0, hp2, hp3, hp4,
-            lowBand, midBell, highBand,
-            lp1, lp2, lp3, lp4,
-            numSections
-        };
-        using Sections = std::array<BiquadCoeffs, numSections>;
-
         void prepare (double sampleRate, int maxBlockSize);
         void reset();
         void setSettings (const EqSettings& s);
         void process (float* const* channels, int numChannels, int numSamples) noexcept;
 
-        // Shared with the UI so the drawn curve is exactly what is processed
-        static Sections designSections (const EqSettings& s, double sampleRate);
+        // ---- Curves for the UI. Pure functions of the settings: thread-safe on any thread when given a
+        //      copy of the settings, e.g. processor.readEffectiveSettings().instance (k).eq (atomic reads).
+        //      They describe exactly what the audio thread processes (same designs).
+        // Total response of all bands that are on, in dB
         static double responseDb (const EqSettings& s, double freq, double sampleRate);
+        // Response of one band (its on switch is ignored), in dB
+        static double bandResponseDb (const EqBand& band, bool legacyResponse, double freq, double sampleRate);
+        // Many frequencies at once (designs each band once): band = -1 -> all bands that are on,
+        // band 0..15 -> that band alone (also when off). `freqs` and `outDb` hold `count` values.
+        static void responseCurveDb (const EqSettings& s, double sampleRate, const float* freqs, float* outDb, int count, int band = -1);
+
+        // The 0.5 fixed bands of `legacyFields` as bands 1-5 (low cut / low / mid / high / high cut) with
+        // their roles (lowCut, warmth, autoMix, air, highCut). Used by the state migration.
+        static std::array<EqBand, 5> legacyBands (const EqSettings& legacyFields) noexcept;
 
     private:
-        void updateCoefficients (bool snap) noexcept;
+        using Mult = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>;
+
+        struct BandState
+        {
+            EqBand target;                         // latest settings
+            int type = 0, slope = 3;               // topology currently realised
+            bool legacy = false;
+            bool switching = false;                // fading out for a topology change
+            Mult freq { 1000.0f }, q { 1.0f };
+            juce::SmoothedValue<float> gain, amount;
+            std::array<Biquad, 4> filters;
+            int numSections = 0;
+            bool isCut = false, needsDesign = true;
+        };
+
+        void adopt (BandState& b) noexcept;   // realises the target topology, values snapped
+        void design (BandState& b) noexcept;
+        void processBand (BandState& b, float* const* channels, int numChannels, int start, int n) noexcept;
 
         double fs = 44100.0;
-        EqSettings target;
-        int currentHpSlope = 1, currentLpSlope = 1;
-
-        using Mult = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>;
-        Mult hpfFreq { 80.0f }, lowFreq { 150.0f }, midFreq { 1500.0f }, highFreq { 10000.0f }, lpfFreq { 18000.0f },
-             midQ { 1.0f }, lowQ { 0.7071f }, highQ { 0.7071f };
-        juce::SmoothedValue<float> lowGain, midGain, highGain, hpfAmount, lpfAmount;
-
-        std::array<Biquad, numSections> filters;
+        bool legacyTarget = false;
+        std::array<BandState, maxEqBands> bands;
+        bool snapNext = true;   // the first settings after prepare() / reset() apply without a sweep
         static constexpr int updateInterval = 16;
     };
 }

@@ -1,5 +1,6 @@
 #include "FactoryPresets.h"
 #include "../Parameters/ParameterIDs.h"
+#include "../Parameters/EqBands.h"
 
 namespace velvox
 {
@@ -28,6 +29,8 @@ namespace velvox
             s.description = description;
             for (const auto& v : values)
                 s.values[v.id] = v.value;
+            // Written for the 0.5 fixed bands: listed as bands 1-5 with their roles, matched response
+            eqbands::migrateState (eqbands::accessFor (s.values), false);
             return s;
         }
     }
