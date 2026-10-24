@@ -6,6 +6,10 @@
 #include "DSP/VocalAnalyzer.h"
 #include "Check/CheckTypes.h"
 #include "Check/CheckTargets.h"
+#include "Check/CheckFixPlanner.h"
+#include "Parameters/ParameterLayout.h"
+#include "DSP/Instances.h"
+#include "StateKeys.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -98,6 +102,7 @@ public:
         constexpr double fs = 48000.0;
         targetsAndTemplate();
         rules();
+        fixModel();
 
         beginTest ("Finding schema: id, category, German problem / fix text, confidence above the threshold");
         {
@@ -396,6 +401,202 @@ public:
             expectEquals (r.score, -1);
             for (auto& f : r.findings)
                 expect (f.category == check::Category::level, "only level facts: " + f.id);
+        }
+    }
+
+    // A parameter state as plain values (defaults), with a routing and the audible rule of the processor
+    struct State
+    {
+        std::map<juce::String, float> values;
+        Routing routing;
+
+        State (const juce::String& routingText)
+        {
+            for (auto& s : getParameterSpecs())
+                values[s.id] = s.defaultValue;
+            routing = Routing::fromString (routingText);
+        }
+
+        float get (const juce::String& id) const
+        {
+            const auto it = values.find (id);
+            return it != values.end() ? it->second : 0.0f;
+        }
+
+        void apply (const check::ResolvedFix& f)
+        {
+            for (auto& p : f.params)
+                values[p.paramId] = p.value;
+            if (f.routing.has_value())
+                routing = *f.routing;
+        }
+
+        check::FixContext context (const check::EqBandResolver& eq) const
+        {
+            check::FixContext c;
+            c.value = [this] (const juce::String& id) { return get (id); };
+            c.routing = routing;
+            c.audible = [this] (ModuleId m, int k)
+            {
+                return routing.contains (m, k) && get (instanceParamId (check::moduleOnParam (m), k)) > 0.5f;
+            };
+            c.eq = &eq;
+            return c;
+        }
+    };
+
+    // A dummy processor whose state has an UndoManager (the shell track adds the global one)
+    struct UndoHost final : juce::AudioProcessor
+    {
+        juce::UndoManager undo;
+        juce::AudioProcessorValueTreeState apvts { *this, &undo, "PARAMETERS", createParameterLayout() };
+        UndoHost() { apvts.state.setProperty (statekeys::routing, Routing::defaults().toString(), nullptr); }
+        const juce::String getName() const override { return "undo"; }
+        void prepareToPlay (double, int) override {}
+        void releaseResources() override {}
+        void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+        double getTailLengthSeconds() const override { return 0.0; }
+        bool acceptsMidi() const override { return false; }
+        bool producesMidi() const override { return false; }
+        juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+        bool hasEditor() const override { return false; }
+        int getNumPrograms() override { return 1; }
+        int getCurrentProgram() override { return 0; }
+        void setCurrentProgram (int) override {}
+        const juce::String getProgramName (int) override { return {}; }
+        void changeProgramName (int, const juce::String&) override {}
+        void getStateInformation (juce::MemoryBlock&) override {}
+        void setStateInformation (const void*, int) override {}
+        float value (const char* id) { return apvts.getParameter (id)->convertFrom0to1 (apvts.getParameter (id)->getValue()); }
+    };
+
+    void fixModel()
+    {
+        using namespace check;
+        const LegacyEqResolver legacy;
+        FixAction mud;
+        mud.modules.push_back (ModuleId::eq);
+        mud.eq.push_back ({ EqRole::mud, EqShape::bell, 300.0f, -3.0f, 1.2f, 12 });
+
+        beginTest ("Fix model: a missing EQ is switched on and inserted; the legacy resolver uses the low band as a bell");
+        {
+            State s ("v2,comp,check");
+            s.values[pid::eqOn] = 0.0f;
+            const auto f = planFix (mud, "Mulm", s.context (legacy));
+            expect (f.routing.has_value() && f.routing->contains (ModuleId::eq), "EQ inserted");
+            s.apply (f);
+            expect (s.routing.indexOf (ModuleId::eq) < s.routing.indexOf (ModuleId::check), "where an EQ usually sits (before the check)");
+            expectEquals (s.get (pid::eqOn), 1.0f);
+            expectEquals (s.get (pid::lowType), 1.0f, "bell");
+            expectWithinAbsoluteError (s.get (pid::lowFreq), 300.0f, 0.5f);
+            expectWithinAbsoluteError (s.get (pid::lowGain), -3.0f, 0.01f);
+            expectWithinAbsoluteError (s.get (pid::lowQ), 1.2f, 0.01f);
+        }
+
+        beginTest ("Fix model: EQ after VOCAL CHECK - applying twice does not double the cut, a deeper user cut stays");
+        {
+            State s ("v2,check,eq");
+            s.values[pid::eqOn] = 1.0f;
+            s.apply (planFix (mud, "Mulm", s.context (legacy)));
+            expectWithinAbsoluteError (s.get (pid::lowGain), -3.0f, 0.01f);
+            const auto again = planFix (mud, "Mulm", s.context (legacy));
+            s.apply (again);
+            expectWithinAbsoluteError (s.get (pid::lowGain), -3.0f, 0.01f, "idempotent");
+
+            s.values[pid::lowGain] = -5.0f;
+            s.apply (planFix (mud, "Mulm", s.context (legacy)));
+            expectWithinAbsoluteError (s.get (pid::lowGain), -5.0f, 0.01f, "never weakens an existing cut");
+        }
+
+        beginTest ("Fix model: EQ before VOCAL CHECK - the measurement contains its cut, the fix adds to it");
+        {
+            State s ("v2,eq,check");
+            s.values[pid::eqOn] = 1.0f;
+            s.values[pid::lowType] = 1.0f;
+            s.values[pid::lowFreq] = 310.0f;
+            s.values[pid::lowGain] = -2.0f;
+            s.apply (planFix (mud, "Mulm", s.context (legacy)));
+            expectWithinAbsoluteError (s.get (pid::lowGain), -5.0f, 0.01f);
+        }
+
+        beginTest ("Fix model: parameter kinds; modules that are off are not touched unless the fix switches them on");
+        {
+            State s ("v2,eq,check");
+            FixAction sib;
+            sib.modules.push_back (ModuleId::deess);
+            sib.params.push_back ({ pid::deessFreq, 5500.0f, ParamChange::Kind::set, 0.0f });
+            sib.params.push_back ({ pid::deessThreshold, -36.0f, ParamChange::Kind::atMost, 0.0f });
+            sib.params.push_back ({ pid::deessRange, 9.0f, ParamChange::Kind::amount, 0.0f });
+            s.values[pid::deessOn] = 0.0f;
+            s.apply (planFix (sib, "S", s.context (legacy)));
+            expectEquals (s.get (pid::deessOn), 1.0f);
+            expect (s.routing.contains (ModuleId::deess));
+            expectWithinAbsoluteError (s.get (pid::deessFreq), 5500.0f, 0.5f);
+            expectWithinAbsoluteError (s.get (pid::deessThreshold), -36.0f, 0.01f);
+            expectWithinAbsoluteError (s.get (pid::deessRange), 9.0f, 0.01f);
+
+            FixAction over;   // reduce compression: only where a compressor is on
+            over.params.push_back ({ pid::compRatio, -1.5f, ParamChange::Kind::amount, 1.0f });
+            State off ("v2,eq,check");
+            off.values[pid::compOn] = 0.0f;
+            expect (planFix (over, "x", off.context (legacy)).empty(), "nothing to reduce");
+            State on ("v2,comp,check");
+            on.values[pid::compOn] = 1.0f;
+            on.values[pid::compRatio] = 4.0f;
+            on.apply (planFix (over, "x", on.context (legacy)));
+            expectWithinAbsoluteError (on.get (pid::compRatio), 2.5f, 0.01f);
+        }
+
+        beginTest ("Fix model: several fixes merge (the stronger cut on the same band wins; low cut takes the higher frequency)");
+        {
+            State s ("v2,check,eq");
+            s.values[pid::eqOn] = 1.0f;
+            FixAction mud2 = mud;
+            mud2.eq.front().freqHz = 320.0f;
+            mud2.eq.front().gainDb = -4.5f;
+            FixAction rumble, plosive;
+            rumble.modules.push_back (ModuleId::eq);
+            rumble.eq.push_back ({ EqRole::lowcut, EqShape::lowCut, 90.0f, 0.0f, 0.7071f, 12 });
+            plosive.modules.push_back (ModuleId::eq);
+            plosive.eq.push_back ({ EqRole::lowcut, EqShape::lowCut, 120.0f, 0.0f, 0.7071f, 24 });
+            const auto f = planFixes ({ { mud, "a" }, { rumble, "b" }, { mud2, "c" }, { plosive, "d" } }, s.context (legacy), "Alles");
+            s.apply (f);
+            expectWithinAbsoluteError (s.get (pid::lowGain), -4.5f, 0.01f);
+            expectWithinAbsoluteError (s.get (pid::lowFreq), 320.0f, 0.5f);
+            expectEquals (s.get (pid::hpfOn), 1.0f);
+            expectWithinAbsoluteError (s.get (pid::hpfFreq), 120.0f, 0.5f);
+            expectEquals (s.get (pid::hpfSlope), 1.0f, "24 dB/oct");
+            expectEquals (f.name, juce::String ("Alles"));
+        }
+
+        beginTest ("Fix model: applying is one undo step (parameters and routing)");
+        {
+            UndoHost host;
+            const auto before = host.apvts.state.getProperty (statekeys::routing).toString();
+            State s (before);
+            for (auto& [id, v] : s.values)
+                if (auto* p = host.apvts.getParameter (id))
+                    v = p->convertFrom0to1 (p->getValue());
+            s.routing = Routing::fromString ("v2,comp,check");
+            host.apvts.state.setProperty (statekeys::routing, s.routing.toString(), nullptr);
+            host.apvts.getParameter (pid::eqOn)->setValueNotifyingHost (0.0f);
+            s.values[pid::eqOn] = 0.0f;
+            host.apvts.copyState();
+            host.undo.clearUndoHistory();
+            const auto routingBefore = host.apvts.state.getProperty (statekeys::routing).toString();
+
+            applyResolvedFix (host.apvts, planFix (mud, "Vocal Check: Mulm", s.context (legacy)));
+            expectWithinAbsoluteError (host.value (pid::lowGain), -3.0f, 0.01f);
+            expectEquals (host.value (pid::eqOn), 1.0f);
+            expect (host.apvts.state.getProperty (statekeys::routing).toString() != routingBefore);
+            expect (host.undo.canUndo(), "undoable");
+            expectEquals (host.undo.getUndoDescription(), juce::String ("Vocal Check: Mulm"));
+
+            host.undo.undo();
+            expectWithinAbsoluteError (host.value (pid::lowGain), 0.0f, 0.01f, "one undo restores the gain");
+            expectEquals (host.value (pid::eqOn), 0.0f, "... the switch");
+            expectEquals (host.apvts.state.getProperty (statekeys::routing).toString(), routingBefore, "... and the routing");
+            expect (! host.undo.canUndo(), "it was a single step");
         }
     }
 
