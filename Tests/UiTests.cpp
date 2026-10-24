@@ -258,20 +258,38 @@ public:
             }
         }
 
-        beginTest ("Module browser: categories, search, instance limits, insertion");
+        beginTest ("Module browser: cards grouped by category, search, Esc, Enter, highlight, full modules greyed with a reason");
         {
             Harness h;
             ui::ModuleBrowser browser (h.proc);
             browser.setBounds (0, 0, ui::baseWidth, ui::baseHeight);
             browser.open (1, false);
-            expectEquals ((int) browser.visibleModules().size(), dsp::numModules, "all modules in 'All'");
+            using C = ui::ModuleBrowser::Category;
+            expectEquals ((int) browser.visibleModules().size(), dsp::numModules, "every module");
+            const std::vector<std::pair<C, std::vector<ModuleId>>> expected {
+                { C::cleanUp, { ModuleId::eq, ModuleId::deess, ModuleId::smooth } },
+                { C::dynamics, { ModuleId::comp, ModuleId::smash, ModuleId::ride } },
+                { C::colour, { ModuleId::sat } },
+                { C::widthVoices, { ModuleId::doubler, ModuleId::choir, ModuleId::pitch } },
+                { C::space, { ModuleId::delay, ModuleId::reverb } },
+                { C::rhythm, { ModuleId::chop, ModuleId::pulse } },
+                { C::analysis, { ModuleId::check } } };
+            std::vector<ModuleId> order;
+            for (auto& [cat, ids] : expected)
+            {
+                const auto group = browser.groupBoundsFor (cat);
+                expect (! group.isEmpty(), ui::ModuleBrowser::categoryName (cat));
+                for (auto id : ids)
+                {
+                    expect (ui::ModuleBrowser::categoryOf (id) == cat);
+                    expect (group.contains (browser.cardBoundsFor (id)), juce::String (dsp::moduleKey (id)) + " in its group");
+                    order.push_back (id);
+                }
+            }
+            expect (browser.visibleModules() == order, "grouped display order");
+            for (auto id : order)
+                expect (browser.getLocalBounds().contains (browser.cardBoundsFor (id)), "card inside the window");
 
-            browser.setCategory (ui::ModuleBrowser::Category::space);
-            expect (browser.visibleModules() == std::vector<ModuleId> { ModuleId::delay, ModuleId::reverb });
-            browser.setCategory (ui::ModuleBrowser::Category::analysis);
-            expect (browser.visibleModules() == std::vector<ModuleId> { ModuleId::check }, "analysis tools separate");
-
-            browser.setCategory (ui::ModuleBrowser::Category::all);
             browser.setSearchText ("harsh");
             const auto harsh = browser.visibleModules();
             expect (std::find (harsh.begin(), harsh.end(), ModuleId::smooth) != harsh.end()
@@ -280,21 +298,41 @@ public:
             expect (browser.visibleModules().empty());
             browser.setSearchText ({});
 
+            // Hover shows the description
+            const auto reverbCard = browser.cardBoundsFor (ModuleId::reverb).getCentre().toFloat();
+            browser.mouseMove (mouse (browser, reverbCard, reverbCard, false));
+            expect (browser.getInfoText().startsWith ("Reverb"), "hover description: " + browser.getInfoText());
+
             ModuleId chosen = ModuleId::eq;
             int at = -1;
             browser.onChoose = [&] (ModuleId id, int index, bool) { chosen = id; at = index; };
-            click (browser, browser.cardBoundsFor (ModuleId::reverb).getCentre().toFloat());
+            click (browser, reverbCard);
             expect (chosen == ModuleId::reverb && at == 1, "clicking a card chooses it for the position");
             expect (! browser.isOpen(), "the browser closes");
 
-            // Full bank: the card does nothing
+            // Keys: highlight + Enter, Esc
+            browser.open (0, true);
+            expect (browser.getHighlighted() == ModuleId::eq, "first card highlighted");
+            browser.moveHighlight (1);
+            expect (browser.getHighlighted() == ModuleId::deess, "arrow moves the highlight");
+            expect (browser.keyPressed (juce::KeyPress (juce::KeyPress::returnKey)));
+            expect (chosen == ModuleId::deess && ! browser.isOpen(), "Enter adds the highlighted module");
+            browser.open (0, true);
+            browser.keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+            expect (! browser.isOpen(), "Esc closes");
+
+            // Full: greyed with a reason, not choosable, skipped by the highlight
             browser.open (0, true);
             auto r = h.proc.getRouting();
             r.insertAt (r.size(), ModuleId::pitch, 0);
             h.proc.setRouting (r);
+            expect (browser.reasonUnavailable (ModuleId::pitch).isNotEmpty(), "reason for pitch");
+            expect (browser.reasonUnavailable (ModuleId::reverb).isEmpty());
             chosen = ModuleId::eq;
             click (browser, browser.cardBoundsFor (ModuleId::pitch).getCentre().toFloat());
             expect (chosen == ModuleId::eq && browser.isOpen(), "pitch is already in the chain (one instance)");
+            browser.setSearchText ("transpose");
+            expect (! browser.chooseHighlighted(), "Enter does not add a full module");
         }
 
         beginTest ("Editor: browser inserts at the chosen position and opens the new instance");

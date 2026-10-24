@@ -106,3 +106,9 @@ user module presets in UserSettings "userModulePresets". All 15 module panels + 
   der Dopplungen". The ParameterLayout texts stay (they are also host-visible; owner: mixlaw/coordinator).
 - Removed assertion family: DesignTests "Review: no control is laid out with zero size or outside its panel" moved into
   PanelFrameTests (now checked with the Mehr drawer closed and open, at the editor's panel size 984 × 442).
+
+Task 8: complete (ModuleBrowser rewritten: 760 × 500 popup, search field, cards 108 × 76 grouped by Clean-up / Dynamics / Colour /
+Width-Voices / Space / Rhythm / Analysis in a wrapping flow, hover/highlight description line, full modules greyed with
+"voll" + reason, Up/Down (Left/Right while the search is empty) move the highlight, Enter adds it, Esc closes. UiTests updated.)
+- Ruling: removed assertion family "category chips filter (All / Space / Analysis)" — spec 2.7 shows all groups at once with a
+  search field; replaced by "every card sits in its category group, grouped order", hover text, Enter/Esc/highlight tests.
