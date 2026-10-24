@@ -202,3 +202,104 @@ public:
 };
 
 static DoublerTests doublerTests;
+
+// 0.6 engine: parameters, voice mapping
+class DoublerParameterTests final : public juce::UnitTest
+{
+public:
+    DoublerParameterTests() : juce::UnitTest ("Velvox doubler parameters", "Velvox") {}
+
+    void runTest() override
+    {
+        beginTest ("Doubler parameters: new IDs exist with old-behaviour defaults");
+        {
+            const auto def = [this] (const char* id) -> float
+            {
+                const auto* s = findParameterSpec (id);
+                expect (s != nullptr, juce::String ("missing ") + id);
+                return s != nullptr ? s->defaultValue : -12345.0f;
+            };
+            expectEquals (def (pid::doublerVoices), 0.0f, "Classic");
+            const float delays[] { 14.0f, 19.18f, 24.0f, 31.0f }, detunes[] { 0.0f, 0.0f, -5.0f, 5.0f };
+            const float gains[] { 0.0f, 0.0f, -3.0f, -3.0f }, pans[] { -100.0f, 100.0f, -50.0f, 50.0f };
+            for (int v = 0; v < 4; ++v)
+            {
+                expectEquals (def (pid::doublerVoiceOn[v]), 1.0f);
+                expectWithinAbsoluteError (def (pid::doublerVoiceDelay[v]), delays[v], 1.0e-4f);
+                expectEquals (def (pid::doublerVoiceDetune[v]), detunes[v]);
+                expectEquals (def (pid::doublerVoiceGain[v]), gains[v]);
+                expectEquals (def (pid::doublerVoicePan[v]), pans[v]);
+            }
+            expectEquals (def (pid::doublerModDepth), 8.0f);
+            expectWithinAbsoluteError (def (pid::doublerModRate), 0.31f, 1.0e-6f);
+            expectEquals (def (pid::doublerLowCut), 120.0f);
+            expectEquals (def (pid::doublerDry), 0.0f);
+            expect (findParameterSpec ("doublerV3Pan_2") != nullptr, "instance 2 bank");
+
+            OfflineParameters p;
+            const auto s = p.read (dsp::Routing::fromString ("v2,doubler")).doubler;
+            expect (s.mode == dsp::DoublerMode::classic);
+            expectWithinAbsoluteError (s.voices[1].delayMs, 19.18f, 1.0e-4f);
+            expectEquals (s.voices[0].pan, -1.0f);
+            expectEquals (s.voices[3].pan, 0.5f);
+            expectEquals (s.lowCutHz, 120.0f);
+            expectEquals (s.dryDb, 0.0f);
+
+            p.set (pid::doublerVoices, 2.0f);
+            p.set (pid::doublerV3Gain, -12.0f);
+            p.set (pid::doublerV2On, 0.0f);
+            const auto f = p.read (dsp::Routing::fromString ("v2,doubler")).doubler;
+            expect (f.mode == dsp::DoublerMode::four);
+            expectEquals (f.voices[2].gainDb, -12.0f);
+            expect (! f.voices[1].on);
+        }
+
+        beginTest ("Doubler voices: Classic follows the 0.2 controls");
+        {
+            dsp::DoublerSettings s;
+            s.delayMs = 25.0f;
+            s.width = 0.6f;
+            s.detuneCents = 12.0f;
+            s.voices[0].delayMs = 3.0f;   // ignored in Classic
+            const auto r = dsp::DoublerModule::resolveVoices (s);
+            expectEquals (r.count, 2);
+            expectWithinAbsoluteError (r.v[0].delayMs, 25.0f, 1.0e-4f);
+            expectWithinAbsoluteError (r.v[1].delayMs, 34.25f, 1.0e-3f);
+            expectWithinAbsoluteError (r.v[0].pan, -0.6f, 1.0e-6f);
+            expectWithinAbsoluteError (r.v[1].pan, 0.6f, 1.0e-6f);
+            expectEquals (r.v[0].detuneCents, 0.0f);
+            expectEquals (r.v[0].gain, 1.0f);
+            expect (r.v[0].on && r.v[1].on && ! r.v[2].on && ! r.v[3].on);
+            expectEquals (r.modDepthCents, 12.0f);
+            expectEquals (r.normalisation, 1.0f);
+        }
+
+        beginTest ("Doubler voices: 2 and 4 voice modes use the per-voice values");
+        {
+            dsp::DoublerSettings s;
+            s.mode = dsp::DoublerMode::four;
+            s.width = 0.5f;
+            s.modDepthCents = 3.0f;
+            s.voices[1].on = false;
+            s.voices[2].gainDb = -6.0f;
+            const auto r = dsp::DoublerModule::resolveVoices (s);
+            expectEquals (r.count, 4);
+            expectWithinAbsoluteError (r.v[2].delayMs, 24.0f, 1.0e-4f);
+            expectWithinAbsoluteError (r.v[2].gain, 0.501187f, 1.0e-5f);
+            expectEquals (r.v[2].detuneCents, -5.0f);
+            expectWithinAbsoluteError (r.v[0].pan, -0.5f, 1.0e-6f);
+            expectWithinAbsoluteError (r.v[3].pan, 0.25f, 1.0e-6f);
+            expect (! r.v[1].on);
+            expectEquals (r.modDepthCents, 3.0f);
+            expectWithinAbsoluteError (r.normalisation, 0.70711f, 1.0e-4f);
+
+            s.mode = dsp::DoublerMode::two;
+            const auto t = dsp::DoublerModule::resolveVoices (s);
+            expectEquals (t.count, 2);
+            expect (! t.v[2].on && ! t.v[3].on);
+            expectEquals (t.normalisation, 1.0f);
+        }
+    }
+};
+
+static DoublerParameterTests doublerParameterTests;

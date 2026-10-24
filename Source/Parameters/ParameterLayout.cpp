@@ -125,6 +125,45 @@ namespace velvox
         }
     }
 
+    namespace
+    {
+        // Doubler engine (0.6). Defaults reproduce the 0.2 Doubler (Classic mode, V1/V2 = what the
+        // 0.2 Delay / Width defaults give); V3/V4 only play in the 4-voice mode.
+        void appendDoublerSpecs (std::vector<ParameterSpec>& specs)
+        {
+            specs.push_back ({ pid::doublerVoices, "Doubler Voices", "Doubler", T::Choice, 0, 2, 0, 0, "", { "Classic", "2", "4" },
+                               "Classic: two voices set by Delay and Detune (the doubler of 0.2-0.5). 2 / 4: every voice with its own delay, detune, gain and pan." });
+            static const float delays[] { 14.0f, 19.18f, 24.0f, 31.0f }, detunes[] { 0.0f, 0.0f, -5.0f, 5.0f };
+            static const float gains[] { 0.0f, 0.0f, -3.0f, -3.0f }, pans[] { -100.0f, 100.0f, -50.0f, 50.0f };
+            static const char* const names[4][5] {
+                { "Doubler V1 On", "Doubler V1 Delay", "Doubler V1 Detune", "Doubler V1 Gain", "Doubler V1 Pan" },
+                { "Doubler V2 On", "Doubler V2 Delay", "Doubler V2 Detune", "Doubler V2 Gain", "Doubler V2 Pan" },
+                { "Doubler V3 On", "Doubler V3 Delay", "Doubler V3 Detune", "Doubler V3 Gain", "Doubler V3 Pan" },
+                { "Doubler V4 On", "Doubler V4 Delay", "Doubler V4 Detune", "Doubler V4 Gain", "Doubler V4 Pan" },
+            };
+            for (int v = 0; v < 4; ++v)
+            {
+                specs.push_back ({ pid::doublerVoiceOn[v], names[v][0], "Doubler", T::Bool, 0, 1, 1, 0, "", {}, "Switches this voice on (2 / 4 voice mode)." });
+                specs.push_back ({ pid::doublerVoiceDelay[v], names[v][1], "Doubler", T::Float, 1.0f, 60.0f, delays[v], 15.0f, "ms", {},
+                                   "How late this voice comes in after the original." });
+                specs.push_back ({ pid::doublerVoiceDetune[v], names[v][2], "Doubler", T::Float, -30.0f, 30.0f, detunes[v], 0.0f, "ct", {},
+                                   "Constant pitch offset of this voice." });
+                specs.push_back ({ pid::doublerVoiceGain[v], names[v][3], "Doubler", T::Float, -24.0f, 6.0f, gains[v], 0.0f, "dB", {},
+                                   "Level of this voice." });
+                specs.push_back ({ pid::doublerVoicePan[v], names[v][4], "Doubler", T::Float, -100.0f, 100.0f, pans[v], 0.0f, "%", {},
+                                   "Stereo position of this voice (scaled by Width)." });
+            }
+            specs.push_back ({ pid::doublerModDepth, "Doubler Mod Depth", "Doubler", T::Float, 0.0f, 25.0f, 8.0f, 0.0f, "ct", {},
+                               "Slow random pitch and timing wobble of the voices (2 / 4 voice mode; Classic uses Detune)." });
+            specs.push_back ({ pid::doublerModRate, "Doubler Mod Rate", "Doubler", T::Float, 0.05f, 3.0f, 0.31f, 0.5f, "Hz", {},
+                               "Speed of the wobble (every voice moves at its own, unrelated speed around it)." });
+            specs.push_back ({ pid::doublerLowCut, "Doubler Low Cut", "Doubler", T::Float, 20.0f, 1000.0f, 120.0f, 150.0f, "Hz", {},
+                               "High-pass on the doubled voices (keeps the low end to the original)." });
+            specs.push_back ({ pid::doublerDry, "Doubler Dry", "Doubler", T::Float, -60.0f, 6.0f, 0.0f, 0.0f, "dB", {},
+                               "Level of the original vocal. -60 dB = off (voices only)." });
+        }
+    }
+
     const std::vector<ParameterSpec>& getParameterSpecs()
     {
         static const std::vector<ParameterSpec> specs = []
@@ -393,6 +432,7 @@ namespace velvox
               "Slow wow and flutter on the repeats, like a tape echo." },
         };
             appendEqBandSpecs (table);
+            appendDoublerSpecs (table);
             appendInstanceBanks (table);
             return table;
         }();

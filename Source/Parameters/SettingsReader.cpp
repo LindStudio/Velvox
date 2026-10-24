@@ -65,6 +65,15 @@ namespace velvox
     bind (raw.doublerWidth, pid::doublerWidth);   bind (raw.doublerDelay, pid::doublerDelay);
     bind (raw.doublerDetune, pid::doublerDetune); bind (raw.doublerMonoSafe, pid::doublerMonoSafe);
     bind (raw.doublerTone, pid::doublerTone);
+    bind (raw.doublerVoices, pid::doublerVoices);     bind (raw.doublerModDepth, pid::doublerModDepth);
+    bind (raw.doublerModRate, pid::doublerModRate);   bind (raw.doublerLowCut, pid::doublerLowCut);
+    bind (raw.doublerDry, pid::doublerDry);
+    for (size_t v = 0; v < 4; ++v)
+    {
+        bind (raw.doublerVOn[v], pid::doublerVoiceOn[v]);         bind (raw.doublerVDelay[v], pid::doublerVoiceDelay[v]);
+        bind (raw.doublerVDetune[v], pid::doublerVoiceDetune[v]); bind (raw.doublerVGain[v], pid::doublerVoiceGain[v]);
+        bind (raw.doublerVPan[v], pid::doublerVoicePan[v]);
+    }
     bind (raw.duckSource, pid::duckSource);
     bind (raw.delayDuckAmount, pid::delayDuckAmount);       bind (raw.delayDuckThreshold, pid::delayDuckThreshold);
     bind (raw.delayDuckAttack, pid::delayDuckAttack);       bind (raw.delayDuckRelease, pid::delayDuckRelease);
@@ -229,6 +238,14 @@ namespace velvox
     s.doubler.detuneCents = raw.doublerDetune.get();
     s.doubler.monoSafe = raw.doublerMonoSafe.get() * 0.01f;
     s.doubler.toneHz = raw.doublerTone.get();
+    s.doubler.mode = (dsp::DoublerMode) juce::jlimit (0, 2, raw.doublerVoices.index());
+    for (size_t v = 0; v < 4; ++v)
+        s.doubler.voices[v] = { raw.doublerVOn[v].on(), raw.doublerVDelay[v].get(), raw.doublerVDetune[v].get(),
+                                raw.doublerVGain[v].get(), raw.doublerVPan[v].get() * 0.01f };
+    s.doubler.modDepthCents = raw.doublerModDepth.get();
+    s.doubler.modRateHz = raw.doublerModRate.get();
+    s.doubler.lowCutHz = raw.doublerLowCut.get();
+    s.doubler.dryDb = raw.doublerDry.get();
 
     s.duckExternal = raw.duckSource.index() == 1;
     s.delayDuck = { raw.delayDuckAmount.get(), raw.delayDuckThreshold.get(), raw.delayDuckAttack.get(), raw.delayDuckRelease.get() };

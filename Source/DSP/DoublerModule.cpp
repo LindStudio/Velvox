@@ -18,6 +18,33 @@ namespace velvox::dsp
         return (ratio - 1.0) * sampleRate / (twoPi * rateHz);
     }
 
+    DoublerVoices DoublerModule::resolveVoices (const DoublerSettings& s) noexcept
+    {
+        DoublerVoices r;
+        const float w = juce::jlimit (0.0f, 1.0f, s.width);
+        if (s.mode == DoublerMode::classic)
+        {
+            // The 0.2 doubler: left voice at Delay, right voice 1.37x later, Detune = wobble depth
+            const float d = juce::jlimit (1.0f, maxDelayMs, s.delayMs);
+            r.count = 2;
+            r.v[0] = { true, d, 0.0f, 1.0f, -w };
+            r.v[1] = { true, d * 1.37f, 0.0f, 1.0f, +w };
+            r.modDepthCents = s.detuneCents;
+            r.normalisation = 1.0f;
+            return r;
+        }
+        r.count = s.mode == DoublerMode::four ? 4 : 2;
+        for (int i = 0; i < r.count; ++i)
+        {
+            const auto& vs = s.voices[(size_t) i];
+            r.v[(size_t) i] = { vs.on, vs.delayMs, vs.detuneCents, vs.on ? juce::Decibels::decibelsToGain (vs.gainDb) : 0.0f,
+                                juce::jlimit (-1.0f, 1.0f, vs.pan * w) };
+        }
+        r.modDepthCents = s.modDepthCents;
+        r.normalisation = std::sqrt (2.0f / (float) r.count);
+        return r;
+    }
+
     void DoublerModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;

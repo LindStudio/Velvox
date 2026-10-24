@@ -52,6 +52,8 @@ namespace velvox
         Raw delayToReverb;
         Raw stereoWidth, monoBelow, levelMatchMode, levelMatchWindow, levelMatchRange;
         Raw doublerOn, doublerMix, doublerWidth, doublerDelay, doublerDetune, doublerMonoSafe, doublerTone;
+        Raw doublerVoices, doublerModDepth, doublerModRate, doublerLowCut, doublerDry;
+        std::array<Raw, 4> doublerVOn, doublerVDelay, doublerVDetune, doublerVGain, doublerVPan;
         Raw duckSource, delayDuckAmount, delayDuckThreshold, delayDuckAttack, delayDuckRelease;
         Raw reverbDuckAmount, reverbDuckThreshold, reverbDuckAttack, reverbDuckRelease;
         Raw pitchOn, pitchSemitones, pitchCents, pitchPreserveFormants, pitchFormant, pitchMix;
