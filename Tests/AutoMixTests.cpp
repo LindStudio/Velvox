@@ -46,6 +46,20 @@ namespace
         return v;
     }
 
+    // EQ decisions live in role bands since 0.6 (spec 8, Q5)
+    float lowCutHz (const MixPlan& p)
+    {
+        const auto b = roleBand (p, {}, dsp::EqRole::lowCut);
+        return b.has_value() && b->on ? b->freq : 0.0f;
+    }
+    float airGain (const MixPlan& p, int instance = 0) { return roleGain (p, {}, dsp::EqRole::air, instance); }
+    float liveLowCutHz (Harness& h)   // 0 = no low cut
+    {
+        const auto eq = h.proc.readSettings().eq;
+        const int i = eq.findRole (dsp::EqRole::lowCut);
+        return i >= 0 && eq.bands[(size_t) i].on ? eq.bands[(size_t) i].freq : 0.0f;
+    }
+
     VelvoxAudioProcessorEditor& asVelvox (juce::AudioProcessorEditor& e) { return dynamic_cast<VelvoxAudioProcessorEditor&> (e); }
 
     // Button clicks are delivered asynchronously: click and let the message loop run
@@ -373,9 +387,9 @@ public:
             VocalSpec low; low.f0 = 105.0f; low.seconds = 14.0;
             VocalSpec high; high.f0 = 320.0f; high.seconds = 14.0;
             const auto pl = planFor (low), ph = planFor (high);
-            expect (pl.get (pid::hpfFreq) < ph.get (pid::hpfFreq) - 40.0f,
-                    "male " + juce::String (pl.get (pid::hpfFreq)) + " Hz vs female " + juce::String (ph.get (pid::hpfFreq)) + " Hz");
-            expect (pl.get (pid::hpfFreq) < 0.85f * 105.0f * std::pow (2.0f, -5.0f / 12.0f) + 5.0f, "below the lowest sung notes");
+            expect (lowCutHz (pl) > 0.0f && lowCutHz (pl) < lowCutHz (ph) - 40.0f,
+                    "male " + juce::String (lowCutHz (pl)) + " Hz vs female " + juce::String (lowCutHz (ph)) + " Hz");
+            expect (lowCutHz (pl) < 0.85f * 105.0f * std::pow (2.0f, -5.0f / 12.0f) + 5.0f, "below the lowest sung notes");
         }
 
         beginTest ("Planner: tone decisions depend on the material");
@@ -383,8 +397,8 @@ public:
             VocalSpec dark; dark.tiltDb = -5.0f; dark.seconds = 14.0;
             VocalSpec bright; bright.tiltDb = 4.0f; bright.seconds = 14.0;
             const auto pd = planFor (dark), pb = planFor (bright);
-            expect (pd.get (pid::highGain) > 1.0f, "dark voice gets more highs");
-            expectEquals (pb.get (pid::highGain), 0.0f, "bright voice gets no extra highs");
+            expect (airGain (pd) > 1.0f, "dark voice gets more highs");
+            expectEquals (airGain (pb), 0.0f, "bright voice gets no extra highs");
 
             VocalSpec sib; sib.sibilance = 1.6f; sib.seconds = 14.0;
             VocalSpec soft; soft.sibilance = 0.05f; soft.seconds = 14.0;
@@ -409,7 +423,7 @@ public:
             const auto pn = planFor (noisy);
             if (pn.on (pid::rideOn))
                 expect (pn.get (pid::rideMaxBoost) <= 3.0f, "ride boost limited with noise");
-            expect (pn.get (pid::highGain) <= 2.0f, "high boost limited with noise");
+            expect (airGain (pn) <= 2.0f, "high boost limited with noise");
 
             VocalSpec res; res.resonanceHz = 3000.0f; res.resonanceDb = 16.0f; res.seconds = 14.0;
             expect (planFor (res).on (pid::smoothOn), "upper resonance -> SMOOTH");
@@ -701,9 +715,10 @@ public:
             {
                 const auto& c = it->second;
                 expect (c.on (pid::eqOn) && c.routing.contains (ModuleId::eq), "EQ engaged");
-                expectEquals (c.get (pid::highType), 0.0f, "shelf");
-                expect (c.get (pid::highGain) <= -1.0f && c.get (pid::highGain) >= -4.0f, "gentle cut: " + juce::String (c.get (pid::highGain), 1));
-                expect (c.get (pid::highFreq) <= 6000.0f, "shelf reaches into the upper mids");
+                const auto air = roleBand (c, {}, dsp::EqRole::air);
+                expect (air.has_value() && air->on && air->bandType() == dsp::EqBandType::highShelf, "shelf");
+                expect (airGain (c) <= -1.0f && airGain (c) >= -4.0f, "gentle cut: " + juce::String (airGain (c), 1));
+                expect (air.has_value() && air->freq <= 6000.0f, "shelf reaches into the upper mids");
             }
 
             VocalSpec d; d.seconds = 12.0; d.tiltDb = -5.0f; d.f0 = 120.0f;
@@ -719,8 +734,7 @@ public:
             auto base = AutoMixPlanner::plan (profile, defaults());
             base.set (pid::eqOn, 1.0f);
             base.set (pid::compOn, 1.0f);
-            base.set (pid::highGain, 3.0f);
-            base.set (pid::highFreq, 9000.0f);
+            setRoleBand (base, {}, 0, dsp::EqRole::air, eqBand (dsp::EqBandType::highShelf, 9000.0f, 3.0f, 0.7071f), true);
             if (! base.routing.contains (ModuleId::comp))
                 base.routing.insertAt (base.routing.size(), ModuleId::comp, 0);
 
@@ -732,9 +746,10 @@ public:
                 const auto& c = it->second;
                 const auto k2 = [] (const char* id) { return dsp::instanceParamId (id, 1); };
                 expect (c.on (k2 (pid::eqOn).toRawUTF8()), "EQ 2 is switched on");
-                expectWithinAbsoluteError (c.get (k2 (pid::highGain)), 3.0f, 1.0e-4f, "the boost moved to EQ 2");
-                expectWithinAbsoluteError (c.get (k2 (pid::highFreq)), 9000.0f, 1.0e-2f, "at the same frequency");
-                expectWithinAbsoluteError (c.get (pid::highGain), 0.0f, 1.0e-4f, "and left EQ 1");
+                expectWithinAbsoluteError (airGain (c, 1), 3.0f, 1.0e-4f, "the boost moved to EQ 2");
+                const auto air2 = roleBand (c, {}, dsp::EqRole::air, 1);
+                expect (air2.has_value() && std::abs (air2->freq - 9000.0f) < 1.0e-2f, "at the same frequency");
+                expectWithinAbsoluteError (airGain (c), 0.0f, 1.0e-4f, "and left EQ 1");
                 for (auto m : { ModuleId::comp, ModuleId::smash, ModuleId::deess, ModuleId::smooth })
                     if (c.routing.contains (m))
                         expect (c.routing.indexOf (ModuleId::eq, 1) > c.routing.indexOf (m), "EQ 2 after the dynamics");
@@ -742,8 +757,12 @@ public:
 
             // No highs boosted, no presence boost: no EQ 2 variant
             auto flat = base;
-            flat.set (pid::highGain, 0.0f);
-            flat.set (pid::midGain, 0.0f);
+            for (auto role : { dsp::EqRole::air, dsp::EqRole::autoMix })
+                if (auto band = roleBand (flat, {}, role); band.has_value())
+                {
+                    band->gain = 0.0f;
+                    setRoleBand (flat, {}, 0, role, *band, false);
+                }
             const auto none = AutoMixEngine::candidatesFor (flat, profile);
             expect (std::none_of (none.begin(), none.end(), [] (auto& c) { return c.second.routing.contains (ModuleId::eq, 1); }),
                     "no EQ 2 without a boost to move");
@@ -782,7 +801,7 @@ public:
             Harness h;
             auto& am = h.proc.getAutoMix();
             expect (am.shouldShowPrompt(), "a new instance asks for an analysis");
-            const float hpfBefore = h.get (pid::hpfFreq);
+            const float hpfBefore = liveLowCutHz (h);
 
             am.start();
             expect (am.getPhase() == AutoMixController::Phase::listening);
@@ -798,16 +817,16 @@ public:
                 expect (! st.title.contains ("Hall-Hall"), "reverb title reads naturally: " + st.title);
             }
             expect (am.getReport().steps.size() > 0 && am.getReport().steps[0].title.startsWith ("Low Cut"), "low cut decided by the analysis");
-            expect (h.get (pid::hpfOn) > 0.5f, "low cut on");
+            expect (liveLowCutHz (h) > 0.0f, "low cut on");
             expect (h.get (pid::levelMatchMode) > 0.5f, "fair compare enabled");
             expect (h.proc.getRouting().isValid());
 
             // Compare with the previous state (real parameter switch) and back
-            const float mixHpf = h.get (pid::hpfFreq);
+            const float mixHpf = liveLowCutHz (h);
             am.showPrevious (true);
-            expectWithinAbsoluteError (h.get (pid::hpfFreq), hpfBefore, 0.01f);
+            expectWithinAbsoluteError (liveLowCutHz (h), hpfBefore, 0.01f);
             am.showPrevious (false);
-            expectWithinAbsoluteError (h.get (pid::hpfFreq), mixHpf, 0.01f);
+            expectWithinAbsoluteError (liveLowCutHz (h), mixHpf, 0.01f);
 
             // State round trip: report, prompt and previous state survive save / load
             juce::MemoryBlock state;
@@ -818,11 +837,11 @@ public:
             expect (am2.hasMix() && am2.hasPrevious(), "mix and previous state restored");
             expect (! am2.shouldShowPrompt(), "no prompt when reopening the project");
             expectEquals ((int) am2.getReport().steps.size(), (int) am.getReport().steps.size());
-            expectWithinAbsoluteError (h2.get (pid::hpfFreq), mixHpf, 0.01f);
+            expectWithinAbsoluteError (liveLowCutHz (h2), mixHpf, 0.01f);
 
             // Restore the previous state completely
             am.restorePrevious();
-            expectWithinAbsoluteError (h.get (pid::hpfFreq), hpfBefore, 0.01f);
+            expectWithinAbsoluteError (liveLowCutHz (h), hpfBefore, 0.01f);
             expect (! am.hasMix());
         }
 
@@ -945,7 +964,7 @@ public:
         {
             Harness h;
             auto& am = h.proc.getAutoMix();
-            const float hpf = h.get (pid::hpfFreq);
+            const float hpf = liveLowCutHz (h);
             am.start();
             const auto out = h.run (h.noise (0.2f, 1.0, 3));
             juce::MessageManager::getInstance()->runDispatchLoopUntil (150);
@@ -953,7 +972,7 @@ public:
             expect (am.getPhase() == AutoMixController::Phase::capturing, "capturing after signal");
             am.cancel();
             expect (am.getPhase() == AutoMixController::Phase::idle);
-            expectEquals (h.get (pid::hpfFreq), hpf);
+            expectEquals (liveLowCutHz (h), hpf);
             expect (! am.analyseNow(), "nothing captured anymore");
         }
     }
