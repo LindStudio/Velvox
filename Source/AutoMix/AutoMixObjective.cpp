@@ -46,8 +46,11 @@ namespace velvox::automix
 
         // ---- Tonal balance (relative to the core of the voice). Windows from the analysis
         // thresholds that were calibrated on real vocals (VocalProfiler issues): inside
-        // them a vocal reads as neither muddy, thin, dull nor harsh.
-        b.tonal = 0.6f * window (m.bodyDb, -9.0f, -1.0f)
+        // them a vocal reads as neither muddy, thin, dull nor harsh. A high voice (lowest
+        // notes above 250 Hz) has no fundamentals in the 100-300 Hz body band, so there
+        // only too much body counts.
+        const bool highVoice = profile.pitchValid && profile.f0LowHz > 250.0f;
+        b.tonal = 0.6f * window (m.bodyDb, highVoice ? -200.0f : -9.0f, -1.0f)
                 + 0.8f * window (m.lowMidDb, -7.0f, 0.0f)
                 + 1.0f * window (m.topDb, -16.0f, -7.0f)
                 + 0.4f * window (m.airDb, -32.0f, -16.0f, 3.0f);

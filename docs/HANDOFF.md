@@ -36,16 +36,14 @@
 ## Nächste Schritte
 Design/UI ist NICHT Teil dieser Liste – dafür gibt Jakob eine eigene Anweisung.
 
-1. **Kalibrierung nach dem Hörtest vom 24.10.** (Auswertung in `docs/BENCHMARK.md`): 0.3 vs 0.4 stand 5 : 5.
-   - LRA-Regel gegen Level Ride zurücknehmen (verlor 2 von 3 Mal auf Verständlichkeit); die Spitzen am Wortanfang stattdessen
-     mit schnellerem Kompressor-Attack / der Ausgangsstufe abfangen.
-   - Zielfunktion Richtung „dicht, upfront, verständlich“: Crest-Untergrenze und Spitzen-Zuwachs schwächer gewichten.
-   - Large Hall + „Dynamik leichter“ verlor gegen das Original (DIE NACHBARIN) – „Dynamik leichter“ seltener wählen.
-   - Harshness (DYL, MYLK) weiter beobachten.
-   - Danach: neuer Benchmark + zweiter Hörtest (Kit 0.3 vs neu).
-2. GRÜNER SCHEIN: lautere Stellen außerhalb des Analyse-Abschnitts (Spitze 0 dBFS auf der ganzen Datei).
-3. Datensatz VocalSet (lag auf dem anderen PC unter `%USERPROFILE%\dev\velvox-data`, hier nicht vorhanden). Split nach Sängern: dev f1–f6/m1–m7, val f7–f8/m8–m9, held-out f9/m10/m11.
-4. In FL Studio testen (Pops, Modul-Browser, Mausrad-Q, Auto-Mix im echten Projekt).
+Erledigt am 24.10. (abends): Kalibrierung nach dem Hörtest (2b8b9d9: Ride-Regel zurück, Attack 3/8 ms, Zielfunktion dicht/upfront),
+Körper-Band bei hohen Stimmen, VocalSet geladen (`%USERPROFILE%\dev\velvox-data`, Val-Split geprüft), GRÜNER SCHEIN bewertet
+(Clip Guard fängt 1–2 dB außerhalb des Analyse-Abschnitts weich ab – bewusst keine Zusatzreserve).
+
+1. **Zweiter Hörtest** (Jakob): Kit `%USERPROFILE%\dev\velvox-bench\2026-10-24\hoertest2_0.3_vs_neu`, Ergebnis in `docs/BENCHMARK.md`.
+2. Harshness (DYL, MYLK) und Sibilanz (WIR SIND, HDGDL: Strafe 5–9) weiter beobachten – erst nach Hörtest 2 nachregeln.
+3. Schlussprüfung auf VocalSet-Held-out (f9, m10, m11), wenn die Gewichte stehen.
+4. In FL Studio testen (Pops, Modul-Browser, Mausrad-Q, Auto-Mix im echten Projekt); vorher `scripts\install-vst3.ps1`.
 
 ## Hilfen
 - Build + alle Tests: `scripts\build.ps1`. Nur Tests bauen: VS-CMake (`vswhere` → `...\CMake\bin\cmake.exe`) `--build build --config Release --target VelvoxTests`.

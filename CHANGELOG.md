@@ -20,6 +20,7 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 ### Behoben
 - Gelegentliche Knackser: Lesezugriff außerhalb der Delay-Linien (Reverb/Doubler).
 - Zielfunktion zählte Float-Überschreitungen im Render (vor der Ausgangsstufe) als Clipping; jetzt nur noch als Lautheitsverlust bewertet.
+- Zielfunktion bestrafte bei hohen Stimmen (tiefster Ton > 250 Hz) das leere Band „Körper“ unter dem Grundton (VocalSet male9: Strafe 143).
 - Reverb-Schritt hieß „Hall-Hall“ / „Large Hall-Hall“.
 
 ### Technik

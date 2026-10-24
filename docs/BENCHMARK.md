@@ -86,3 +86,13 @@ Original besser 2× (04 DYL Lo-Fi, 11 DIE NACHBARIN mit Large Hall + Dynamik lei
   (Ausgangsstufe/Kompressor statt Ride abschalten).
 - Reverb/Delay von 0.4 kommen gut an; Large Hall + Dynamik leichter (11) verlor gegen das Original.
 - Harshness bleibt Thema (04, 08) – „Höhen sanfter“ half bei 08, bei 05 nicht.
+
+## Nach der Kalibrierung (2b8b9d9 + Körper-Fix)
+
+- Echte Vocals (13): Mittel Basis 12,87 → gewählt 11,02. „Dynamik dichter“ jetzt bei 7 Titeln, „Dynamik leichter“ bei keinem
+  (u. a. GRÜNER SCHEIN und DIE NACHBARIN, wo der Hörtest dichter wollte); Level Ride auf den Hooks wieder an.
+- **VocalSet v1.1, Validierungs-Sänger** (f7, f8, m8, m9; `excerpts`, 28 Dateien, `%USERPROFILE%\dev\velvox-data`):
+  alle 28 gemischt, Mittel 1,58 → 1,32. Vorher 13,8 durch zwei Ausreißer (male9, tonal 143): Das Band „Körper“
+  (100–300 Hz) liegt bei hohen Stimmen (tiefster Ton > 250 Hz) unter dem Grundton – dort zählt jetzt nur noch zu viel Körper.
+  Held-out-Sänger (f9, m10, m11) bleiben für die Schlussprüfung unberührt.
+- Zweites Hörtest-Kit 0.3 vs. neu: `%USERPROFILE%\dev\velvox-bench\2026-10-24\hoertest2_0.3_vs_neu`.

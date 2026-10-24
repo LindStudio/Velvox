@@ -34,7 +34,7 @@ Standard s = 2 dB, d. h. 2 dB außerhalb kosten 1.
 
 | Term | Messung | Fenster / Gewicht |
 |---|---|---|
-| tonal | Bänder relativ zum Kern (300 Hz – 2 kHz) | Body −9…−1 (0,6), Low-Mids −7…0 (0,8), Top −16…−7 (1,0), Air −32…−16 (0,4, s = 3) |
+| tonal | Bänder relativ zum Kern (300 Hz – 2 kHz) | Body −9…−1 (0,6; bei hohen Stimmen mit tiefstem Ton > 250 Hz nur die Obergrenze), Low-Mids −7…0 (0,8), Top −16…−7 (1,0), Air −32…−16 (0,4, s = 3) |
 | dynamics | Phrasen-Variation, Crest-Faktor | 3…6 dB (0,8); Crest ≥ 5,5 dB (1,2, s = 1,5) – kalibriert am Hörtest vom 24.10.: dicht und upfront gewann |
 | sibilance | S/Vokal-Verhältnis | ≤ −6 dB (1,2); nicht mehr als 10 dB unter dem Original (0,8, Lispeln) |
 | harshness | 2–5 kHz relativ zum Kern | ≤ −4 dB (1,0) |

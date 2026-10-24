@@ -659,6 +659,18 @@ public:
             expect (evaluate (dense, original, profile, -18.0f, true, false).total()
                         < evaluate (loose, original, profile, -18.0f, true, false).total(), "dense beats loose");
 
+            // A high voice (lowest notes above 250 Hz) has no fundamentals in the 100-300 Hz body
+            // band: "no body" there is physics, not a mixing problem (VocalSet male9: -42 dB)
+            auto highVoice = profile;
+            highVoice.pitchValid = true;
+            highVoice.f0LowHz = 360.0f;
+            auto thinBody = m;
+            thinBody.bodyDb = -40.0f;
+            expect (evaluate (thinBody, original, highVoice, -18.0f, true, false).tonal < 0.01f, "high voice: empty body band costs nothing");
+            auto lowVoice = highVoice;
+            lowVoice.f0LowHz = 110.0f;
+            expect (evaluate (thinBody, original, lowVoice, -18.0f, true, false).tonal > 1.0f, "low voice: empty body band costs");
+
             auto louder = m;
             louder.lufs = -12.0f;
             louder.peakDb = -6.0f + 6.0f;
