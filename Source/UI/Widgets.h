@@ -197,11 +197,13 @@ namespace velvox::ui
     public:
         Choice (APVTS& state, const char* paramId, const juce::String& caption = {});
         void resized() override;
+        const juce::String& getParamId() const noexcept { return paramId; }
 
         juce::ComboBox box;
 
     private:
         juce::Label caption;
+        juce::String paramId;
         std::unique_ptr<APVTS::ComboBoxAttachment> attachment;
     };
 

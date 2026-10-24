@@ -76,3 +76,33 @@ each new expectation was checked against the running code, not watched failing f
 - Ruling: the header logo shows icon + HEADLINER only ("VOCAL" and "BY LIND AUDIO" dropped) — why: 8 px text is below the 9 px
   minimum at 1000 px width.
 - Fix found: the stored uiScale was overwritten before it was read (setResizeLimits on a 0 × 0 editor calls resized()); now read first.
+
+Merge: feature/automix (mixlaw, c46dba8) merged after task 6 (conflicts: CMakeLists test list, StateKeys, PluginEditor
+browser.onChoose comment, UiTests reverb insert/send — both intents kept). Coordinator items: duplicate copies the source mix law
+(ChainView::duplicateInstance, ShellTests); browser inserts keep "defaults, off, insert, on" (ShellTests checks the true law);
+"Alte Mix-Kurve – umstellen" in Mehr + panel menu (Task 7); wrong mix tooltips replaced in the UI (Task 7).
+
+Task 7: complete (DetailPanel = common frame: header icon · NAME n · SEND/AUS badge · Presets · Mehr · ?; visual fills; one main row
+of 3–5 controls; Mehr drawer from the right with small knobs, segments and switches; placeInVisual / layoutVisual / placeMeter for
+extras; setMixKnob → "SEND"; PanelMenuHost items: Modul zurücksetzen, Modul-Preset speichern …, Alte Mix-Kurve – umstellen;
+user module presets in UserSettings "userModulePresets". All 15 module panels + OUTPUT moved in. PanelFrameTests 1351 checks.)
+
+- Ruling (main controls per panel, from spec §5 where the parameter exists today): EQ hpfFreq, lowGain, midFreq, midGain, highGain;
+  Comp Threshold, Ratio, Attack, Release; De-Esser Frequency, Threshold, Range, Mode, Listen; Smooth Depth, Sharpness, Speed, Delta;
+  Ride Ausgleich (rideAmount), Target, Speed; Sat Character, Drive, Mix (Output in Mehr — spec lists 2 main, 3 needed); Smash: big
+  SMASH in the visual + Mix, Tone, Output; Doubler Width, Detune, Timing, Mix; Choir Voices, Detune, Width, Mix; Pitch Pitch, Formant,
+  Fine (spec has 2; Fine added to reach 3); Delay note value, Sync, Feedback, Mix, Ping-Pong (Time knob in Mehr, enabled while not
+  synced); Reverb Room, Size, Decay, Mix; Stutter Rate, Gate, Smooth, Pattern; Pulse Depth, Rate, Curve; Output Input Gain, Vocal
+  Level (outputGain), Width, Level Match; Vocal Check mode, Start/Stop, Reset (check track redoes it). Everything else in Mehr.
+- Ruling: OUTPUT now holds VOCAL LEVEL (outputGain) as a main control and the Mono-listen button + clip guard in Mehr — why: with the
+  Vocal Control bar gone, Advanced mode would otherwise have no output level; mono/correlation lost their meter column.
+- Ruling: Pulse curve points (pulseX1..6 / pulseY1..6) count as reachable through the curve editor in the visual (unchanged).
+- Ruling: permanent hint lines removed from panels (subtitle line, Pitch latency note → Pitch knob hover card, Stutter note,
+  Delay tempo/sidechain status line); the panel's one-line description is the panel tooltip.
+- Ruling: module presets: factory + "Eigene" in the Presets menu; saving asks for a name through the editor's dialog
+  (DetailPanel::askForName) and stores the values of the module's instance-1 IDs, so a preset applies to any instance.
+- Ruling: mix tooltips are set by the panel (DetailPanel::updateSendState) instead of editing ParameterLayout.cpp: send =
+  "Send-Pegel", true law insert = "Dry/Wet: 0 % nur Original, 100 % nur Effekt", legacy = "Alte Mix-Kurve"; Doubler Mix = "Anteil
+  der Dopplungen". The ParameterLayout texts stay (they are also host-visible; owner: mixlaw/coordinator).
+- Removed assertion family: DesignTests "Review: no control is laid out with zero size or outside its panel" moved into
+  PanelFrameTests (now checked with the Mehr drawer closed and open, at the editor's panel size 984 × 442).

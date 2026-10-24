@@ -464,6 +464,7 @@ namespace velvox::ui
     //==========================================================================
     Choice::Choice (APVTS& state, const char* paramId, const juce::String& captionText)
     {
+        this->paramId = paramId;
         if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (state.getParameter (paramId)))
             box.addItemList (p->choices, 1);
         attachment = std::make_unique<APVTS::ComboBoxAttachment> (state, paramId, box);

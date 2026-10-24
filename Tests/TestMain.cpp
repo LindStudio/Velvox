@@ -314,7 +314,7 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //   VelvoxTests --snapshot out.png [presetName] [width] [beginner|pro] [moduleId|-1] [overlay]
 // overlay: "help:<page>", "welcome", "tutorial:<step>", "bypass", "hide:<key,key>", "focus:<moduleId>", "edit",
 //          "intro" (analysis popup), "listening", "capturing", "analysing", "mixed" (overview after a synthetic auto mix),
-//          "mixed+done" (with the confirmation card)
+//          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
                            const juce::String& mode, int selection, const juce::String& overlay)
 {
@@ -417,6 +417,10 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
         }
         if (overlay.startsWith ("focus:"))
             ed->getChainView().onSelect (overlay.fromFirstOccurrenceOf (":", false, false).getIntValue());
+        if (overlay == "more" && ed->getDetail() != nullptr)
+            ed->getDetail()->setMoreOpen (true);
+        if (overlay == "details")
+            ed->showMixDetails();
         if (overlay == "mixed+done")
             ed->getAnalysisOverlay().showProgress();
     }

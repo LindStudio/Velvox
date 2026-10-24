@@ -432,6 +432,11 @@ void VelvoxAudioProcessorEditor::select (int id)
         detail = createDetailPanel (proc, id, &spectrum, id >= 0 && dsp::selectionInstance (id) > 0 ? &panelLive : &live);
         detail->onOpenModule = openFromPanel;
         detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };
+        detail->askForName = [this] (const juce::String& title, std::function<void (const juce::String&)> onName)
+        {
+            dialog.show (title, juce::String::fromUTF8 ("Gilt für dieses Modul in allen Projekten."), true, {}, "Speichern", std::move (onName));
+            raiseOverlays();
+        };
         canvas.addAndMakeVisible (*detail);
         detail->setBounds (panelArea());
         detail->refresh();
