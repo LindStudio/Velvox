@@ -12,17 +12,34 @@ namespace velvox::ui
 {
     namespace colours
     {
-        // Style guide palette: Dark BG #0B1020, Panel BG #111827, Card BG #1F2937,
-        // Border #334155, Text #E5E7EB
-        inline const juce::Colour background { 0xff0b1020 };
-        inline const juce::Colour panel      { 0xff111827 };   // main panels (opaque equivalent)
-        inline const juce::Colour raised     { 0xff18202f };   // controls, recessed fields
-        inline const juce::Colour raisedHi   { 0xff1f2937 };   // cards
-        inline const juce::Colour line       { 0xff334155 };   // borders
-        inline const juce::Colour lineSoft   { 0xff243042 };
-        inline const juce::Colour text       { 0xffeef0f5 };
-        inline const juce::Colour textDim    { 0xffaab3c5 };   // secondary labels: dimmer, still clearly legible
-        inline const juce::Colour textFaint  { 0xff76819a };   // scales, units, tertiary hints
+        // HEADLINER VOCAL design system (docs/design/HEADLINER_DESIGN_HANDOFF.md)
+        inline const juce::Colour windowBg   { 0xff05060a };   // plugin background
+        inline const juce::Colour panelInset { 0xff040509 };   // visualizer boxes (border borderInset, radius 8)
+        inline const juce::Colour borderInset { 0xff13161e };
+        inline const juce::Colour control    { 0xff0d0f15 };   // segment groups (radius 7)
+        inline const juce::Colour border     { 0xff161925 };   // panel frames (radius 12)
+        inline const juce::Colour borderSoft { 0xff13151e };   // dividers
+        inline const juce::Colour tickOff    { 0xff30343d };   // unlit ticks of the knob ring
+        inline const juce::Colour knobTop    { 0xff34373f };
+        inline const juce::Colour knobBottom { 0xff121418 };
+        inline const juce::Colour capTop     { 0xff17191d };
+        inline const juce::Colour capBottom  { 0xff2a2d34 };
+        inline const juce::Colour switchOff  { 0xff2a3040 };
+        inline const juce::Colour textStrong { 0xfff1f5f9 };
+        inline const juce::Colour textSoft   { 0xffc9ced9 };
+        inline const juce::Colour textMuted  { 0xff8a93a6 };
+        inline const juce::Colour knobName   { 0xff6b7489 };   // name under a knob
+
+        // Existing roles mapped onto the design system
+        inline const juce::Colour background = windowBg;
+        inline const juce::Colour panel      { 0xff07080d };   // columns, module panels
+        inline const juce::Colour raised     = control;        // controls, recessed fields
+        inline const juce::Colour raisedHi   { 0xff11141c };   // cards, popups
+        inline const juce::Colour line       = border;
+        inline const juce::Colour lineSoft   = borderSoft;
+        inline const juce::Colour text       { 0xffe8ebf2 };
+        inline const juce::Colour textDim    = textMuted;      // secondary labels
+        inline const juce::Colour textFaint  { 0xff5b6478 };   // section labels, scales, units
         inline const juce::Colour accent     { 0xffffffff };
         inline const juce::Colour warning    { 0xffff5c6c };
         inline const juce::Colour ok         { 0xff4be3a6 };
@@ -138,7 +155,32 @@ namespace velvox::ui
         return 0.0f;
     }
 
-    inline juce::Colour moduleColour (dsp::ModuleId id, float alpha = 1.0f) { return neon (moduleHue (id), alpha); }
+    // Module colours of the design (8 design modules verbatim; the other modules sit on the
+    // same cyan -> blue -> violet -> pink run)
+    inline juce::Colour moduleColour (dsp::ModuleId id, float alpha = 1.0f)
+    {
+        using M = dsp::ModuleId;
+        juce::uint32 argb = 0xff00d1ff;
+        switch (id)
+        {
+            case M::ride:    argb = 0xff00d1ff; break;
+            case M::smooth:  argb = 0xff22b8ff; break;
+            case M::smash:   argb = 0xff3b82f6; break;
+            case M::choir:   argb = 0xff6366ff; break;
+            case M::pulse:   argb = 0xff8b5cf6; break;
+            case M::chop:    argb = 0xffa855f7; break;
+            case M::delay:   argb = 0xffd946ef; break;
+            case M::reverb:  argb = 0xfff472b6; break;
+            case M::eq:      argb = 0xff2dd4bf; break;
+            case M::check:   argb = 0xff38bdf8; break;
+            case M::deess:   argb = 0xff0ea5e9; break;
+            case M::comp:    argb = 0xff2563eb; break;
+            case M::doubler: argb = 0xff818cf8; break;
+            case M::pitch:   argb = 0xffc084fc; break;
+            case M::sat:     argb = 0xffec4899; break;
+        }
+        return juce::Colour (argb).withAlpha (alpha);
+    }
 
     // Exponential approach used by every animation (called once per frame)
     struct Smoothed
@@ -167,8 +209,15 @@ namespace velvox::ui
     struct EmbeddedFonts
     {
         EmbeddedFonts();
-        juce::Typeface::Ptr regular, medium, semibold, light, bold;
+        juce::Typeface::Ptr regular, medium, semibold, light, bold, mono;
     };
+
+    // Design system type (exact pixel sizes): values in Roboto Mono, labels in Montserrat SemiBold
+    juce::Font monoFont (float height);
+    juce::Font semiBold (float height, float tracking = 0.0f);
+
+    // White line-art module icon (SVG text, 48 x 48); NeonIcon recolours it
+    juce::String moduleIconSvg (dsp::ModuleId id);
 
     // Body text (Montserrat Regular / SemiBold)
     juce::Font font (float height, bool bold = false);

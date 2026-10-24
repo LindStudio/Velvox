@@ -110,6 +110,11 @@ juce_add_binary_data(VelvoxAssets
         Resources/Fonts/Montserrat-Medium.ttf
         Resources/Fonts/Montserrat-SemiBold.ttf
         Resources/Fonts/Montserrat-Bold.ttf
+        Resources/Fonts/RobotoMono-Regular.ttf
+        Resources/Icons/levelride.svg Resources/Icons/smooth.svg Resources/Icons/vocalsmash.svg Resources/Icons/choir.svg
+        Resources/Icons/pulse.svg Resources/Icons/stutter.svg Resources/Icons/delay.svg Resources/Icons/reverb.svg
+        Resources/Icons/eq.svg Resources/Icons/comp.svg Resources/Icons/deess.svg Resources/Icons/sat.svg
+        Resources/Icons/doubler.svg Resources/Icons/pitch.svg Resources/Icons/check.svg
         Resources/Images/HeadlinerIcon.png
         Resources/Images/HeadlinerWordmark.png
         Resources/Images/HeadlinerLogo.png)
@@ -159,7 +164,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/AbCompareTests.cpp Tests/VocalCheckTests.cpp Tests/PerfProbe.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/AbCompareTests.cpp Tests/VocalCheckTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)

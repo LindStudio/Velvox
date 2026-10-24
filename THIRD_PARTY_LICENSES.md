@@ -11,6 +11,8 @@ Stand: 14.10.2026. Keine rechtliche Beratung – vor einer Veröffentlichung die
 | Microsoft Visual C++ Runtime | MSVC 14.44 | Statisch gelinkt (JUCE-Standard) | Microsoft-Lizenz, Weitergabe erlaubt | keine |
 | pluginval (Tracktion) | 1.0.4 | **Nein** – nur Testwerkzeug | GPLv3 | keine (wird nicht verteilt) |
 | Schrift „Montserrat“ (Light, Regular, Medium, SemiBold, Bold) | in `Resources/Fonts/` | Ja (als Binärdaten eingebettet) | SIL Open Font License 1.1 | Lizenztext (`Resources/Fonts/Montserrat-LICENSE.txt`) mitliefern; die Schrift darf nicht einzeln verkauft werden (Einbetten in Software ist erlaubt) |
+| Schrift „Roboto Mono“ (Regular) | in `Resources/Fonts/` | Ja (als Binärdaten eingebettet) | SIL Open Font License 1.1 | Lizenztext (`Resources/Fonts/RobotoMono-LICENSE.txt`) mitliefern; nicht einzeln verkaufen |
+| Modul-Icons (8 aus dem Claude-Design-Paket, 7 eigene) | in `Resources/Icons/` | Ja | eigene Gestaltung (Lind Audio) | – |
 
 ## Eigene Algorithmen
 
