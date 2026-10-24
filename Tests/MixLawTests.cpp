@@ -222,7 +222,169 @@ public:
         bugTests();
         lawTypeTests();
         dspTests();
+        processorTests();
         baselineTools();
+    }
+
+    static juce::MemoryBlock state05()
+    {
+        juce::MemoryOutputStream z;
+        juce::Base64::convertFromBase64 (z, mixlaw::state05Base64);
+        juce::MemoryInputStream zin (z.getData(), z.getDataSize(), false);
+        juce::GZIPDecompressorInputStream gz (zin);
+        juce::MemoryBlock blob;
+        gz.readIntoMemoryBlock (blob);
+        return blob;
+    }
+
+    static void load (Harness& h, const juce::MemoryBlock& blob)
+    {
+        h.proc.setStateInformation (blob.getData(), (int) blob.getSize());
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+    }
+
+    // What the browser does: fresh parameters, off, joins the chain, then switched on
+    static void addLikeBrowser (Harness& h, ModuleId id, int k, const char* onParam, int index = -1)
+    {
+        h.set (dsp::instanceParamId (onParam, k).toRawUTF8(), 0.0f);
+        auto r = h.proc.getRouting();
+        r.insertAt (index < 0 ? r.size() : index, id, k, true);
+        h.proc.setRouting (r);
+        h.set (dsp::instanceParamId (onParam, k).toRawUTF8(), 1.0f);
+    }
+
+    void processorTests()
+    {
+        using dsp::MixLaws;
+        using dsp::Routing;
+
+        beginTest ("Fresh plugin: every instance on the true law; Delay / Reverb are inserts in the default chain");
+        {
+            Harness h;
+            expect (h.proc.getMixLaws() == MixLaws::allTrue());
+            for (auto id : { ModuleId::delay, ModuleId::reverb, ModuleId::doubler, ModuleId::smash })
+                expect (! h.proc.usesLegacyMixLaw (id, 0));
+            const auto r = h.proc.getRouting();
+            expect (r == Routing::defaults());
+            expectEquals (r.toString(), juce::String ("v2,eq,comp,deess,delay:insert,reverb:insert"));
+            expectEquals (Routing::legacyDefaults().toString(), juce::String ("v2,eq,comp,deess,delay:send,reverb:send"));
+        }
+
+        beginTest ("0.5 state (no flag): every instance legacy; the switch flips exactly one instance; the flag survives save / load");
+        {
+            Harness h;
+            load (h, state05());
+            expect (h.proc.getMixLaws() == MixLaws::allLegacy(), h.proc.getMixLaws().toString());
+            for (auto id : { ModuleId::delay, ModuleId::reverb, ModuleId::doubler, ModuleId::smash })
+                expect (h.proc.usesLegacyMixLaw (id, 0));
+            expect (! h.proc.usesLegacyMixLaw (ModuleId::eq, 0), "only additive-mix modules report the legacy law");
+            expectEquals (h.proc.getRouting().toString(), juce::String ("v2,eq,comp,deess,doubler,smash,delay:insert,reverb:insert"));
+
+            const auto in = fixedSignal (h);
+            const auto legacyOut = renderReloaded (h, in);
+            if (const auto ref = juce::SystemStats::getEnvironmentVariable ("VELVOX_MIXLAW_BASELINE", {}); ref.isNotEmpty())
+            {
+                juce::MemoryBlock raw;
+                juce::File (ref).getChildFile ("state05.raw").loadFileAsData (raw);
+                const auto* f = static_cast<const float*> (raw.getData());
+                float d = 0.0f;
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < legacyOut.getNumSamples(); ++i)
+                        d = std::max (d, std::abs (legacyOut.getSample (ch, i) - f[(size_t) ch * (size_t) legacyOut.getNumSamples() + (size_t) i]));
+                logMessage ("0.5 state vs the 0.5 build: max difference " + juce::String (d, 9));
+                expectEquals (d, 0.0f, "bit-exact with 0.5");
+            }
+
+            h.proc.switchToTrueMixLaw (ModuleId::delay, 0);
+            expect (! h.proc.usesLegacyMixLaw (ModuleId::delay, 0));
+            expect (h.proc.usesLegacyMixLaw (ModuleId::reverb, 0) && h.proc.usesLegacyMixLaw (ModuleId::delay, 1));
+            const auto switched = renderReloaded (h, in);
+            expectGreaterThan (maxAbsDiff (switched, legacyOut), 0.01f, "Delay at 100 % sounds different on the true law");
+
+            juce::MemoryBlock saved;
+            h.proc.getStateInformation (saved);
+            Harness h2;
+            load (h2, saved);
+            expect (h2.proc.getMixLaws() == h.proc.getMixLaws(), h2.proc.getMixLaws().toString());
+
+            h.proc.setLegacyMixLaw (ModuleId::delay, 0, true);
+            expect (h.proc.getMixLaws() == MixLaws::allLegacy());
+        }
+
+        beginTest ("0.1 and 0.3 states load on the legacy law (also instances that are off)");
+        {
+            for (int version : { 1, 3 })
+            {
+                juce::MemoryBlock old;
+                {
+                    Harness src;
+                    auto state = src.proc.getState().copyState();
+                    state.removeProperty (statekeys::mixLaw, nullptr);
+                    if (version == 1)
+                        state.removeProperty (statekeys::routing, nullptr);
+                    else
+                        state.setProperty (statekeys::routing, "eq,ride,comp,smash,deess,smooth,sat,doubler,choir,pitch,delay:send,reverb:insert,chop,pulse,check", nullptr);
+                    state.setProperty (statekeys::stateVersion, version, nullptr);
+                    juce::AudioProcessor::copyXmlToBinary (*state.createXml(), old);
+                }
+                Harness h;
+                load (h, old);
+                expect (h.proc.getMixLaws() == MixLaws::allLegacy(), "version " + juce::String (version));
+            }
+        }
+
+        beginTest ("Old project: a module added through the browser is fresh (true law, insert); automation keeps the legacy law");
+        {
+            Harness h;
+            load (h, state05());
+            addLikeBrowser (h, ModuleId::delay, 1, pid::delayOn);
+            expect (h.proc.getRouting().isInsert (ModuleId::delay, 1));
+            expect (! h.proc.usesLegacyMixLaw (ModuleId::delay, 1), "added delay #2 is fresh");
+            expect (h.proc.usesLegacyMixLaw (ModuleId::delay, 0), "the project's delay stays legacy");
+
+            // Automation switches on an instance that is not in the chain: it joins on, keeps its law
+            h.set ("smashOn_2", 1.0f);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+            expect (h.proc.getRouting().contains (ModuleId::smash, 1), "engaged by automation");
+            expect (h.proc.usesLegacyMixLaw (ModuleId::smash, 1), "automation keeps the old sound");
+
+            // Removing and re-adding an instance through the browser makes it fresh
+            auto r = h.proc.getRouting();
+            r.remove (ModuleId::doubler, 0);
+            h.proc.setRouting (r);
+            addLikeBrowser (h, ModuleId::doubler, 0, pid::doublerOn);
+            expect (! h.proc.usesLegacyMixLaw (ModuleId::doubler, 0));
+        }
+
+        beginTest ("SPACE on a fresh instance: the delay / reverb it switches on become sends and sound like 0.5");
+        {
+            Harness fresh, old;
+            fresh.neutral();
+            old.neutral();
+            old.proc.setRouting (Routing::legacyDefaults());
+            for (auto id : { ModuleId::delay, ModuleId::reverb, ModuleId::doubler, ModuleId::smash })
+                for (int k = 0; k < dsp::maxInstances (id); ++k)
+                    old.proc.setLegacyMixLaw (id, k, true);
+            for (auto* h : { &fresh, &old })
+            {
+                h->set (pid::macroSpace, 100.0f);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+            }
+            expect (fresh.proc.getRouting().isSend (ModuleId::delay, 0) && fresh.proc.getRouting().isSend (ModuleId::reverb, 0),
+                    fresh.proc.getRouting().toString());
+            expect (fresh.proc.getRouting() == old.proc.getRouting(), fresh.proc.getRouting().toString());
+            const auto in = makeBurst (fresh.fs, 2, 300.0).signal;
+            expectLessThan (maxAbsDiff (fresh.run (in), old.run (in)), 1.0e-6f, "same sound as the 0.5 send setup");
+
+            // A delay the user switched on keeps its insert; SPACE only adds to its level
+            Harness user;
+            user.neutral();
+            user.set (pid::delayOn, 1.0f);
+            user.set (pid::macroSpace, 100.0f);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+            expect (user.proc.getRouting().isInsert (ModuleId::delay, 0));
+            expect (user.proc.getRouting().isSend (ModuleId::reverb, 0), "the reverb was switched on by SPACE");
+        }
     }
 
     void dspTests()

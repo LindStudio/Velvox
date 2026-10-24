@@ -27,3 +27,20 @@ Task 3: Ruling: Smash `norm` under the true law = 1 / (1 + 0.6 * (dryGain + blen
   so it is bit-identical to legacy up to 50 %; at 100 % norm = 1 (squashed path at its own makeup level).
 Task 3: Ruling: Doubler at 100 % with Mono-safe > 0 leaves only the side part of the voices in mono (mono sum of the voices is cut
   by design) — the dry is not kept back "for mono"; the UI may want to hint at this. Cost if wrong: mono collapse at extreme settings.
+Task 4: complete (state property "mixLaw", processor API, Routing::defaults() inserts + legacyDefaults(), browser adds inserts,
+  SPACE -> sends; bug test now green; 0.5 fixture vs the 0.5 build: max difference 0.000000000 (one-off, VELVOX_MIXLAW_BASELINE);
+  full suite 11921 checks, 0 failed)
+Task 4: Ruling: "fresh" = an additive-mix instance that JOINS THE CHAIN WHILE SWITCHED OFF (that is what the browser / ChainView::insertModule
+  does: defaults, off, insert, on). Automation/macros (insertEngagedInstances), undo and preset loads bring instances back while on and
+  keep their law; setStateInformation never marks (loadingState guard). Works without touching Source/UI. Cost if wrong: a routing edit
+  that adds an off instance by another path also gets the true law (only audible above 50 %).
+Task 4: Ruling: Routing::insertDefault keeps delay/reverb as sends (it is the automation/macro engage path) — SPACE "keeps sends".
+  In addition, when the macros switch on a delay/reverb that a fresh chain holds as an unused (off) insert on the true law, it becomes a
+  send at that moment (rising edge only, never on load, never for legacy instances) — so SPACE on a fresh instance renders exactly like
+  0.5 (test: < 1e-6). A user's later "Als Insert" stays. Cost if wrong: a fresh-chain delay tile flips to SEND when SPACE is raised.
+Task 4: Ruling: the state version stays 3 (absent flag already means legacy; avoids a merge conflict with other tracks bumping it).
+Task 4: Ruling: ChainSettings::routing default and MixPlan::routing default -> Routing::legacyDefaults() (DSP-level/planner defaults keep
+  the 0.5 behaviour; the processor always sets the routing). The planner's standardRouting() (legacyFull, sends) is unchanged.
+Task 4: Ruling: tests that encoded the old default were re-pointed, not weakened: VelvoxTests "Delay: echo ... dry once" and RoutingTests
+  "Delay into reverb" now set legacyDefaults() (they test the send path); v0.1 migration / format-1 preset expectations now compare with
+  legacyDefaults() (old content must keep sends); UiTests: reverb mode switch now insert->send, "+" index 5, browser reverb #2 is an insert.

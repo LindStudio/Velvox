@@ -74,7 +74,7 @@ namespace velvox::dsp
         DuckSettings delayDuck, reverbDuck;
         bool duckExternal = false;    // use the sidechain input when available
 
-        Routing routing = Routing::defaults();
+        Routing routing = Routing::legacyDefaults();   // the processor always sets it
 
         // Mix law of every module instance (0.6). The DSP default is the 0.5 behaviour;
         // the processor fills it from the instance state (fresh instances: true dry/wet).

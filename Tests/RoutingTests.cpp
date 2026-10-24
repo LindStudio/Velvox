@@ -59,7 +59,8 @@ public:
         {
             const auto def = Routing::defaults();
             expect (def.isValid());
-            expectEquals (def.toString(), juce::String ("v2,eq,comp,deess,delay:send,reverb:send"));
+            expectEquals (def.toString(), juce::String ("v2,eq,comp,deess,delay:insert,reverb:insert"));   // 0.6: inserts
+            expectEquals (Routing::legacyDefaults().toString(), juce::String ("v2,eq,comp,deess,delay:send,reverb:send"));
             expect (Routing::fromString (def.toString()) == def);
 
             // 0.2 / 0.3 strings: every module, 0.3 modules at their default places
@@ -93,6 +94,7 @@ public:
             expect (r.placeBefore (ModuleId::deess, 0, ModuleId::eq, 0));
             expectEquals (r.indexOf (ModuleId::deess), 0);
             expect (r.remove (ModuleId::eq, 1) && ! r.contains (ModuleId::eq, 1));
+            expect (r.setInsert (ModuleId::reverb, 0, false) && r.isSend (ModuleId::reverb));
             expect (r.setInsert (ModuleId::reverb, 0, true) && r.isInsert (ModuleId::reverb));
             expect (! r.setInsert (ModuleId::eq, 0, false), "only delay / reverb have a send mode");
             expect (r.isValid());
@@ -313,6 +315,7 @@ public:
             {
                 Harness h;
                 h.neutral();
+                h.proc.setRouting (Routing::legacyDefaults());   // the coupling needs both as sends
                 h.set (pid::delayOn, 1.0f);
                 h.set (pid::delayMix, 100.0f);
                 h.set (pid::delayFeedback, 0.0f);
@@ -414,7 +417,7 @@ public:
             h.proc.setStateInformation (v1.getData(), (int) v1.getSize());
             expectWithinAbsoluteError (h.get (pid::compRatio), 5.0f, 0.01f, "saved value restored");
             expectWithinAbsoluteError (h.get (pid::delayToReverb), 0.0f, 0.01f, "missing parameter reset to default");
-            expect (h.proc.getRouting() == Routing::defaults(), "v0.1: EQ, comp, de-esser, delay and reverb sends: " + h.proc.getRouting().toString());
+            expect (h.proc.getRouting() == Routing::legacyDefaults(), "v0.1: EQ, comp, de-esser, delay and reverb sends: " + h.proc.getRouting().toString());
 
             juce::MemoryBlock again;
             h.proc.getStateInformation (again);
@@ -472,7 +475,7 @@ public:
             auto v1 = restored;
             v1.routing = {};
             v1.applyTo (h.proc.getState());
-            expect (h.proc.getRouting() == Routing::defaults(), "format 1 preset -> default routing: " + h.proc.getRouting().toString());
+            expect (h.proc.getRouting() == Routing::legacyDefaults(), "format 1 preset -> default routing: " + h.proc.getRouting().toString());
         }
 
         beginTest ("A/B slots include routing and repeated instances");
