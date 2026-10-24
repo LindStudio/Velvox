@@ -1,6 +1,7 @@
 // Creative pitch shifter (Signalsmith Stretch): accuracy, latency, formants, CPU.
 
 #include "TestHelpers.h"
+#include "DSP/PitchTracker.h"
 #include <juce_dsp/juce_dsp.h>
 
 using namespace velvox;
@@ -388,6 +389,43 @@ public:
 };
 
 static PitchQualityTests pitchQualityTests;
+
+// Building blocks of the 0.6 engine
+class PitchEngineTests final : public juce::UnitTest
+{
+public:
+    PitchEngineTests() : juce::UnitTest ("Velvox pitch engine", "Velvox") {}
+
+    void runTest() override
+    {
+        beginTest ("Tracker: period of tones within 0.1 %, noise is unvoiced");
+        for (double fs : { 48000.0, 44100.0, 96000.0 })
+        {
+            for (double f0 : { 80.0, 147.0, 220.0, 600.0, 900.0 })
+            {
+                dsp::PitchTracker t;
+                t.prepare (fs);
+                for (int i = 0; i < (int) (0.5 * fs); ++i)
+                    t.push ((float) (0.3 * std::sin (2.0 * pi * f0 * i / fs) + 0.1 * std::sin (4.0 * pi * f0 * i / fs + 1.0)));
+                const double expected = fs / f0;
+                logMessage (juce::String (fs, 0) + " Hz, " + juce::String (f0, 0) + " Hz tone: period " + juce::String (t.getPeriod(), 3)
+                            + " (expected " + juce::String (expected, 3) + ")");
+                expectWithinAbsoluteError ((double) t.getPeriod(), expected, expected * 0.001);
+            }
+            dsp::PitchTracker t;
+            t.prepare (fs);
+            juce::Random r (3);
+            for (int i = 0; i < (int) (0.5 * fs); ++i)
+                t.push (0.3f * (r.nextFloat() * 2.0f - 1.0f));
+            expectEquals (t.getPeriod(), 0.0f, "noise is unvoiced");
+            for (int i = 0; i < (int) (0.5 * fs); ++i)
+                t.push (0.0f);
+            expectEquals (t.getPeriod(), 0.0f, "silence is unvoiced");
+        }
+    }
+};
+
+static PitchEngineTests pitchEngineTests;
 
 class PitchTests final : public juce::UnitTest
 {
