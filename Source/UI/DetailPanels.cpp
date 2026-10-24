@@ -382,96 +382,81 @@ namespace velvox::ui
 
         float grFrom (const LiveData* live, const LiveData::History LiveData::* h) { return live != nullptr ? (live->*h).ago (0) : 0.0f; }
 
+        // EQ: curve top left; cuts (switch + slope) and band types at the side; band knobs below
         class EqPanel final : public DetailPanel
         {
         public:
             explicit EqPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Equalizer", help::shortDescription ((int) ModuleId::eq), pid::eqOn)
             {
-                visualHeight = 184;
-                lcOn = &toggle (pid::hpfOn, "Low cut");
-                lcSlope = &choice (pid::hpfSlope, {});
-                lcFreq = &knob (pid::hpfFreq, "Frequency");
-                lowType = &choice (pid::lowType, "Type");
-                lowFreq = &knob (pid::lowFreq, "Freq");
-                lowGain = &knob (pid::lowGain, "Gain");
-                lowQ = &knob (pid::lowQ, "Q");
-                midFreq = &knob (pid::midFreq, "Freq");
-                midGain = &knob (pid::midGain, "Gain");
-                midQ = &knob (pid::midQ, "Q");
-                highType = &choice (pid::highType, "Type");
-                highFreq = &knob (pid::highFreq, "Freq");
-                highGain = &knob (pid::highGain, "Gain");
-                highQ = &knob (pid::highQ, "Q");
-                hcOn = &toggle (pid::lpfOn, "High cut");
-                hcSlope = &choice (pid::lpfSlope, {});
-                hcFreq = &knob (pid::lpfFreq, "Frequency");
+                visualHeight = 170;
+                hasSideControls = true;
+                visualShare = 0.6f;
+                lcOn = &toggle (pid::hpfOn, "On");
+                lcSlope = &segments (pid::hpfSlope);
+                lowType = &segments (pid::lowType);
+                hcOn = &toggle (pid::lpfOn, "On");
+                hcSlope = &segments (pid::lpfSlope);
+                highType = &segments (pid::highType);
+                lcFreq = &knob (pid::hpfFreq, "Low Cut");
+                lowFreq = &knob (pid::lowFreq, "Low Freq");
+                lowGain = &knob (pid::lowGain, "Low Gain");
+                lowQ = &knob (pid::lowQ, "Low Q");
+                midFreq = &knob (pid::midFreq, "Mid Freq");
+                midGain = &knob (pid::midGain, "Mid Gain");
+                midQ = &knob (pid::midQ, "Mid Q");
+                highFreq = &knob (pid::highFreq, "High Freq");
+                highGain = &knob (pid::highGain, "High Gain");
+                highQ = &knob (pid::highQ, "High Q");
+                hcFreq = &knob (pid::lpfFreq, "High Cut");
                 mix = &knob (pid::eqMix, "Mix");
                 emphasise ({ lowGain, midGain, highGain }, Knob::Prominence::primary);
-                emphasise ({ lowQ, midQ, highQ }, Knob::Prominence::detail);
             }
 
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                auto [top, bottom] = split (r);
-
-                const int w = top.getWidth();
-                auto lc = top.removeFromLeft (w * 2 / 9);
-                top.removeFromLeft (sectionGap);
-                auto low = top.removeFromLeft (w * 4 / 9);
-                top.removeFromLeft (sectionGap);
-                auto mid = top;
-                section ("Low cut", lc);
-                section ("Low band", low);
-                section ("Mid", mid);
-                auto lcIn = inner (lc);
-                auto lcCtl = lcIn.removeFromLeft (lcIn.getWidth() / 2);
-                lcOn->setBounds (lcCtl.removeFromTop (lcCtl.getHeight() / 2).withSizeKeepingCentre (lcCtl.getWidth() - 6, 32).translated (0, 6));
-                lcSlope->setBounds (lcCtl.withSizeKeepingCentre (lcCtl.getWidth() - 6, 32).translated (0, -6));
-                lcFreq->setBounds (lcIn);
-                row ({ lowType, lowFreq, lowGain, lowQ }, inner (low));
-                row ({ midFreq, midGain, midQ }, inner (mid));
-
-                auto high = bottom.removeFromLeft (w * 4 / 9);
-                bottom.removeFromLeft (sectionGap);
-                auto hc = bottom.removeFromLeft (w * 2 / 9);
-                bottom.removeFromLeft (sectionGap);
-                auto out = bottom;
-                section ("High band", high);
-                section ("High cut", hc);
-                section ("Output", out);
-                row ({ highType, highFreq, highGain, highQ }, inner (high));
-                auto hcIn = inner (hc);
-                auto hcCtl = hcIn.removeFromLeft (hcIn.getWidth() / 2);
-                hcOn->setBounds (hcCtl.removeFromTop (hcCtl.getHeight() / 2).withSizeKeepingCentre (hcCtl.getWidth() - 6, 32).translated (0, 6));
-                hcSlope->setBounds (hcCtl.withSizeKeepingCentre (hcCtl.getWidth() - 6, 32).translated (0, -6));
-                hcFreq->setBounds (hcIn);
-                row ({ mix }, inner (out).withSizeKeepingCentre (130, inner (out).getHeight()));
+                auto side = sideArea;
+                auto left = side.removeFromLeft (side.getWidth() / 2 - 8);
+                side.removeFromLeft (16);
+                auto right = side;
+                const auto cut = [&] (const juce::String& caption, Toggle& on, Segments& slope, juce::Rectangle<int>& col)
+                {
+                    auto group = col.removeFromTop (captionH + 4 + 30);
+                    section (caption, group);
+                    auto line = group.withTrimmedTop (captionH + 4);
+                    on.setBounds (line.removeFromLeft (64));
+                    slope.setBounds (line);
+                    col.removeFromTop (12);
+                };
+                cut ("Low Cut", *lcOn, *lcSlope, left);
+                placeGroup ("Low Band", *lowType, left);
+                cut ("High Cut", *hcOn, *hcSlope, right);
+                placeGroup ("High Band", *highType, right);
+                knobGrid ({ lcFreq, lowFreq, lowGain, lowQ, midFreq, midGain, midQ, highFreq, highGain, highQ, hcFreq, mix }, r, 6);
             }
 
-            Toggle* lcOn; Choice* lcSlope; Knob* lcFreq;
-            Choice* lowType; Knob *lowFreq, *lowGain, *lowQ;
-            Knob *midFreq, *midGain, *midQ;
-            Choice* highType; Knob *highFreq, *highGain, *highQ;
-            Toggle* hcOn; Choice* hcSlope; Knob* hcFreq; Knob* mix;
+            Toggle *lcOn, *hcOn;
+            Segments *lcSlope, *lowType, *hcSlope, *highType;
+            Knob *lcFreq, *lowFreq, *lowGain, *lowQ, *midFreq, *midGain, *midQ, *highFreq, *highGain, *highQ, *hcFreq, *mix;
         };
 
+        // COMPRESSOR: transfer view, detector + GR at the side, all dynamics knobs in one row
         class CompPanel final : public DetailPanel
         {
         public:
             explicit CompPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Compressor", help::shortDescription ((int) ModuleId::comp), pid::compOn)
             {
+                hasSideControls = true;
                 for (auto& [id, label, ptr] : std::initializer_list<std::tuple<const char*, const char*, Knob**>> {
                          { pid::compThreshold, "Threshold", &threshold }, { pid::compRatio, "Ratio", &ratio },
                          { pid::compAttack, "Attack", &attack }, { pid::compRelease, "Release", &release },
                          { pid::compKnee, "Knee", &knee }, { pid::compMakeup, "Makeup", &makeup },
-                         { pid::compMix, "Mix", &mix }, { pid::compScHpf, "SC filter", &scHpf } })
+                         { pid::compScHpf, "SC Filter", &scHpf }, { pid::compMix, "Mix", &mix } })
                     *ptr = &knob (id, label);
-                detector = &choice (pid::compDetector, "Detector");
+                detector = &segments (pid::compDetector);
                 emphasise ({ threshold, ratio }, Knob::Prominence::primary);
-                emphasise ({ knee, scHpf }, Knob::Prominence::detail);
                 addAndMakeVisible (gr);
                 gr.setTooltip ("Gain reduction in dB");
             }
@@ -485,31 +470,31 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                gr.setBounds (r.removeFromRight (60));
-                r.removeFromRight (sectionGap);
-                auto [dyn, out] = split (r);
-                section ("Dynamics", dyn);
-                section ("Output and detector", out);
-                row ({ threshold, ratio, attack, release, knee }, inner (dyn));
-                row ({ makeup, mix, scHpf, detector }, inner (out));
+                auto side = sideArea;
+                gr.setBounds (side.removeFromRight (44));
+                side.removeFromRight (16);
+                placeGroup ("Detector", *detector, side);
+                knobGrid ({ threshold, ratio, attack, release, knee, makeup, scHpf, mix }, r, 8);
             }
 
             Knob *threshold, *ratio, *attack, *release, *knee, *makeup, *mix, *scHpf;
-            Choice* detector;
+            Segments* detector;
             GainReductionMeter gr { colours::accent, "GR" };
         };
 
+        // DE-ESSER: mode and listen at the side with the GR meter, detection knobs below
         class DeEssPanel final : public DetailPanel
         {
         public:
             explicit DeEssPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "De-esser", help::shortDescription ((int) ModuleId::deess), pid::deessOn)
             {
+                hasSideControls = true;
+                mode = &segments (pid::deessMode);
+                listen = &toggle (pid::deessListen, "Listen (nur S-Laute)");
                 freq = &knob (pid::deessFreq, "Frequency");
                 threshold = &knob (pid::deessThreshold, "Threshold");
                 range = &knob (pid::deessRange, "Range");
-                mode = &choice (pid::deessMode, "Mode");
-                listen = &toggle (pid::deessListen, "Listen");
                 emphasise ({ freq, threshold }, Knob::Prominence::primary);
                 addAndMakeVisible (gr);
             }
@@ -523,91 +508,88 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                gr.setBounds (r.removeFromRight (60));
-                r.removeFromRight (sectionGap);
-                auto [a, b] = split (r, 0.62f);
-                section ("Detection", a);
-                section ("Behaviour", b);
-                row ({ freq, threshold, range }, inner (a));
-                auto in = inner (b);
-                mode->setBounds (in.removeFromLeft (in.getWidth() / 2));
-                listen->setBounds (in.withSizeKeepingCentre (130, 34));
+                auto side = sideArea;
+                gr.setBounds (side.removeFromRight (44));
+                side.removeFromRight (16);
+                placeGroup ("Mode", *mode, side);
+                placeSwitches ({ listen }, side);
+                knobGrid ({ freq, threshold, range, nullptr, nullptr, nullptr }, r, 6);
             }
 
             Knob *freq, *threshold, *range;
-            Choice* mode;
+            Segments* mode;
             Toggle* listen;
             GainReductionMeter gr { colours::accent, "GR" };
         };
 
+        // SATURATION: character as segments, drive / output / mix
         class SatPanel final : public DetailPanel
         {
         public:
             explicit SatPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Saturation", help::shortDescription ((int) ModuleId::sat), pid::satOn)
             {
-                visualHeight = 268;
-                character = &choice (pid::satCharacter, "Character");
+                visualHeight = 170;
+                hasSideControls = true;
+                character = &segments (pid::satCharacter);
                 drive = &knob (pid::satDrive, "Drive");
                 output = &knob (pid::satOutput, "Output");
                 mix = &knob (pid::satMix, "Mix");
                 drive->setProminence (Knob::Prominence::primary);
-                drive->setMaxDialSize (124);
-                for (auto* k : { output, mix })
-                    k->setMaxDialSize (88);
             }
 
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                section ("Tone", r);
-                row ({ character, drive, output, mix }, inner (r));
+                auto side = sideArea;
+                placeGroup ("Charakter", *character, side, 34);
+                knobGrid ({ drive, output, mix, nullptr, nullptr, nullptr }, r, 6);
             }
 
-            Choice* character;
+            Segments* character;
             Knob *drive, *output, *mix;
         };
 
+        // DOUBLER: voices, stereo and tone in one knob row
         class DoublerPanel final : public DetailPanel
         {
         public:
             explicit DoublerPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Doubler", help::shortDescription ((int) ModuleId::doubler), pid::doublerOn)
             {
-                mix = &knob (pid::doublerMix, "Mix");
                 width = &knob (pid::doublerWidth, "Width");
                 delay = &knob (pid::doublerDelay, "Timing");
                 detune = &knob (pid::doublerDetune, "Detune");
-                monoSafe = &knob (pid::doublerMonoSafe, "Mono safe");
+                monoSafe = &knob (pid::doublerMonoSafe, "Mono Safe");
                 tone = &knob (pid::doublerTone, "Tone");
+                mix = &knob (pid::doublerMix, "Mix");
                 emphasise ({ mix, width }, Knob::Prominence::primary);
             }
 
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                auto [a, b] = split (r);
-                section ("Voices", a);
-                section ("Stereo and tone", b);
-                row ({ mix, delay, detune }, inner (a));
-                row ({ width, monoSafe, tone }, inner (b));
+                knobGrid ({ width, delay, detune, monoSafe, tone, mix }, r, 6);
             }
 
             Knob *mix, *width, *delay, *detune, *monoSafe, *tone;
         };
 
+        // PITCH: keep-formants switch and latency note at the side, transpose knobs below
         class PitchPanel final : public DetailPanel
         {
         public:
             explicit PitchPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Pitch", help::shortDescription ((int) ModuleId::pitch), pid::pitchOn)
             {
+                hasSideControls = true;
+                keep = &toggle (pid::pitchPreserveFormants, "Formanten erhalten");
                 semis = &knob (pid::pitchSemitones, "Pitch");
                 fine = &knob (pid::pitchCents, "Fine");
                 formant = &knob (pid::pitchFormant, "Formant");
                 mix = &knob (pid::pitchMix, "Mix");
-                keep = &toggle (pid::pitchPreserveFormants, "Keep formants");
                 emphasise ({ semis }, Knob::Prominence::primary);
+                info.setMinimumHorizontalScale (0.9f);
                 addAndMakeVisible (noteLabel (info));
             }
 
@@ -628,15 +610,11 @@ namespace velvox::ui
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                info.setBounds (r.removeFromBottom (22).withTrimmedLeft (6));
-                r.removeFromBottom (6);
-                auto [a, b] = split (r);
-                section ("Transpose", a);
-                section ("Character", b);
-                row ({ semis, fine, mix }, inner (a));
-                auto in = inner (b);
-                keep->setBounds (in.removeFromLeft (in.getWidth() / 3).withSizeKeepingCentre (170, 34));
-                row ({ formant }, in.removeFromLeft (in.getWidth() / 2));
+                auto side = sideArea;
+                placeSwitches ({ keep }, side);
+                info.setJustificationType (juce::Justification::topLeft);
+                info.setBounds (side.removeFromTop (60));
+                knobGrid ({ semis, fine, formant, mix, nullptr, nullptr }, r, 6);
             }
 
             Knob *semis, *fine, *formant, *mix;
@@ -804,24 +782,27 @@ namespace velvox::ui
             GainReductionMeter gr { colours::accent, "Duck" };
         };
 
+        // OUTPUT: stereo image + loudness view, level match at the side, gains, stereo and read-outs below
         class OutputPanel final : public DetailPanel
         {
         public:
             explicit OutputPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Output", help::shortDescription (-1), nullptr)
             {
+                hasSideControls = true;
+                mode = &segments (pid::levelMatchMode);
+                window = &segments (pid::levelMatchWindow);
+                clip = &toggle (pid::safetyClip, "Clip Guard");
+                inGain = &knob (pid::inputGain, "Input Gain");
                 width = &knob (pid::stereoWidth, "Width");
-                monoBelow = &knob (pid::monoBelow, "Mono below");
-                mode = &choice (pid::levelMatchMode, "Level match");
-                window = &choice (pid::levelMatchWindow, "Measure over");
-                range = &knob (pid::levelMatchRange, "Max correction");
-                clip = &toggle (pid::safetyClip, "Clip guard");
+                monoBelow = &knob (pid::monoBelow, "Mono Below");
+                range = &knob (pid::levelMatchRange, "Max Correction");
                 emphasise ({ width }, Knob::Prominence::primary);
                 addAndMakeVisible (correlation);
                 correlation.setTooltip ("Phase correlation: +1 = mono-safe, below 0 = parts cancel in mono");
                 for (auto* l : { &inValue, &procValue, &matchValue })
                 {
-                    l->setFont (display (30.0f));
+                    l->setFont (monoFont (22.0f));
                     l->setColour (juce::Label::textColourId, colours::text);
                     l->setJustificationType (juce::Justification::centred);
                     addAndMakeVisible (*l);
@@ -845,38 +826,34 @@ namespace velvox::ui
             {
                 const auto under = [&] (juce::Label& l, const juce::String& text)
                 {
-                    drawCaption (g, text, l.getBounds().toFloat().translated (0.0f, 30.0f).withHeight (16.0f),
-                                 juce::Justification::centred, colours::textDim, 9.5f);
+                    g.setColour (colours::knobName);
+                    g.setFont (semiBold (9.0f, 0.06f));
+                    g.drawText (text.toUpperCase(), l.getBounds().toFloat().translated (0.0f, 22.0f).withHeight (14.0f), juce::Justification::centred, false);
                 };
                 under (inValue, "Input LUFS");
                 under (procValue, "Processed LUFS");
                 under (matchValue, "Match dB");
-                drawCaption (g, "Correlation", correlation.getBounds().toFloat().translated (0.0f, -22.0f).withHeight (16.0f),
-                             juce::Justification::centredLeft, colours::textDim, 10.0f);
+                g.setColour (colours::knobName);
+                g.setFont (semiBold (9.0f, 0.06f));
+                g.drawText ("CORRELATION", correlation.getBounds().toFloat().translated (0.0f, 30.0f).withHeight (14.0f), juce::Justification::centred, false);
             }
 
         private:
             void layoutContent (juce::Rectangle<int> r) override
             {
-                auto [stereo, loud] = split (r);
-                section ("Stereo", stereo);
-                auto s = inner (stereo);
-                auto corr = s.removeFromRight (s.getWidth() / 3);
-                correlation.setBounds (corr.withSizeKeepingCentre (corr.getWidth() - 30, 32));
-                row ({ width, monoBelow }, s);
+                auto side = sideArea;
+                placeGroup ("Level Match", *mode, side);
+                placeGroup ("Measure over", *window, side);
+                placeSwitches ({ clip }, side);
 
-                section ("Loudness", loud);
-                auto l = inner (loud);
-                auto readouts = l.removeFromRight (l.getWidth() * 2 / 5);
-                const int w = readouts.getWidth() / 3;
-                for (auto* lab : { &inValue, &procValue, &matchValue })
-                    lab->setBounds (readouts.removeFromLeft (w).withSizeKeepingCentre (w, 36).translated (0, -10));
-                row ({ mode, window, range, clip }, l);
-                clip->setBounds (clip->getBounds().withSizeKeepingCentre (136, 34));
+                knobGrid ({ inGain, width, monoBelow, range, &inValue, &procValue, &matchValue, &correlation }, r, 8);
+                for (auto* l : { &inValue, &procValue, &matchValue })
+                    l->setBounds (l->getBounds().withSizeKeepingCentre (l->getWidth(), 28));
+                correlation.setBounds (correlation.getBounds().withSizeKeepingCentre (correlation.getWidth() - 16, 28));
             }
 
-            Knob *width, *monoBelow, *range;
-            Choice *mode, *window;
+            Knob *inGain, *width, *monoBelow, *range;
+            Segments *mode, *window;
             Toggle* clip;
             CorrelationView correlation;
             juce::Label inValue, procValue, matchValue;

@@ -277,6 +277,24 @@ public:
             expect (found[(int) ModuleId::chop].segments.contains ("chopRate"), "STUTTER rate as segments");
             expect (found[(int) ModuleId::smash].knobs.contains ("smashAmount"), "VOCAL SMASH big knob");
 
+            // The seven further modules and the output stage use segments and switches as well
+            expect (found[(int) ModuleId::eq].segments.contains ("hpfSlope") && found[(int) ModuleId::eq].segments.contains ("lowType")
+                    && found[(int) ModuleId::eq].segments.contains ("highType"), "EQ slopes and band types as segments");
+            expect (found[(int) ModuleId::eq].toggles.contains ("hpfOn") && found[(int) ModuleId::eq].toggles.contains ("lpfOn"), "EQ cut switches");
+            expect (found[(int) ModuleId::comp].segments.contains ("compDetector"), "COMPRESSOR detector as segments");
+            expect (found[(int) ModuleId::deess].segments.contains ("deessMode") && found[(int) ModuleId::deess].toggles.contains ("deessListen"), "DE-ESSER mode + listen");
+            expect (found[(int) ModuleId::sat].segments.contains ("satCharacter"), "SATURATION character as segments");
+            expect (found[(int) ModuleId::pitch].toggles.contains ("pitchPreserveFormants"), "PITCH keep formants switch");
+            expect (found[-1].segments.contains ("levelMatchMode") && found[-1].segments.contains ("levelMatchWindow"), "OUTPUT level match as segments");
+            expect (found[-1].knobs.contains ("inputGain"), "OUTPUT input gain");
+            for (auto* pid : { "compThreshold", "compRatio", "compAttack", "compRelease", "compKnee", "compMakeup", "compMix", "compScHpf" })
+                expect (found[(int) ModuleId::comp].knobs.contains (pid), juce::String ("COMPRESSOR keeps ") + pid);
+            for (auto* pid : { "doublerWidth", "doublerDelay", "doublerDetune", "doublerMonoSafe", "doublerTone", "doublerMix" })
+                expect (found[(int) ModuleId::doubler].knobs.contains (pid), juce::String ("DOUBLER keeps ") + pid);
+            for (int id = 0; id < dsp::numModules; ++id)
+                expect (found[id].segments.size() + found[id].knobs.size() + found[id].toggles.size() > 0 || id == (int) ModuleId::check,
+                        juce::String ("controls in ") + dsp::moduleKey ((ModuleId) id));
+
             // Nothing the old panels offered gets lost
             for (auto* pid : { "delayDuckAmount", "delayDuckThreshold", "delayDuckAttack", "delayDuckRelease", "delayToReverb", "delayDrive", "delayDiffusion" })
                 expect (found[(int) ModuleId::delay].knobs.contains (pid), juce::String ("DELAY keeps ") + pid);
