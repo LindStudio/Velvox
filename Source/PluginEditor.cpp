@@ -29,7 +29,7 @@ namespace
     constexpr int frameRate = 60;
 
     // Window size limits relative to the design canvas
-    constexpr double minScale = 0.6, maxScale = 1.4;
+    constexpr double minScale = 0.7, maxScale = 1.4;   // below 0.7 the 9 px knob names of the design get unreadable
 
     juce::Rectangle<int> chainArea()   { return { margin, chainTop, baseWidth - 2 * margin, chainH }; }
     juce::Rectangle<int> bodyArea()    { return { margin, bodyTop, panelW, bodyH }; }

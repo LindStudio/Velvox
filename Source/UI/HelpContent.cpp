@@ -29,25 +29,30 @@ namespace velvox::ui::help
 
 ## Your first minute
 - Load Headliner on the mixer track of your vocal. A new instance asks: "Let's mix your vocal."
-- Click "Audio analysieren" and start playback of the vocal in your DAW. Headliner captures a limited section (pauses are skipped) and stops by itself.
-- The analysis and the mix run in the background; the playback is never interrupted. When it is done, the Auto Mix view shows what was set up and why.
-- Use "Vorher / Headliner Mix" and "Original" to compare at equal loudness, and the Feinschliff controls to fine-tune.
+- Click "Vocal analysieren" and start playback of the vocal in your DAW. Headliner captures a limited section (pauses are skipped) and stops by itself.
+- The analysis and the mix run in the background; the playback is never interrupted. When it is done, the AUTO MIX tab shows what was set up and why.
+- Use "Vorher / Headliner Mix" and "Original" to compare at equal loudness, and VOCAL CONTROL to fine-tune.
 
-## Two views
-- Auto Mix: status of the analysis, the processing that was set up, comparison and six fine-tuning controls.
-- Module: every module with all of its real parameters, meters and visualisations. Click a module card to open it.
-Both views control the same sound. Switching never changes or resets a value.
+## Three tabs
+- CHAIN: the modules as columns, and below them every parameter of the selected module with its meters and visualisation.
+- AUTO MIX: status of the analysis, the processing that was set up, and the comparison.
+- VOCAL CHECK: a diagnosis of the recording with suggestions.
+All tabs control the same sound. Switching never changes or resets a value.
+
+## VOCAL CONTROL
+The bar at the bottom is always there: Presence, Space, Width, Punch and Warmth change several modules at once, Vocal Level sets the final level.
 
 ## Help is always here
-The Help button at the top right opens this guide. Inside a module, the ? button jumps straight to the page for that module. You can restart the tutorial from the bottom of the navigation.)" });
+The ? button at the top right opens this guide. Inside a module, the ? button jumps straight to the page for that module. You can restart the tutorial from the bottom of the navigation.)" });
 
-            p.push_back ({ "chain", "The signal chain", gStart, R"(The row under the top bar is the signal chain. Audio enters at In, runs through the modules from left to right and leaves at Out.
+            p.push_back ({ "chain", "The signal chain", gStart, R"(The columns under the header are the signal chain. Audio enters at INPUT, runs through the modules from left to right and leaves at OUTPUT.
 
-## Reading a tile
-- The dot on the left is the power switch. Lit = the module processes audio, hollow = it is switched off and bypassed.
-- The dot glows brighter while the module is working hard (for example while a compressor reduces gain).
-- An "M" on a switched-off tile means a Feinschliff control currently drives this module. "Auto" marks modules set up by the automatic mix.
-- Delay and Reverb carry an Ins / Send switch: Ins processes in series like every other module, Send runs them in parallel on the lower lane.
+## Reading a column
+- The power button next to the name switches the module. A switched-off column is dimmed and the module is bypassed.
+- The neon icon shows the module; below it the two most important knobs work directly.
+- A thin line above the footer moves while the module is working (for example while a compressor reduces gain).
+- Under the icon: MACRO = a VOCAL CONTROL knob currently drives this switched-off module, AUTO = set up by the automatic mix.
+- Delay and Reverb carry a SEND / INSERT switch: INSERT processes in series like every other module, SEND runs them in parallel. Sends sit behind the dashed line at the end of the row.
 
 ## Why order matters
 Every module hears what the modules before it did. Typical consequences:
@@ -58,25 +63,26 @@ Every module hears what the modules before it did. Typical consequences:
 The default order follows these rules and is a safe place to start.)" });
 
             p.push_back ({ "modules", "Organising modules", gWork, R"(## Open a module
-Click a tile to open it: the Module view shows all of its controls below the chain.
+Click a column to open it: all of its controls appear below the chain.
 
 ## Switch on and off
-Click the dot on a tile, or the power button in the module header. A switched-off module is bypassed: it is removed from the active processing and costs no CPU.
+Click the power button of a column, or the one in the module header. A switched-off module is bypassed: it is removed from the active processing and costs no CPU.
 
 ## Change the order
-Drag a tile left or right by its body. A glowing marker shows where it will land. Release to drop - the audio order changes at the same moment (with a short, click-free crossfade). Drag Delay or Reverb onto the lower lane to run them as parallel sends, or back into the row to insert them.
+The arrows in the footer of a column move it one step earlier or later. For bigger moves drag a column by its name or icon: a glowing marker shows where it will land, and the audio order changes at the same moment (with a short, click-free crossfade). Drop Delay or Reverb behind the dashed line to run them as parallel sends, or back into the row to insert them.
 Dragging starts only after the mouse has moved a few pixels, so a normal click never moves a module.
 
-## Hide modules you do not use
-Right-click a tile and choose "Hide from chain view", or use the Modules button below the chain. Hiding only tidies the view: a hidden module keeps its settings and keeps processing if it is switched on. The Modules button shows how many modules are hidden and how many of those are still active. Use it to open, switch or show any hidden module again.
+## Add, copy, remove
+- The round + at the end of the row, or a + on the line between two columns, opens the module browser. The same module can be used several times; each instance has its own settings.
+- The middle footer buttons copy a column (with its settings) or take it out of the chain. Undo brings it back.
 
-## Hide, switch off or remove - the difference
-- Hidden: not shown in the row. The sound does not change.
-- Switched off: shown with a hollow dot. The module is not processed.
-- Sends: Delay and Reverb on the lower lane are not in the series chain but are added in parallel.
+## Switched off or removed - the difference
+- Switched off: shown dimmed. The module stays in its place but is not processed.
+- Removed: not in the chain any more (Undo restores it with its settings).
+- Sends: Delay and Reverb behind the dashed line are not in the series chain but are added in parallel.
 
 ## Layouts
-In the Modules menu:
+In the chain menu (… under the round +):
 - Restore default order puts every module back to its factory position.
 - Save as my default layout stores the current order and hidden modules for you (in your user settings, for all projects).
 - Load my default layout applies that saved layout to this instance.
@@ -98,18 +104,24 @@ The order and hidden modules of each instance are also saved with your project a
 ## Automation
 Every knob, switch and menu is a real plugin parameter: your DAW can automate it, and presets and A/B store it. Headliner reports changes to the host as proper gestures, so recorded automation is clean.)" });
 
-            p.push_back ({ "modes", "Auto Mix and Module views", gWork, R"(## Auto Mix
+            p.push_back ({ "modes", "The tabs and VOCAL CONTROL", gWork, R"(## AUTO MIX
 The overview after an analysis:
 - Vocal status: how much voice was analysed, whether that was enough, how many modules were set up, the live input level, the beat sidechain and the output level.
 - Notes on the recording: only what was measured, each marked gemessen (measured), wahrscheinlich (likely) or möglich (possible).
 - Automatic mix: every processing step that was actually set up, with the reason. Click a step to open its module.
-- Feinschliff: six controls that change several modules at once - Presence (highs and de-essing), Warmth (body, softer highs, saturation), Punch (faster, firmer compression and drive), Width (doubler and stereo width), Space (ducked reverb and delay) and Density (compression and saturation). They work on top of the automatic mix and move the real parameters.
+- Feinschliff: Density (compression and saturation) and the fair compare.
 
-## Module
-Every module with all its parameters. When a Feinschliff control moves a parameter, the knob shows a small marker at the value that is actually processed. Cards set up by the automatic mix carry an "Auto" badge.
+## CHAIN
+Every module with all its parameters. When a VOCAL CONTROL knob moves a parameter, the knob shows a small marker at the value that is actually processed. Columns set up by the automatic mix show AUTO.
+
+## VOCAL CHECK
+A diagnosis of the recording at the position of the Vocal Check module, with a suggestion and a FIX button per finding.
+
+## VOCAL CONTROL
+Always at the bottom: Presence (highs and de-essing), Space (ducked reverb and delay), Width (doubler and stereo width), Punch (faster, firmer compression and drive), Warmth (body, softer highs, saturation) and Vocal Level (the final output level). They work on top of the automatic mix and move the real parameters.
 
 ## Switching
-Both views show the same settings. Switching never changes the sound or resets anything.)" });
+All tabs show the same settings. Switching never changes the sound or resets anything.)" });
 
             p.push_back ({ "automix", "Automatic mix", gWork, R"(## What it does
 Headliner records a limited section of the vocal while your DAW plays it (about 14 seconds of singing, at most 24 seconds including short gaps), analyses it and sets up the modules. Everything runs inside the plugin: no internet, no cloud, no AI service. A plugin only hears what the DAW plays through it - Headliner never reads the audio file itself, so only the captured section is analysed.
@@ -217,7 +229,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- Lower Threshold = reacts to more and quieter S sounds.\n- Higher Range = stronger reduction.\n- Frequency: lower values also catch lower hiss but can make the voice lisp.",
                 "- Frequency 5 to 7 kHz, Range 6 dB.\n- Turn on Listen, move Frequency until you hear mostly S sounds, turn Listen off.\n- Lower Threshold until only the S sounds are reduced.",
                 "- Too much Range: the singer sounds as if they had a lisp.\n- Leaving Listen switched on (you only hear the S band).\n- Using Wideband on a dense mix where the whole vocal then ducks audibly.",
-                "Place it after EQ boosts and compression, which both make S sounds louder. Presence (Feinschliff) raises the de-essing automatically together with the highs. Smooth handles ringing resonances, the de-esser handles sibilance."));
+                "Place it after EQ boosts and compression, which both make S sounds louder. Presence (VOCAL CONTROL) raises the de-essing automatically together with the highs. Smooth handles ringing resonances, the de-esser handles sibilance."));
 
             p.push_back (modulePage ("sat", "Saturation",
                 "Adds harmonics: warmth, grit, density and a stronger presence in a loud mix. The drive is level compensated, so it changes character rather than volume.",
@@ -226,7 +238,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- More Drive = more harmonics and more audible distortion.\n- Lower Mix = subtler, keeps the clean transients.\n- Hard character distorts most at the same Drive.",
                 "- Warm or Tape, Drive 4 to 8 dB, Mix 100 %.\n- For aggressive leads: Hard with Mix 30 to 50 %.",
                 "- Too much drive on S sounds - put the De-esser before it or lower Drive.\n- Judging distortion only on solo; in the mix more is often fine, but check.",
-                "Saturation increases density similar to compression; with Vocal Smash or heavy compression use less. Warmth, Punch and Density (Feinschliff) add saturation automatically."));
+                "Saturation increases density similar to compression; with Vocal Smash or heavy compression use less. Warmth, Punch and Density (VOCAL CONTROL) add saturation automatically."));
 
             p.push_back (modulePage ("doubler", "Doubler",
                 "Creates two extra takes left and right with small timing and pitch differences, for a wide and thick vocal while the original stays in the centre.",
@@ -235,7 +247,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- Higher Mix = more obvious doubling.\n- More Detune and Timing = looser, more chorus-like; too much sounds out of tune or echoey.\n- Mono safe 100 % = mono playback sounds exactly like the original.",
                 "- Mix 40 to 50 %, Width 80 %, Timing 12 to 18 ms, Detune 6 to 10 ct, Mono safe 50 to 100 %.",
                 "- Too much Detune on a tuned lead.\n- Forgetting the club: check with Mono on the output rail.",
-                "Choir is the bigger brother for whole groups of voices; you rarely need both at full level. Width (Feinschliff) drives the doubler. Put reverb after the doubler so both doubles get the same room."));
+                "Choir is the bigger brother for whole groups of voices; you rarely need both at full level. Width (VOCAL CONTROL) drives the doubler. Put reverb after the doubler so both doubles get the same room."));
 
             p.push_back (modulePage ("pitch", "Pitch",
                 "Creative transposition: shifts the vocal by semitones and cents, with optional formant control. It is not a pitch correction tool.",
@@ -258,11 +270,11 @@ Each module shows real data from the audio or from its own settings: the EQ curv
             p.push_back (modulePage ("delay", "Delay",
                 "Echoes of the vocal, with filters on the repeats and ducking that pushes the echoes down while the vocal is active.",
                 "For depth, width and rhythm, especially at the ends of phrases.",
-                "- Sync locks the time to the host tempo using Note; without Sync (or without a host tempo) Time is used.\n- Feedback sets the number of repeats, Mix their level.\n- Low cut and High cut filter the repeats.\n- Ping-pong alternates repeats left and right.\n- Into reverb sends the echoes into the reverb (when both run as sends).\n- Ducking: Amount, Threshold, Attack and Release; Duck source chooses the vocal or the sidechain input.\n- The Ins / Send switch on the chain tile decides series or parallel.",
+                "- Sync locks the time to the host tempo using Note; without Sync (or without a host tempo) Time is used.\n- Feedback sets the number of repeats, Mix their level.\n- Low cut and High cut filter the repeats.\n- Ping-pong alternates repeats left and right.\n- Into reverb sends the echoes into the reverb (when both run as sends).\n- Ducking: Amount, Threshold, Attack and Release; Duck source chooses the vocal or the sidechain input.\n- The SEND / INSERT switch on the chain column decides series or parallel.",
                 "- More Feedback = longer tail. Very high values build up.\n- Higher Mix = louder echoes.\n- More duck Amount = clearer words while singing, echoes bloom in the gaps.",
                 "- Send, Sync on, 1/8 or 1/4 dotted, Feedback 25 to 35 %, Mix 15 to 25 %.\n- Low cut 300 Hz, High cut 6 kHz, duck Amount 6 to 10 dB.",
                 "- Too much Mix without ducking: the vocal gets blurry.\n- Unfiltered repeats that fight with the lead in the high end.",
-                "As a send it is not compressed or saturated by the chain. Space (Feinschliff) drives Delay and Reverb together. Use Into reverb for a smooth, washed tail."));
+                "As a send it is not compressed or saturated by the chain. Space (VOCAL CONTROL) drives Delay and Reverb together. Use Into reverb for a smooth, washed tail."));
 
             p.push_back (modulePage ("reverb", "Reverb",
                 "Room and depth: a Room or Plate reverb with pre-delay, tone and low cut, plus ducking that clears space while the vocal is singing.",
@@ -334,7 +346,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "## " + moduleSectionHeadings()[3] + "\n- Width above 100 % widens, below narrows, 0 % is mono.\n- Higher Mono below = more of the low end in mono.\n\n"
                 "## " + moduleSectionHeadings()[4] + "\n- Width 100 to 120 %, Mono below 120 Hz for club playback.\n- Level match: Bypass match while you work.\n\n"
                 "## " + moduleSectionHeadings()[5] + "\n- Extreme Width that pushes correlation below 0.\n- Forgetting that Auto gain changes the output level continuously.\n\n"
-                "## " + moduleSectionHeadings()[6] + "\nWidth (Feinschliff) drives the output width together with the Doubler. Output gain on the right rail sets the final level after this stage." });
+                "## " + moduleSectionHeadings()[6] + "\nWidth (VOCAL CONTROL) drives the output width together with the Doubler. Vocal Level in VOCAL CONTROL sets the final level after this stage; Input Gain sits in this panel." });
 
             return p;
         }

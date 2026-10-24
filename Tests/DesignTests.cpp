@@ -8,6 +8,8 @@
 #include "UI/Segments.h"
 #include "UI/ChainView.h"
 #include "UI/VocalControlBar.h"
+#include "UI/HelpContent.h"
+#include "UI/TutorialOverlay.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -345,6 +347,27 @@ public:
 
             ed.getTopBar().selectView (ui::TopBar::View::vocalCheck);
             expect (ed.getDetail() != nullptr && ed.getDetail()->getWidth() >= 1300, "VOCAL CHECK uses the whole width");
+        }
+
+        beginTest ("Design: help and tutorial describe the new interface");
+        {
+            const juce::StringArray outdated { "lower lane", "Analysieren starts", "Auto Mix and Module switch", "Module button",
+                                               "Hide from chain view", "six fine-tuning controls", "right rail", "\"Audio analysieren\"",
+                                               "Ins / Send switch", "Modules button" };
+            for (auto& step : ui::TutorialOverlay::steps())
+                for (auto& phrase : outdated)
+                    expect (! step.text.contains (phrase), "tutorial '" + step.title + "' mentions: " + phrase);
+            for (auto& page : ui::help::pages())
+                for (auto& phrase : outdated)
+                    expect (! page.body.contains (phrase), "help '" + page.key + "' mentions: " + phrase);
+
+            const auto* start = ui::help::find ("start");
+            expect (start != nullptr && start->body.contains ("VOCAL CONTROL") && start->body.contains ("CHAIN")
+                    && start->body.contains ("VOCAL CHECK"), "start page explains the three tabs and Vocal Control");
+            bool tabsStep = false;
+            for (auto& step : ui::TutorialOverlay::steps())
+                tabsStep = tabsStep || (step.target == "modes" && step.text.contains ("CHAIN") && step.text.contains ("AUTO MIX"));
+            expect (tabsStep, "tutorial step for the tabs");
         }
 
         beginTest ("Design: an old project shows the same values in the new panels");

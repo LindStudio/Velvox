@@ -2,6 +2,27 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [0.5.0] – Branch `feature/automix` (Entwicklungsstand, FL-Studio-Test ausstehend)
+
+### Neu
+- **Komplett neue Oberfläche „HEADLINER VOCAL“** nach dem Claude-Design-Paket (`docs/STYLEGUIDE.md`):
+  Fenster 1384 × 1040 (skalierbar 70–140 %), Header mit Tabs CHAIN / AUTO MIX / VOCAL CHECK, Kette als Spalten
+  mit Neon-Icon, zwei Live-Reglern und Fußleiste ‹ Duplizieren Entfernen ›, Modul-Panels mit Visualizer,
+  Segment-Gruppen statt Dropdowns und Regler-Raster in der Modulfarbe, schmale IN/OUT-Meter, VOCAL CONTROL
+  (Presence, Space, Width, Punch, Warmth, Vocal Level + Gain Reduction) in allen Tabs.
+- Neue Regler (57-Strich-Kranz, vertiefte Kappe, Leuchtpunkt), Schalter und Segmente; Roboto Mono für Werte.
+- 15 Neon-Modul-Icons (8 aus dem Design, 7 passend ergänzt).
+- Alle 15 Module bleiben bedienbar; Design-Regler ohne DSP-Gegenstück sind nicht gebaut (`docs/DESIGN_MAPPING.md`).
+
+### Geändert
+- Gain-Regler aus der Meter-Spalte: Ausgangspegel = VOCAL LEVEL, Input Gain im OUTPUT-Panel.
+- AUTO MIX: Feinschliff zeigt nur noch Density und den fairen Vergleich; „Vocal analysieren“.
+- Hilfe und Tutorial beschreiben Tabs, Spalten und VOCAL CONTROL.
+
+### Technik
+- `Tests/DesignTests.cpp` (Farben, Icons, Regler, Segmente, Tabs, Spalten, Panels, Vocal Control, Texte,
+  Alt-Projekte behalten ihre Werte). Wackeliger Hilfe-Test wartet jetzt auf das Öffnen statt 5 ms.
+
 ## [0.4.0] – Branch `feature/automix` (Entwicklungsstand, FL-Studio- und Hörtest ausstehend)
 
 ### Neu

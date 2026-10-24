@@ -33,6 +33,12 @@
 - **Benchmark:** `--bench`, `--score`, `VELVOX_OVERRIDE`, `tools/bench/make_ab_kit.py`. 0.4 schlägt 0.3 auf allen 13 echten Vocals (mit Vorbehalt, siehe `docs/BENCHMARK.md`). Hörtest-Kits unter `%USERPROFILE%\dev\velvox-bench\2026-10-24`.
 - **Volle Testsuite: 10263 Checks, 0 Fehler. pluginval Strenge 10 (mit GUI-Tests): SUCCESS.**
 
+## Neue Oberfläche (0.5, 24./25.10.)
+Umgesetzt nach Jakobs Design-Paket (`docs/design/`), Plan `docs/superpowers/plans/2026-10-24-headliner-ui-redesign.md`,
+Entscheidungen im Ledger `.superpowers/sdd/2026-10-24-headliner-ui-redesign/progress.md` (nicht im Repo) und unten in CHANGELOG 0.5.0.
+Stil: `docs/STYLEGUIDE.md`; was mangels DSP fehlt: `docs/DESIGN_MAPPING.md` (eigenes DSP-Projekt, wenn gewünscht).
+Screenshots zum Abgleich: `%USERPROFILE%\dev\velvox-bench\ui-2026-10-24\`.
+
 ## Nächste Schritte
 Design/UI ist NICHT Teil dieser Liste – dafür gibt Jakob eine eigene Anweisung.
 
