@@ -355,6 +355,20 @@ namespace velvox::ui
         return {};
     }
 
+    juce::Rectangle<float> ChainView::getArrowBounds (bool right)
+    {
+        layoutTiles();
+        const float maxScroll = std::max (0.0f, contentWidth() - rowArea().getWidth());
+        if (right)
+            return scroll.target < maxScroll - 0.5f ? rightArrowArea() : juce::Rectangle<float>();
+        return scroll.target > 0.5f ? leftArrowArea() : juce::Rectangle<float>();
+    }
+
+    juce::String ChainView::checkColumnNote()
+    {
+        return juce::String::fromUTF8 ("Diagnose\nohne Klang-\nver\xc3\xa4nderung");
+    }
+
     Knob* ChainView::getColumnKnob (ModuleId id, int instance, int which)
     {
         updateColumnKnobs();
@@ -366,6 +380,9 @@ namespace velvox::ui
     {
         layoutTiles();
         const auto row = rowArea();
+        const float maxScroll = std::max (0.0f, contentWidth() - row.getWidth());
+        const float visibleLeft = row.getX() + (scroll.current > 0.5f ? arrowW : 0.0f);
+        const float visibleRight = row.getRight() - (scroll.current < maxScroll - 0.5f ? arrowW : 0.0f);
 
         // Knobs for every column in the chain, none for columns that left it
         std::set<int> present;
@@ -383,6 +400,8 @@ namespace velvox::ui
                 for (auto& k : pair)
                 {
                     k->setDialSize (48);
+                    // The wheel scrolls the chain (the slider passes it on to its parents)
+                    k->slider.setScrollWheelEnabled (false);
                     addChildComponent (*k);
                 }
             }
@@ -390,7 +409,9 @@ namespace velvox::ui
             const auto onIt = onState.find (t.code());
             const bool on = (onIt == onState.end() ? isOn (t.id, t.instance) : onIt->second)
                             || (t.instance == 0 && macroEngaged[(size_t) t.id]);
-            const bool shown = row.getX() - 0.5f <= t.bounds.getX() && t.bounds.getRight() <= row.getRight() + 0.5f
+            // Only fully visible columns show their knobs, and never under a scroll arrow
+            // (the arrows are drawn by this component, the knobs would cover and catch them)
+            const bool shown = visibleLeft - 0.5f <= t.bounds.getX() && t.bounds.getRight() <= visibleRight + 0.5f
                                && ! (dragging && dragTile >= 0 && tiles[(size_t) dragTile].code() == t.code());
             for (int k = 0; k < 2; ++k)
                 if (auto& knob = pair[(size_t) k])

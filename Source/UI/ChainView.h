@@ -38,6 +38,10 @@ namespace velvox::ui
         static std::pair<juce::String, juce::String> columnLabels (dsp::ModuleId id);
         // Knob `which` (0 = upper, 1 = lower) of a column, nullptr when the column has none
         Knob* getColumnKnob (dsp::ModuleId id, int instance, int which);
+        // Scroll arrow area (empty when that arrow is not shown)
+        juce::Rectangle<float> getArrowBounds (bool right);
+        // Text in the knob area of the VOCAL CHECK column
+        static juce::String checkColumnNote();
 
         explicit ChainView (VelvoxAudioProcessor& processor);
 

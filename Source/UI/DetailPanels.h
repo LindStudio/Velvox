@@ -46,7 +46,7 @@ namespace velvox::ui
         Toggle& toggle (const char* paramId, const juce::String& label);
         Choice& choice (const char* paramId, const juce::String& caption);
         // Segment group (design): labels map onto the choices by name; none = the parameter's own
-        Segments& segments (const char* paramId, juce::StringArray labels = {});
+        Segments& segments (const char* paramId, juce::StringArray labels = {}, bool withOverflow = false);
 
         static void row (std::initializer_list<juce::Component*> items, juce::Rectangle<int> area);
         // Knobs in rows of `columns`, each cell centred (design knob grid)

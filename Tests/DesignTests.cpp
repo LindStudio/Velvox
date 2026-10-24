@@ -370,6 +370,121 @@ public:
             expect (tabsStep, "tutorial step for the tabs");
         }
 
+        // ---- Findings of the final review
+        beginTest ("Review: every delay division and pulse rate stays reachable (overflow segment)");
+        {
+            Harness h;
+            auto& state = h.proc.getState();
+            ui::Segments seg (state, pid::delayDivision, { "1/4", "1/4D", "1/8", "1/8D", "1/8T", "1/16" }, ui::moduleColour (ModuleId::delay), true);
+            seg.setBounds (0, 0, 420, 28);
+            auto* choice = dynamic_cast<juce::AudioParameterChoice*> (state.getParameter (pid::delayDivision));
+            expect (choice != nullptr);
+            if (choice != nullptr)
+            {
+                choice->setValueNotifyingHost (choice->convertTo0to1 ((float) choice->choices.indexOf ("1/64")));
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (60);
+                expectEquals (seg.getSelectedSegment(), seg.getOverflowSegment(), "a value without its own segment lights the overflow segment");
+                expectEquals (seg.getOverflowText(), juce::String ("1/64"), "and shows its name");
+                seg.chooseFromOverflow (choice->choices.indexOf ("1/2D"));
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (60);
+                expectEquals (choice->getIndex(), choice->choices.indexOf ("1/2D"), "every choice can be picked");
+                expectEquals (seg.getOverflowText(), juce::String ("1/2D"));
+                seg.clickSegment (0);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (60);
+                expect (seg.getOverflowText() != juce::String ("1/2D"), "overflow resets when a visible segment is chosen");
+            }
+
+            // The panels use it for the many-step parameters
+            auto r = h.proc.getRouting();
+            if (! r.contains (ModuleId::pulse)) r.insertDefault (ModuleId::pulse, 0);
+            h.proc.setRouting (r);
+            for (auto id : { ModuleId::delay, ModuleId::pulse })
+            {
+                auto panel = ui::createDetailPanel (h.proc, (int) id);
+                panel->setBounds (0, 0, 1180, 460);
+                int overflowGroups = 0;
+                std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+                {
+                    for (auto* child : c.getChildren())
+                    {
+                        if (auto* s = dynamic_cast<ui::Segments*> (child))
+                            if (s->getOverflowSegment() >= 0)
+                                ++overflowGroups;
+                        walk (*child);
+                    }
+                };
+                walk (*panel);
+                expect (overflowGroups >= 1, juce::String ("overflow segment in ") + dsp::moduleKey (id));
+            }
+        }
+
+        beginTest ("Review: no control is laid out with zero size or outside its panel");
+        {
+            Harness h;
+            auto r = h.proc.getRouting();
+            for (int id = 0; id < dsp::numModules; ++id)
+                if (! r.contains ((ModuleId) id))
+                    r.insertDefault ((ModuleId) id, 0);
+            h.proc.setRouting (r);
+            for (int id = -1; id < dsp::numModules; ++id)
+            {
+                auto panel = ui::createDetailPanel (h.proc, id);
+                panel->setBounds (0, 0, 1180, 460);
+                for (auto* child : panel->getChildren())
+                {
+                    if (! child->isVisible() || dynamic_cast<juce::Viewport*> (child) != nullptr)
+                        continue;
+                    const auto name = juce::String (id < 0 ? "output" : dsp::moduleKey ((ModuleId) id));
+                    expect (child->getHeight() >= 14 && child->getWidth() >= 14, name + ": control too small " + child->getBounds().toString());
+                    expect (panel->getLocalBounds().contains (child->getBounds()), name + ": control outside " + child->getBounds().toString());
+                }
+            }
+        }
+
+        beginTest ("Review: column knobs never cover the scroll arrows and ignore the mouse wheel");
+        {
+            Harness h;
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 1360, ui::ChainView::preferredHeight);
+            for (auto id : { ModuleId::ride, ModuleId::smash, ModuleId::smooth, ModuleId::sat, ModuleId::doubler, ModuleId::choir,
+                             ModuleId::chop, ModuleId::pulse, ModuleId::pitch, ModuleId::eq, ModuleId::comp })
+                view.insertModule (id);
+            for (float x : { 0.0f, view.getMaxScroll() * 0.5f, 360.0f, view.getMaxScroll() })
+            {
+                view.scrollTo (x, false);
+                view.refresh();
+                for (const auto& s : h.proc.getRouting())
+                    for (int k = 0; k < 2; ++k)
+                        if (auto* knob = view.getColumnKnob (s.id, s.instance, k); knob != nullptr && knob->isVisible())
+                        {
+                            for (bool right : { false, true })
+                            {
+                                const auto arrow = view.getArrowBounds (right);
+                                expect (arrow.isEmpty() || ! knob->getBounds().toFloat().intersects (arrow),
+                                        "knob over the " + juce::String (right ? "right" : "left") + " arrow at scroll " + juce::String (x));
+                            }
+                            expect (! knob->slider.isScrollWheelEnabled(), "wheel scrolls the chain, not the knob");
+                        }
+            }
+        }
+
+        beginTest ("Review: VOCAL CHECK column text is proper UTF-8");
+        {
+            expect (ui::ChainView::checkColumnNote().contains (juce::String::fromUTF8 ("ver\xc3\xa4nderung")), "umlaut intact");
+        }
+
+        beginTest ("Review: window size is stored as a scale, never taller than the screen, at least 80 %");
+        {
+            Harness h;
+            h.proc.getState().state.setProperty ("uiWindowWidth", 1440, nullptr);   // saved by the 1440 x 900 layout of 0.4
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+                expect (e->getHeight() <= display->userArea.getHeight(), "fits the work area: " + juce::String (e->getHeight()));
+            expect (h.proc.getState().state.hasProperty ("uiScale"), "scale stored");
+            if (auto* c = e->getConstrainer())
+                expectEquals (c->getMinimumWidth(), juce::roundToInt (ui::baseWidth * 0.8), "minimum 80 % (9 px names stay >= 7 px)");
+        }
+
         beginTest ("Design: an old project shows the same values in the new panels");
         {
             Harness h;

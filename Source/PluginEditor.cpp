@@ -9,7 +9,8 @@ using namespace velvox::ui;
 namespace
 {
     // Window width in pixels (key of the 1440 x 900 layout)
-    const juce::Identifier uiWidthProperty { "uiWindowWidth" };
+    // Window size as a scale of the design canvas (0.4 stored a pixel width under "uiWindowWidth")
+    const juce::Identifier uiScaleProperty { "uiScale" };
     const juce::Identifier uiSelectionProperty { "uiSelection" };
 
     // "Remind me later" hides the welcome card until the plugin is loaded again
@@ -29,7 +30,7 @@ namespace
     constexpr int frameRate = 60;
 
     // Window size limits relative to the design canvas
-    constexpr double minScale = 0.7, maxScale = 1.4;   // below 0.7 the 9 px knob names of the design get unreadable
+    constexpr double minScale = 0.8, maxScale = 1.4;   // below 0.8 the 9 px knob names of the design drop under 7 px
 
     juce::Rectangle<int> chainArea()   { return { margin, chainTop, baseWidth - 2 * margin, chainH }; }
     juce::Rectangle<int> bodyArea()    { return { margin, bodyTop, panelW, bodyH }; }
@@ -238,15 +239,18 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     if (auto* c = getConstrainer())
         c->setFixedAspectRatio ((double) baseWidth / (double) baseHeight);
 
+    // Stored as a scale of the design canvas ("uiScale"): a pixel width saved by an older
+    // layout (uiWindowWidth, 1440 x 900) would open the new, taller window off the screen.
+    // Never larger than the work area of the screen.
     int fitW = baseWidth;
     if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
     {
         const auto area = display->userArea;
-        fitW = (int) std::min (area.getWidth() * 0.94, area.getHeight() * 0.88 * baseWidth / (double) baseHeight);
+        fitW = (int) std::min (area.getWidth() * 0.94, area.getHeight() * 0.94 * baseWidth / (double) baseHeight);
     }
     const int defaultW = juce::jlimit (minW, baseWidth, fitW);
-    const int savedWidth = (int) proc.getState().state.getProperty (uiWidthProperty, defaultW);
-    const int w = juce::jlimit (minW, maxW, savedWidth);
+    const double savedScale = (double) proc.getState().state.getProperty (uiScaleProperty, defaultW / (double) baseWidth);
+    const int w = juce::jlimit (minW, std::max (minW, std::min (maxW, fitW)), juce::roundToInt (savedScale * baseWidth));
     setSize (w, juce::roundToInt (w * (double) baseHeight / baseWidth));
 
     auto& autoMix = proc.getAutoMix();
@@ -425,7 +429,7 @@ void VelvoxAudioProcessorEditor::resized()
 {
     const float scale = (float) getWidth() / (float) baseWidth;
     canvas.setTransform (juce::AffineTransform::scale (scale));
-    proc.getState().state.setProperty (uiWidthProperty, getWidth(), nullptr);
+    proc.getState().state.setProperty (uiScaleProperty, getWidth() / (double) baseWidth, nullptr);
 }
 
 // Pulls every meter exactly once per frame; all views read the shared result

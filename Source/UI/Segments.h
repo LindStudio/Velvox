@@ -8,10 +8,12 @@ namespace velvox::ui
     // bound to a choice or bool parameter. Choice labels map onto the parameter's choices by
     // name (a label that is no choice name maps by position); a bool parameter takes two
     // labels (off, on). Host automation and presets update the selection.
+    // With `withOverflow`, a last "…" segment opens a menu with every choice; when the value
+    // has no segment of its own, that segment lights up and shows the value's name.
     class Segments final : public juce::Component
     {
     public:
-        Segments (APVTS& state, const char* paramId, juce::StringArray labels, juce::Colour accent);
+        Segments (APVTS& state, const char* paramId, juce::StringArray labels, juce::Colour accent, bool withOverflow = false);
         ~Segments() override;
 
         void paint (juce::Graphics&) override;
@@ -23,11 +25,18 @@ namespace velvox::ui
         void setAccent (juce::Colour accent);
         const juce::String& getParamId() const noexcept { return paramId; }
 
+        int getOverflowSegment() const noexcept { return overflow != nullptr ? (int) choiceIndex.size() : -1; }
+        juce::String getOverflowText() const { return overflow != nullptr ? overflow->getButtonText() : juce::String(); }
+        void chooseFromOverflow (int choice);
+
     private:
         void showValue (float denormalisedValue);
+        void showOverflowMenu();
 
         juce::String paramId;
+        juce::StringArray allChoices;
         juce::OwnedArray<juce::TextButton> buttons;
+        juce::TextButton* overflow = nullptr;   // owned by buttons (last)
         std::vector<int> choiceIndex;
         std::unique_ptr<juce::ParameterAttachment> attachment;
         int selectedSegment = -1;

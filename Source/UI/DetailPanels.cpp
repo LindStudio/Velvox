@@ -150,7 +150,7 @@ namespace velvox::ui
         return ref;
     }
 
-    Segments& DetailPanel::segments (const char* paramId, juce::StringArray labels)
+    Segments& DetailPanel::segments (const char* paramId, juce::StringArray labels, bool withOverflow)
     {
         const auto id = pidFor (paramId);
         if (labels.isEmpty())
@@ -160,7 +160,7 @@ namespace velvox::ui
             else
                 labels = { "Off", "On" };
         }
-        auto s = std::make_unique<Segments> (apvts, id.toRawUTF8(), labels, colours::teal);
+        auto s = std::make_unique<Segments> (apvts, id.toRawUTF8(), labels, colours::teal, withOverflow);
         auto& ref = *s;
         segmentGroups.push_back (s.get());
         addAndMakeVisible (ref);
@@ -665,7 +665,7 @@ namespace velvox::ui
                 : DetailPanel (p, "Delay", help::shortDescription ((int) ModuleId::delay), pid::delayOn)
             {
                 hasSideControls = true;
-                division = &segments (pid::delayDivision, { "1/4", "1/4D", "1/8", "1/8D", "1/8T", "1/16" });
+                division = &segments (pid::delayDivision, { "1/4", "1/4D", "1/8", "1/8D", "1/8T", "1/16" }, true);
                 source = &segments (pid::duckSource, { "Vocal", "Sidechain" });
                 sync = &toggle (pid::delaySync, "Tempo-Sync");
                 pingPong = &toggle (pid::delayPingPong, "Ping-Pong");
@@ -715,8 +715,9 @@ namespace velvox::ui
                 gr.setBounds (side.removeFromRight (44));
                 side.removeFromRight (12);
                 placeGroup ("Ducking source", *source, side);
-                info.setBounds (side);
 
+                // Tempo / sidechain status under the knobs (the side area is full)
+                info.setBounds (r.removeFromBottom (18));
                 knobGrid ({ time, feedback, spread, lowCut, highCut, modulation, drive, diffusion, toReverb,
                             mix, duckAmount, duckThreshold, duckAttack, duckRelease }, r, 7);
             }
@@ -869,7 +870,7 @@ namespace velvox::ui
                 : DetailPanel (p, "Pulse", help::shortDescription ((int) ModuleId::pulse), pid::pulseOn)
             {
                 hasSideControls = true;
-                rate = &segments (pid::pulseRate, pulseRateLabels (p));
+                rate = &segments (pid::pulseRate, pulseRateLabels (p), true);
                 interp = &segments (pid::pulseInterp);
                 depth = &knob (pid::pulseDepth, "Depth");
                 tension = &knob (pid::pulseTension, "Shape");
