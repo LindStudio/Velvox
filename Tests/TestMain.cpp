@@ -1,3 +1,4 @@
+#include "CheckEval.h"
 #include "PluginProcessor.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "PluginEditor.h"
@@ -464,6 +465,25 @@ int main (int argc, char* argv[])
     if (argc >= 3 && juce::String (argv[1]) == "--fxrender")
         return velvox::test::runFxRender (juce::File (juce::String::fromUTF8 (argv[2])),
                                           argc >= 4 ? juce::File (juce::String::fromUTF8 (argv[3])) : juce::File());
+
+    // VOCAL CHECK calibration (Tests/CheckEval.cpp); an argument ending in .txt is a list of files
+    if (argc >= 4 && (juce::String (argv[1]) == "--check-template" || juce::String (argv[1]) == "--check-eval"))
+    {
+        juce::StringArray files;
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg = juce::String::fromUTF8 (argv[i]);
+            if (arg.endsWithIgnoreCase (".txt"))
+                files.addLines (juce::File (arg).loadFileAsString());
+            else
+                files.add (arg);
+        }
+        files.trim();
+        files.removeEmptyStrings();
+        const juce::File out (juce::String::fromUTF8 (argv[2]));
+        return juce::String (argv[1]) == "--check-template" ? velvox::test::runCheckTemplate (out, files)
+                                                            : velvox::test::runCheckEval (out, files);
+    }
 
     if (argc >= 4 && juce::String (argv[1]) == "--automix")
         return runAutoMixOnFile (juce::File (juce::String::fromUTF8 (argv[2])), juce::File (juce::String::fromUTF8 (argv[3])));

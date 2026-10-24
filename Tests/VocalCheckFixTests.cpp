@@ -5,6 +5,7 @@
 #include "SyntheticVocal.h"
 #include "DSP/VocalAnalyzer.h"
 #include "Check/CheckTypes.h"
+#include "Check/CheckTargets.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -43,6 +44,7 @@ public:
     void runTest() override
     {
         constexpr double fs = 48000.0;
+        targetsAndTemplate();
 
         beginTest ("Finding schema: id, category, German problem / fix text, confidence above the threshold");
         {
@@ -159,6 +161,52 @@ public:
             const auto g = analyzer.getGeneration();
             analyzer.clear();
             expectEquals ((int) (analyzer.getGeneration() - g), 1);
+        }
+    }
+
+    void targetsAndTemplate()
+    {
+        beginTest ("Targets: party = the auto-mix objective windows; genres and voices differ");
+        {
+            using check::CheckTargets;
+            using check::Genre;
+            const auto t = CheckTargets::make (Genre::party, false, false);
+            expectEquals (t.body.lo, -9.0f);
+            expectEquals (t.body.hi, -1.0f);
+            expectEquals (t.lowMid.lo, -7.0f);
+            expectEquals (t.lowMid.hi, 0.0f);
+            expectEquals (t.top.lo, -16.0f);
+            expectEquals (t.top.hi, -7.0f);
+            expectEquals (t.air.lo, -32.0f);
+            expectEquals (t.air.hi, -16.0f);
+            expectEquals (t.presenceMax, -4.0f);
+            expectEquals (t.phrase.lo, 3.0f);
+            expectEquals (t.phrase.hi, 6.0f);
+            expectEquals (t.crestMin, 5.5f);
+            expectEquals (t.sibilanceMax, -6.0f);
+            const auto high = CheckTargets::make (Genre::party, true, false);
+            expectLessThan (high.body.lo, -100.0f, "a high voice has no fundamentals in the body band");
+            const auto acoustic = CheckTargets::make (Genre::acoustic, false, false);
+            expectGreaterThan (acoustic.phrase.hi, t.phrase.hi, "acoustic allows more dynamics");
+        }
+
+        beginTest ("Voice template: finite, smooth, voice shaped (both voice classes)");
+        {
+            for (bool high : { false, true })
+            {
+                const auto& tpl = check::voiceTemplate (high);
+                expectEquals ((int) tpl.size(), VocalAnalyzer::numBands);
+                const auto at = [&] (float hz) { return tpl[(size_t) juce::jlimit (0, VocalAnalyzer::numBands - 1, (int) std::lround (12.0 * std::log2 (hz / 40.0)))]; };
+                for (size_t b = 1; b < tpl.size(); ++b)
+                {
+                    expect (std::isfinite (tpl[b]));
+                    // Between the fundamentals and 3 kHz (below F0 the spectrum falls steeply; VocalSet also
+                    // falls ~20 dB between 3.5 and 4.5 kHz - its recording chain, so the template is only used below 2.5 kHz)
+                    if (VocalAnalyzer::bandCentre ((int) b) > 300.0f && VocalAnalyzer::bandCentre ((int) b) < 3000.0f)
+                        expectLessThan (std::abs (tpl[b] - tpl[b - 1]), 3.0f, "smooth at band " + juce::String ((int) b));
+                }
+                expectGreaterThan (at (500.0f) - at (6000.0f), 10.0f, "the voice falls towards the highs");
+            }
         }
     }
 

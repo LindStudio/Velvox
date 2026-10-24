@@ -86,6 +86,9 @@ namespace velvox::dsp
         float sibilanceHz = 0.0f;         // centre of the S energy (0 = not measured)
         float monoLossDb = 0.0f;          // stereo loudness minus the loudness of the mono sum
         float sideToMidDb = -100.0f;
+        // 1/3-octave smoothed long-term spectrum (1/12-octave grid, dB, -200 = no bins) and its
+        // deviation from the voice template (median-normalised over 150 Hz - 8 kHz; empty = not measured)
+        std::vector<float> smoothDb, deviationDb;
         int hiddenFindings = 0;           // findings below the confidence threshold (not shown)
         int score = -1;                   // 0..100, -1 = not enough material
     };

@@ -1,4 +1,5 @@
 #include "VocalAnalyzer.h"
+#include "../Check/CheckTargets.h"
 
 namespace velvox::dsp
 {
@@ -827,6 +828,38 @@ namespace velvox::dsp
                         r.sibilanceHz = c;
                     }
                 }
+            }
+        }
+
+        // ---- 1/3-octave smoothed long-term spectrum and its deviation from the voice template
+        if (r.spectrumDb.size() == (size_t) numBands)
+        {
+            r.smoothDb.assign ((size_t) numBands, -200.0f);
+            for (int b = 0; b < numBands; ++b)
+            {
+                double p = 0.0;
+                int k = 0;
+                for (int j = b - 2; j <= b + 2; ++j)
+                    if (j >= 0 && j < numBands && binsPerBand[(size_t) j] > 0)
+                    {
+                        p += std::pow (10.0, r.spectrumDb[(size_t) j] / 10.0);
+                        ++k;
+                    }
+                if (k > 0)
+                    r.smoothDb[(size_t) b] = toDb (p / k);
+            }
+            const auto& tpl = check::voiceTemplate (r.highVoice);
+            std::vector<float> d;
+            for (int b = 0; b < numBands; ++b)
+                if (bandCentre (b) >= 150.0f && bandCentre (b) <= 8000.0f && r.smoothDb[(size_t) b] > -190.0f)
+                    d.push_back (r.smoothDb[(size_t) b] - tpl[(size_t) b]);
+            if (d.size() > 20)
+            {
+                const float offset = percentile (d, 0.5f);
+                r.deviationDb.assign ((size_t) numBands, 0.0f);
+                for (int b = 0; b < numBands; ++b)
+                    if (r.smoothDb[(size_t) b] > -190.0f)
+                        r.deviationDb[(size_t) b] = r.smoothDb[(size_t) b] - tpl[(size_t) b] - offset;
             }
         }
     }

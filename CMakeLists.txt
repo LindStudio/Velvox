@@ -54,6 +54,7 @@ set(VELVOX_SOURCES
     Source/DSP/SmoothModule.cpp
     Source/DSP/CheckModule.cpp
     Source/DSP/VocalAnalyzer.cpp
+    Source/Check/CheckTargets.cpp
     Source/DSP/RideModule.cpp
     Source/DSP/Macros.cpp
     Source/Presets/ParameterSnapshot.cpp
@@ -166,7 +167,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/AbCompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/AbCompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)
