@@ -42,6 +42,52 @@ namespace
         h.proc.setRouting (r);
         h.proc.getUndo().clear();
     }
+
+    juce::MouseEvent mouse (juce::Component& c, juce::Point<float> pos, juce::Point<float> downPos, bool dragged,
+                            juce::ModifierKeys mods = {})
+    {
+        const auto now = juce::Time::getCurrentTime();
+        return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), pos, mods,
+                                 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &c, &c, now, downPos, now, 1, dragged);
+    }
+
+    void drag (juce::Component& c, juce::Point<float> from, juce::Point<float> to, juce::ModifierKeys mods = {})
+    {
+        c.mouseDown (mouse (c, from, from, false, mods));
+        c.mouseDrag (mouse (c, (from + to) * 0.5f, from, true, mods));
+        c.mouseDrag (mouse (c, to, from, true, mods));
+        c.mouseUp (mouse (c, to, from, true, mods));
+    }
+
+    void doubleClick (juce::Component& c, juce::Point<float> at)
+    {
+        for (int i = 0; i < 2; ++i)
+        {
+            c.mouseDown (mouse (c, at, at, false));
+            c.mouseUp (mouse (c, at, at, false));
+        }
+        c.mouseDoubleClick (mouse (c, at, at, false));
+    }
+
+    juce::MouseWheelDetails wheel (float dy, float dx = 0.0f)
+    {
+        juce::MouseWheelDetails w;
+        w.deltaX = dx;
+        w.deltaY = dy;
+        w.isReversed = false;
+        w.isSmooth = false;
+        w.isInertial = false;
+        return w;
+    }
+
+    juce::Array<int> menuIds (const juce::PopupMenu& menu)
+    {
+        juce::Array<int> ids;
+        for (juce::PopupMenu::MenuItemIterator it (menu, true); it.next();)
+            if (it.getItem().itemID != 0)
+                ids.add (it.getItem().itemID);
+        return ids;
+    }
 }
 
 class EqPanelTests final : public juce::UnitTest
@@ -166,6 +212,240 @@ public:
             expectEquals (band (m, 0, air).type, (int) EqBandType::bell, "edit on a macro-only band");
             expectEquals (band (m, 0, air).role, (int) dsp::EqRole::air, "keeps its role");
             expectEquals (steps (m), 1, "materialise + edit = one step");
+        }
+
+        beginTest ("Graph: double-click on empty space adds a Bell there and selects it");
+        {
+            Harness h;
+            withEq (h, 0);
+            ui::EqGraph g (h.proc, nullptr, 0);
+            g.setBounds (0, 0, 900, 320);
+            int selectedByCallback = -2;
+            g.onSelect = [&] (int b) { selectedByCallback = b; };
+            const juce::Point<float> at (g.xForFreq (2000.0f), g.yForGain (6.0f));
+            expectEquals (g.bandAt (at), -1, "empty space");
+            doubleClick (g, at);
+            const auto b = band (h, 0, 0);
+            expect (b.on && b.type == (int) EqBandType::bell, "a Bell");
+            expectWithinAbsoluteError (b.freq / 2000.0f, 1.0f, 0.02f, "at the clicked frequency");
+            expectWithinAbsoluteError (b.gain, 6.0f, 0.3f, "and gain");
+            expectEquals (g.getSelected(), 0);
+            expectEquals (selectedByCallback, 0, "the panel hears about it");
+            expectEquals (steps (h), 1, "one undo step (the clicks before it record nothing)");
+            g.update (*std::make_unique<ui::LiveData>());
+            expect (g.pointFor (0).getDistanceFrom (at) < 2.0f, "the point sits where it was added");
+            expectEquals (g.bandAt (at), 0);
+
+            // Gains beyond the shown +-18 dB keep the point inside the plot
+            setValue (h, ui::eqedit::paramId (0, 0, pid::eqband::gain), 27.0f);
+            g.update (*std::make_unique<ui::LiveData>());
+            expect (g.plotArea().expanded (0.5f).contains (g.pointFor (0)), "clamped to the plot");
+
+            // A full EQ: nothing happens
+            for (int i = 1; i < dsp::maxEqBands; ++i)
+                ui::eqedit::addBand (h.proc, 0, 100.0f + 50.0f * (float) i, 0.0f);
+            g.update (*std::make_unique<ui::LiveData>());
+            const int before = steps (h);
+            const juce::Point<float> empty (g.xForFreq (15000.0f), g.yForGain (-14.0f));
+            doubleClick (g, empty);
+            expectEquals (steps (h), before, "17th band refused, no step");
+        }
+
+        beginTest ("Graph: drag a point (Shift / Ctrl fine), one undo step with host gestures");
+        {
+            Harness h;
+            withEq (h, 0);
+            ui::eqedit::addBand (h.proc, 0, 1000.0f, 0.0f);
+            h.proc.getUndo().clear();
+            ui::EqGraph g (h.proc, nullptr, 0);
+            g.setBounds (0, 0, 900, 320);
+            g.update (*std::make_unique<ui::LiveData>());
+
+            const auto from = g.pointFor (0);
+            const juce::Point<float> to (g.xForFreq (4000.0f), g.yForGain (-6.0f));
+            drag (g, from, to);
+            expectWithinAbsoluteError (band (h, 0, 0).freq / 4000.0f, 1.0f, 0.02f, "frequency follows");
+            expectWithinAbsoluteError (band (h, 0, 0).gain, -6.0f, 0.3f, "gain follows");
+            expectEquals (steps (h), 1, "the whole drag = one step");
+            expect (h.proc.getUndo().undo());
+            expectWithinAbsoluteError (band (h, 0, 0).freq, 1000.0f, 1.0f, "undone");
+            expectWithinAbsoluteError (band (h, 0, 0).gain, 0.0f, 0.01f);
+
+            // Fine: the same mouse distance moves a tenth
+            g.update (*std::make_unique<ui::LiveData>());
+            const auto p = g.pointFor (0);
+            drag (g, p, p + juce::Point<float> (100.0f, -50.0f), juce::ModifierKeys::shiftModifier);
+            const float fineOct = std::log2 (band (h, 0, 0).freq / 1000.0f);
+            const float normalOct = std::log2 (g.freqForX (p.x + 100.0f) / 1000.0f);
+            expectWithinAbsoluteError (fineOct, normalOct * 0.1f, 0.01f, "Shift: 1/10 in frequency");
+            expectWithinAbsoluteError (band (h, 0, 0).gain, (g.gainForY (p.y - 50.0f) - 0.0f) * 0.1f, 0.05f, "and in gain");
+
+            // Ctrl, too
+            setValue (h, ui::eqedit::paramId (0, 0, pid::eqband::gain), 0.0f);
+            g.update (*std::make_unique<ui::LiveData>());
+            const auto c = g.pointFor (0);
+            drag (g, c, c + juce::Point<float> (0.0f, -50.0f), juce::ModifierKeys::ctrlModifier);
+            expectWithinAbsoluteError (band (h, 0, 0).gain, g.gainForY (c.y - 50.0f) * 0.1f, 0.05f, "Ctrl: fine");
+
+            // A click on a point without moving records nothing
+            const int before = steps (h);
+            g.update (*std::make_unique<ui::LiveData>());
+            drag (g, g.pointFor (0), g.pointFor (0));
+            expectEquals (steps (h), before);
+        }
+
+        beginTest ("Graph: cut points move in frequency only; wheel = Q (cuts: slope); Alt+click resets; double-click toggles");
+        {
+            Harness h;
+            withEq (h, 0);
+            ui::eqedit::addBand (h.proc, 0, 2000.0f, 5.0f);
+            const int cut = ui::eqedit::addBand (h.proc, 0, 100.0f, 0.0f);
+            ui::eqedit::setType (h.proc, 0, cut, EqBandType::lowCut);
+            ui::EqGraph g (h.proc, nullptr, 0);
+            g.setBounds (0, 0, 900, 320);
+            g.update (*std::make_unique<ui::LiveData>());
+
+            const auto cp = g.pointFor (cut);
+            expectWithinAbsoluteError (cp.y, g.yForGain (0.0f), 0.5f, "a cut sits on the 0 dB line");
+            drag (g, cp, { g.xForFreq (150.0f), cp.y - 60.0f });
+            expectWithinAbsoluteError (band (h, 0, cut).freq / 150.0f, 1.0f, 0.02f);
+            expectWithinAbsoluteError (band (h, 0, cut).gain, 0.0f, 1.0e-3f, "no gain on a cut");
+
+            g.update (*std::make_unique<ui::LiveData>());
+            const auto bp = g.pointFor (0);
+            const float q0 = band (h, 0, 0).q;
+            g.mouseWheelMove (mouse (g, bp, bp, false), wheel (0.11f));
+            const float q1 = band (h, 0, 0).q;
+            g.mouseWheelMove (mouse (g, bp, bp, false), wheel (-0.33f));
+            const float q2 = band (h, 0, 0).q;
+            expect (q1 > q0 * 1.15f && q2 < q1, "wheel up narrows, down widens");
+            const juce::Point<float> empty (g.xForFreq (12000.0f), g.yForGain (-12.0f));
+            g.mouseWheelMove (mouse (g, empty, empty, false), wheel (0.11f));
+            g.mouseWheelMove (mouse (g, bp, bp, false), wheel (0.0f, 0.3f));
+            expectEquals (band (h, 0, 0).q, q2, "elsewhere / horizontal: nothing");
+
+            g.update (*std::make_unique<ui::LiveData>());
+            const int slope0 = band (h, 0, cut).slope;
+            const auto cp2 = g.pointFor (cut);
+            g.mouseWheelMove (mouse (g, cp2, cp2, false), wheel (0.11f));
+            expectEquals (band (h, 0, cut).slope, slope0 + 1, "wheel on a cut: one slope step steeper");
+            g.mouseWheelMove (mouse (g, cp2, cp2, false), wheel (-0.11f));
+            expectEquals (band (h, 0, cut).slope, slope0);
+
+            // Alt+click: gain and Q back to the defaults
+            g.update (*std::make_unique<ui::LiveData>());
+            const auto alt = g.pointFor (0);
+            h.proc.getUndo().clear();
+            g.mouseDown (mouse (g, alt, alt, false, juce::ModifierKeys::altModifier));
+            g.mouseUp (mouse (g, alt, alt, false, juce::ModifierKeys::altModifier));
+            expectWithinAbsoluteError (band (h, 0, 0).gain, 0.0f, 1.0e-3f, "Alt+click: 0 dB");
+            expectWithinAbsoluteError (band (h, 0, 0).q, 1.0f, 1.0e-3f, "Q 1");
+            expectEquals (steps (h), 1);
+
+            // Double-click on a point: on / off
+            g.update (*std::make_unique<ui::LiveData>());
+            doubleClick (g, g.pointFor (0));
+            expect (! band (h, 0, 0).on, "switched off");
+            g.update (*std::make_unique<ui::LiveData>());
+            doubleClick (g, g.pointFor (0));
+            expect (band (h, 0, 0).on, "and on again");
+            expectEquals (steps (h), 3);
+        }
+
+        beginTest ("Graph: right-click menu - 8 types, slopes for cuts, on/off, delete; Delete key");
+        {
+            Harness h;
+            withEq (h, 0);
+            ui::eqedit::addBand (h.proc, 0, 500.0f, -4.0f);
+            ui::eqedit::addBand (h.proc, 0, 5000.0f, 2.0f);
+            ui::EqGraph g (h.proc, nullptr, 0);
+            g.setBounds (0, 0, 900, 320);
+            g.update (*std::make_unique<ui::LiveData>());
+
+            auto ids = menuIds (g.buildPointMenu (0));
+            for (int t = 0; t < dsp::numEqBandTypes; ++t)
+                expect (ids.contains (ui::EqGraph::menuTypeBase + t), "type " + juce::String (t));
+            expect (! ids.contains (ui::EqGraph::menuSlopeBase), "no slopes for a Bell");
+            expect (ids.contains (ui::EqGraph::menuToggle) && ids.contains (ui::EqGraph::menuDelete));
+
+            h.proc.getUndo().clear();
+            g.performMenu (0, ui::EqGraph::menuTypeBase + (int) EqBandType::highCut);
+            expectEquals (band (h, 0, 0).type, (int) EqBandType::highCut);
+            ids = menuIds (g.buildPointMenu (0));
+            for (int s = 0; s < dsp::numEqSlopes; ++s)
+                expect (ids.contains (ui::EqGraph::menuSlopeBase + s), "slope " + juce::String (dsp::eqSlopeDbPerOct (s)));
+            g.performMenu (0, ui::EqGraph::menuSlopeBase + 1);
+            expectEquals (band (h, 0, 0).slope, 1, "12 dB/oct");
+            g.performMenu (0, ui::EqGraph::menuToggle);
+            expect (! band (h, 0, 0).on);
+            g.setSelected (0);
+            g.performMenu (0, ui::EqGraph::menuDelete);
+            expect (band (h, 0, 0).isFree(), "deleted");
+            expectEquals (g.getSelected(), 1, "the selection moves to the remaining band");
+            expectEquals (steps (h), 4, "every menu action = one step");
+
+            expect (g.keyPressed (juce::KeyPress (juce::KeyPress::deleteKey)));
+            expect (band (h, 0, 1).isFree(), "Delete key removes the selected band");
+            expectEquals (g.getSelected(), -1, "nothing left to select");
+        }
+
+        beginTest ("Graph: hover card after 600 ms; macro bands are shown, tagged and editable");
+        {
+            Harness h;
+            withEq (h, 0);
+            ui::eqedit::addBand (h.proc, 0, 1000.0f, 3.0f);
+            h.proc.getState().getParameter (pid::macroPresence)->setValueNotifyingHost (0.6f);   // 60 %
+            ui::EqGraph g (h.proc, nullptr, 0);
+            g.setBounds (0, 0, 900, 320);
+            auto live = std::make_unique<ui::LiveData>();
+            g.update (*live);
+
+            const auto p = g.pointFor (0);
+            g.mouseMove (mouse (g, p, p, false));
+            g.update (*live);
+            expect (! g.isHoverCardShown(), "not at once");
+            juce::Thread::sleep (650);
+            g.update (*live);
+            expect (g.isHoverCardShown(), "after 600 ms");
+            g.mouseExit (mouse (g, { 1.0f, 1.0f }, { 1.0f, 1.0f }, false));
+            expect (! g.isHoverCardShown());
+
+            int air = -1;
+            for (int b = 0; b < dsp::maxEqBands; ++b)
+                if (g.getShown()[(size_t) b].used && g.getShown()[(size_t) b].band.role == (int) dsp::EqRole::air)
+                    air = b;
+            expectEquals (air, 1, "the Presence band is shown next to the user band");
+            if (air < 0)
+                return;
+            expectEquals (ui::eqedit::roleTag (g.getShown()[(size_t) air].band.role), juce::String ("AIR"), "role tag");
+            expectEquals (ui::eqedit::roleTag (g.getShown()[0].band.role), juce::String(), "user bands carry no tag");
+            const auto ap = g.pointFor (air);
+            expectWithinAbsoluteError (ap.y, g.yForGain (3.0f), 0.5f, "drawn at the processed gain (+3 dB at 60 %)");
+            h.proc.getUndo().clear();
+            drag (g, ap, { ap.x, g.yForGain (8.0f) });
+            expectWithinAbsoluteError (h.proc.readEffectiveSettings().eq.bands[(size_t) air].gain, 8.0f, 0.3f,
+                                       "the processed band follows the mouse (macro share not doubled)");
+            expectWithinAbsoluteError (band (h, 0, air).gain, 5.0f, 0.3f, "base gain = 8 - 3");
+            expectEquals (steps (h), 1, "materialise + drag = one step");
+            expect (h.proc.getUndo().undo());
+            expect (band (h, 0, air).isFree(), "undo gives the band back to the macro");
+        }
+
+        beginTest ("Graph: EQ 2 edits its own bands only");
+        {
+            Harness h;
+            withEq (h, 1);
+            ui::EqGraph g (h.proc, nullptr, 1);
+            g.setBounds (0, 0, 900, 320);
+            doubleClick (g, { g.xForFreq (300.0f), g.yForGain (-5.0f) });
+            expect (value (h, "eqBand1On_2") > 0.5f);
+            expectWithinAbsoluteError (value (h, "eqBand1Gain_2"), -5.0f, 0.3f);
+            expect (band (h, 0, 0).isFree(), "EQ 1 untouched");
+            g.update (*std::make_unique<ui::LiveData>());
+            const auto p = g.pointFor (0);
+            g.mouseWheelMove (mouse (g, p, p, false), wheel (0.22f));
+            expect (value (h, "eqBand1Q_2") > 1.3f, "wheel on EQ 2");
+            expectWithinAbsoluteError (value (h, "eqBand1Q"), 1.0f, 1.0e-4f, "EQ 1 Q untouched");
         }
     }
 };

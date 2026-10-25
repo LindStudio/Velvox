@@ -132,7 +132,11 @@ namespace velvox::ui
         // Drag state: start values, so Shift / Ctrl fine is relative and never jumps
         juce::Point<float> dragLast;
         float dragFreq = 1000.0f, dragGain = 0.0f, dragOffset = 0.0f;
-        bool dragFine = false;
+        bool materialised = true;
+        float wheelAccum = 0.0f;   // cut slope steps from the wheel
+        // Hover card text, built in update() (no allocation while painting)
+        juce::String cardTitle, cardValues;
+        float cardWidth = 0.0f;
     };
 
     std::unique_ptr<ModuleView> createEqGraph (VelvoxAudioProcessor& p, const SpectrumSource* spectrum, int instance);
