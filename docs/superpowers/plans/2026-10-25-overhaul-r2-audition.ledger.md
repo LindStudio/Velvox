@@ -36,3 +36,16 @@ Ruling: "only that band's processed output" = the band's dry share plus its satu
 — Cost if wrong: a level-match stage like the EQ's would be ~20 lines.
 Ruling: the Saturation solo works only in multiband mode (single band: the request is ignored, bit-identical); switching
 multiband off fades the solo out; switching the module off ends it. — Cost if wrong: none (single band = whole signal).
+
+Task 3: complete (Source/UI/AuditionButton.h: drawHeadphones, AuditionPress, AuditionButton; EQ panel: headphone at the
+right end of the selected-band badge, graph hot spot beside the hovered / soloed point, soloed band highlighted and the
+rest dimmed; solo cleared on band delete, panel / graph destruction and when the panel is hidden inside a window.
+"Headliner audition panels" 31 checks; "Headliner EQ panel" 357 checks unchanged.)
+
+Ruling: click = latch, press longer than 350 ms = momentary (ends at release), click on an active solo = off - for both
+the row button and the graph hot spot. — Cost if wrong: a constant (AuditionPress::holdMs).
+Ruling: the graph hot spot is an 18 px headphone 21 px right of the hovered point (left of it near the right edge); it
+stays visible while the band is soloed. The badge of the selected-band row grows from 96 to 128 px to hold the headphone.
+— Cost if wrong: layout constants.
+Ruling: the solo stays with its band when the selection changes; the row button shows the selected band's state, and a
+click there moves the solo to the selected band (one solo per EQ instance). — Cost if wrong: small.

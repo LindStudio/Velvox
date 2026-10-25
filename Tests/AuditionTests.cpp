@@ -8,6 +8,10 @@
 #include "DSP/SaturationModule.h"
 #include "Parameters/EqBands.h"
 #include "Parameters/ParameterIDs.h"
+#include "PluginEditor.h"
+#include "UI/EqPanel.h"
+#include "UI/SatPanel.h"
+#include "UI/AuditionButton.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -415,3 +419,173 @@ public:
 };
 
 static AuditionSatTests auditionSatTests;
+
+//==============================================================================
+// UI: the headphones of the EQ panel and the Saturation strip, Mix in the Saturation main row
+namespace
+{
+    juce::MouseEvent mouseOn (juce::Component& c, juce::Point<float> pos, juce::ModifierKeys mods = {})
+    {
+        const auto now = juce::Time::getCurrentTime();
+        return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), pos, mods,
+                                 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &c, &c, now, pos, now, 1, false);
+    }
+
+    void press (juce::Component& c, juce::Point<float> at) { c.mouseDown (mouseOn (c, at)); }
+    void release (juce::Component& c, juce::Point<float> at) { c.mouseUp (mouseOn (c, at)); }
+    void clickAt (juce::Component& c, juce::Point<float> at) { press (c, at); release (c, at); }
+    juce::Point<float> centreOf (juce::Component& c) { return c.getLocalBounds().getCentre().toFloat(); }
+
+    std::unique_ptr<ui::EqPanel> openEq (Harness& h, int instance)
+    {
+        auto r = h.proc.getRouting();
+        if (! r.contains (dsp::ModuleId::eq, instance))
+            r.insertAt (r.count, dsp::ModuleId::eq, instance, true);
+        h.proc.setRouting (r);
+        h.proc.getUndo().clear();
+        auto p = ui::createDetailPanel (h.proc, dsp::selectionCode (dsp::ModuleId::eq, instance));
+        p->setBounds (VelvoxAudioProcessorEditor::panelArea().withZeroOrigin());
+        auto* eq = dynamic_cast<ui::EqPanel*> (p.get());
+        if (eq != nullptr)
+            p.release();
+        return std::unique_ptr<ui::EqPanel> (eq);
+    }
+
+    // Every parameter value (normalised) of the processor
+    std::vector<float> allValues (Harness& h)
+    {
+        std::vector<float> v;
+        for (auto* p : h.proc.getParameters())
+            v.push_back (p->getValue());
+        return v;
+    }
+}
+
+class AuditionUiTests final : public juce::UnitTest
+{
+public:
+    AuditionUiTests() : juce::UnitTest ("Headliner audition panels", "Headliner") {}
+
+    void runTest() override
+    {
+        beginTest ("AuditionButton: click latches, second click ends, press-and-hold is momentary");
+        {
+            ui::AuditionButton b;
+            b.setBounds (0, 0, 28, 28);
+            juce::uint32 now = 1000;
+            b.clock = [&] { return now; };
+            std::vector<bool> calls;
+            b.onChange = [&] (bool on) { calls.push_back (on); };
+            clickAt (b, centreOf (b));
+            expect (b.isActive(), "latched");
+            now += 50;
+            clickAt (b, centreOf (b));
+            expect (! b.isActive(), "second click ends it");
+            press (b, centreOf (b));
+            expect (b.isActive(), "on while held");
+            now += ui::AuditionPress::holdMs + 10;
+            release (b, centreOf (b));
+            expect (! b.isActive(), "momentary: off at release");
+            expect (calls == std::vector<bool> { true, false, true, false });
+        }
+
+        beginTest ("EQ panel: the row headphone solos the selected band - no parameter, no undo step, not saved");
+        {
+            Harness h;
+            auto panel = openEq (h, 0);
+            const int a = ui::eqedit::addBand (h.proc, 0, 1000.0f, 3.0f);
+            const int b = ui::eqedit::addBand (h.proc, 0, 4000.0f, -2.0f);
+            panel->refresh();
+            panel->selectBand (b);
+            h.proc.getUndo().clear();
+            const auto values = allValues (h);
+            juce::MemoryBlock before;
+            h.proc.getStateInformation (before);
+
+            auto& eq = h.proc.getChain().getEqualizer (0);
+            auto& solo = panel->getAuditionButton();
+            expect (solo.isVisible(), "shown with a selected band");
+            expect (! panel->getMainRowArea().isEmpty() && panel->getMainRowArea().contains (solo.getBounds().getCentre()),
+                    "in the selected-band row");
+            clickAt (solo, centreOf (solo));
+            expectEquals (eq.getAuditionBand(), b);
+            panel->refresh();
+            expect (solo.isActive());
+            expect (allValues (h) == values, "no parameter changed");
+            expectEquals (h.proc.getUndo().getNumSteps(), 0, "no undo step");
+            juce::MemoryBlock during;
+            h.proc.getStateInformation (during);
+            expect (before == during, "not in the saved state");
+
+            panel->selectBand (a);
+            panel->refresh();
+            expect (! solo.isActive(), "the row shows the selected band's state");
+            expectEquals (eq.getAuditionBand(), b, "the solo stays with its band");
+            clickAt (solo, centreOf (solo));
+            expectEquals (eq.getAuditionBand(), a, "one solo at a time: now band a");
+            clickAt (solo, centreOf (solo));
+            expectEquals (eq.getAuditionBand(), -1);
+
+            panel->selectBand (-1);
+            panel->refresh();
+            expect (! solo.isVisible(), "hidden without a selection");
+        }
+
+        beginTest ("EQ graph: hot spot beside the hovered point - click latches, hold is momentary; deleting the band ends it");
+        {
+            Harness h;
+            auto panel = openEq (h, 0);
+            const int a = ui::eqedit::addBand (h.proc, 0, 800.0f, 4.0f);
+            panel->refresh();
+            auto* g = panel->getGraph();
+            expect (g != nullptr);
+            if (g == nullptr)
+                return;
+            g->update (*std::make_unique<ui::LiveData>());
+            auto& eq = h.proc.getChain().getEqualizer (0);
+            juce::uint32 now = 5000;
+            g->clock = [&] { return now; };
+
+            expect (! g->isAuditionIconShown (a), "hidden until the point is hovered");
+            g->mouseMove (mouseOn (*g, g->pointFor (a)));
+            expect (g->isAuditionIconShown (a), "shown on hover");
+            const auto icon = g->auditionIconArea (a).getCentre();
+            expect (g->bandAt (icon) < 0, "the hot spot is beside the point, not on it");
+            g->mouseMove (mouseOn (*g, icon));
+            expect (g->isAuditionIconShown (a), "stays while the mouse moves onto it");
+
+            const int stepsBefore = h.proc.getUndo().getNumSteps();
+            const auto freqBefore = ui::eqedit::parameterBand (h.proc, 0, a).freq;
+            press (*g, icon);
+            expectEquals (eq.getAuditionBand(), a, "on at the press");
+            g->mouseDrag (mouseOn (*g, icon.translated (40.0f, -30.0f)));
+            now += ui::AuditionPress::holdMs + 50;
+            release (*g, icon);
+            expectEquals (eq.getAuditionBand(), -1, "held: ends at release");
+            expectEquals (ui::eqedit::parameterBand (h.proc, 0, a).freq, freqBefore, "pressing the hot spot never moves the band");
+            expectEquals (h.proc.getUndo().getNumSteps(), stepsBefore, "no undo step");
+
+            clickAt (*g, icon);
+            expectEquals (eq.getAuditionBand(), a, "click: latched");
+            g->mouseMove (mouseOn (*g, { 5.0f, 5.0f }));
+            expect (g->isAuditionIconShown (a), "a soloed band keeps its headphone");
+            g->performMenu (a, ui::EqGraph::menuDelete);
+            g->update (*std::make_unique<ui::LiveData>());
+            expectEquals (eq.getAuditionBand(), -1, "deleted band: solo ends");
+        }
+
+        beginTest ("EQ: closing the panel ends the solo");
+        {
+            Harness h;
+            auto panel = openEq (h, 0);
+            const int a = ui::eqedit::addBand (h.proc, 0, 1000.0f, 0.0f);
+            panel->selectBand (a);
+            clickAt (panel->getAuditionButton(), centreOf (panel->getAuditionButton()));
+            expectEquals (h.proc.getChain().getEqualizer (0).getAuditionBand(), a);
+            panel.reset();
+            expectEquals (h.proc.getChain().getEqualizer (0).getAuditionBand(), -1);
+        }
+    }
+};
+
+static AuditionUiTests auditionUiTests;
