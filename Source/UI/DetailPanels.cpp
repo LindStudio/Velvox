@@ -9,6 +9,7 @@
 #include "HelpContent.h"
 #include "UserSettings.h"
 #include "VocalCheckView.h"
+#include "TimePanels.h"
 
 namespace velvox::ui
 {
@@ -559,37 +560,43 @@ namespace velvox::ui
     {
         if (mainControls.empty())
             return;
-        // Preferred widths: knobs 96, segment groups by their number of segments, switches 120
-        std::vector<int> widths;
+        // Preferred widths: knobs 96, segment groups by their number of segments, switches 124. When the row is
+        // too narrow (Mehr open), everything shrinks alike - except switches, which keep room for their label
+        std::vector<int> widths, keep;
         int total = 0;
         for (auto* c : mainControls)
         {
             int w = 96;
             if (auto* s = dynamic_cast<Segments*> (c))
                 w = juce::jlimit (150, 440, 58 * (s->getNumSegments() + (s->getOverflowSegment() >= 0 ? 1 : 0)));
-            else if (dynamic_cast<Toggle*> (c) != nullptr)
-                w = 124;
+            else if (auto* t = dynamic_cast<Toggle*> (c))
+                w = std::min (124, 38 + juce::GlyphArrangement::getStringWidthInt (medium (12.0f), t->getButtonText()));
             else if (dynamic_cast<Choice*> (c) != nullptr)
                 w = 170;
             else if (dynamic_cast<juce::Button*> (c) != nullptr)
                 w = 104;
             widths.push_back (w);
+            keep.push_back (dynamic_cast<Toggle*> (c) != nullptr ? 1 : 0);
             total += w;
         }
         const int gapW = 18;
         total += gapW * ((int) mainControls.size() - 1);
-        const float shrink = total > row.getWidth() ? (float) row.getWidth() / (float) total : 1.0f;
+        int kept = 0;
+        for (size_t i = 0; i < widths.size(); ++i)
+            kept += keep[i] != 0 ? widths[i] : 0;
+        const float shrink = total > row.getWidth() ? (float) std::max (0, row.getWidth() - kept) / (float) std::max (1, total - kept) : 1.0f;
         float x = (float) row.getX() + (float) std::max (0, (row.getWidth() - total) / 2);
         for (size_t i = 0; i < mainControls.size(); ++i)
         {
-            const int w = std::min ((int) ((float) widths[i] * shrink), row.getRight() - (int) x);
+            const float scale = keep[i] != 0 ? 1.0f : shrink;
+            const int w = std::min ((int) ((float) widths[i] * scale), row.getRight() - (int) x);
             auto cell = juce::Rectangle<int> ((int) x, row.getY(), w, row.getHeight());
             auto* c = mainControls[i];
             if (dynamic_cast<Knob*> (c) != nullptr)
                 c->setBounds (cell);
             else
                 c->setBounds (cell.withSizeKeepingCentre (w, dynamic_cast<Choice*> (c) != nullptr ? 30 : 28).translated (0, -8));
-            x += (float) widths[i] * shrink + (float) gapW * shrink;
+            x += (float) widths[i] * scale + (float) gapW * shrink;
         }
     }
 
@@ -788,70 +795,6 @@ namespace velvox::ui
             int frame = 0;
         };
 
-        // STUTTER (chop): Rate, Gate, Smooth, Pattern
-        class ChopPanel final : public DetailPanel
-        {
-        public:
-            explicit ChopPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Stutter", help::shortDescription ((int) ModuleId::chop), pid::chopOn)
-            {
-                auto& rate = segments (pid::chopRate);
-                auto& pattern = choice (pid::chopPattern, {});
-                setCaption (pattern, "Pattern");
-                auto& depth = knob (pid::chopDepth, "Gate");
-                auto& smooth = knob (pid::chopSmooth, "Smooth");
-                setMainControls ({ &rate, &depth, &smooth, &pattern });
-            }
-        };
-
-        // DELAY: Note value, Sync, Feedback, Mix, Ping-Pong; everything else in Mehr
-        class DelayPanel final : public DetailPanel
-        {
-        public:
-            explicit DelayPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Delay", help::shortDescription ((int) ModuleId::delay), pid::delayOn)
-            {
-                division = &segments (pid::delayDivision, { "1/4", "1/4D", "1/8", "1/8D", "1/8T", "1/16" }, true);
-                auto& sync = toggle (pid::delaySync, "Sync");
-                auto& pingPong = toggle (pid::delayPingPong, "Ping-Pong");
-                segments (pid::duckSource, { "Vocal", "Sidechain" });
-                time = &knob (pid::delayTime, "Time");
-                auto& feedback = knob (pid::delayFeedback, "Feedback");
-                knob (pid::delaySpread, "Offset");
-                knob (pid::delayLowCut, "Low Cut");
-                knob (pid::delayHighCut, "High Cut");
-                knob (pid::delayMod, "Wobble");
-                knob (pid::delayDrive, "Drive");
-                knob (pid::delayDiffusion, "Diffusion");
-                knob (pid::delayToReverb, "Into Reverb");
-                auto& mix = knob (pid::delayMix, "Mix");
-                knob (pid::delayDuckAmount, "Ducking");
-                knob (pid::delayDuckThreshold, "Duck Thresh");
-                knob (pid::delayDuckAttack, "Duck Attack");
-                knob (pid::delayDuckRelease, "Duck Release");
-                setCaption (*division, "Time");
-                setMainControls ({ division, &sync, &feedback, &mix, &pingPong });
-                setMixKnob (&mix);
-                gr.setTooltip ("Ducking (dB)");
-                placeInVisual ({ &gr });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                gr.push (grFrom (live, &LiveData::delayDuck));
-                const bool synced = apvts.getRawParameterValue (pidFor (pid::delaySync))->load() > 0.5f;
-                time->setEnabled (! synced);
-                division->setEnabled (synced);
-            }
-
-        private:
-            void layoutVisual (juce::Rectangle<int> area) override { placeMeter (gr, area); }
-            Segments* division = nullptr;
-            Knob* time = nullptr;
-            GainReductionMeter gr { colours::accent, "Duck" };
-        };
-
         // OUTPUT: stereo image + loudness; Input Gain, Vocal Level, Width, Level Match;
         // Mehr: mono below, max correction, measure window, clip guard, mono listening
         class OutputPanel final : public DetailPanel
@@ -922,49 +865,6 @@ namespace velvox::ui
             CorrelationView correlation;
             juce::Label inValue, procValue, matchValue;
             juce::TextButton* monoButton = nullptr;
-        };
-
-        //======================================================================
-        // PULSE: Depth, Rate, Curve; shape, timing and manual tempo in Mehr
-        class PulsePanel final : public DetailPanel
-        {
-        public:
-            explicit PulsePanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Pulse", help::shortDescription ((int) ModuleId::pulse), pid::pulseOn)
-            {
-                auto& rate = segments (pid::pulseRate, pulseRateLabels (p), true);
-                auto& interp = segments (pid::pulseInterp);
-                auto& depth = knob (pid::pulseDepth, "Depth");
-                knob (pid::pulseTension, "Shape");
-                knob (pid::pulseSmooth, "Smooth");
-                knob (pid::pulseAttack, "Attack");
-                knob (pid::pulseRelease, "Release");
-                bpm = &knob (pid::pulseBpm, "Manual BPM");
-                knob (pid::pulseMix, "Mix");
-                setMainControls ({ &depth, &rate, &interp });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                // The manual tempo only matters when the host sends none
-                const bool host = proc.getChain().getPulse().displayHostTempo.load();
-                bpm->setAlpha (host ? 0.4f : (apvts.getRawParameterValue (pid::pulseOn)->load() > 0.5f ? 1.0f : 0.55f));
-            }
-
-        private:
-            // The design's five rates, mapped onto the parameter's names where they exist
-            static juce::StringArray pulseRateLabels (VelvoxAudioProcessor& p)
-            {
-                juce::StringArray out;
-                if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p.getState().getParameter (pid::pulseRate)))
-                    for (auto* name : { "1/2", "1/4", "1/8", "1/16", "1/32" })
-                        if (c->choices.contains (name))
-                            out.add (name);
-                return out;
-            }
-
-            Knob* bpm = nullptr;
         };
 
         // VOCAL SMASH: the big SMASH control in the visual next to the GR meter; Mix, Tone, Output
@@ -1161,10 +1061,10 @@ namespace velvox::ui
                 case ModuleId::sat:     panel = createSatPanel (p); break;   // SatPanel.cpp
                 case ModuleId::doubler: panel = std::make_unique<DoublerPanel> (p); break;
                 case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
-                case ModuleId::chop:    panel = std::make_unique<ChopPanel> (p); break;
-                case ModuleId::delay:   panel = std::make_unique<DelayPanel> (p); break;
+                case ModuleId::chop:    panel = createTimeModulePanel (p, ModuleId::chop); break;
+                case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
                 case ModuleId::reverb:  panel = createReverbPanel (p); break;
-                case ModuleId::pulse:   panel = std::make_unique<PulsePanel> (p); break;
+                case ModuleId::pulse:   panel = createTimeModulePanel (p, ModuleId::pulse); break;
                 case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;
                 case ModuleId::choir:   panel = std::make_unique<ChoirPanel> (p); break;
                 case ModuleId::smooth:  panel = std::make_unique<SmoothPanel> (p); break;

@@ -17,6 +17,8 @@ namespace
         if (auto* s = dynamic_cast<ui::Segments*> (c)) return s->getParamId();
         if (auto* t = dynamic_cast<ui::Toggle*> (c)) return t->getParamId();
         if (auto* ch = dynamic_cast<ui::Choice*> (c)) return ch->getParamId();
+        // Graph controls of their own (e.g. the Pulse shape tiles) name the parameter they edit
+        if (const auto& id = c->getProperties()["paramId"]; id.isString()) return id.toString();
         return {};
     }
 
