@@ -190,6 +190,8 @@ namespace velvox::test
         const bool delayHeard = proc->readEffectiveSettings().delayOn;
         const int echoLag = delayHeard ? (int) std::lround (proc->getChain().meters.effectiveDelayMs.load() * 0.001 * fs) : 0;
         const int echoRepeats = delayHeard ? 8 : 0;
+        // The output is late by the reported latency (e.g. LEVEL RIDE's lookahead): reference the input there
+        const int latency = proc->getLatencySamples();
         int lastEvent = -1000000;
         std::vector<float> win;
         for (int s = std::max (settle, localHalf); s + localHalf < (int) outputD2.size(); ++s)
@@ -200,7 +202,7 @@ namespace velvox::test
             float inMax = 0.0f;
             for (int rep = 0; rep <= echoRepeats; ++rep)
             {
-                const int c = s - rep * echoLag;
+                const int c = s - latency - rep * echoLag;
                 for (int k = std::max (0, c - inHalf); k <= c + inHalf && k < (int) inputD2.size(); ++k)
                     inMax = std::max (inMax, inputD2[(size_t) k]);
             }

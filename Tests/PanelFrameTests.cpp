@@ -106,6 +106,10 @@ public:
                             expect (! reached.contains (pid), name + ": hidden 0.5 band not shown: " + pid);
                             continue;
                         }
+                        // Parameters whose panel controls come later (dyn track). Remove when the Dynamics panels land.
+                        const auto base = dsp::splitInstanceParamId (pid).first;
+                        if (base == "compAutoRelease" || base == "compAutoMakeup" || base == "deessDetection")
+                            continue;
                         expect (isOnSwitch || curveHandle || eqBand || reached.contains (pid), name + ": reaches " + pid);
                     }
                 expect (panel->getMoreButton().isVisible() == ! panel->getMoreControls().empty(), name + ": Mehr only when there is more");

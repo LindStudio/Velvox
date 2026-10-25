@@ -1,9 +1,21 @@
 #pragma once
 
 #include "DspUtilities.h"
+#include "DynamicsFeed.h"
 
 namespace velvox::dsp
 {
+    // One word / phrase as the "word bars" view shows it. Output-domain sample positions
+    // (the running count since prepare / reset, like RideModule::samplePosition); levels are
+    // the mean power of the voice band (100 Hz .. 8 kHz) before and after the ride gain.
+    struct RideSegment
+    {
+        std::int64_t startSample = 0;
+        int lengthSamples = 0;
+        float levelBeforeDb = -120.0f;
+        float levelAfterDb = -120.0f;
+    };
+
     struct RideSettings
     {
         bool enabled = false;
@@ -40,6 +52,32 @@ namespace velvox::dsp
         void setSettings (const RideSettings& s) noexcept;
         void process (float* const* channels, int numChannels, int numSamples) noexcept;
 
+        // Constant latency (the lookahead), also while the module is off
+        static constexpr float lookaheadMs = 80.0f;
+        int getLatencySamples() const noexcept { return latency; }
+
+        // Word-level control law (0.6, QUALITY_BASELINE gap #8)
+        static constexpr float syllableMs = 80.0f;        // syllable level window (0.5: 60 ms)
+        static constexpr float pauseHoldMs = 250.0f;      // gaps shorter than this hold the gain
+        static constexpr float onsetGraceMs = 60.0f;      // no transient freeze at word onsets
+        static constexpr float downSlowMs = 150.0f, downFastMs = 10.0f;   // Response 0 .. 1
+        static constexpr float upSlowMs = 200.0f, upFastMs = 10.0f;
+        // Share of the distance to the target that is corrected: the gain lags the level, so the
+        // knob maps onto a curve that makes the realised correction follow the set Amount
+        static float effectiveAmount (float amount) noexcept
+        {
+            const float a = juce::jlimit (0.0f, 1.0f, amount);
+            return a;
+        }
+
+        // Word segmentation for the UI feed: a segment opens when the voice gets active, ends when it
+        // falls silent, when the level stays segmentGapDb under the segment's peak for segmentGapMs
+        // (gap between words; the next one starts once the level rises segmentRiseDb again), or
+        // after segmentMaxMs (sustained notes).
+        static constexpr float segmentGapDb = 9.0f, segmentGapMs = 40.0f, segmentRiseDb = 6.0f, segmentMaxMs = 2000.0f;
+        FrameFifo<RideSegment, 128> segments;
+        std::atomic<std::int64_t> samplePosition { 0 };   // output samples processed (end of the last block)
+
         // UI / test read-outs
         std::atomic<float> currentGainDb { 0.0f };
         std::atomic<float> detectedLevelDb { -100.0f };
@@ -47,12 +85,36 @@ namespace velvox::dsp
 
     private:
         void control() noexcept;
+        void resetControl() noexcept;
+        void analyse (float* const* channels, int numChannels, int numSamples) noexcept;
+
+        static constexpr int chunkSize = 256;
+        IntegerDelay lookahead;
+        int latency = 0;
+        int warmupSamples = 0, fadeInPos = 0, fadeInLength = 480;
+        void applyWarmup (float* const* channels, int numChannels, int numSamples) noexcept;
+        std::array<float, chunkSize> gains {};
+        std::array<float, chunkSize> powers {};
+
+        // Segmenter (output domain: band power delayed by the lookahead, times the applied gain)
+        void segmentSample (float power, float gain) noexcept;
+        void closeSegment() noexcept;
+        std::vector<float> powerDelay { 0.0f };
+        int powerPos = 0;
+        float segPower = 0.0f, segCoeff = 0.0f;
+        bool segOpen = false, waitRise = false;
+        std::int64_t outPos = 0, segStart = 0;
+        int segLen = 0, segLoudLen = 0, dipSamples = 0, segTick = 0;
+        double sumBefore = 0.0, sumAfter = 0.0, loudBefore = 0.0, loudAfter = 0.0;
+        float segPeakDb = -120.0f, dipMinDb = 0.0f;
 
         double fs = 48000.0;
         RideSettings settings;
 
-        Biquad bandHpf, bandLpf;
-        float fastPower = 0.0f, syllablePower = 0.0f;
+        Biquad bandHpf, bandLpf, sibilantHpf, sibilantLpf, bodyLpf;
+        float fastPower = 0.0f, syllablePower = 0.0f, sibilantPower = 0.0f, bodyPower = 0.0f;
+        // 4.5-12 kHz power this many times the 100 Hz-2 kHz power = S sound (+9 dB; white noise reads +6)
+        static constexpr float sibilantRatio = 8.0f;
         float fastCoeff = 0.0f, syllableCoeff = 0.0f;
         float transientClamp = 1000.0f;   // power ratio above the syllable level that is ignored
         int freezeSamples = 0;            // hold after a transient
@@ -62,6 +124,8 @@ namespace velvox::dsp
         float rampFrom = 1.0f, rampTo = 1.0f;
         int rampPos = 0;
         bool voiced = false;
+        int voicedSamples = 0, pauseSamples = 0, gapRecentSamples = 0, phraseWarmup = 0, dipRun = 0;
+        static constexpr float wordGapDb = 9.0f;   // fast level this far under the syllable level = gap
         int controlCounter = 0;
 
         juce::SmoothedValue<float> enabled { 0.0f };

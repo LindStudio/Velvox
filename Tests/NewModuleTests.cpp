@@ -1108,7 +1108,15 @@ public:
             m.setSettings (s);
             auto out = in;
             runModule (m, out);
-            expectEquals (maxAbsDiff (in, out), 0.0);
+            // 0.6: the rider looks ahead (constant latency): amount 0 = the input, delayed,
+            // after the 10 ms fade-in that follows the empty delay line of a fresh instance
+            const int L = m.getLatencySamples(), settled = L + (int) (0.01 * fs) + 1;
+            expectGreaterThan (L, 0);
+            double d = 0.0;
+            for (int c = 0; c < 2; ++c)
+                for (int i = settled; i < in.getNumSamples(); ++i)
+                    d = std::max (d, (double) std::abs (in.getSample (c, i - L) - out.getSample (c, i)));
+            expectEquals (d, 0.0);
         }
     }
 
@@ -1288,8 +1296,11 @@ public:
                 const bool chop = juce::String (gate) == pid::chopOn;
                 const auto before = render (chop ? "smooth,chop" : "smooth,pulse", gate);
                 const auto after = render (chop ? "chop,smooth" : "pulse,smooth", gate);
+                // Skip the start-up: the legacy routing string completes the chain with every module, so
+                // LEVEL RIDE's lookahead (0.6) is in it too - the output starts ~4870 samples late and the
+                // gate's slew from its start state differs there between the two orders
                 double d = 0.0;
-                for (int i = 2048; i < before.getNumSamples(); ++i)
+                for (int i = 12000; i < before.getNumSamples(); ++i)
                     d = std::max (d, (double) std::abs (before.getSample (0, i) - after.getSample (0, i)));
                 logMessage (juce::String (gate) + ": max difference smooth-first vs gate-first " + juce::String (d, 6));
                 expectLessThan (d, 1.0e-3, gate);

@@ -16,6 +16,8 @@ namespace velvox::dsp
         freq.setCurrentAndTargetValue (settings.freq);
         attackCoeff = timeConstantCoeff (0.5f, fs);
         releaseCoeff = timeConstantCoeff (60.0f, fs);
+        fullRelease = timeConstantCoeff (250.0f, fs);
+        bandHighHz.store ((float) std::min (20000.0, fs * 0.5), std::memory_order_relaxed);
         reset();
     }
 
@@ -25,13 +27,16 @@ namespace velvox::dsp
         detector.reset();
         shelf.reset();
         envDb = 0.0f;
+        fullEnv = 0.0f;
         updateShelf (0.0f);
+        currentReductionDb.store (0.0f, std::memory_order_relaxed);
     }
 
     void DeEsserModule::setSettings (const DeEssSettings& s) noexcept
     {
         settings = s;
         freq.setTargetValue (s.freq);
+        bandLowHz.store (s.freq, std::memory_order_relaxed);
     }
 
     void DeEsserModule::updateShelf (float reductionDb) noexcept
@@ -43,6 +48,7 @@ namespace velvox::dsp
     void DeEsserModule::process (float* const* channels, int numChannels, int numSamples) noexcept
     {
         float maxReduction = 0.0f;
+        spectrumTap.push (channels, numChannels, numSamples);
 
         for (int start = 0; start < numSamples; start += updateInterval)
         {
@@ -60,16 +66,24 @@ namespace velvox::dsp
             float wideGains[updateInterval];
             for (int i = start; i < start + n; ++i)
             {
-                float peak = 0.0f;
+                float peak = 0.0f, full = 0.0f;
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
+                    full = std::max (full, std::abs (channels[ch][i]));
                     const float band = detector.process (channels[ch][i], ch);
                     peak = std::max (peak, std::abs (band));
                     if (settings.listen)
                         channels[ch][i] = band; // solo the detection band
                 }
 
-                const float inDb = gainToDb (peak);
+                float inDb = gainToDb (peak);
+                if (settings.relative)
+                {
+                    // Instant attack like the band detector, 250 ms release: the S band can never
+                    // read louder relative to a voice whose onset the envelope has not caught yet
+                    fullEnv = full > fullEnv ? full : full + fullRelease * (fullEnv - full);
+                    inDb += referenceDb - std::max (fullFloorDb, gainToDb (fullEnv));
+                }
                 const float outDb = CompressorModule::computeGainDb (inDb, settings.thresholdDb, ratio, kneeDb);
                 const float targetReduction = std::min (settings.rangeDb, std::max (0.0f, inDb - outDb));
 
@@ -109,9 +123,10 @@ namespace velvox::dsp
                     channels[ch][i] = shelf.process (channels[ch][i], ch);
         }
 
-        if (! detector.isStateFinite() || ! shelf.isStateFinite() || ! std::isfinite (envDb))
+        if (! detector.isStateFinite() || ! shelf.isStateFinite() || ! std::isfinite (envDb) || ! std::isfinite (fullEnv))
             reset();
 
         gainReductionDb.push (maxReduction);
+        currentReductionDb.store (envDb, std::memory_order_relaxed);
     }
 }

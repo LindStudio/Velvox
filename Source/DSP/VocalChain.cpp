@@ -133,6 +133,8 @@ namespace velvox::dsp
         int maxLatency = pitch.getLatencySamples();
         for (auto& sat : saturation)
             maxLatency += sat.getLatencySamples();
+        for (auto& r : ride)
+            maxLatency += r.getLatencySamples();
         for (auto& sm : smooth)
             maxLatency += sm.getLatencySamples();
         bypassDelay.prepare (std::max (1, maxLatency));
@@ -170,6 +172,7 @@ namespace velvox::dsp
         // No fade on (re)start: take the latest routing directly
         routeGain.reset (sampleRate, 0.008);
         routeGain.setCurrentAndTargetValue (1.0f);
+        routeHold = 0;
         adoptRoutingImmediately = true;
 
         prepared = true;
@@ -331,7 +334,7 @@ namespace velvox::dsp
             adoptRoutingImmediately = false;
         }
 
-        // Tempo-locked modules after latent ones (SMOOTH, saturation, pitch) see the signal late; the
+        // Tempo-locked modules after latent ones (SMOOTH, saturation, pitch, LEVEL RIDE) see the signal late; the
         // host shifts the output back by the whole latency, so they follow the song position delayed
         // by the latency in front of them and stay on the grid
         const auto transportFor = [&] (ModuleId id)
@@ -355,6 +358,8 @@ namespace velvox::dsp
                 latency += saturation[(size_t) slot.instance].getLatencySamples();
             else if (slot.id == ModuleId::smooth)
                 latency += smooth[(size_t) slot.instance].getLatencySamples();
+            else if (slot.id == ModuleId::ride)
+                latency += ride[(size_t) slot.instance].getLatencySamples();
             else if (slot.id == ModuleId::pitch && activePitchOn)
                 latency += pitch.getLatencySamples();
         }
@@ -768,21 +773,35 @@ namespace velvox::dsp
 
     void VocalChain::applyRoutingFade (float* const* io, int numChannels, int n) noexcept
     {
-        if (! routeGain.isSmoothing() && routeGain.getCurrentValue() >= 1.0f)
+        if (routeHold == 0 && ! routeGain.isSmoothing() && routeGain.getCurrentValue() >= 1.0f)
             return;
 
         for (int i = 0; i < n; ++i)
         {
-            const float g = routeGain.getNextValue();
+            float g = 0.0f;
+            if (routeHold > 0)
+            {
+                // The new path is longer (a latent module joined): see below
+                if (--routeHold == 0)
+                    routeGain.setTargetValue (1.0f);
+            }
+            else
+                g = routeGain.getNextValue();
             for (int ch = 0; ch < numChannels; ++ch)
                 io[ch][i] *= g;
         }
 
         // Faded out completely: switch routing, then fade back in
-        if (! routeGain.isSmoothing() && routeGain.getTargetValue() <= 0.0f)
+        if (routeHold == 0 && ! routeGain.isSmoothing() && routeGain.getTargetValue() <= 0.0f)
         {
+            const int before = getLatencySamples();
             applyPendingStructure();
-            routeGain.setTargetValue (1.0f);
+            // Latent modules that were already in the path still hold up to `before` samples of
+            // the old path's audio; when the path got longer, that audio would end in the silence
+            // of the newly joined module's empty buffer - mute it instead (no hard cut)
+            routeHold = getLatencySamples() > before ? before : 0;
+            if (routeHold == 0)
+                routeGain.setTargetValue (1.0f);
         }
     }
 
@@ -820,6 +839,8 @@ namespace velvox::dsp
         {
             if (slot.id == ModuleId::sat)
                 latency += saturation[(size_t) slot.instance].getLatencySamples();
+            else if (slot.id == ModuleId::ride)   // lookahead, constant while in the chain
+                latency += ride[(size_t) slot.instance].getLatencySamples();
             else if (slot.id == ModuleId::smooth)   // STFT: constant while in the chain (also when off)
                 latency += smooth[(size_t) slot.instance].getLatencySamples();
         }

@@ -134,6 +134,8 @@ namespace velvox
     bind (raw.reverbHighCut, pid::reverbHighCut);
     bind (raw.delaySpread, pid::delaySpread);   bind (raw.delayDrive, pid::delayDrive);
     bind (raw.delayDiffusion, pid::delayDiffusion); bind (raw.delayMod, pid::delayMod);
+    bind (raw.compAutoRelease, pid::compAutoRelease); bind (raw.compAutoMakeup, pid::compAutoMakeup);
+    bind (raw.deessDetection, pid::deessDetection);
     bind (raw.satMultiband, pid::satMultiband);
     bind (raw.satXoverLow, pid::satXoverLow);   bind (raw.satXoverHigh, pid::satXoverHigh);
     bind (raw.satBandOn[0], pid::satLowOn);     bind (raw.satBandDrive[0], pid::satLowDrive);   bind (raw.satBandChar[0], pid::satLowChar);
@@ -297,6 +299,9 @@ namespace velvox
     s.deess.mode = raw.deessMode.index();
     s.comp.detector = raw.compDetector.index();
     s.comp.sidechainHpfHz = raw.compScHpf.get();
+    s.comp.autoRelease = raw.compAutoRelease.on();
+    s.comp.autoMakeup = raw.compAutoMakeup.on();
+    s.deess.relative = raw.deessDetection.index() == 1;
 
     s.pulse.enabled = raw.pulseOn.on();
     s.pulse.rate = raw.pulseRate.index();

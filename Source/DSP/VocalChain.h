@@ -246,6 +246,7 @@ namespace velvox::dsp
         // Routing changes are applied at a short dip to silence (no clicks)
         Routing activeRouting = Routing::defaults(), pendingRouting = Routing::defaults();
         juce::SmoothedValue<float> routeGain { 1.0f };
+        int routeHold = 0;   // samples of silence after a switch that made the path longer
         bool adoptRoutingImmediately = true;
 
         // Pitch on/off changes the latency: switched under the same fade

@@ -125,9 +125,10 @@ _add(Module(
     cases=[Case("vocal", headliner=_COMP_H, procedures=["dyn_curve", "dyn_timing", "thd_lf", "vocal", "nulls", "cpu"],
                 info={"threshold": -24, "ratio": 4, "knee": 6, "attack": 10, "release": 120})],
     # Pro-C 2 "Vocal" is program dependent (its static ratio steepens to ~12:1), so ratio / threshold are judged against
-    # the set values; ballistics and THD against Pro-C 2 Vocal.
+    # the set values; THD against Pro-C 2 Vocal. Attack is judged against the set 10 ms: Pro-C 2 reads 18 ms (Vocal) and
+    # 6.5 ms (Clean) at the same knob value, so its attack defines no single target (ledger Ruling, overhaul/dyn).
     tolerances={"curve_dev_db": ("lower", 0.0, 1.0), "ratio_measured": ("match", 0.5, 4.0),
-                "threshold_measured_db": ("match", 2.0, -24.0), "attack_ms": ("match", 5.0),
+                "threshold_measured_db": ("match", 2.0, -24.0), "attack_ms": ("match", 5.0, 10.0),
                 "release_ms": ("match", 40.0), "thd_100hz_db": ("lower", 3.0), "crest_reduction_db": ("match", 1.0),
                 "st_loudness_std_lu": ("match", 0.5), "cpu_pct": ("lower", 0.5)}))
 
@@ -140,6 +141,11 @@ _add(Module(
               params=[("Mode", "Single Vocal"), ("Band Processing", "Split Band"), ("Range", "6"), ("Lookahead Enabled", "Disabled"),
                       ("High-Pass Frequency", "6000"), ("Low-Pass Frequency", "20000")])],
     cases=[Case("vocal", headliner={"deessFreq": 6500, "deessThreshold": -30, "deessRange": 6, "deessMode": 0, "deessListen": 0},
+                procedures=["deess_vocal", "deess_inactive_null", "nulls", "cpu"],
+                calibrate={"Pro-DS": Calib("Threshold", [-60, -55, -50, -45, -40, -35, -30, -25, -20], "sib_reduction")}),
+           # 0.6 option: detection relative to the full-band level (Pro-DS "Single Vocal" is relative as well)
+           Case("relative", headliner={"deessFreq": 6500, "deessThreshold": -30, "deessRange": 6, "deessMode": 0, "deessListen": 0,
+                                       "deessDetection": 1},
                 procedures=["deess_vocal", "deess_inactive_null", "nulls", "cpu"],
                 calibrate={"Pro-DS": Calib("Threshold", [-60, -55, -50, -45, -40, -35, -30, -25, -20], "sib_reduction")})],
     tolerances={"sib_reduction_db": ("higher", 1.0), "nonsib_hf_change_db": ("higher", 0.5), "selectivity_db": ("higher", 1.0),

@@ -131,7 +131,7 @@ public:
             expectWithinAbsoluteError (rmsSine, 13.5f, 0.3f, "RMS detector calibrated to sine peak level");
             expectWithinAbsoluteError (peakSine, 13.5f, 1.5f);
 
-            // RMS detection regulates more calmly: less gain ripple on noise
+            // Gain ripple on steady noise
             const auto ripple = [&] (int detector)
             {
                 Harness h;
@@ -164,7 +164,10 @@ public:
             };
             const double peakRipple = ripple (0), rmsRipple = ripple (1);
             logMessage ("Gain ripple on noise: peak " + juce::String (peakRipple, 2) + " dB, RMS " + juce::String (rmsRipple, 2) + " dB");
-            expectLessThan (rmsRipple, peakRipple);
+            // 0.6: the peak detector holds the peak over 10 ms (no ballistics ripple), so on steady
+            // noise both detectors regulate calmly; before 0.6 the peak detector rippled (0.1+ dB)
+            expectLessThan (rmsRipple, 0.1);
+            expectLessThan (peakRipple, 0.1);
 
             const auto bassy = twoTones (ref.fs, 60.0, 0.5f, 2000.0, 0.02f, 1.0);
             const float noFilter = reduction (0, 20.0f, bassy), filtered = reduction (0, 250.0f, bassy);

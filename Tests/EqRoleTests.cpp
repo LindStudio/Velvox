@@ -191,24 +191,30 @@ public:
             float outputGain;
         };
         std::vector<Golden> goldens;
+        // 0.6 dynamics track: the compressor's peak hold, LEVEL RIDE's word-level law (80 ms lookahead, gap / S hold)
+        // change how loud the chain comes out, so the output trim and, where scores were close, the chosen candidate
+        // moved; every EQ decision below is unchanged (output: 3.55 -> 4.42, 2.05 -> 3.29, 1.92 -> 2.58, 2.73 -> 4.63,
+        // 3.53 -> 4.75 dB; candidates of "stereo with rumble" and "dark 44.1 kHz" see their lines)
         { VocalSpec s; s.seconds = 12.0;
           goldens.push_back ({ "clean dry", s, "Basisplan", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
-                               100.0f, 0, 200.0f, -1.9933f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 3.5459f }); }
+                               100.0f, 0, 200.0f, -1.9933f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.4194f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = -5.0f; s.f0 = 120.0f;
           goldens.push_back ({ "dark low", s, "Mehr Raum (Large Hall) + Ohne S\xc3\xa4ttigung", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
-                               70.0f, 1, 180.0f, 0.0f, 285.0876f, -2.0254f, 1.2f, 9000.0f, 2.8646f, 2.0544f }); }
+                               70.0f, 1, 180.0f, 0.0f, 285.0876f, -2.0254f, 1.2f, 9000.0f, 2.8646f, 3.2925f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = 4.0f; s.sibilance = 1.6f; s.f0 = 300.0f;
           goldens.push_back ({ "bright sibilant", s, "H\xc3\xb6hen sanfter + De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,deess,doubler,delay:send,reverb:send",
-                               136.4929f, 0, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 5000.0f, -3.4294f, 1.9203f }); }
+                               136.4929f, 0, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 5000.0f, -3.4294f, 2.5849f }); }
         { VocalSpec s; s.seconds = 12.0; s.channels = 2; s.stereoDifference = 0.5f; s.rumbleDb = -26.0f;
-          goldens.push_back ({ "stereo with rumble", s, "Dynamik leichter + De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,smash,deess,sat,delay:send,reverb:send",
-                               126.5934f, 1, 200.0f, -2.3243f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 2.7278f }); }
+          // 0.6 dynamics: was "Dynamik leichter + De-Esser staerker" (the lighter compression is no longer needed)
+          goldens.push_back ({ "stereo with rumble", s, "De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,smash,deess,sat,delay:send,reverb:send",
+                               126.5934f, 1, 200.0f, -2.3243f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.6316f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = -3.0f; s.f0 = 150.0f; s.sampleRate = 44100.0;
           // 0.6 reverb track: the reverb now reaches its set decay (T30 +-10 %), so the base plan's send already
           // gives enough space here (score 0.454 vs 0.471 for "Mehr Raum (Large Hall)", was the other way round);
           // the EQ / output decisions below are unchanged
-          goldens.push_back ({ "dark 44.1 kHz", s, "Basisplan", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
-                               70.0f, 0, 200.0f, -3.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 3.5252f }); }
+          // 0.6 dynamics: "Mehr Raum (Large Hall)" scores best again (it was the 0.5 choice before the reverb change)
+          goldens.push_back ({ "dark 44.1 kHz", s, "Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
+                               70.0f, 0, 200.0f, -3.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.7490f }); }
 
         const auto current = defaultValues();
         for (const auto& g : goldens)
