@@ -43,3 +43,22 @@ constant into Theme.h at merge time (the audition track's band solo may want the
 
 Ruling: Panel header order is power · S · icon · NAME — why: on/off and solo belong together like a channel strip; the right
 side holds Presets / Mehr / ? — cost if wrong: header layout lines in DetailPanel::resized/paint.
+
+Task 4: complete (wheel / shift-wheel / tilt / trackpad, thumb strip under the tiles, edge arrows, strip drag (empty space,
+Shift+drag, middle-drag), clicked or selected tiles slide fully into view clear of the arrows; 1091 checks green)
+
+Ruling: "Drag of the strip" = dragging empty strip space (the send divider, space behind the tiles), Shift+drag or a middle-button
+drag anywhere, plus the thumb — a plain drag on a tile keeps reordering — why: drag-to-reorder is an established 0.6 gesture and
+a full chain has almost no empty space; the hover cards on the arrows / thumb name Shift+drag — cost if wrong: switch the pan
+trigger in ChainView::mouseDown.
+
+Ruling: While the row scrolls, tiles are 8 px lower (the tile's vertical layout scales) and the thumb sits in that strip — why:
+an overlay thumb across the tile rims looked like a rendering glitch; the 88 px row and the editor layout stay unchanged — cost
+if wrong: tiles keep 88 px and the thumb overlays (scrollBarH = 0 + track over the rims).
+
+Ruling: Wheel speeds: a Windows notch (120/256) moves ~one tile (200 px per unit, glide); small steps (< 0.2, precision
+touchpads) and smooth trackpad deltas (1:1 pixels, 512 per unit) follow without glide; macOS non-precise wheels 2400 per unit
+(notch ~0.04) — why: JUCE's per-platform delta scales — cost if wrong: one constant each.
+
+Ruling: isTileFullyVisible() now counts the edge arrows as covering, and scrollToShow keeps 28 px clear of them — why: a
+selected tile under an arrow is not "nothing cut off" — cost if wrong: none (existing tests stay green).

@@ -177,6 +177,166 @@ public:
 
         runProcessorTests();
         runSoloUiTests();
+        runScrollTests();
+    }
+
+    // Every module, several duplicates, two sends: 21 instances
+    static constexpr const char* fullChain = "v2,check,eq,eq#2,comp,comp#2,deess,sat,sat#2,smooth,ride,smash,doubler,choir,pitch,chop,"
+                                             "pulse,delay:insert,eq#3,reverb:send,reverb#2:send";
+
+    static juce::MouseWheelDetails wheelOf (float dy, float dx = 0.0f, bool smooth = false)
+    {
+        juce::MouseWheelDetails w;
+        w.deltaX = dx;
+        w.deltaY = dy;
+        w.isReversed = false;
+        w.isSmooth = smooth;
+        w.isInertial = false;
+        return w;
+    }
+
+    void runScrollTests()
+    {
+        constexpr float notch = 120.0f / 256.0f;   // one wheel notch on Windows (JUCE)
+
+        beginTest ("Chain scroll: wheel (one notch ~ one tile), shift-wheel / tilt and trackpad scroll the row");
+        {
+            Harness h;
+            h.proc.setRouting (dsp::Routing::fromString (fullChain));
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
+            view.refresh();
+            expect (view.getMaxScroll() > 1000.0f, "21 instances: the row scrolls a lot");
+            const float step = view.scrollStep();
+            expect (step >= ui::ChainView::minTileW, "a step is one tile");
+            const auto at = view.getRowViewport().getCentre();
+
+            view.mouseWheelMove (mouse (view, at, at, false), wheelOf (-notch));
+            expect (view.getScroll() >= 0.75f * step && view.getScroll() <= 1.5f * step,
+                    "one notch down = about one tile: " + juce::String (view.getScroll()));
+            view.mouseWheelMove (mouse (view, at, at, false), wheelOf (notch));
+            expectWithinAbsoluteError (view.getScroll(), 0.0f, 0.5f, "and back");
+
+            view.mouseWheelMove (mouse (view, at, at, false, juce::ModifierKeys::shiftModifier), wheelOf (-notch));
+            expect (view.getScroll() > 0.5f * step, "shift-wheel");
+            view.scrollTo (0.0f, false);
+            view.mouseWheelMove (mouse (view, at, at, false), wheelOf (0.0f, -notch));
+            expect (view.getScroll() > 0.5f * step, "horizontal wheel / tilt (WM_MOUSEHWHEEL: right = negative)");
+
+            view.scrollTo (0.0f, false);
+            for (int i = 0; i < 10; ++i)
+                view.mouseWheelMove (mouse (view, at, at, false), wheelOf (0.0f, -0.02f, true));
+            expect (view.getScroll() > 10.0f, "trackpad swipe: " + juce::String (view.getScroll()));
+
+            view.scrollTo (0.0f, false);
+            for (int i = 0; i < 400; ++i)
+                view.mouseWheelMove (mouse (view, at, at, false), wheelOf (-notch));
+            expectWithinAbsoluteError (view.getScroll(), view.getMaxScroll(), 0.5f, "the wheel reaches the end");
+        }
+
+        beginTest ("Chain scroll: drag the thumb, drag the empty strip, middle-drag, edge arrows; a tile drag still reorders");
+        {
+            Harness h;
+            h.proc.setRouting (dsp::Routing::fromString (fullChain));
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
+            view.refresh();
+            view.scrollTo (0.0f, false);
+
+            const auto track = view.getScrollTrackBounds(), thumb = view.getScrollThumbBounds();
+            expect (! track.isEmpty() && ! thumb.isEmpty() && track.contains (thumb), "a scroll thumb along the row");
+            expect (thumb.getWidth() >= 24.0f, "thumb big enough to grab");
+            const auto routingBefore = h.proc.getRouting();
+            drag (view, thumb.getCentre(), thumb.getCentre() + juce::Point<float> (100.0f, 0.0f));
+            const float expected = 100.0f * view.getMaxScroll() / (track.getWidth() - thumb.getWidth());
+            expectWithinAbsoluteError (view.getScroll(), expected, 2.0f, "thumb drag scrolls proportionally");
+            expect (h.proc.getRouting() == routingBefore, "no reorder from the thumb");
+
+            // Empty strip space (behind the sends) drags the row like a sheet
+            view.scrollTo (view.getMaxScroll(), false);
+            const auto lane = view.getLaneBounds();
+            const auto addCard = view.getAddCardBounds();
+            expect (view.getRowViewport().expanded (0.5f).contains (addCard), "add card fully reachable at the end");
+            for (auto [id, k] : { std::pair { ModuleId::reverb, 0 }, { ModuleId::reverb, 1 } })
+                expect (view.isTileFullyVisible (id, k), "send tile fully reachable at the end");
+            const float endScroll = view.getScroll();
+            const juce::Point<float> empty (lane.getX() + 5.0f, lane.getY() + 6.0f);   // the divider in front of the sends
+            expect (view.getTileAt (empty) < 0, "test setup: empty strip space");
+            drag (view, empty, empty + juce::Point<float> (150.0f, 0.0f));
+            expectWithinAbsoluteError (view.getScroll(), endScroll - 150.0f, 1.0f, "empty space drags the strip");
+            expect (h.proc.getRouting() == routingBefore, "panning never reorders");
+
+            // Shift + drag on a tile drags the strip too
+            view.scrollTo (300.0f, false);
+            const auto chop = view.getTileBounds (ModuleId::chop).getCentre();
+            drag (view, chop, chop + juce::Point<float> (-60.0f, 0.0f), juce::ModifierKeys::shiftModifier);
+            expectWithinAbsoluteError (view.getScroll(), 360.0f, 1.0f, "shift-drag pans");
+            expect (h.proc.getRouting() == routingBefore, "shift-drag never reorders");
+
+            // Middle button drag anywhere, also on a tile
+            view.scrollTo (300.0f, false);
+            const auto tile = view.getTileBounds (ModuleId::smooth);
+            const auto from = tile.getCentre();
+            drag (view, from, from + juce::Point<float> (-80.0f, 0.0f), juce::ModifierKeys::middleButtonModifier);
+            expectWithinAbsoluteError (view.getScroll(), 380.0f, 1.0f, "middle-drag pans");
+            expect (h.proc.getRouting() == routingBefore, "middle-drag never reorders");
+
+            // Edge arrows page the row
+            view.scrollTo (0.0f, false);
+            expect (view.getScrollArrowBounds (false).isEmpty(), "no left arrow at the start");
+            const auto right = view.getScrollArrowBounds (true);
+            expect (! right.isEmpty(), "right arrow while more tiles are on the right");
+            click (view, right.getCentre());
+            expect (view.getScroll() > view.getRowViewport().getWidth() * 0.5f, "a page to the right");
+            expect (! view.getScrollArrowBounds (false).isEmpty(), "left arrow now");
+            click (view, view.getScrollArrowBounds (false).getCentre());
+            expectWithinAbsoluteError (view.getScroll(), 0.0f, 0.5f, "and back");
+
+            // A tile drag still reorders
+            view.scrollTo (0.0f, false);
+            const auto eq2 = view.getTileBounds (ModuleId::eq, 1), comp1 = view.getTileBounds (ModuleId::comp);
+            drag (view, eq2.getCentre(), { comp1.getRight() + 10.0f, comp1.getCentreY() });
+            expect (h.proc.getRouting() != routingBefore, "tile drag reorders");
+        }
+
+        beginTest ("Chain scroll: a clicked or selected tile is scrolled fully into view, at every window size");
+        {
+            Harness h;
+            h.proc.setRouting (dsp::Routing::fromString (fullChain));
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
+            view.refresh();
+            view.scrollTo (0.0f, false);
+            // The tile cut by the right edge
+            const auto row = view.getRowViewport();
+            for (const auto& s : h.proc.getRouting())
+            {
+                const auto b = view.getTileBounds (s.id, s.instance);
+                if (s.insert && b.getX() < row.getRight() && b.getRight() > row.getRight())
+                {
+                    click (view, { b.getX() + 6.0f, b.getY() + 12.0f });
+                    view.scrollTo (view.getScroll(), false);   // finish the glide
+                    expect (view.isTileFullyVisible (s.id, s.instance), "a clicked half-hidden tile slides into view");
+                    break;
+                }
+            }
+
+            for (int width : { 889, 1000, 2000 })
+            {
+                auto e = proEditor (h);
+                e->setSize (width, width * 600 / 1000);
+                auto& ed = asVelvox (*e);
+                auto& chain = ed.getChainView();
+                for (const auto& s : h.proc.getRouting())
+                {
+                    ed.selectModule (dsp::selectionCode (s.id, s.instance));
+                    chain.scrollTo (chain.getScroll(), false);
+                    expect (chain.isTileFullyVisible (s.id, s.instance),
+                            "width " + juce::String (width) + ": " + ui::ChainView::cardName (h.proc.getRouting(), s.id, s.instance));
+                }
+                expect (chain.getRowViewport().getRight() <= chain.getOutputBounds().getX(), "row never runs under OUTPUT");
+            }
+        }
     }
 
     void runSoloUiTests()
