@@ -28,6 +28,7 @@ class Calib:
     param: str
     values: list
     probe: str          # see bench.PROBES
+    step: float = 0.0   # > 0: the bisection stays on this grid (plugins that reject other values)
 
 
 @dataclass
@@ -146,13 +147,22 @@ _add(Module(
 # ---------------------------------------------------------------------------------------------
 # Smooth vs soothe2, depth calibrated to the same removed energy
 # ---------------------------------------------------------------------------------------------
+_SMOOTH = {"smoothAmount": 75, "smoothSensitivity": 50, "smoothLow": 800, "smoothHigh": 12000,
+           "smoothAttack": 5, "smoothRelease": 80, "smoothMode": 0, "smoothOutput": 0, "smoothDelta": 0}
+_SOOTHE_DEPTH = Calib("depth", [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10], "delta_energy", step=0.1)
 _add(Module(
     key="smooth", title="Smooth",
     refs=[Ref("soothe2", "oeksound/soothe2_x64.vst3", params=[("mode", "soft"), ("mix", "100"), ("delta", "off")])],
-    cases=[Case("vocal", headliner={"smoothAmount": 75, "smoothSensitivity": 50, "smoothLow": 800, "smoothHigh": 12000,
-                                    "smoothAttack": 5, "smoothRelease": 80, "smoothMode": 0, "smoothOutput": 0, "smoothDelta": 0},
+    cases=[Case("vocal", headliner=_SMOOTH,
                 procedures=["resonance_vocal", "nulls", "cpu"],
-                calibrate={"soothe2": Calib("depth", [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10], "delta_energy")})],
+                calibrate={"soothe2": _SOOTHE_DEPTH}),
+           # more settings (0.6 smooth track): lighter, more selective, hard mode - each calibrated to equal removed energy
+           Case("light", headliner=dict(_SMOOTH, smoothAmount=35), procedures=["resonance_vocal"],
+                calibrate={"soothe2": _SOOTHE_DEPTH}),
+           Case("sharp", headliner=dict(_SMOOTH, smoothSensitivity=85), procedures=["resonance_vocal"],
+                calibrate={"soothe2": _SOOTHE_DEPTH}),
+           Case("hard", headliner=dict(_SMOOTH, smoothAmount=60, smoothMode=1), refs={"soothe2": [("mode", "hard")]},
+                procedures=["resonance_vocal"], calibrate={"soothe2": _SOOTHE_DEPTH})],
     # delta_db is the calibration match (soothe2 depth 0 already removes ~15 dB below the dry level on f7_row, so
     # Headliner runs at Amount 75 to act comparably); informative only.
     tolerances={"delta_db": ("info", 0.0), "pte_reduction_db": ("higher", 0.3), "ltas_reduction_db": ("higher", 0.5), "flatness_gain_db": ("higher", 0.2),

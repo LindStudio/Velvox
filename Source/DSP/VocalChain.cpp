@@ -129,10 +129,12 @@ namespace velvox::dsp
         chop.prepare (sampleRate, bs);
         pulse.prepare (sampleRate, bs);
 
-        // Room for the largest possible latency: every saturation instance plus pitch
+        // Room for the largest possible latency: every saturation and smooth instance plus pitch
         int maxLatency = pitch.getLatencySamples();
         for (auto& sat : saturation)
             maxLatency += sat.getLatencySamples();
+        for (auto& sm : smooth)
+            maxLatency += sm.getLatencySamples();
         bypassDelay.prepare (std::max (1, maxLatency));
         bypassDelay.setDelay (getLatencySamples());
 
@@ -786,8 +788,12 @@ namespace velvox::dsp
     {
         int latency = 0;
         for (const auto& slot : routing)
+        {
             if (slot.id == ModuleId::sat)
                 latency += saturation[(size_t) slot.instance].getLatencySamples();
+            else if (slot.id == ModuleId::smooth)   // STFT: constant while in the chain (also when off)
+                latency += smooth[(size_t) slot.instance].getLatencySamples();
+        }
         if (pitchOn && routing.contains (ModuleId::pitch))
             latency += pitch.getLatencySamples();
         return latency;

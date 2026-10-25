@@ -361,6 +361,11 @@ def calibrate(ctx: Ctx, case: M.Case):
                 if (ok[a] - target) * (ok[b] - target) < 0:
                     for _ in range(5):
                         mid = 0.5 * (a + b)
+                        if cal.step:
+                            # the plugin only reaches a grid of values (it rejects the rest)
+                            mid = round(round(mid / cal.step) * cal.step, 6)
+                            if mid in tried or mid <= min(a, b) or mid >= max(a, b):
+                                break
                         m = measure(mid)
                         if m is None:
                             break

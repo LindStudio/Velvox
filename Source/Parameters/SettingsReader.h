@@ -63,6 +63,7 @@ namespace velvox
         Raw smashOn, smashAmount, smashBlend, smashAttack, smashRelease, smashTone, smashOutput;
         Raw choirOn, choirVoices, choirDetune, choirTiming, choirHumanize, choirWidth, choirDensity, choirMix;
         Raw smoothOn, smoothAmount, smoothSensitivity, smoothLow, smoothHigh, smoothAttack, smoothRelease, smoothMode, smoothOutput, smoothDelta;
+        std::array<Raw, 6> smoothWFreq, smoothWGain;
         Raw checkOn, checkMode;
         Raw rideOn, rideTarget, rideAmount, rideMaxBoost, rideMaxCut, rideResponse, ridePhrase, rideTransient, rideSilence;
         Raw reverbEarly, reverbDiffusion, reverbMod, reverbBass, reverbHighCut;
