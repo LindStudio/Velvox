@@ -93,7 +93,39 @@ namespace velvox::pid
     inline constexpr const char* doublerDelay    = "doublerDelay";
     inline constexpr const char* doublerDetune   = "doublerDetune";
     inline constexpr const char* doublerMonoSafe = "doublerMonoSafe";
-    inline constexpr const char* doublerTone     = "doublerTone";
+    inline constexpr const char* doublerTone     = "doublerTone";   // = the high cut of the voices (0.6 engine too)
+
+    // Doubler engine (0.6): voice mode, per-voice controls, modulation, filters, dry
+    inline constexpr const char* doublerVoices   = "doublerVoices";
+    inline constexpr const char* doublerV1On     = "doublerV1On";
+    inline constexpr const char* doublerV1Delay  = "doublerV1Delay";
+    inline constexpr const char* doublerV1Detune = "doublerV1Detune";
+    inline constexpr const char* doublerV1Gain   = "doublerV1Gain";
+    inline constexpr const char* doublerV1Pan    = "doublerV1Pan";
+    inline constexpr const char* doublerV2On     = "doublerV2On";
+    inline constexpr const char* doublerV2Delay  = "doublerV2Delay";
+    inline constexpr const char* doublerV2Detune = "doublerV2Detune";
+    inline constexpr const char* doublerV2Gain   = "doublerV2Gain";
+    inline constexpr const char* doublerV2Pan    = "doublerV2Pan";
+    inline constexpr const char* doublerV3On     = "doublerV3On";
+    inline constexpr const char* doublerV3Delay  = "doublerV3Delay";
+    inline constexpr const char* doublerV3Detune = "doublerV3Detune";
+    inline constexpr const char* doublerV3Gain   = "doublerV3Gain";
+    inline constexpr const char* doublerV3Pan    = "doublerV3Pan";
+    inline constexpr const char* doublerV4On     = "doublerV4On";
+    inline constexpr const char* doublerV4Delay  = "doublerV4Delay";
+    inline constexpr const char* doublerV4Detune = "doublerV4Detune";
+    inline constexpr const char* doublerV4Gain   = "doublerV4Gain";
+    inline constexpr const char* doublerV4Pan    = "doublerV4Pan";
+    inline constexpr const char* doublerModDepth = "doublerModDepth";
+    inline constexpr const char* doublerModRate  = "doublerModRate";
+    inline constexpr const char* doublerLowCut   = "doublerLowCut";
+    inline constexpr const char* doublerDry      = "doublerDry";
+    inline constexpr const char* doublerVoiceOn[4]     { doublerV1On, doublerV2On, doublerV3On, doublerV4On };
+    inline constexpr const char* doublerVoiceDelay[4]  { doublerV1Delay, doublerV2Delay, doublerV3Delay, doublerV4Delay };
+    inline constexpr const char* doublerVoiceDetune[4] { doublerV1Detune, doublerV2Detune, doublerV3Detune, doublerV4Detune };
+    inline constexpr const char* doublerVoiceGain[4]   { doublerV1Gain, doublerV2Gain, doublerV3Gain, doublerV4Gain };
+    inline constexpr const char* doublerVoicePan[4]    { doublerV1Pan, doublerV2Pan, doublerV3Pan, doublerV4Pan };
 
     // Ducking (reverb / delay returns)
     inline constexpr const char* duckSource         = "duckSource";

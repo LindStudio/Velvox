@@ -73,8 +73,13 @@ METRICS = {
     "sustain_roughness_db": ("lower", 0.5, "dB", "2-period envelope std of the shifted held vowel minus the dry one (phasiness/beating)"),
     "comb_depth_db": ("lower", 1.0, "dB", "peak-to-notch range of the mono-sum transfer (pink noise)"),
     "am_roughness_db": ("lower", 0.5, "dB", "std of the 20 ms envelope of a 440 Hz tone (beating/flanging)"),
+    "am_roughness_multi_db": ("lower", 0.5, "dB", "am_roughness averaged over 6 tones 196-880 Hz (less dependent on beat phases)"),
     "lr_corr": ("lower", 0.1, "", "L/R correlation of the output (vocals)"),
     "mono_loss_db": ("lower", 1.0, "dB", "loudness lost in the mono sum (vocals)"),
+    "voice_delay_err_ms": ("lower", 0.5, "ms", "|median delay of a solo voice - set delay| (noise), mean over voices"),
+    "voice_detune_err_cents": ("lower", 1.0, "ct", "|median pitch of a solo voice - set detune| (440 Hz), mean over voices"),
+    "voice_pitch_jitter_cents": ("lower", 0.5, "ct", "std of a solo voice's pitch track (no wobble), mean over voices"),
+    "voice_splice_db": ("lower", 0.5, "dB", "std of the 20 ms envelope of a solo voice at +30 ct (pitch-shifter artefacts)"),
     "echo_time_err_ms": ("lower", 0.5, "ms", "|first echo time - set time|"),
     "feedback_db_per_repeat": ("match", 1.0, "dB", "level change from echo 1 to echo 2"),
     "echo_smear_ms": ("lower", 1.0, "ms", "time holding 90 % of the first echo's energy"),
@@ -225,8 +230,9 @@ class Ctx:
         h = Side(HEADLINER, "headliner", self.module.key, params=list(c.headliner.items()))
         out = [h]
         if self.use_refs:
+            only = c.info.get("refs")   # a case may compare against some of the module's references only
             for r in self.module.refs:
-                if r.name in self.ref_errors:
+                if r.name in self.ref_errors or (only and r.name not in only):
                     continue
                 params = list(r.params) + list(c.refs.get(r.name, []))
                 if r.name in self.calibrated.get(c.name, {}):
@@ -705,6 +711,53 @@ def proc_mod_widen(ctx, case):
     t = S.sine(FS, 440, -12, 4.0)
     yt = ctx.render("sine440", t)
     ctx.metric("am_roughness_db", {n: _am_roughness(y) for n, y in yt.items()})
+    # The 440 Hz value depends on the beat phases the voices happen to have (a 3.5 s window holds only a
+    # few beats): the same voice levels give 0.7-3.1 dB by phase alone. The mean over six tones is the
+    # robust comparison.
+    per = []
+    for f in (196, 262, 330, 523, 659, 880):
+        ym = ctx.render(f"sine{f}", S.sine(FS, f, -12, 4.0))
+        per.append({n: _am_roughness(y) for n, y in ym.items()})
+    ctx.metric("am_roughness_multi_db", _mean_over_clips(per), note="6 tones")
+
+
+def voice_tracking_values(xn, yn, xt, yt, f0, max_ms=80.0):
+    """Solo voice: (median delay ms of the noise render, median pitch ct and pitch-track std ct of the tone render)."""
+    tr = q.delay_track_ms(xn, yn, FS, min_ms=0.5, max_ms=max_ms)
+    pt = q.pitch_track_cents(yt, FS, f0)[4:]
+    return float(np.median(tr)), float(np.median(pt)), float(np.std(pt))
+
+
+def proc_voice_tracking(ctx, case):
+    xn = S.white_noise(FS, 6.0, -20.0)
+    xt = S.sine(FS, 440, -12, 4.0)
+    solo = case.info["solo"]
+    derr, cerr, jit = [], [], []
+    for i, (d_set, c_set) in enumerate(case.info["voices"]):
+        h_extra = solo[HEADLINER](i)
+        r_extra = {n: f(i) for n, f in solo.items() if n != HEADLINER}
+        yn = ctx.render(f"noise_v{i + 1}", xn, headliner_extra=h_extra, ref_extra=r_extra, tag="_solo")
+        yt = ctx.render(f"sine440_v{i + 1}", xt, headliner_extra=h_extra, ref_extra=r_extra, tag="_solo")
+        dd, cc, jj = {}, {}, {}
+        for n in yn:
+            if n not in yt:
+                continue
+            d, c, j = voice_tracking_values(xn, yn[n], xt, yt[n], 440.0)
+            dd[n], cc[n], jj[n] = abs(d - d_set), abs(c - c_set), j
+            ctx.log(f"    {n} voice {i + 1}: delay {d:.2f} ms (set {d_set}), pitch {c:+.2f} ct (set {c_set:+}), jitter {j:.2f} ct")
+        derr.append(dd), cerr.append(cc), jit.append(jj)
+    ctx.metric("voice_delay_err_ms", _mean_over_clips(derr))
+    ctx.metric("voice_detune_err_cents", _mean_over_clips(cerr))
+    ctx.metric("voice_pitch_jitter_cents", _mean_over_clips(jit))
+
+
+def proc_voice_splice(ctx, case):
+    xt = S.sine(FS, 440, -12, 6.0)
+    solo, sp = case.info["solo"], case.info["splice"]
+    h_extra = dict(solo[HEADLINER](0), **sp[HEADLINER])
+    r_extra = {n: f(0) + sp.get(n, []) for n, f in solo.items() if n != HEADLINER}
+    ys = ctx.render("sine440_splice", xt, headliner_extra=h_extra, ref_extra=r_extra, tag="_solo")
+    ctx.metric("voice_splice_db", {n: _am_roughness(y) for n, y in ys.items()}, note="+30 ct")
 
 
 def _lr_corr(y):
@@ -865,6 +918,7 @@ PROCEDURES = {
     "vocal": proc_vocal, "vocal_listen": proc_vocal_listen, "deess_vocal": proc_deess_vocal,
     "deess_inactive_null": proc_deess_inactive_null, "resonance_vocal": proc_resonance_vocal, "sat_tones": proc_sat_tones,
     "pitch_tones": proc_pitch_tones, "pitch_vocal": proc_pitch_vocal, "pitch_formant": proc_pitch_formant, "mod_widen": proc_mod_widen,
+    "voice_tracking": proc_voice_tracking, "voice_splice": proc_voice_splice,
     "vocal_width": proc_vocal_width, "delay_ir": proc_delay_ir, "dry_leak": proc_dry_leak, "reverb_ir": proc_reverb_ir,
     "ride_vocal": proc_ride_vocal, "gate_tone": proc_gate_tone, "check_null": proc_check_null, "nulls": proc_nulls,
     "cpu": proc_cpu,
