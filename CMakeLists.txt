@@ -40,6 +40,7 @@ set(VELVOX_SOURCES
     Source/DSP/SaturationModule.cpp
     Source/DSP/DelayModule.cpp
     Source/DSP/ReverbModule.cpp
+    Source/DSP/ReverbDepth.cpp
     Source/DSP/VocalChain.cpp
     Source/DSP/Routing.cpp
     Source/DSP/MixLaw.cpp

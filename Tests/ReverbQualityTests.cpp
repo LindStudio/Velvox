@@ -3,6 +3,7 @@
 
 #include <juce_core/juce_core.h>
 #include "DSP/ReverbModule.h"
+#include "DSP/ReverbDepth.h"
 #include "ReverbMetrics.h"
 
 using namespace velvox::dsp;
@@ -160,3 +161,81 @@ public:
 };
 
 static ReverbQualityTests reverbQualityTests;
+
+// "Raumtiefe" (spec 5.12): one depth value moves Mix, Pre-delay and Size together along a curated path
+class ReverbDepthTests final : public juce::UnitTest
+{
+public:
+    ReverbDepthTests() : juce::UnitTest ("Headliner reverb depth path", "Headliner") {}
+
+    void runTest() override
+    {
+        beginTest ("Depth path: mix rises, pre-delay falls, size grows - every type");
+        for (int type = 0; type < ReverbModule::numTypes; ++type)
+        {
+            auto prev = reverbDepthPath (type, 0.0f);
+            bool mixUp = true, preDown = true, sizeUp = true;
+            for (int i = 1; i <= 100; ++i)
+            {
+                const auto p = reverbDepthPath (type, (float) i / 100.0f);
+                mixUp = mixUp && p.mixPercent > prev.mixPercent;
+                preDown = preDown && p.preDelayMs <= prev.preDelayMs;
+                sizeUp = sizeUp && p.sizePercent >= prev.sizePercent;
+                prev = p;
+            }
+            const auto name = juce::String (ReverbModule::voicing (type).name);
+            expect (mixUp, name + ": mix strictly increasing");
+            expect (preDown, name + ": pre-delay never increasing");
+            expect (sizeUp, name + ": size never decreasing");
+        }
+
+        beginTest ("Depth path: sensible end points inside the parameter ranges");
+        for (int type = 0; type < ReverbModule::numTypes; ++type)
+        {
+            const auto name = juce::String (ReverbModule::voicing (type).name);
+            const auto front = reverbDepthPath (type, 0.0f), back = reverbDepthPath (type, 1.0f);
+            expect (front.mixPercent > 0.0f && front.mixPercent <= 6.0f, name + " front mix " + juce::String (front.mixPercent));
+            expect (front.preDelayMs >= 25.0f, name + " front pre-delay " + juce::String (front.preDelayMs));
+            expect (back.mixPercent >= 35.0f && back.mixPercent <= 70.0f, name + " back mix " + juce::String (back.mixPercent));
+            expect (back.sizePercent >= 80.0f, name + " back size " + juce::String (back.sizePercent));
+            expect (back.preDelayMs < front.preDelayMs && back.sizePercent > front.sizePercent);
+            for (float d : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
+            {
+                const auto p = reverbDepthPath (type, d);
+                expect (p.mixPercent >= 0.0f && p.mixPercent <= 100.0f);
+                expect (p.preDelayMs >= 0.0f && p.preDelayMs <= 250.0f);
+                expect (p.sizePercent >= 0.0f && p.sizePercent <= 100.0f);
+            }
+        }
+
+        beginTest ("Depth path: out-of-range depth and type are clamped, never NaN");
+        {
+            const auto a = reverbDepthPath (2, -3.0f), b = reverbDepthPath (2, 0.0f);
+            expectEquals (a.mixPercent, b.mixPercent);
+            const auto c = reverbDepthPath (2, 7.0f), d = reverbDepthPath (2, 1.0f);
+            expectEquals (c.sizePercent, d.sizePercent);
+            const auto e = reverbDepthPath (99, 0.5f), f = reverbDepthPath (ReverbModule::numTypes - 1, 0.5f);
+            expectEquals (e.preDelayMs, f.preDelayMs);
+            const auto g = reverbDepthPath (1, std::numeric_limits<float>::quiet_NaN());
+            expect (std::isfinite (g.mixPercent) && std::isfinite (g.preDelayMs) && std::isfinite (g.sizePercent));
+        }
+
+        beginTest ("Depth path: settings on the path map back to their depth (places the dot)");
+        for (int type = 0; type < ReverbModule::numTypes; ++type)
+            for (int i = 0; i <= 20; ++i)
+            {
+                const float d = (float) i / 20.0f;
+                const auto p = reverbDepthPath (type, d);
+                const float back = reverbDepthFromSettings (type, p.mixPercent, p.preDelayMs, p.sizePercent);
+                expect (std::abs (back - d) <= 0.02f, juce::String (ReverbModule::voicing (type).name) + " depth " + juce::String (d, 2)
+                                                        + " -> " + juce::String (back, 3));
+            }
+        {
+            // off the path: the mix decides (the dot follows what is heard most)
+            const float lo = reverbDepthFromSettings (2, 2.0f, 250.0f, 0.0f), hi = reverbDepthFromSettings (2, 100.0f, 0.0f, 100.0f);
+            expect (lo <= 0.05f && hi >= 0.95f, juce::String (lo, 3) + " / " + juce::String (hi, 3));
+        }
+    }
+};
+
+static ReverbDepthTests reverbDepthTests;
