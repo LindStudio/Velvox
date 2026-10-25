@@ -189,32 +189,40 @@ public:
             float midFreq, midGain, midQ;     // mid bell
             float highFreq, highGain;         // high shelf
             float outputGain;
+            float toneFreq = 0.0f, toneGain = 0.0f, toneQ = 1.0f;   // 0.6.1: broad 2-5 kHz bell (autoTone)
         };
         std::vector<Golden> goldens;
         // 0.6 dynamics track: the compressor's peak hold, LEVEL RIDE's word-level law (80 ms lookahead, gap / S hold)
         // change how loud the chain comes out, so the output trim and, where scores were close, the chosen candidate
         // moved; every EQ decision below is unchanged (output: 3.55 -> 4.42, 2.05 -> 3.29, 1.92 -> 2.58, 2.73 -> 4.63,
         // 3.53 -> 4.75 dB; candidates of "stereo with rumble" and "dark 44.1 kHz" see their lines)
+        // 0.6.1 auto EQ (spec item 7): the EQ moves now follow the objective's target curve on a model of the
+        // take, corrected with the levels of the real render (AutoEq). Shifts: "clean dry" is inside the windows
+        // (no body cut any more); "dark low" gets a broad presence lift and a stronger body cut instead of the
+        // 9 kHz shelf (the synthetic take has little content up there); "bright sibilant" gets the -4 dB shelf plus a
+        // broad 2.6 kHz cut in the base plan (the softer-highs variant is not needed any more) and the body / low-mid
+        // lifts the render asked for; "stereo with rumble" is inside the body window; "dark 44.1 kHz" cuts the low
+        // mids. Chosen candidates and output trims moved with the EQ.
         { VocalSpec s; s.seconds = 12.0;
           goldens.push_back ({ "clean dry", s, "Basisplan", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
-                               100.0f, 0, 200.0f, -1.9933f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.4194f }); }
+                               100.0f, 0, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.3844f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = -5.0f; s.f0 = 120.0f;
-          goldens.push_back ({ "dark low", s, "Mehr Raum (Large Hall) + Ohne S\xc3\xa4ttigung", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
-                               70.0f, 1, 180.0f, 0.0f, 285.0876f, -2.0254f, 1.2f, 9000.0f, 2.8646f, 3.2925f }); }
+          goldens.push_back ({ "dark low", s, "Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
+                               70.0f, 1, 200.0f, -4.0f, 285.0876f, -1.5f, 1.2f, 10000.0f, 0.0f, 4.6905f, 3000.0f, 3.0f, 0.8f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = 4.0f; s.sibilance = 1.6f; s.f0 = 300.0f;
-          goldens.push_back ({ "bright sibilant", s, "H\xc3\xb6hen sanfter + De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,deess,doubler,delay:send,reverb:send",
-                               136.4929f, 0, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 5000.0f, -3.4294f, 2.5849f }); }
+          goldens.push_back ({ "bright sibilant", s, "De-Esser st\xc3\xa4rker + Dynamik leichter", "v2,eq,ride,comp,deess,doubler,delay:send,reverb:send",
+                               136.4929f, 0, 170.0f, 4.0f, 350.0f, 3.0f, 1.0f, 5000.0f, -4.0f, 3.7932f, 2560.0f, -4.0f, 1.0f }); }
         { VocalSpec s; s.seconds = 12.0; s.channels = 2; s.stereoDifference = 0.5f; s.rumbleDb = -26.0f;
           // 0.6 dynamics: was "Dynamik leichter + De-Esser staerker" (the lighter compression is no longer needed)
           goldens.push_back ({ "stereo with rumble", s, "De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,smash,deess,sat,delay:send,reverb:send",
-                               126.5934f, 1, 200.0f, -2.3243f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.6316f }); }
+                               126.5934f, 1, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.5825f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = -3.0f; s.f0 = 150.0f; s.sampleRate = 44100.0;
           // 0.6 reverb track: the reverb now reaches its set decay (T30 +-10 %), so the base plan's send already
           // gives enough space here (score 0.454 vs 0.471 for "Mehr Raum (Large Hall)", was the other way round);
           // the EQ / output decisions below are unchanged
           // 0.6 dynamics: "Mehr Raum (Large Hall)" scores best again (it was the 0.5 choice before the reverb change)
-          goldens.push_back ({ "dark 44.1 kHz", s, "Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
-                               70.0f, 0, 200.0f, -3.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.7490f }); }
+          goldens.push_back ({ "dark 44.1 kHz", s, "Basisplan", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
+                               70.0f, 0, 200.0f, -3.0f, 200.0f, -4.0f, 1.2f, 10000.0f, 0.0f, 4.9537f }); }
 
         const auto current = defaultValues();
         for (const auto& g : goldens)
@@ -227,7 +235,12 @@ public:
             expectEquals (r.candidates[(size_t) r.chosenCandidate].name, juce::String::fromUTF8 (g.chosen), "same candidate");
             expectEquals (r.plan.routing.toString(), juce::String (g.routing), "same chain");
             expectWithinAbsoluteError (r.plan.get (pid::outputGain), g.outputGain, 0.25f, "output level (renders use the matched EQ now)");
-            logMessage ("    output gain " + juce::String (r.plan.get (pid::outputGain), 4) + " (0.5: " + juce::String (g.outputGain, 4) + ")");
+            logMessage ("    output gain " + juce::String (r.plan.get (pid::outputGain), 4) + " (0.5: " + juce::String (g.outputGain, 4) + "), chosen "
+                        + r.candidates[(size_t) r.chosenCandidate].name + ", chain " + r.plan.routing.toString());
+            for (auto role : { EqRole::lowCut, EqRole::warmth, EqRole::autoMix, EqRole::air, EqRole::autoTone, EqRole::autoNotch1, EqRole::autoNotch2, EqRole::autoNotch3 })
+                if (const auto b = planBand (r.plan, current, role); b.has_value() && b->on)
+                    logMessage ("      role " + juce::String ((int) role) + ": type " + juce::String (b->type) + " " + juce::String (b->freq, 4) + " Hz "
+                                + juce::String (b->gain, 4) + " dB Q " + juce::String (b->q, 4) + " slope " + juce::String (b->slope));
 
             const auto lowCut = planBand (r.plan, current, EqRole::lowCut);
             expect (lowCut.has_value() && lowCut->on && lowCut->bandType() == dsp::EqBandType::lowCut, "low cut band");
@@ -256,6 +269,7 @@ public:
             check (EqRole::warmth, dsp::EqBandType::lowShelf, g.lowFreq, g.lowGain, 0.7071f, "low shelf");
             check (EqRole::autoMix, dsp::EqBandType::bell, g.midFreq, g.midGain, g.midQ, "mid bell");
             check (EqRole::air, dsp::EqBandType::highShelf, g.highFreq, g.highGain, 0.7071f, "high shelf");
+            check (EqRole::autoTone, dsp::EqBandType::bell, g.toneFreq, g.toneGain, g.toneQ, "tone bell");
 
             // only role bands: nothing is written to the hidden 0.5 fixed bands
             for (auto& [id, v] : r.plan.values)
