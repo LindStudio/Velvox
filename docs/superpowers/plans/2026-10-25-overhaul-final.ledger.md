@@ -118,3 +118,5 @@ docs/ARCHITECTURE.md: "0.6 – Pro-Overhaul (Einheiten)" (panels, UndoHistory, M
 hand-over, latency, refhost).
 - Ruling: CHANGELOG key numbers taken from QUALITY_BASELINE (after-measurements of each track) and the track ledgers; no
   numbers re-measured here except the EQ block.
+
+Final: full suite 30529 checks passed, 0 failed (after 0ca7a01); Velvox_VST3 builds (Headliner.vst3).
