@@ -74,3 +74,6 @@ Task 4: complete (frame fix + screenshots + full suite, see below)
   first (79 < 87 px), passes after. — Cost if wrong: segments / knobs get a few px less with Mehr open.
 - Screenshots (looked at each): C:\Users\jakob\dev\velvox-wt\shots-timepanels\{delay-pingpong, delay-synced-mehr, pulse-classic,
   pulse-custom-mehr, stutter, stutter-repeat}-{1000,889}.png. With Mehr open at 889 px the Pulse tiles are ~55 px wide (still readable).
+
+Final: full suite after the merge: 28934 checks passed, 25 failed - only "sat: reaches satMultiband ... satLink" (13, satpanel track) and
+"smooth: reaches smoothW..." (12, smooth panel track). No other failure.
