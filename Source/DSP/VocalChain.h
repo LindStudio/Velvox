@@ -156,8 +156,10 @@ namespace velvox::dsp
         // Latency of the currently active configuration
         int getLatencySamples() const noexcept { return getLatencyFor (activeRouting, activePitchOn); }
         // Latency of a routing with the pitch module on / off (for host reporting):
-        // every saturation instance in the chain plus the pitch shifter while it is on
+        // every saturation and smooth instance in the chain plus the pitch shifter while it is on
         int getLatencyFor (const Routing& routing, bool pitchOn) const noexcept;
+        // Latency of the active chain in front of a module (tempo-locked modules follow the song position late by it)
+        int latencyBefore (ModuleId id) const noexcept;
 
         // Module instances (instance 0 = the module of 0.1-0.3)
         CompressorModule& getCompressor (int instance = 0) noexcept { return comp[(size_t) clampInstance (ModuleId::comp, instance)]; }

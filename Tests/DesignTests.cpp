@@ -20,7 +20,7 @@ namespace
     // Every parameter-bound control of a panel: knobs, segment groups, switches
     struct BoundControls
     {
-        juce::StringArray knobs, segments, toggles;
+        juce::StringArray knobs, segments, toggles, choices;
         std::vector<juce::Colour> knobAccents;
     };
 
@@ -37,6 +37,8 @@ namespace
                 out.segments.add (s->getParamId());
             else if (auto* t = dynamic_cast<ui::Toggle*> (child))
                 out.toggles.add (t->getParamId());
+            else if (auto* ch = dynamic_cast<ui::Choice*> (child))
+                out.choices.add (ch->getParamId());
             collect (*child, out);
         }
     }
@@ -148,7 +150,7 @@ public:
             expect (ed.getDetail() == nullptr, "no module panel in Simple mode");
 
             top.selectTab (ui::TopBar::Tab::vocalCheck);
-            expect (ed.getDetail() != nullptr && ed.getDetail()->isVisible(), "VOCAL CHECK shows the check panel");
+            expect (ed.getCheckView().isVisible(), "VOCAL CHECK shows the check view");
             expect (! ed.getSimpleView().isVisible());
             expectEquals (h.proc.getState().state.getProperty ("uiTab").toString(), juce::String ("check"), "tab stored with the project");
 
@@ -268,16 +270,19 @@ public:
                 expect (ride.knobs.contains (pid), juce::String ("LEVEL RIDE has ") + pid);
             expect (found[(int) ModuleId::delay].segments.contains ("delayDivision"), "DELAY time as segments");
             expect (found[(int) ModuleId::delay].toggles.contains ("delaySync") && found[(int) ModuleId::delay].toggles.contains ("delayPingPong"), "DELAY switches");
-            expect (found[(int) ModuleId::reverb].segments.contains ("reverbType"), "REVERB room list");
+            expect (found[(int) ModuleId::reverb].choices.contains ("reverbType"), "REVERB room list (dropdown, 0.6)");
             expect (found[(int) ModuleId::pulse].segments.contains ("pulseRate"), "PULSE rate as segments");
             expect (found[(int) ModuleId::choir].segments.contains ("choirVoices"), "CHOIR voices as segments");
             expect (found[(int) ModuleId::smooth].segments.contains ("smoothMode") && found[(int) ModuleId::smooth].toggles.contains ("smoothDelta"), "SMOOTH character + delta");
             expect (found[(int) ModuleId::chop].segments.contains ("chopRate"), "STUTTER rate as segments");
             expect (found[(int) ModuleId::smash].knobs.contains ("smashAmount"), "VOCAL SMASH big knob");
 
-            expect (found[(int) ModuleId::eq].segments.contains ("hpfSlope") && found[(int) ModuleId::eq].segments.contains ("lowType")
-                    && found[(int) ModuleId::eq].segments.contains ("highType"), "EQ slopes and band types as segments");
-            expect (found[(int) ModuleId::eq].toggles.contains ("hpfOn") && found[(int) ModuleId::eq].toggles.contains ("lpfOn"), "EQ cut switches");
+            // EQ (0.6): the bands live in the graph and the selected-band row ("Headliner EQ panel"); with no band only Mix
+            // (Mehr); the hidden 0.5 fixed bands are never shown
+            expect (found[(int) ModuleId::eq].knobs.contains ("eqMix"), "EQ Mix");
+            for (auto* legacy : { "hpfSlope", "lowType", "highType", "hpfOn", "lpfOn", "hpfFreq", "midGain" })
+                expect (! found[(int) ModuleId::eq].segments.contains (legacy) && ! found[(int) ModuleId::eq].toggles.contains (legacy)
+                        && ! found[(int) ModuleId::eq].knobs.contains (legacy), juce::String ("EQ hides ") + legacy);
             expect (found[(int) ModuleId::comp].segments.contains ("compDetector"), "COMPRESSOR detector as segments");
             expect (found[(int) ModuleId::deess].segments.contains ("deessMode") && found[(int) ModuleId::deess].toggles.contains ("deessListen"), "DE-ESSER mode + listen");
             expect (found[(int) ModuleId::sat].segments.contains ("satCharacter"), "SATURATION character as segments");
@@ -343,7 +348,7 @@ public:
             expect (c.segments.contains ("levelMatchMode"), "fair compare as segments");
 
             ed.getTopBar().selectTab (ui::TopBar::Tab::vocalCheck);
-            expect (ed.getDetail() != nullptr && ed.getDetail()->getWidth() >= 980, "VOCAL CHECK uses the whole width");
+            expect (ed.getCheckView().isVisible() && ed.getCheckView().getWidth() >= 980, "VOCAL CHECK uses the whole width");
         }
 
         beginTest ("Design: help and tutorial describe the new interface");
