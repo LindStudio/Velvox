@@ -214,10 +214,10 @@ namespace velvox::ui
 
         VelvoxAudioProcessor& proc;
         std::array<dsp::ChopModule::DisplayFrame, dsp::ChopModule::displayCapacity> frames {};
-        int numFrames = 0, currentStep = -1, frameCount = 0;
+        int numFrames = 0, currentStep = -1, frameCount = 0, shownPattern = -1, shownRate = -1;
         bool on = false;
-        juce::String steps;
-        juce::String nameText;
+        const char* steps = "";
+        juce::String readoutText;
         juce::Rectangle<float> wave, strip;
     };
 }

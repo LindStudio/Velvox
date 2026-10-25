@@ -89,6 +89,7 @@ public:
         pulsePanel();
         pulseTiles();
         pulseCurve();
+        stutter();
     }
 
 private:
@@ -521,6 +522,116 @@ private:
             view.mouseDoubleClick (mouseAt (view, at, at, false, {}, 2));
             expectWithinAbsoluteError (h.get (pid::pulseX[2]), 0.28f, 1.0e-4f, "default x");
             expectWithinAbsoluteError (h.get (pid::pulseY[2]), 0.7f, 1.0e-4f, "default y");
+        }
+    }
+
+    // Stutter in the chain, on, a 0.5 sine at 120 BPM (no host: the module's fallback tempo) for `seconds`
+    static void runStutter (Harness& h, const juce::String& pattern, float seconds)
+    {
+        auto r = h.proc.getRouting();
+        if (! r.contains (ModuleId::chop))
+            r.insertDefault (ModuleId::chop, 0);
+        h.proc.setRouting (r);
+        h.neutral();
+        h.set (pid::chopOn, 1.0f);
+        h.set (pid::chopPattern, (float) dsp::ChopModule::patternNames().indexOf (pattern));
+        h.set (pid::chopRate, 1.0f);   // 1/16
+        h.set (pid::chopDepth, 100.0f);
+        const int n = (int) (seconds * h.fs);
+        juce::AudioBuffer<float> in (2, n);
+        for (int i = 0; i < n; ++i)
+            for (int ch = 0; ch < 2; ++ch)
+                in.setSample (ch, i, 0.5f * (float) std::sin (2.0 * pi * 220.0 * i / h.fs));
+        h.run (in);
+    }
+
+    void stutter()
+    {
+        beginTest ("Stutter view: the waveform feed, muted and repeated slices shaded");
+        {
+            Harness h;
+            runStutter (h, "Gate 1/2", 2.5f);
+            ui::StutterWaveView view (h.proc);
+            view.setBounds (0, 0, 900, 260);
+            view.update (liveFor (h));
+            expect (view.getNumFrames() > 800, "about 2.5 s of frames: " + juce::String (view.getNumFrames()));
+
+            std::array<dsp::ChopModule::DisplayFrame, dsp::ChopModule::displayCapacity> direct {};
+            const int n = h.proc.getChain().getChop().readDisplay (direct.data(), (int) direct.size());
+            expectEquals (n, view.getNumFrames(), "the view reads the module's display ring");
+            if (n > 0)
+            {
+                const auto a = direct[(size_t) n - 1], b = view.getFrame (view.getNumFrames() - 1);
+                expect (a.peak == b.peak && a.gain == b.gain && a.step == b.step && a.type == b.type, "same newest frame");
+            }
+            const int muted = view.countShadedSlices ('.');
+            expect (muted >= 8, "Gate 1/2 at 1/16, 120 BPM: muted slices shaded: " + juce::String (muted));
+            expectEquals (view.countShadedSlices ('r'), 0, "no repeats in a gate");
+
+            Harness h2;
+            runStutter (h2, "Chop & repeat", 2.5f);
+            ui::StutterWaveView view2 (h2.proc);
+            view2.setBounds (0, 0, 900, 260);
+            view2.update (liveFor (h2));
+            expect (view2.countShadedSlices ('r') >= 3, "repeated slices shaded: " + juce::String (view2.countShadedSlices ('r')));
+
+            // Depth 0: the muted steps do not mute - nothing is shaded as cut
+            Harness h3;
+            runStutter (h3, "Gate 1/2", 0.1f);
+            h3.set (pid::chopDepth, 0.0f);
+            juce::AudioBuffer<float> more (2, (int) (2.0 * h3.fs));
+            for (int i = 0; i < more.getNumSamples(); ++i)
+                for (int ch = 0; ch < 2; ++ch)
+                    more.setSample (ch, i, 0.5f * (float) std::sin (2.0 * pi * 220.0 * i / h3.fs));
+            h3.run (more);
+            ui::StutterWaveView view3 (h3.proc);
+            view3.setBounds (0, 0, 900, 260);
+            view3.update (liveFor (h3));
+            expect (view3.countShadedSlices ('.') <= 1, "depth 0: no cuts shown");
+
+            juce::Image img (juce::Image::ARGB, 900, 260, true);
+            juce::Graphics g (img);
+            view.paintEntireComponent (g, false);
+        }
+
+        beginTest ("Stutter view: empty feed");
+        {
+            Harness h;
+            ui::StutterWaveView view (h.proc);
+            view.setBounds (0, 0, 900, 260);
+            view.update (liveFor (h));
+            expectEquals (view.getNumFrames(), 0);
+            expectEquals (view.countShadedSlices ('.'), 0);
+            juce::Image img (juce::Image::ARGB, 900, 260, true);
+            juce::Graphics g (img);
+            view.paintEntireComponent (g, false);
+        }
+
+        beginTest ("Stutter: the UI says Stutter (chain tile, browser, help, host names); Rate, Depth, Smooth, Pattern");
+        {
+            expectEquals (juce::String (dsp::moduleDisplayName (ModuleId::chop)), juce::String ("Stutter"));
+            expectEquals (juce::String (dsp::moduleShortName (ModuleId::chop)), juce::String ("Stutter"));
+            expectEquals (juce::String (dsp::moduleKey (ModuleId::chop)), juce::String ("chop"), "internal key unchanged");
+            const auto* page = ui::help::find ("chop");
+            expect (page != nullptr && page->title == "Stutter", "help page title");
+            expect (page != nullptr && ! page->body.containsIgnoreCase ("chop "), "help text says Stutter");
+            Harness h;
+            for (auto* id : { pid::chopOn, pid::chopPattern, pid::chopRate, pid::chopDepth, pid::chopSmooth })
+                expect (h.proc.getState().getParameter (id)->getName (64).startsWith ("Stutter"), juce::String ("host name of ") + id);
+
+            auto panel = ui::createDetailPanel (h.proc, (int) ModuleId::chop);
+            panel->setBounds (VelvoxAudioProcessorEditor::panelArea().withZeroOrigin());
+            const auto& main = panel->getMainControls();
+            expectEquals ((int) main.size(), 4);
+            expect (findMain<ui::Segments> (*panel, pid::chopRate) != nullptr, "Rate");
+            auto* depth = findMain<ui::Knob> (*panel, pid::chopDepth);
+            expect (depth != nullptr && depth->getLabel() == "DEPTH", "Depth");
+            expect (findMain<ui::Knob> (*panel, pid::chopSmooth) != nullptr, "Smooth");
+            expect (findMain<ui::Choice> (*panel, pid::chopPattern) != nullptr, "Pattern dropdown");
+            bool hasWave = false;
+            for (auto* c : panel->getChildren())
+                hasWave = hasWave || dynamic_cast<ui::StutterWaveView*> (c) != nullptr;
+            expect (hasWave, "the waveform is the visual");
         }
     }
 };

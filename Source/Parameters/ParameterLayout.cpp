@@ -280,12 +280,12 @@ namespace velvox
             { pid::pitchMix,       "Pitch Mix",      "Pitch", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "Blend of shifted and original voice." },
 
             // ---------------- Vocal chop (0.2) ----------------
-            { pid::chopOn,      "Chop On",      "Chop", T::Bool, 0, 1, 0, 0, "", {}, "Enables the tempo-synced vocal chopper." },
-            { pid::chopPattern, "Chop Pattern", "Chop", T::Choice, 0, (float) (dsp::ChopModule::patterns().size() - 1), 2, 0, "",
+            { pid::chopOn,      "Stutter On",      "Chop", T::Bool, 0, 1, 0, 0, "", {}, "Enables Stutter, the tempo-synced gate and repeater." },
+            { pid::chopPattern, "Stutter Pattern", "Chop", T::Choice, 0, (float) (dsp::ChopModule::patterns().size() - 1), 2, 0, "",
               dsp::ChopModule::patternNames(), "16-step rhythm: plays, mutes or repeats (stutters) the vocal." },
-            { pid::chopRate,    "Chop Rate",    "Chop", T::Choice, 0, 3, 1, 0, "", dsp::ChopModule::rateNames(), "Length of one step, synced to the host tempo." },
-            { pid::chopDepth,   "Chop Depth",   "Chop", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "How strongly the pattern is applied." },
-            { pid::chopSmooth,  "Chop Smooth",  "Chop", T::Float, 0.5f, 30.0f, 3.0f, 5.0f, "ms", {}, "Softens the edges of each step (higher = smoother, less clicky)." },
+            { pid::chopRate,    "Stutter Rate",    "Chop", T::Choice, 0, 3, 1, 0, "", dsp::ChopModule::rateNames(), "Length of one step, synced to the host tempo." },
+            { pid::chopDepth,   "Stutter Depth",   "Chop", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "How strongly the pattern is applied." },
+            { pid::chopSmooth,  "Stutter Smooth",  "Chop", T::Float, 0.5f, 30.0f, 3.0f, 5.0f, "ms", {}, "Softens the edges of each step (higher = smoother, less clicky)." },
 
             // ---------------- Pro extensions (0.2) ----------------
             { pid::lowType,  "Low Band Type",  "EQ", T::Choice, 0, 1, 0, 0, "", { "Shelf", "Bell" }, "Low band as shelf (whole low end) or bell (around the frequency)." },

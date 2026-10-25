@@ -884,6 +884,164 @@ namespace velvox::ui
     }
 
     //==========================================================================
+    // STUTTER: cuts on the waveform
+
+    StutterWaveView::StutterWaveView (VelvoxAudioProcessor& p) : proc (p)
+    {
+        setInterceptsMouseClicks (false, false);
+    }
+
+    void StutterWaveView::resized()
+    {
+        auto r = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
+        r.removeFromTop (20.0f);
+        strip = r.removeFromBottom (8.0f);
+        r.removeFromBottom (10.0f);
+        wave = r;
+    }
+
+    void StutterWaveView::update (const LiveData& d)
+    {
+        const auto& s = d.settings.chop;
+        on = s.enabled;
+        currentStep = on ? d.chopStep : -1;
+        const auto& pats = dsp::ChopModule::patterns();
+        const int pattern = juce::jlimit (0, (int) pats.size() - 1, s.pattern);
+        if (pattern != shownPattern || s.rate != shownRate)
+        {
+            shownPattern = pattern;
+            shownRate = s.rate;
+            steps = pats[(size_t) pattern].steps;
+            readoutText = juce::String (pats[(size_t) pattern].name) + "   "
+                          + dsp::ChopModule::rateNames()[juce::jlimit (0, dsp::ChopModule::rateNames().size() - 1, s.rate)];
+        }
+        numFrames = proc.getChain().getChop().readDisplay (frames.data(), (int) frames.size());
+        if (liveFrame (frameCount))
+            repaint();
+    }
+
+    int StutterWaveView::countShadedSlices (char type) const noexcept
+    {
+        const int first = std::max (0, numFrames - windowFrames);
+        int count = 0;
+        for (int i = first; i < numFrames;)
+        {
+            const auto& f = frames[(size_t) i];
+            int j = i;
+            bool cut = false;
+            while (j < numFrames && frames[(size_t) j].step == f.step && frames[(size_t) j].type == f.type)
+                { cut = isMuted (frames[(size_t) j]) || cut; ++j; }
+            if ((type == '.' && cut) || (type == 'r' && f.type == 'r'))
+                ++count;
+            i = j;
+        }
+        return count;
+    }
+
+    void StutterWaveView::paint (juce::Graphics& g)
+    {
+        const auto hue = moduleColour (ModuleId::chop);
+        const float alpha = on ? 1.0f : 0.45f;
+        const float cy = wave.getCentreY(), half = wave.getHeight() * 0.5f;
+        const float pxPerFrame = wave.getWidth() / (float) windowFrames;
+        const int first = std::max (0, numFrames - windowFrames);
+        // Frame i ends at this x (the newest frame at the right edge)
+        const auto xEnd = [&] (int i) { return wave.getRight() - (float) (numFrames - 1 - i) * pxPerFrame; };
+
+        g.setFont (monoFont (11.5f));
+        g.setColour (colours::text.withAlpha (0.4f + 0.6f * alpha));
+        g.drawText (readoutText, getLocalBounds().toFloat().reduced (16.0f, 12.0f).withHeight (14.0f), juce::Justification::topRight, false);
+
+        // Slices: muted ones darkened, repeated ones tinted and framed
+        for (int i = first; i < numFrames;)
+        {
+            const auto& f = frames[(size_t) i];
+            int j = i;
+            bool cut = false;
+            while (j < numFrames && frames[(size_t) j].step == f.step && frames[(size_t) j].type == f.type)
+                { cut = isMuted (frames[(size_t) j]) || cut; ++j; }
+            const float x0 = xEnd (i) - pxPerFrame, x1 = xEnd (j - 1);
+            const auto slice = juce::Rectangle<float>::leftTopRightBottom (std::max (wave.getX(), x0), wave.getY(), x1, wave.getBottom());
+            if (cut)
+            {
+                g.setColour (hue.withAlpha (0.07f * alpha));
+                g.fillRect (slice);
+                g.setColour (hue.withAlpha (0.35f * alpha));
+                g.fillRect (slice.withHeight (2.0f));
+                g.fillRect (slice.withTop (slice.getBottom() - 2.0f));
+            }
+            else if (f.type == 'r')
+            {
+                g.setColour (hue.withAlpha (0.16f * alpha));
+                g.fillRect (slice);
+                g.setColour (hue.withAlpha (0.7f * alpha));
+                g.fillRect (slice.withWidth (1.0f));
+                if (slice.getWidth() >= 16.0f)
+                {
+                    g.setFont (semiBold (9.0f, 0.1f));
+                    g.drawText ("R", slice.withHeight (16.0f), juce::Justification::centred, false);
+                }
+            }
+            i = j;
+        }
+
+        // Centre line, then the waveform per pixel column: the vocal in grey, what passes in the module colour
+        g.setColour (colours::borderSoft.brighter (0.3f));
+        g.fillRect (juce::Rectangle<float> (wave.getX(), cy - 0.5f, wave.getWidth(), 1.0f));
+        if (numFrames > 0)
+        {
+            const int columns = (int) wave.getWidth();
+            int i = first;
+            for (int c = 0; c < columns; ++c)
+            {
+                const float xr = wave.getX() + (float) (c + 1);
+                float peak = 0.0f, passed = 0.0f;
+                bool repeat = false, any = false;
+                while (i < numFrames && xEnd (i) <= xr)
+                {
+                    const auto& f = frames[(size_t) i++];
+                    any = true;
+                    peak = std::max (peak, f.peak);
+                    passed = std::max (passed, f.peak * juce::jlimit (0.0f, 1.0f, f.gain));
+                    repeat = repeat || f.type == 'r';
+                }
+                if (! any)
+                    continue;
+                const float hIn = std::sqrt (juce::jlimit (0.0f, 1.0f, peak)) * half * 0.95f;
+                const float hOut = std::sqrt (juce::jlimit (0.0f, 1.0f, passed)) * half * 0.95f;
+                const float x = wave.getX() + (float) c;
+                g.setColour (colours::textFaint.withAlpha (0.55f * alpha));
+                g.fillRect (juce::Rectangle<float> (x, cy - hIn, 1.0f, 2.0f * hIn));
+                if (hOut > 0.25f)
+                {
+                    g.setColour ((repeat ? hue.interpolatedWith (juce::Colours::white, 0.45f) : hue.interpolatedWith (juce::Colours::white, 0.15f)).withAlpha (alpha));
+                    g.fillRect (juce::Rectangle<float> (x, cy - hOut, 1.0f, 2.0f * hOut));
+                }
+            }
+        }
+        // Now
+        g.setColour (juce::Colours::white.withAlpha (0.5f * alpha));
+        g.fillRect (juce::Rectangle<float> (wave.getRight() - 1.0f, wave.getY(), 1.0f, wave.getHeight()));
+
+        // The 16 steps of the pattern, the current one lit
+        const int n = 16;
+        const float gap = 4.0f, w = (strip.getWidth() - gap * (float) (n - 1)) / (float) n;
+        for (int k = 0; k < n && steps[k] != 0; ++k)
+        {
+            const auto cell = juce::Rectangle<float> (strip.getX() + (float) k * (w + gap), strip.getY(), w, strip.getHeight());
+            const char t = steps[k];
+            const bool now = k == currentStep;
+            if (t == 'x')
+                g.setColour (hue.withAlpha ((now ? 0.95f : 0.45f) * alpha));
+            else if (t == 'r')
+                g.setColour (hue.interpolatedWith (juce::Colours::white, 0.4f).withAlpha ((now ? 0.95f : 0.3f) * alpha));
+            else
+                g.setColour (now ? colours::textMuted : colours::control.brighter (0.15f));
+            g.fillRoundedRectangle (cell, 2.0f);
+        }
+    }
+
+    //==========================================================================
     namespace
     {
         // DELAY: echo map + note value or ms (by Sync), Sync, Feedback, Mix, Ping-Pong; the rest in Mehr
@@ -1009,6 +1167,23 @@ namespace velvox::ui
             Knob* bpm = nullptr;
             PulseShapeTiles* tiles = nullptr;
         };
+
+        // STUTTER (internal: chop): the cuts on the scrolling vocal; Rate, Depth, Smooth, Pattern
+        class StutterPanel final : public DetailPanel
+        {
+        public:
+            explicit StutterPanel (VelvoxAudioProcessor& p)
+                : DetailPanel (p, "Stutter", help::shortDescription ((int) ModuleId::chop), pid::chopOn)
+            {
+                auto& rate = segments (pid::chopRate);
+                setCaption (rate, "Rate");
+                auto& depth = knob (pid::chopDepth, "Depth");
+                auto& smooth = knob (pid::chopSmooth, "Smooth");
+                auto& pattern = choice (pid::chopPattern, {});
+                setCaption (pattern, "Pattern");
+                setMainControls ({ &rate, &depth, &smooth, &pattern });
+            }
+        };
     }
 
     //==========================================================================
@@ -1018,6 +1193,7 @@ namespace velvox::ui
         {
             case ModuleId::delay: return std::make_unique<EchoMapView> (p, instance);
             case ModuleId::pulse: return std::make_unique<PulseCurveView> (p);
+            case ModuleId::chop:  return std::make_unique<StutterWaveView> (p);
             default: break;
         }
         return nullptr;
@@ -1029,6 +1205,7 @@ namespace velvox::ui
         {
             case ModuleId::delay: return std::make_unique<DelayPanel> (p);
             case ModuleId::pulse: return std::make_unique<PulsePanel> (p);
+            case ModuleId::chop:  return std::make_unique<StutterPanel> (p);
             default: break;
         }
         return nullptr;

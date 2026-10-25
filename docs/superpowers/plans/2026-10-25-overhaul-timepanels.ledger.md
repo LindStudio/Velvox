@@ -47,3 +47,17 @@ green; panel frame: "pulse: reaches pulseShape / pulseAmount" fixed – it faile
 - Ruling: PanelFrameTests' reach detection also accepts a control's "paramId" component property (PulseShapeTiles sets it). —
   The tiles are a graph control, not a Knob/Segments/Toggle/Choice; the property names the edited parameter. Nothing excluded,
   the tile behaviour itself is pinned in TimePanelTests. — Cost if wrong: a control could claim a parameter it does not edit (review).
+
+Task 3: complete (StutterWaveView + StutterPanel, old ChopView / ChopPanel removed; "Stutter" in Routing display/short name (chain tile,
+browser), help page + texts, auto-mix note, host parameter names; "Headliner time panels" 366 checks green. First run: the stutter view
+test hung – an infinite loop in the slice walk (`cut = cut || isMuted (frames[j++])` short-circuits the increment); fixed.
+TDD note: the naming checks were written together with the renames, not watched failing first.)
+
+- Ruling: the factory preset "Vocal Chop" and the pattern name "Chop & repeat" keep their names. — A preset / rhythm name, not the
+  module name; renaming breaks preset favourites ("f:Vocal Chop") and existing tests. Internal key "chop", IDs and the parameter group
+  stay. — Cost if wrong: "chop" still appears in two names.
+- Ruling: host-visible parameter names "Chop On/Pattern/Rate/Depth/Smooth" → "Stutter …" (IDs unchanged). — "UI name Stutter
+  everywhere"; hosts store IDs, so automation keeps working. — Cost if wrong: automation lanes show a new name (CHANGELOG).
+- Ruling: Stutter view = the last 4 s (ChopModule::readDisplay, 2.5 ms frames) aggregated per pixel column; input peak grey,
+  what passes (peak × gain) in the module colour (sqrt scale), muted slices (type '.' with gain < 0.5) darkened with edge lines,
+  repeated slices tinted with "R"; a 16-cell pattern strip with the current step below. Depth 0 shows no cuts.

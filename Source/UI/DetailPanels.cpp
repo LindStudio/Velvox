@@ -830,22 +830,6 @@ namespace velvox::ui
             int frame = 0;
         };
 
-        // STUTTER (chop): Rate, Gate, Smooth, Pattern
-        class ChopPanel final : public DetailPanel
-        {
-        public:
-            explicit ChopPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Stutter", help::shortDescription ((int) ModuleId::chop), pid::chopOn)
-            {
-                auto& rate = segments (pid::chopRate);
-                auto& pattern = choice (pid::chopPattern, {});
-                setCaption (pattern, "Pattern");
-                auto& depth = knob (pid::chopDepth, "Gate");
-                auto& smooth = knob (pid::chopSmooth, "Smooth");
-                setMainControls ({ &rate, &depth, &smooth, &pattern });
-            }
-        };
-
         // REVERB: Room, Size, Decay, Mix; everything else in Mehr
         class ReverbPanel final : public DetailPanel
         {
@@ -1407,7 +1391,7 @@ namespace velvox::ui
                 case ModuleId::sat:     panel = std::make_unique<SatPanel> (p); break;
                 case ModuleId::doubler: panel = std::make_unique<DoublerPanel> (p); break;
                 case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
-                case ModuleId::chop:    panel = std::make_unique<ChopPanel> (p); break;
+                case ModuleId::chop:    panel = createTimeModulePanel (p, ModuleId::chop); break;
                 case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
                 case ModuleId::reverb:  panel = std::make_unique<ReverbPanel> (p); break;
                 case ModuleId::pulse:   panel = createTimeModulePanel (p, ModuleId::pulse); break;

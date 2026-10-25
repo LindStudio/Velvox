@@ -899,95 +899,6 @@ namespace velvox::ui
         };
 
         //======================================================================
-        // Chop: 16-step sequencer with a glowing playhead
-        class ChopView final : public ModuleView
-        {
-        public:
-            void update (const LiveData& d) override
-            {
-                const auto& pats = dsp::ChopModule::patterns();
-                const auto& pat = pats[(size_t) juce::jlimit (0, (int) pats.size() - 1, d.settings.chop.pattern)];
-                steps = pat.steps;
-                name = pat.name;
-                on = d.settings.chop.enabled;
-                current = d.chopStep;
-                for (int i = 0; i < 16; ++i)
-                    flash[(size_t) i] = (on && i == current) ? 1.0f : flash[(size_t) i] * 0.9f;
-                repaint();
-            }
-
-            void paint (juce::Graphics& g) override
-            {
-                auto r = getLocalBounds().toFloat().reduced (20.0f, 14.0f);
-                label (g, "Pattern", r.withHeight (12.0f));
-                label (g, name, r.withHeight (12.0f), juce::Justification::topRight, colours::text);
-                auto cells = r.withSizeKeepingCentre (r.getWidth(), std::min (r.getHeight() - 50.0f, 96.0f)).translated (0.0f, 4.0f);
-
-                const int n = juce::jmax (1, steps.length());
-                const float gap = 6.0f;
-                const float w = (cells.getWidth() - gap * (float) (n - 1)) / (float) n;
-                const float alpha = on ? 1.0f : 0.4f;
-
-                for (int i = 0; i < n; ++i)
-                {
-                    const auto cell = juce::Rectangle<float> (cells.getX() + (float) i * (w + gap), cells.getY(), w, cells.getHeight());
-                    const auto type = steps[i];
-                    const float f = flash[(size_t) juce::jlimit (0, 15, i)];
-                    const auto c = aurora ((float) i / (float) (n - 1));
-
-                    if (f > 0.02f)
-                        drawGlow (g, cell.getCentre(), cell.getHeight() * 0.9f, 0.35f * f, c);
-
-                    if (type == 'x')
-                    {
-                        g.setGradientFill (juce::ColourGradient (c.withAlpha ((0.55f + 0.45f * f) * alpha), 0.0f, cell.getY(),
-                                                                 c.withAlpha ((0.15f + 0.3f * f) * alpha), 0.0f, cell.getBottom(), false));
-                        g.fillRoundedRectangle (cell, 5.0f);
-                        g.setColour (juce::Colours::white.withAlpha ((0.12f + 0.4f * f) * alpha));
-                        g.fillRoundedRectangle (cell.withHeight (2.0f).reduced (3.0f, 0.0f), 1.0f);
-                    }
-                    else if (type == 'r')
-                    {
-                        g.setColour (c.withAlpha ((0.08f + 0.2f * f) * alpha));
-                        g.fillRoundedRectangle (cell, 5.0f);
-                        g.setColour (c.withAlpha ((0.6f + 0.4f * f) * alpha));
-                        g.drawRoundedRectangle (cell.reduced (0.5f), 5.0f, 1.2f);
-                        g.setFont (caps (11.5f));
-                        g.drawText ("R", cell, juce::Justification::centred, false);
-                    }
-                    else
-                    {
-                        g.setColour (juce::Colours::black.withAlpha (0.35f));
-                        g.fillRoundedRectangle (cell, 5.0f);
-                        g.setColour (colours::accent.withAlpha (0.05f + 0.15f * f));
-                        g.drawRoundedRectangle (cell.reduced (0.5f), 5.0f, 1.0f);
-                    }
-
-                    if (i % 4 == 0)
-                    {
-                        g.setColour (colours::textFaint);
-                        g.setFont (medium (10.5f));
-                        g.drawText (juce::String (i / 4 + 1), juce::Rectangle<float> (cell.getX(), cell.getBottom() + 8.0f, w, 12.0f),
-                                    juce::Justification::centredLeft, false);
-                    }
-                }
-
-                if (on && current >= 0 && current < n)
-                {
-                    const float x = cells.getX() + (float) current * (w + gap) + w * 0.5f;
-                    g.setColour (juce::Colours::white.withAlpha (0.7f));
-                    g.fillRoundedRectangle (x - w * 0.5f, cells.getY() - 9.0f, w, 3.0f, 1.5f);
-                }
-            }
-
-        private:
-            juce::String steps, name;
-            bool on = false;
-            int current = -1;
-            std::array<float, 16> flash {};
-        };
-
-        //======================================================================
         // Reverb: the tail - pre-delay gap, early reflections, diffuse decay
         class ReverbView final : public ModuleView
         {
@@ -1624,7 +1535,7 @@ namespace velvox::ui
             case ModuleId::sat:     return std::make_unique<SatView>();
             case ModuleId::doubler: return std::make_unique<DoublerView>();
             case ModuleId::pitch:   return std::make_unique<PitchView>();
-            case ModuleId::chop:    return std::make_unique<ChopView>();
+            case ModuleId::chop:    return createTimeModuleView (p, ModuleId::chop, instance);
             case ModuleId::delay:   return createTimeModuleView (p, ModuleId::delay, instance);
             case ModuleId::reverb:  return std::make_unique<ReverbView>();
             case ModuleId::pulse:   return createTimeModuleView (p, ModuleId::pulse, instance);
