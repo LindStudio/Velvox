@@ -5,6 +5,7 @@
 #include "../StateKeys.h"
 #include "../Parameters/RoutingMigration.h"
 #include "../Parameters/EqBands.h"
+#include "../Parameters/MacroBake.h"
 
 namespace velvox
 {
@@ -53,6 +54,37 @@ namespace velvox
                         fallback[rp->getParameterID()] = rp->convertFrom0to1 (rp->getValue());
             eqbands::migrateState (eqbands::accessFor (effective, resetMissingToDefault ? nullptr : &fallback), true);
             return effective;
+        }
+    }
+
+    namespace
+    {
+        // A snapshot from a file of format < 3 (presets, auto-mix states of 0.2 - 0.6.0) was made while the
+        // macros were an offset layer in the audio path: the layer is baked into its module values once
+        // (positions kept), so it sounds exactly as it was made. Such snapshots are full (presets and
+        // auto-mix states apply with missing = default), so the 0.5 EQ migration runs here as applyTo
+        // would run it.
+        void bakeOldMacros (ParameterSnapshot& s)
+        {
+            bool any = false;
+            for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroAggression, pid::macroWidth, pid::macroSpace, pid::macroDensity })
+                if (const auto it = s.values.find (id); it != s.values.end() && it->second > 0.0f)
+                    any = true;
+            if (! any)
+                return;
+            if (! eqbands::containsBandValues (s.values))
+                eqbands::migrateState (eqbands::accessFor (s.values, nullptr), true);
+            const auto routing = s.routing.isEmpty() ? dsp::Routing::legacyFull() : dsp::Routing::fromString (s.routing);
+            if (s.mixLaw.isEmpty())
+            {
+                macrobake::bake (eqbands::accessFor (s.values, nullptr), routing, nullptr);   // the law follows the Mix values when applied
+            }
+            else
+            {
+                auto laws = dsp::MixLaws::fromString (s.mixLaw);
+                macrobake::bake (eqbands::accessFor (s.values, nullptr), routing, &laws);
+                s.mixLaw = laws.toString();
+            }
         }
     }
 
@@ -220,6 +252,8 @@ namespace velvox
                 s.values[id] = value;
         }
 
+        if ((int) tree.getProperty (versionAttr, 1) < 3)
+            bakeOldMacros (s);
         return s;
     }
 }

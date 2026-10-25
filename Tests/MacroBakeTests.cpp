@@ -14,6 +14,7 @@
 #include "StateKeys.h"
 #include "MacroTestHelpers.h"
 #include "Parameters/MacroBake.h"
+#include "Parameters/MacroMapper.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -166,7 +167,8 @@ namespace velvox::test::macrobaketest
         return tree;
     }
 
-    inline juce::AudioBuffer<float> renderOld (const OldCase& c, const juce::AudioBuffer<float>& in)
+    // Loads an old case into `r` (a project state, or a preset applied to a fresh instance)
+    inline void loadOld (const OldCase& c, Harness& r, const Values& macros)
     {
         if (c.asPreset)
         {
@@ -174,22 +176,54 @@ namespace velvox::test::macrobaketest
             {
                 Harness h;
                 c.configure (h);
-                tree = oldPresetTree (h, c.macros, c.name.startsWith ("0.5"));
+                tree = oldPresetTree (h, macros, c.name.startsWith ("0.5"));
             }
-            Harness r;
             ParameterSnapshot::fromValueTree (tree).applyTo (r.proc.getState());
             settle();
-            return r.run (in);
+            return;
         }
         juce::MemoryBlock blob;
         {
             Harness h;
             c.configure (h);
-            blob = withOldMacros (h, c.macros);
+            blob = withOldMacros (h, macros);
         }
-        Harness r;
         load (r, blob);
+    }
+
+    inline juce::AudioBuffer<float> renderOld (const OldCase& c, const juce::AudioBuffer<float>& in)
+    {
+        Harness r;
+        loadOld (c, r, c.macros);
         return r.run (in);
+    }
+
+    // The old semantics, rendered without the processor: the same case loaded with its macros at 0 (the
+    // module state the user had), then dsp::applyMacros on top - what 0.2 - 0.6.0 processed - through a
+    // bare chain with the routing the loaded project has
+    inline juce::AudioBuffer<float> renderReference (const OldCase& c, const juce::AudioBuffer<float>& in, const dsp::Routing& routing)
+    {
+        Values zero;
+        for (const auto& [id, v] : c.macros)
+            zero[id] = 0.0f;
+        Harness base;
+        loadOld (c, base, zero);
+        dsp::MacroValues m;
+        for (int i = 0; i < dsp::numMacros; ++i)
+            if (const auto it = c.macros.find (MacroMapper::paramIds()[(size_t) i]); it != c.macros.end())
+                m.set ((dsp::MacroId) i, it->second * 0.01f);
+        auto settings = dsp::applyMacros (base.proc.readSettings(), m);
+        settings.routing = routing;
+        auto chain = std::make_unique<dsp::VocalChain>();
+        chain->prepare (base.fs, base.blockSize);
+        juce::AudioBuffer<float> out (in);
+        for (int start = 0; start < out.getNumSamples(); start += base.blockSize)
+        {
+            const int n = std::min (base.blockSize, out.getNumSamples() - start);
+            juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), out.getNumChannels(), start, n);
+            chain->process (view, out.getNumChannels(), settings, nullptr);
+        }
+        return out;
     }
 }
 
@@ -203,7 +237,56 @@ public:
     void runTest() override
     {
         valueMapTests();
+        nullTests();
         baselineAgainstOtherBuild();
+    }
+
+    void nullTests()
+    {
+        beginTest ("Old projects / presets with macros: baked once on load, they sound exactly as 0.6.0 played them");
+        const auto in = signal();
+        for (const auto& c : oldCases())
+        {
+            Harness r;
+            loadOld (c, r, c.macros);
+            const auto out = r.run (in);
+            const auto ref = renderReference (c, in, r.proc.getRouting());
+            const float d = maxAbsDiff (out, ref);
+            logMessage (c.name + ": max difference to the old macro layer " + juce::String (juce::Decibels::gainToDecibels (d, -400.0f), 1) + " dBFS"
+                        + " (law " + r.proc.getMixLaws().toString() + ")");
+            if (c.exact)
+                expectLessThan (d, 1.0e-5f, c.name);
+
+            // No layer is left: the loaded parameters ARE what is processed, the positions are kept
+            expect (macroFieldDifference (r.proc.readSettings(), r.proc.readEffectiveSettings()).isEmpty());
+            for (const auto& [id, v] : c.macros)
+                expectWithinAbsoluteError (r.get (id.toRawUTF8()), v, 1.0e-3f, c.name + ": slider position " + id);
+
+            // Saved again and reloaded: nothing is baked twice
+            if (! c.asPreset)
+            {
+                juce::MemoryBlock blob;
+                r.proc.getStateInformation (blob);
+                Harness again;
+                load (again, blob);
+                expectLessThan (maxAbsDiff (again.run (in), out), 1.0e-6f, c.name + ": reloaded");
+                expect (macroFieldDifference (again.proc.readSettings(), r.proc.readSettings(), 1.0e-5f).isEmpty(), c.name + ": reload bakes nothing");
+            }
+        }
+
+        beginTest ("A project saved by this version keeps its slider positions as positions (no bake)");
+        {
+            Harness h;
+            h.neutral();
+            h.set (pid::macroSpace, 60.0f);
+            const float mix = h.get (pid::reverbMix);
+            juce::MemoryBlock blob;
+            h.proc.getStateInformation (blob);
+            Harness r;
+            load (r, blob);
+            expectWithinAbsoluteError (r.get (pid::reverbMix), mix, 1.0e-4f);
+            expectWithinAbsoluteError (r.get (pid::macroSpace), 60.0f, 1.0e-4f);
+        }
     }
 
     static Values allValues (Harness& h)

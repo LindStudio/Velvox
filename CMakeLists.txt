@@ -97,6 +97,7 @@ set(VELVOX_SOURCES
     Source/Parameters/EqBands.cpp
     Source/Parameters/RoutingMigration.cpp
     Source/Parameters/MacroBake.cpp
+    Source/Parameters/MacroMapper.cpp
     Source/AutoMix/CaptureBuffer.cpp
     Source/AutoMix/VocalProfiler.cpp
     Source/AutoMix/AutoMixPlanner.cpp

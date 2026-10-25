@@ -58,8 +58,4 @@ namespace velvox::dsp
     // No longer in the audio path (0.6.1); kept unchanged to bake old projects / presets once on load
     // (Parameters/MacroBake.h) so they sound exactly as before. With all macros at 0 it returns `base`.
     ChainSettings applyMacros (const ChainSettings& base, const MacroValues& macros) noexcept;
-
-    // Which modules the macros currently switch on although they are off in the
-    // base settings (for the UI). Indexed by ModuleId.
-    std::array<bool, numModules> modulesEngagedByMacros (const ChainSettings& base, const MacroValues& macros) noexcept;
 }

@@ -219,7 +219,7 @@ public:
             expectEquals ((int) value (h, "eqBand1Type"), 0);
         }
 
-        beginTest ("Macro bands: shown, and editing them never doubles the macro share");
+        beginTest ("Macro bands: a Simple move creates a real parameter band; editing it is a plain edit (0.6.1)");
         {
             Harness h;
             withEq (h, 0);
@@ -232,29 +232,18 @@ public:
             expect (air >= 0, "the Presence band is shown");
             if (air < 0)
                 return;
-            expect (shown[(size_t) air].macroOnly, "it has no parameters yet");
-            expectWithinAbsoluteError (shown[(size_t) air].gainOffset, 5.0f, 0.01f, "macro share +5 dB");
-
-            const auto before = response (h, 0);
-            expect (ui::eqedit::materialise (h.proc, 0, air));
-            const auto after = response (h, 0);
-            for (size_t i = 0; i < before.size(); ++i)
-                expectWithinAbsoluteError (after[i], before[i], 0.01, "same sound after materialising");
+            expect (! shown[(size_t) air].macroOnly, "no hidden share: the band is a parameter band");
+            expectWithinAbsoluteError (shown[(size_t) air].gainOffset, 0.0f, 1.0e-4f);
             const auto p = band (h, 0, air);
-            expect (p.on && p.role == (int) dsp::EqRole::air, "now a parameter band with its role");
-            expectWithinAbsoluteError (p.gain, 0.0f, 1.0e-3f, "base gain 0 dB");
-            expect (! ui::eqedit::shownBands (h.proc, 0)[(size_t) air].macroOnly);
-            expect (! ui::eqedit::materialise (h.proc, 0, air), "second time: nothing to do");
+            expect (p.on && p.role == (int) dsp::EqRole::air, "a parameter band with its role");
+            expectWithinAbsoluteError (p.gain, 5.0f, 1.0e-3f, "the +5 dB are in its Gain parameter");
+            expect (! ui::eqedit::materialise (h.proc, 0, air), "nothing to materialise");
 
-            // Switching it off through the panel works on the materialised band in one step
             h.proc.getUndo().clear();
-            Harness m;
-            withEq (m, 0);
-            m.proc.getState().getParameter (pid::macroPresence)->setValueNotifyingHost (1.0f);
-            ui::eqedit::setType (m.proc, 0, air, EqBandType::bell);
-            expectEquals (band (m, 0, air).type, (int) EqBandType::bell, "edit on a macro-only band");
-            expectEquals (band (m, 0, air).role, (int) dsp::EqRole::air, "keeps its role");
-            expectEquals (steps (m), 1, "materialise + edit = one step");
+            ui::eqedit::setType (h.proc, 0, air, EqBandType::bell);
+            expectEquals (band (h, 0, air).type, (int) EqBandType::bell);
+            expectEquals (band (h, 0, air).role, (int) dsp::EqRole::air, "keeps its role");
+            expectEquals (steps (h), 1, "one step");
         }
 
         beginTest ("Graph: double-click on empty space adds a Bell there and selects it");
@@ -467,11 +456,11 @@ public:
             h.proc.getUndo().clear();
             drag (g, ap, { ap.x, g.yForGain (8.0f) });
             expectWithinAbsoluteError (h.proc.readEffectiveSettings().eq.bands[(size_t) air].gain, 8.0f, 0.3f,
-                                       "the processed band follows the mouse (macro share not doubled)");
-            expectWithinAbsoluteError (band (h, 0, air).gain, 5.0f, 0.3f, "base gain = 8 - 3");
-            expectEquals (steps (h), 1, "materialise + drag = one step");
+                                       "the processed band follows the mouse");
+            expectWithinAbsoluteError (band (h, 0, air).gain, 8.0f, 0.3f, "0.6.1: the parameter IS the processed gain");
+            expectEquals (steps (h), 1, "one step");
             expect (h.proc.getUndo().undo());
-            expect (band (h, 0, air).isFree(), "undo gives the band back to the macro");
+            expectWithinAbsoluteError (band (h, 0, air).gain, 3.0f, 1.0e-3f, "undo: back to what PRESENCE set");
         }
 
         beginTest ("Graph: EQ 2 edits its own bands only");

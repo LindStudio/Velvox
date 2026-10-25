@@ -7,8 +7,8 @@ namespace velvox
 {
     // Routing strings of 0.2 / 0.3 (and presets without a routing) contain every module.
     // From 0.4 a chain only holds what is actually used. The migration keeps the order
-    // and drops modules that are inaudible with the current parameter values (off and
-    // not engaged by a macro); EQ, compressor, de-esser and the delay / reverb sends
+    // and drops modules that are inaudible with the current parameter values (off; an
+    // old project's macros are baked into them first); EQ, compressor, de-esser and the delay / reverb sends
     // always stay, so the familiar starting point is kept. The sound never changes:
     // a dropped module was silent.
     dsp::Routing pruneInaudible (const dsp::Routing& full, const dsp::ChainSettings& effective);

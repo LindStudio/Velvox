@@ -569,8 +569,8 @@ public:
             p.set (pid::satLowDrive, 3.0f);
             p.set (pid::satMidDrive, 6.0f);
             p.set (pid::satHighDrive, 9.0f);
-            p.set (pid::macroWarmth, 100.0f);
-            const auto cs = p.read (dsp::Routing::defaults());
+            // 0.6.1: WARMTH writes the modules (a Simple move from 0 to 100 %)
+            const auto cs = dsp::applyMacroMove (p.read (dsp::Routing::defaults()), dsp::MacroId::warmth, 0.0f, 1.0f);
             const auto& b = cs.sat.bands;
             expect (cs.sat.multiband);
             expectWithinAbsoluteError (b[1].driveDb - b[0].driveDb, 3.0f, 0.01f);

@@ -9,7 +9,9 @@ namespace velvox::statekeys
     // 1 (implicit, v0.1.x): parameters only
     // 2 (v0.2.x): + routing; missing parameters are reset to defaults on load
     // 3 (v0.3): + "AutoMix" child (report, previous state, first-open prompt)
-    inline constexpr int currentStateVersion = 3;
+    // 4 (v0.6.1): the macro parameters are the Simple sliders' positions; before, they were an offset
+    //             layer in the audio path - baked into the module parameters once on load
+    inline constexpr int currentStateVersion = 4;
 
     inline const juce::Identifier stateVersion { "stateVersion" };
     inline const juce::Identifier routing      { "routing" };

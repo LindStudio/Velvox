@@ -160,7 +160,6 @@ namespace velvox::ui
         // Per selection code (module + 256 * instance)
         std::map<int, float> activity;
         std::map<int, bool> onState;
-        std::array<bool, dsp::numModules> macroEngaged {};
         int selected = 0;
         int hovered = -2;
         int hoveredGap = -1;

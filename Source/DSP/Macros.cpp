@@ -331,18 +331,4 @@ namespace velvox::dsp
         s.delayDuck.amountDb  = clamp (s.delayDuck.amountDb, 0.0f, 24.0f);
         return s;
     }
-
-    std::array<bool, numModules> modulesEngagedByMacros (const ChainSettings& base, const MacroValues& m) noexcept
-    {
-        const auto eff = applyMacros (base, m);
-        std::array<bool, numModules> e {};
-        e[(size_t) ModuleId::eq]      = eff.eqOn && ! base.eqOn;
-        e[(size_t) ModuleId::comp]    = eff.compOn && ! base.compOn;
-        e[(size_t) ModuleId::deess]   = eff.deessOn && ! base.deessOn;
-        e[(size_t) ModuleId::sat]     = eff.sat.enabled && ! base.sat.enabled;
-        e[(size_t) ModuleId::doubler] = eff.doubler.enabled && ! base.doubler.enabled;
-        e[(size_t) ModuleId::delay]   = eff.delayOn && ! base.delayOn;
-        e[(size_t) ModuleId::reverb]  = eff.reverbOn && ! base.reverbOn;
-        return e;
-    }
 }

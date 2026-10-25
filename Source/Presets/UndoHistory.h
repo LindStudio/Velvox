@@ -45,6 +45,10 @@ namespace velvox
         void beginSuppress() noexcept { ++suppressDepth; }
         void endSuppress() noexcept { suppressDepth = std::max (0, suppressDepth - 1); }
 
+        // True while a step is undone / redone or a suppressed change (the auto-mix compare) is applied:
+        // values set then are restored state, not edits (the Simple-slider mapper ignores them)
+        bool isApplyingHistory() const noexcept { return restoring || suppressDepth > 0; }
+
         // ---- History
         bool undo();
         bool redo();
@@ -59,6 +63,11 @@ namespace velvox
         // (the processor answers with the auto-mix "Nachher" state while "Vorher" is shown, and ends
         // that compare). The step then becomes a whole-state step from that state to the current one.
         std::function<std::optional<ParameterSnapshot>()> takeCompareBase;
+
+        // Parameters whose quick repeats coalesce together with what code moved in reaction (the Simple
+        // sliders, which write their modules). Others coalesce only as single-parameter steps; a
+        // multi-parameter step (a graph point, the reverb depth) stays one step per wheel event.
+        std::function<bool (int parameterIndex)> coalescesWithSideEffects;
 
         // Clock (ms) for coalescing quick repeats; tests set their own, nullptr = the real one
         void setClockForTests (std::function<juce::uint32()> clock) { clockForTests = std::move (clock); }
@@ -90,9 +99,10 @@ namespace velvox
         juce::uint32 nowMs() const;
 
         // Wheel / step coalescing: JUCE's Slider::mouseWheelMove and ValueText::stepBy open and close
-        // a gesture per notch. A single-parameter step on the same parameter that starts within
-        // coalesceMs of the end of the last step (and continues from its value, with nothing
-        // recorded, undone or redone between) extends that step instead of adding one.
+        // a gesture per notch. A step whose gesture began on the same parameter as the last step's and
+        // that starts within coalesceMs of its end (continuing from its value, with nothing recorded,
+        // undone or redone between) extends that step instead of adding one. Single-parameter steps only,
+        // except for coalescesWithSideEffects parameters (0.6.1: a Simple slider and its modules).
         static constexpr juce::uint32 coalesceMs = 400;
         ValueAction* coalesceCandidate = nullptr;   // the newest step, owned by `manager`
         juce::uint32 lastStepMs = 0, gestureStartMs = 0;

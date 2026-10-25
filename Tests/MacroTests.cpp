@@ -1,9 +1,10 @@
-// Beginner macros: neutrality, real effect on the audio, clamping, no
-// overwriting of base parameters, view mode never changes the sound.
+// The Simple sliders ("macros"): since 0.6.1 they SET the module parameters (no hidden layer in the
+// audio path) - real effect on the audio, clamping, undo, automation, view mode never changes the sound.
 
 #include "TestHelpers.h"
 #include "MacroTestHelpers.h"
 #include "StateKeys.h"
+#include <thread>
 
 using namespace velvox;
 using namespace velvox::test;
@@ -13,38 +14,38 @@ class MacroTests final : public juce::UnitTest
 public:
     MacroTests() : juce::UnitTest ("Velvox macros", "Velvox") {}
     void moveTests();
+    void simpleSetsModulesTests();
 
     void runTest() override
     {
         moveTests();
 
-        beginTest ("All macros at 0: effective settings equal the base settings");
+        beginTest ("No layer on the parameters: with the sliders up, what the DSP gets IS the parameters");
         {
             Harness h;
             for (auto& p : getFactoryPresets())
                 if (p.name == "Hypertechno Lead")
                     p.applyTo (h.proc.getState());
+            for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroAggression, pid::macroWidth, pid::macroSpace, pid::macroDensity })
+                h.set (id, 55.0f);
             const auto base = h.proc.readSettings();
             const auto eff = h.proc.readEffectiveSettings();
-            expectEquals (eff.comp.thresholdDb, base.comp.thresholdDb);
-            expectEquals (eff.reverbMix, base.reverbMix);
-            expectEquals (eff.stereo.width, base.stereo.width);
-            expect (eff.doubler.enabled == base.doubler.enabled);
+            expect (macroFieldDifference (base, eff).isEmpty());
+            expect (h.proc.readMacros().anyActive(), "the positions are kept");
         }
 
-        beginTest ("Space switches on reverb and delay with ducking");
+        beginTest ("Space switches on reverb and delay with ducking - in their own parameters");
         {
             Harness h;
             h.neutral();
             h.set (pid::macroSpace, 100.0f);
-            const auto eff = h.proc.readEffectiveSettings();
+            const auto eff = h.proc.readSettings();
             expect (eff.reverbOn && eff.delayOn);
-            expectWithinAbsoluteError (eff.reverbMix, 0.30f, 1.0e-5f);
-            expectWithinAbsoluteError (eff.delayMix, 0.15f, 1.0e-5f);
-            expectWithinAbsoluteError (eff.reverbDuck.amountDb, 6.0f, 1.0e-4f);
-            const auto engaged = dsp::modulesEngagedByMacros (h.proc.readSettings(), h.proc.readMacros());
-            expect (engaged[(size_t) dsp::ModuleId::reverb] && engaged[(size_t) dsp::ModuleId::delay]);
-            expect (! engaged[(size_t) dsp::ModuleId::eq]);
+            expectWithinAbsoluteError (h.get (pid::reverbMix), 30.0f, 1.0e-3f, "the Advanced panel shows the Mix you hear");
+            expectWithinAbsoluteError (h.get (pid::delayMix), 15.0f, 1.0e-3f);
+            expectWithinAbsoluteError (h.get (pid::reverbDuckAmount), 6.0f, 1.0e-3f);
+            expectWithinAbsoluteError (h.get (pid::delayDuckAmount), 6.0f, 1.0e-3f);
+            expect (h.get (pid::eqOn) < 0.5f, "SPACE leaves the EQ alone");
 
             // Audible: a reverb tail appears after the signal stops
             auto in = h.noise (0.3f, 0.5, 3);
@@ -111,7 +112,7 @@ public:
                     p.applyTo (h.proc.getState());
             for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroAggression, pid::macroWidth, pid::macroSpace, pid::macroDensity })
                 h.set (id, 100.0f);
-            const auto eff = h.proc.readEffectiveSettings();
+            const auto eff = h.proc.readSettings();
             expect (eff.comp.ratio <= 20.0f && eff.comp.thresholdDb >= -60.0f && eff.comp.makeupDb <= 24.0f);
             expect (eff.sat.driveDb <= 24.0f && eff.sat.mix <= 1.0f && eff.stereo.width <= 2.0f);
             expect (eff.eq.highGain <= 18.0f && eff.eq.lowGain <= 18.0f);
@@ -119,18 +120,28 @@ public:
             expect (allFinite (out));
         }
 
-        beginTest ("Macros never overwrite the base (Pro) parameters");
+        beginTest ("PUNCH writes the compressor and saturation parameters, nothing else");
         {
             Harness h;
             h.neutral();
             const auto before = ParameterSnapshot::capture (h.proc.getState());
             h.set (pid::macroAggression, 80.0f);
-            h.run (h.noise (0.3f, 0.5, 11));
             const auto after = ParameterSnapshot::capture (h.proc.getState());
+            expect (after.values.at (pid::compOn) > 0.5f, "compressor switched on for real");
+            expectWithinAbsoluteError (after.values.at (pid::compThreshold), -18.0f - 8.0f, 1.0e-3f);
+            expectWithinAbsoluteError (after.values.at (pid::compRatio), 3.0f + 3.2f, 1.0e-3f);
+            expectWithinAbsoluteError (after.values.at (pid::compAttack), 10.0f * (1.0f - 0.48f), 1.0e-3f);
+            expectWithinAbsoluteError (after.values.at (pid::compMakeup), 4.0f, 1.0e-3f);
+            expect (after.values.at (pid::satOn) > 0.5f);
+            expectWithinAbsoluteError (after.values.at (pid::satMix), 32.0f, 1.0e-3f);
+            const juce::StringArray moved { pid::macroAggression, pid::compOn, pid::compThreshold, pid::compRatio, pid::compAttack, pid::compMakeup,
+                                            pid::satOn, pid::satMix, pid::satDrive, pid::satLowDrive, pid::satMidDrive, pid::satHighDrive };
             for (const auto& [id, v] : before.values)
-                if (! id.startsWith ("macro"))
+                if (! moved.contains (id))
                     expectEquals (after.values.at (id), v, id);
         }
+
+        simpleSetsModulesTests();
 
         beginTest ("Beginner / Pro view mode never changes the sound and is saved");
         {
@@ -215,6 +226,195 @@ public:
         }
     }
 };
+
+
+namespace
+{
+    // A user edit with the gestures every control makes
+    void dragTo (Harness& h, const char* id, std::initializer_list<float> values)
+    {
+        auto* p = h.proc.getState().getParameter (id);
+        p->beginChangeGesture();
+        for (float v : values)
+            p->setValueNotifyingHost (p->convertTo0to1 (v));
+        p->endChangeGesture();
+    }
+
+    // Every parameter value and the routing / law: equal states sound equal. `routingMayGrow`: a module
+    // a slider switched on joined the chain and stays there (switched off again), like an Advanced edit
+    juce::String stateDifference (Harness& a, const ParameterSnapshot& b, bool routingMayGrow = false)
+    {
+        const auto now = ParameterSnapshot::capture (a.proc.getState());
+        for (const auto& [id, v] : b.values)
+            if (std::abs (now.values.at (id) - v) > 1.0e-4f)
+                return id + ": " + juce::String (now.values.at (id)) + " vs " + juce::String (v);
+        if (routingMayGrow)
+        {
+            const auto r = dsp::Routing::fromString (now.routing), was = dsp::Routing::fromString (b.routing);
+            for (const auto& slot : was)
+                if (! r.contains (slot.id, slot.instance) || r.isInsert (slot.id, slot.instance) != was.isInsert (slot.id, slot.instance))
+                    return "routing " + now.routing + " vs " + b.routing;
+            for (const auto& slot : r)
+                if (! was.contains (slot.id, slot.instance) && a.proc.isInstanceAudible (slot.id, slot.instance))
+                    return "audible new module in " + now.routing;
+        }
+        else if (now.routing != b.routing) return "routing " + now.routing + " vs " + b.routing;
+        if (now.mixLaw != b.mixLaw) return "law " + now.mixLaw + " vs " + b.mixLaw;
+        return {};
+    }
+
+    double tailDb (Harness& h)
+    {
+        auto in = h.noise (0.3f, 0.4, 5);
+        juce::AudioBuffer<float> sig (2, (int) (1.6 * h.fs));
+        sig.clear();
+        for (int ch = 0; ch < 2; ++ch)
+            sig.copyFrom (ch, 0, in, ch, 0, in.getNumSamples());
+        const auto out = h.run (sig);
+        return rmsDb (out, (int) (0.9 * h.fs), (int) (0.6 * h.fs));
+    }
+}
+
+void MacroTests::simpleSetsModulesTests()
+{
+    beginTest ("User bug: Reverb switched off in Advanced stays silent although SPACE is up");
+    {
+        Harness h;
+        h.neutral();
+        dragTo (h, pid::macroSpace, { 30.0f, 60.0f });
+        expect (h.get (pid::reverbOn) > 0.5f && h.get (pid::delayOn) > 0.5f, "SPACE switched the effects on (visible in Advanced)");
+        const double withSpace = tailDb (h);
+        // Advanced: both effects off - the slider stays where it is
+        dragTo (h, pid::reverbOn, { 0.0f });
+        dragTo (h, pid::delayOn, { 0.0f });
+        expectWithinAbsoluteError (h.get (pid::macroSpace), 60.0f, 1.0e-3f);
+        const double off = tailDb (h);
+        logMessage ("tail with SPACE " + juce::String (withSpace, 1) + " dB, after switching Reverb / Delay off " + juce::String (off, 1) + " dB");
+        expectGreaterThan (withSpace, -70.0, "SPACE is audible");
+        expectLessThan (off, -150.0, "a switched-off module stays silent");
+    }
+
+    beginTest ("A Simple drag is one undo step; undo / redo restore modules, slider and routing exactly");
+    {
+        Harness h;   // fresh: delay / reverb are unused inserts
+        const auto before = ParameterSnapshot::capture (h.proc.getState());
+        dragTo (h, pid::macroSpace, { 10.0f, 40.0f, 70.0f });
+        dragTo (h, pid::macroWarmth, { 20.0f, 50.0f });
+        const auto after = ParameterSnapshot::capture (h.proc.getState());
+        auto& undo = h.proc.getUndo();
+        expectEquals (undo.getNumSteps(), 2, "two drags, two steps");
+        expect (h.proc.getRouting().isSend (dsp::ModuleId::reverb, 0), "SPACE keeps its sends");
+        expect (undo.undo() && undo.undo());
+        expect (stateDifference (h, before).isEmpty(), stateDifference (h, before));
+        expect (undo.redo() && undo.redo());
+        expect (stateDifference (h, after).isEmpty(), stateDifference (h, after));
+    }
+
+    beginTest ("Wheel notches within 400 ms are one step although each moves several modules");
+    {
+        Harness h;
+        juce::uint32 now = 1000;
+        auto& undo = h.proc.getUndo();
+        undo.setClockForTests ([&now] { return now; });
+        const auto before = ParameterSnapshot::capture (h.proc.getState());
+        for (float v : { 5.0f, 10.0f, 15.0f, 20.0f, 25.0f })
+        {
+            dragTo (h, pid::macroPresence, { v });
+            now += 60;
+        }
+        expectEquals (undo.getNumSteps(), 1, "five notches, one step");
+        const auto atFive = ParameterSnapshot::capture (h.proc.getState());
+        now += 1000;
+        dragTo (h, pid::macroPresence, { 30.0f });
+        expectEquals (undo.getNumSteps(), 2, "a notch after a pause is a new step");
+        expect (undo.undo());
+        expect (stateDifference (h, atFive).isEmpty(), stateDifference (h, atFive));
+        expect (undo.undo());
+        expect (stateDifference (h, before).isEmpty(), stateDifference (h, before));
+        undo.setClockForTests (nullptr);
+    }
+
+    beginTest ("Up and back to the start restores the modules exactly (in one drag and across drags)");
+    {
+        Harness h;
+        for (auto& p : getFactoryPresets())
+            if (p.name == "Modern Pop")
+                p.applyTo (h.proc.getState());
+        h.proc.getUndo().clear();
+        const auto before = ParameterSnapshot::capture (h.proc.getState());
+        for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroAggression, pid::macroWidth, pid::macroDensity })
+        {
+            dragTo (h, id, { 30.0f, 90.0f, 0.0f });
+            expect (stateDifference (h, before, true).isEmpty(), juce::String (id) + " in one drag: " + stateDifference (h, before, true));
+            dragTo (h, id, { 45.0f, 80.0f });
+            dragTo (h, id, { 20.0f });
+            dragTo (h, id, { 0.0f });
+            expect (stateDifference (h, before, true).isEmpty(), juce::String (id) + " across drags: " + stateDifference (h, before, true));
+        }
+    }
+
+    beginTest ("An Advanced edit between two Simple moves stays: the slider then moves from there");
+    {
+        Harness h;
+        h.neutral();
+        dragTo (h, pid::macroSpace, { 50.0f });
+        expectWithinAbsoluteError (h.get (pid::reverbMix), 15.0f, 1.0e-3f);
+        dragTo (h, pid::reverbMix, { 40.0f });   // the user in the Reverb panel
+        dragTo (h, pid::macroSpace, { 0.0f });
+        expect (h.get (pid::reverbOn) > 0.5f, "the user's reverb stays on");
+        expectWithinAbsoluteError (h.get (pid::reverbMix), 25.0f, 1.0e-3f, "SPACE removes only its share");
+    }
+
+    beginTest ("WIDTH on a Doubler at 50 %: the original stays (additive law), back down restores the true law");
+    {
+        Harness h;
+        juce::uint32 now = 1000;   // separate drags (no coalescing)
+        h.proc.getUndo().setClockForTests ([&now] { return now += 1000; });
+        h.neutral();
+        dragTo (h, pid::doublerOn, { 1.0f });
+        dragTo (h, pid::doublerMix, { 50.0f });
+        expect (! h.proc.usesLegacyMixLaw (dsp::ModuleId::doubler, 0));
+        dragTo (h, pid::macroWidth, { 100.0f });
+        expectWithinAbsoluteError (h.get (pid::doublerMix), 100.0f, 1.0e-3f);
+        expect (h.proc.usesLegacyMixLaw (dsp::ModuleId::doubler, 0), "Mix 100 % with the dry kept = the additive law");
+        dragTo (h, pid::macroWidth, { 0.0f });
+        expectWithinAbsoluteError (h.get (pid::doublerMix), 50.0f, 1.0e-3f);
+        expect (! h.proc.usesLegacyMixLaw (dsp::ModuleId::doubler, 0), "back at the start: true law again");
+        h.proc.getUndo().undo();
+        expect (h.proc.usesLegacyMixLaw (dsp::ModuleId::doubler, 0), "undo brings the law of that step back");
+        h.proc.getUndo().setClockForTests (nullptr);
+    }
+
+    beginTest ("Host automation of a macro (audio thread) moves the modules, never records an undo step");
+    {
+        Harness h;
+        h.neutral();
+        auto* p = h.proc.getState().getParameter (pid::macroSpace);
+        std::thread automation ([p] { p->setValueNotifyingHost (0.5f); });
+        automation.join();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+        expect (h.get (pid::reverbOn) > 0.5f, "mapped on the message thread");
+        expectWithinAbsoluteError (h.get (pid::reverbMix), 15.0f, 1.0e-3f);
+        std::thread back ([p] { p->setValueNotifyingHost (0.0f); });
+        back.join();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+        expect (h.get (pid::reverbOn) < 0.5f, "an automation curve back at 0 switches it off again");
+        expectEquals (h.proc.getUndo().getNumSteps(), 0, "automation never records");
+    }
+
+    beginTest ("Positions set by a preset, a transaction or undo are positions only (nothing mapped)");
+    {
+        Harness h;
+        h.neutral();
+        auto snap = ParameterSnapshot::capture (h.proc.getState(), "p");
+        snap.values[pid::macroSpace] = 70.0f;   // a 0.6.1 preset: the modules hold the sound already
+        h.proc.getUndo().perform ("Preset", [&] { snap.applyTo (h.proc.getState()); });
+        expectWithinAbsoluteError (h.get (pid::macroSpace), 70.0f, 1.0e-3f);
+        expect (h.get (pid::reverbOn) < 0.5f, "nothing added on top of the preset");
+        dragTo (h, pid::macroSpace, { 80.0f });
+        expectWithinAbsoluteError (h.get (pid::reverbMix), 3.0f, 1.0e-3f, "a later move maps from there (+10 % of 30)");
+    }
+}
 
 void MacroTests::moveTests()
 {
