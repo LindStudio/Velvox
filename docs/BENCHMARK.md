@@ -131,3 +131,36 @@ Stand 0.6: alle 15 Module bestehen ihre Gates bis auf einen Messwert. Offene Lü
   bei −24 dBFS stärker; Choir-Rauigkeit bei 440 Hz einzeln (6-Ton-Mittel besteht); Vocal Smash ist kein Pro-C-Klon.
 - **Nicht gemessen:** Automation während des Renders (Zipper, Delay-Zeit-Sweeps – nur Unit-Tests), Stutter/Pulse/Vocal Check
   ohne Referenz-Plugin (absolute Grenzen), kein Hörtest der 0.6-Module (Dateien in `listen\` liegen bereit).
+
+## 0.6.1 – Auto-Mix-EQ: Resonanz-Kerben und breite Klangkorrekturen (2026-10-25)
+
+Vorher setzte der Auto-Mix im EQ praktisch nur den Low Cut (die alten Regeln für Körper/Tiefmitten/Höhen griffen selten).
+Jetzt (`Source/AutoMix/AutoEq.*`, Spec 0.6.1 Punkt 7): schmale Kerben (Q 10–16, bis −9 dB, nie Anhebung) auf **anhaltenden**
+Resonanzen (Spitze in ≥ 3 von 4 Teilen der Aufnahme, schmal) und breite Korrekturen (Shelves/Bells, −4 … +4 dB) Richtung
+Zielkurve der Zielfunktion – auf einem Modell (Langzeitspektrum + Analog-Betrag der Bänder) geplant und in den
+Prüf-Runden mit den Pegeln des echten Renders nachgeregelt. Höchstens 6 Auto-Mix-Bänder (Low Cut eingeschlossen), nur in
+eigenen Rollen-Bändern; Nutzer- und Vocal-Check-Bänder bleiben unberührt und werden mitgerechnet.
+
+**Bewertung (`--bench`, gewählter Kandidat, Mittel, niedriger = besser; gleiche Dateien, gleiche Zielfunktion):**
+
+| Set | 0.6.0 (cc26e0b) | 0.6.1 auto EQ | besser / schlechter |
+|---|---|---|---|
+| VocalSet Val (f7, f8, m8, m9, `excerpts`, 27 Dateien*) | 1,015 | **0,273** | 20 / 3 |
+| echte Vocals (13, inkl. MYLK dry chorus) | 11,516 | **10,069** | 9 / 2 |
+| … ohne DYL (Lo-Fi, tonal unerreichbar) | 3,98 | **2,82** | |
+| Basisplan (vor der Variantensuche) Val / echt | 1,194 / 13,23 | 0,376 / 10,99 | |
+
+\* 28 Dateien, zwei heißen gleich (`m9_caro_vibrato.wav`) und fallen beim Zusammenkopieren zusammen. Held-out-Sänger unberührt.
+
+- Größte Gewinne: Loona 6,90 → 1,93 (zu hell: Shelf −4 dB + breiter 2,6-kHz-Schnitt statt nur „Höhen sanfter“),
+  MYLK 5,21 → 2,61, WIR SIND 11,92 → 8,45, HDGDL 9,50 → 7,70 (weniger Höhen → weniger S-Strafe), VocalSet-Männer
+  (m8/m9: tonal 1,5–2,4 → 0,1–0,4).
+- Schlechter: Taylor Swift 0,90 → 1,11 (S-Laute), GRÜNER SCHEIN 0,00 → 0,08; VocalSet m8_caro 0,08 → 0,39 (Kerben + Shelf
+  auf einem hellen Take), f7_row_straight 0,27 → 0,37 (Raum, kein EQ-Term).
+- Kerben: 21 auf 15 von 27 VocalSet-Dateien (oft 7,2 kHz bei m8 – dasselbe Mikrofon – und 1,5–2,6 kHz), 1 auf den
+  13 echten Vocals (Taylor Swift, 3,2 kHz). Die Zielfunktion misst Kerben kaum – ob sie klingen, entscheidet der Hörtest.
+- Achtung (wie in 0.4): Der Auto-Mix optimiert genau diese Zielfunktion – ein Hinweis, kein Beweis.
+
+**Hörtest:** `%USERPROFILE%\dev\velvox-bench\2026-10-25\autoeq\` – `hoertest_0.6.0_vs_0.6.1\` (13 echte Vocals, blind,
+gleiche Lautheit, Lösung `ab_key.csv`), dazu `real\` und `val\` mit `<Datei>__0.6.0.wav` / `__0.6.1.wav`, beiden Berichten
+und beiden `bench.csv`. Worauf achten: Kerben (hohl/phasig?), helle Takes (zu dumpf?), dunkle Takes (Präsenz-Anhebung).

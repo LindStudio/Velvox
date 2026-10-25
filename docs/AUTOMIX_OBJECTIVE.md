@@ -6,7 +6,12 @@ Tests: `Tests/AutoMixTests.cpp` → `optimizerTests()`.
 ## Ablauf
 
 1. **Analyse** der aufgenommenen Vocal (`VocalProfiler`) → **Basisplan** (`AutoMixPlanner`, regelbasiert).
-2. Verifikation: rendern, messen, nachregeln (max. 4 Runden), wie in 0.3.
+   EQ (0.6.1, `AutoEq`): schmale Kerben auf anhaltenden Resonanzen; breite Bänder (Rollen warmth, auto, autoTone, air)
+   minimieren auf einem Modell (Langzeitspektrum + Analog-Betrag der Bänder) die Tonal- und Härte-Terme unten, mit 1 dB
+   Abstand zu den Fenstergrenzen und 0,03 Strafe je dB Bandgröße; offen geplant werden Absenkungen und Höhen-Anhebungen.
+2. Verifikation: rendern, messen, nachregeln (max. 4 Runden), wie in 0.3. Seit 0.6.1 auch der Klang: liegen die gerenderten
+   Bänder außerhalb der Fenster, verschiebt `autoeq::correct` die breiten Auto-Mix-Bänder (auch Anhebungen von Körper und
+   Tiefmitten, die die Kette nicht selbst bringt), in den Grenzen −4 … +4 dB, höchstens 6 Auto-Mix-Bänder.
 3. **Kandidaten:** `candidatesFor` leitet aus dem Basisplan Varianten ab. Jede ändert *eine*
    zusammenhängende Entscheidung:
    | Variante | Änderung | Wann nicht |
@@ -14,7 +19,7 @@ Tests: `Tests/AutoMixTests.cpp` → `optimizerTests()`.
    | Dynamik leichter | Ratio ×0,7, Threshold +2 dB, Makeup −1 dB, Smash aus | Kompressor aus |
    | Dynamik dichter | Ratio ×1,35, Threshold −2 dB, Makeup +1 dB, sanftes Smash | Kompressor aus, Take bereits stark komprimiert |
    | Mit / Ohne Sättigung | Sättigung umschalten (Tape-artig, Drive 4, Mix 25 %) | Verzerrung im Material erkannt |
-   | Höhen sanfter | High-Shelf 5 kHz, −1,5 … −4 dB (je heller, desto mehr) – der Planer selbst hebt Höhen nur an | Take nicht heller als −7 dB (über 2 kHz ggü. Kern), Höhenanhebung geplant |
+   | Höhen sanfter | High-Shelf 5 kHz, −1,5 … −4 dB (je heller, desto mehr) – der Planer selbst hebt Höhen nur an | Take nicht heller als −7 dB (über 2 kHz ggü. Kern), Höhenanhebung geplant, Basisplan senkt die Höhen schon (≤ −1 dB, 0.6.1) |
    | Höhen nach der Dynamik (EQ 2) | High-Shelf und Präsenz-Boost wandern in eine zweite EQ-Instanz hinter Comp/Smash/De-Esser/Smooth | kein Boost vorhanden |
    | Effekte trockener | Reverb- und Delay-Mix ×0,65 | keine Effekte geplant |
    | Mehr Raum (bei getragenem Gesang: Large Hall) | Reverb-Mix ×1,35 (max. 28 %); getragen Large Hall, 2,6 s, Pre-Delay 40 ms (der Basisplan nutzt bei getragenem Gesang ohne Eigenraum bereits Large Hall 2,3 s) | Reverb aus, Sprache, Take schon hallig |

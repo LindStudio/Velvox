@@ -48,6 +48,21 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 ### Alte Projekte – Abhören
 - Ohne aktives Band-Solo ist die Ausgabe bitgleich zu vorher.
 
+### Geändert – Auto-Mix-EQ
+- **Der Auto-Mix setzt im EQ jetzt gezielte Anhebungen und Absenkungen statt praktisch nur einen Low Cut:** schmale Kerben
+  (Q 10–16, bis −9 dB, nie anhebend) auf Resonanzen, die über die ganze Aufnahme stehen (Raum, Mikrofon – nicht die Teiltöne
+  gehaltener Noten), und breite Korrekturen (Shelves/Bells, −4 … +4 dB) in Richtung der Zielkurve. Geplant auf einem Modell
+  der Aufnahme und nach dem Probe-Render der ganzen Kette nachgeregelt. Höchstens 6 Bänder (inkl. Low Cut), in eigenen
+  Rollen-Bändern (Markierung AUTO); Nutzer- und Vocal-Check-Bänder bleiben unberührt und werden mitgerechnet (keine
+  doppelte Kerbe auf einer Vocal-Check-Korrektur). Eine gekerbte Resonanz schaltet SMOOTH nicht mehr zusätzlich ein; die
+  Variante „Höhen sanfter“ entfällt, wenn der Basisplan die Höhen schon absenkt. Zielfunktion: VocalSet-Val 1,02 → 0,27,
+  echte Vocals 11,5 → 10,1 (`docs/BENCHMARK.md`).
+
+### Alte Projekte – Auto-Mix-EQ
+- Gespeicherte Projekte klingen unverändert (der Auto-Mix ändert nur etwas, wenn man ihn neu startet). Die versteckte
+  Band-Rolle hat vier neue Werte (am Ende angehängt, alte Werte unverändert). Ein neuer Auto-Mix-Lauf ersetzt die
+  Auto-Mix-Bänder eines früheren Laufs.
+
 ## [0.6.0] – Branch `feature/automix` („Pro-Overhaul“, Entwicklungsstand, FL-Studio-Test ausstehend)
 
 ### Neu – Oberfläche
