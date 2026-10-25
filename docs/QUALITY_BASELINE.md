@@ -90,25 +90,27 @@ The tables are generated (`bench.py <module> --update-doc`). gap = Headliner −
 
 | case | metric | Headliner | Pro-Q 4 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| vocal | resp_max_dev_db (dB) | 0.99 | 3.13 | -2.13 | ≤ 0.50 | FAIL |
-| vocal | resp_rms_dev_db (dB) | 0.27 | 1.02 | -0.76 | ≤ 0.20 | FAIL |
-| vocal | resp_hf_max_dev_db (dB) | 0.64 | 0.49 | 0.15 | ≤ 0.50 | FAIL |
+| vocal | resp_max_dev_db (dB) | 1.00 | 3.13 | -2.13 | ≤ 0.50 | FAIL |
+| vocal | resp_rms_dev_db (dB) | 0.19 | 1.02 | -0.83 | ≤ 0.20 | pass |
+| vocal | resp_hf_max_dev_db (dB) | 0.03 | 0.49 | -0.46 | ≤ 0.50 | pass |
 | vocal | resp_vs_ref_max_db (dB) – vs Pro-Q 4 | 2.91 | – | – | ref + 0.50 | info |
-| vocal | crest_reduction_db (dB) – mean of clips | -0.77 | -0.93 | 0.16 | ref ± 1.00 | pass |
+| vocal | crest_reduction_db (dB) – mean of clips | -0.79 | -0.93 | 0.13 | ref ± 1.00 | pass |
 | vocal | st_loudness_std_lu (LU) – mean of clips | 3.97 | 4.04 | -0.06 | ref + 0.50 | pass |
 | vocal | mix0_null_db (dB) – latency 0 | -152 | – | – | ≤ -60.0 | pass |
 | vocal | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| vocal | cpu_pct (%) – median over this module's renders | 0.24 | 0.05 | 0.19 | ref + 0.50 | pass |
-| air | resp_max_dev_db (dB) | 5.50 | 0.97 | 4.53 | ≤ 0.50 | FAIL |
-| air | resp_rms_dev_db (dB) | 1.65 | 0.29 | 1.36 | ≤ 0.20 | FAIL |
-| air | resp_hf_max_dev_db (dB) | 5.50 | 0.97 | 4.53 | ≤ 0.50 | FAIL |
-| air | resp_vs_ref_max_db (dB) – vs Pro-Q 4 | 5.51 | – | – | ref + 0.50 | info |
-| air | cramp_dev_db (dB) – bell +6 dB Q 1.5: 15 kHz vs 1.5 kHz x10 | 5.50 | 0.06 | 5.43 | ref + 0.50 | FAIL |
-| cut | resp_max_dev_db (dB) | 0.03 | 1.22 | -1.19 | ≤ 0.50 | pass |
+| vocal | cpu_pct (%) – median over this module's renders | 0.27 | 0.05 | 0.22 | ref + 0.50 | pass |
+| air | resp_max_dev_db (dB) | 0.27 | 0.97 | -0.70 | ≤ 0.50 | pass |
+| air | resp_rms_dev_db (dB) | 0.03 | 0.29 | -0.26 | ≤ 0.20 | pass |
+| air | resp_hf_max_dev_db (dB) | 0.27 | 0.97 | -0.70 | ≤ 0.50 | pass |
+| air | resp_vs_ref_max_db (dB) – vs Pro-Q 4 | 0.86 | – | – | ref + 0.50 | info |
+| air | cramp_dev_db (dB) – bell +6 dB Q 1.5: 15 kHz vs 1.5 kHz x10 | 0.27 | 0.06 | 0.20 | ref + 0.50 | pass |
+| cut | resp_max_dev_db (dB) | 0.02 | 1.22 | -1.19 | ≤ 0.50 | pass |
 | cut | resp_rms_dev_db (dB) | 0.00 | 0.42 | -0.41 | ≤ 0.20 | pass |
 | cut | resp_hf_max_dev_db (dB) | 0.00 | 0.00 | -0.00 | ≤ 0.50 | pass |
 | cut | resp_vs_ref_max_db (dB) – vs Pro-Q 4 | 1.22 | – | – | ref + 0.50 | info |
 <!-- END eq -->
+
+**EQ after 0.6 (eq track + final pass).** Re-measured on the 0.6 band parameters (`eqBand{n}*`, matched response; the cases no longer use the hidden 0.5 fixed-band IDs). Cramping is gone (15 kHz bell 0.27 dB off its shape, was 5.50; Pro-Q 4 0.06), the 12 kHz shelf is 0.03 dB off (was 0.64). One gated FAIL remains: `vocal` `resp_max_dev_db` 1.00 dB, located at 20 Hz in the stop band of the 24 dB/oct low cut at 100 Hz (prototype −55.9 dB): the band designs fall back to the bilinear form below ~27 Hz at 48 kHz (eq ledger Ruling), inaudible. After-renders: `velvox-bench\2026-10-25\modules-after\eq\`.
 
 <!-- BEGIN comp -->
 #### Compressor (`comp`)

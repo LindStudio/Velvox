@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Velvox VERSION 0.4.0 LANGUAGES C CXX)
+project(Velvox VERSION 0.6.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -195,7 +195,8 @@ if(VELVOX_BUILD_TESTS)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)
     endif()
     # Modal loops only for the test runner (used to pump the message loop for UI snapshots)
-    target_compile_definitions(VelvoxTests PRIVATE ${VELVOX_COMMON_DEFINITIONS} JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_compile_definitions(VelvoxTests PRIVATE ${VELVOX_COMMON_DEFINITIONS} JUCE_MODAL_LOOPS_PERMITTED=1
+        VELVOX_PROJECT_VERSION="${PROJECT_VERSION}")   # tests check ProductInfo against it
     target_link_libraries(VelvoxTests
         PRIVATE
             ${VELVOX_COMMON_LIBS}

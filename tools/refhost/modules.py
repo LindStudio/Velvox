@@ -67,7 +67,14 @@ def _pq4_band(n, used, shape, freq, gain=None, q=None, slope=None):
     return p
 
 
-EQ_OFF = {"hpfOn": 0, "lpfOn": 0, "lowGain": 0, "midGain": 0, "highGain": 0}
+# 0.6 band parameters (eqBand{n}*): a fresh instance has no bands; types / slopes are choice indices
+# (Type: 0 Bell, 1 Low Shelf, 2 High Shelf, 3 Low Cut, 4 High Cut ...; Slope: 0..5 = 6/12/18/24/36/48 dB/oct)
+EQ_OFF = {}
+
+
+def _band(n, type_, freq, gain=0.0, q=1.0, slope=3):
+    return {f"eqBand{n}On": 1, f"eqBand{n}Type": type_, f"eqBand{n}Freq": freq, f"eqBand{n}Gain": gain,
+            f"eqBand{n}Q": q, f"eqBand{n}Slope": slope}
 
 PRO_C2_BASE = [("Auto Gain", "Off"), ("Lookahead", "0"), ("Range", "60"), ("Wet Gain", "0"), ("Oversampling", "Off")]
 
@@ -86,22 +93,20 @@ _add(Module(
     refs=[Ref("Pro-Q 4", FF + "Pro-Q 4.vst3")],
     cases=[
         Case("vocal",
-             headliner={**EQ_OFF, "hpfOn": 1, "hpfFreq": 100, "hpfSlope": 1, "midFreq": 3000, "midGain": 4, "midQ": 1.0,
-                        "highType": 0, "highFreq": 12000, "highGain": 5, "highQ": 0.71},
+             headliner={**EQ_OFF, **_band(1, 3, 100, slope=3), **_band(2, 0, 3000, 4, 1.0), **_band(3, 2, 12000, 5, 0.71)},
              refs={"Pro-Q 4": _pq4_band(1, True, "Low Cut", 100, slope="24 dB/oct", q=0.71)
                    + _pq4_band(2, True, "Bell", 3000, 4, 1.0) + _pq4_band(3, True, "High Shelf", 12000, 5, 0.71)},
              procedures=["eq_response", "vocal", "nulls", "cpu"],
              info={"analog": [("hpf", 100.0, 4), ("bell", 3000.0, 4.0, 1.0), ("highshelf", 12000.0, 5.0, 0.71)]}),
         Case("air",
-             headliner={**EQ_OFF, "midFreq": 15000, "midGain": 6, "midQ": 1.5},
+             headliner={**EQ_OFF, **_band(1, 0, 15000, 6, 1.5)},
              refs={"Pro-Q 4": _pq4_band(1, True, "Bell", 15000, 6, 1.5)},
              procedures=["eq_response", "eq_cramping"],
              info={"analog": [("bell", 15000.0, 6.0, 1.5)],
-                   "cramp": {"lo": {"headliner": {"midFreq": 1500}, "Pro-Q 4": [("Band 1 Frequency", "1500")]},
-                             "hi": {"headliner": {"midFreq": 15000}, "Pro-Q 4": [("Band 1 Frequency", "15000")]}}}),
+                   "cramp": {"lo": {"headliner": {"eqBand1Freq": 1500}, "Pro-Q 4": [("Band 1 Frequency", "1500")]},
+                             "hi": {"headliner": {"eqBand1Freq": 15000}, "Pro-Q 4": [("Band 1 Frequency", "15000")]}}}),
         Case("cut",
-             headliner={**EQ_OFF, "midFreq": 350, "midGain": -6, "midQ": 2.0, "lowType": 0, "lowFreq": 150, "lowGain": -3,
-                        "lowQ": 0.71},
+             headliner={**EQ_OFF, **_band(1, 0, 350, -6, 2.0), **_band(2, 1, 150, -3, 0.71)},
              refs={"Pro-Q 4": _pq4_band(1, True, "Bell", 350, -6, 2.0) + _pq4_band(2, True, "Low Shelf", 150, -3, 0.71)},
              procedures=["eq_response"],
              info={"analog": [("bell", 350.0, -6.0, 2.0), ("lowshelf", 150.0, -3.0, 0.71)]}),

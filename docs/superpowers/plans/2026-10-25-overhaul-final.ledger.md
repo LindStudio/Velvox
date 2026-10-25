@@ -98,3 +98,13 @@ C:\Users\jakob\dev\velvox-wt\shots-final\advanced-tabs.png (SIMPEL | ADVANCED, M
   screen is the clearest; the stored view state (uiMode / uiTab) is unchanged, Auto Mix stays reachable via SIMPEL and the
   Details overlay. Cost if wrong: one label.
 Full suite after Tasks 1-9: 30527 checks, 0 failed (+ Headliner/Velvox categories re-run after the help text edit: 0 failed).
+
+Task 10a: complete (EQ bench + version). tools/refhost/modules.py EQ cases now set the 0.6 band parameters (`_band()` helper →
+eqBand{n}On/Type/Freq/Gain/Q/Slope; EQ_OFF is empty because a fresh instance has no bands; the cramp lo/hi overrides use
+eqBand1Freq). `bench.py eq --out velvox-bench\2026-10-25\modules-after --update-doc`: 18 metrics, 1 FAIL (vocal
+resp_max_dev_db 1.00 dB at 20 Hz in the 100 Hz/24 dB-oct low cut's stop band, prototype −55.9 dB – bilinear fallback below
+~27 Hz, documented under the EQ block); air cramping 0.27 dB (was 5.50), vocal HF 0.03 dB (was 0.64). refhost python tests:
+34 OK. Version 0.6.0: CMake project VERSION and product::versionString; VelvoxTests gets VELVOX_PROJECT_VERSION from CMake.
+Test (VelvoxTests "Velvox chain"): "Version: 0.6.0 in CMake and ProductInfo" (failed first: 0.4.0).
+- Ruling: the vocal-case FAIL is not fixed here (the brief forbids DSP sound changes outside the listed items; the deviation sits
+  56 dB down below 27 Hz). Cost if wrong: none audible.
