@@ -102,7 +102,7 @@ Every knob, switch and menu is a real plugin parameter: your DAW can automate it
 The module chain with the panel of the selected module. When a macro moves a parameter, its knob shows a small marker at the value that is actually processed.
 
 ## VOCAL CHECK
-A diagnosis of the recording at the position of the Vocal Check module, with suggestions.
+A diagnosis of the recording at the position of the Vocal Check module: a score (0 - 100) and one tile per finding with the suggested fix. "Anwenden" applies it, "Alles anwenden" applies every suggestion at once - each is one step of Undo (Ctrl+Z). "Ignorieren" hides a finding (restorable under "x ignoriert"). The genre (Party, Pop, Akustik) sets the target ranges.
 
 ## Switching
 All views show the same settings. Switching never changes the sound or resets anything.)" });
@@ -187,7 +187,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
 - Too dry or too far back: Reverb and Delay with ducking (Mehr), so the words stay clear.
 - Too narrow: Doubler or Choir, then check Mono in the OUTPUT panel.
 - Clipping output: lower Vocal Level and keep Clip guard on.
-- Not sure where to start: open VOCAL CHECK and play the vocal for a while. A finding opens the module it recommends.)" });
+- Not sure where to start: open VOCAL CHECK and play the vocal for a while, then use "Anwenden" on the findings.)" });
 
             //==================================================================
             p.push_back (modulePage ("eq", "Equalizer",
@@ -220,7 +220,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
             p.push_back (modulePage ("sat", "Saturation",
                 "Adds harmonics: warmth, grit, density and a stronger presence in a loud mix. The drive is level compensated, so it changes character rather than volume.",
                 "When the vocal sounds too clean, thin or polite for an energetic track.",
-                "- Character: Warm (smooth, slightly asymmetric), Tape (gentle, symmetric), Tube (rich even harmonics), Hard (firm clipping).\n- Drive sets the amount of saturation.\n- Output trims the level after the stage.\n- Mix blends the saturated and the clean signal.",
+                "- Character: Warm (smooth, slightly asymmetric), Tape (gentle, symmetric), Tube (rich even harmonics), Hard (firm clipping).\n- Drive sets the amount of saturation (the big control; you can also drag a band up or down).\n- Multiband splits the voice into Low, Mid and High: click a band to choose it, then pick its character and Drive; drag the handles between the bands to move the crossovers; each band has its own on/off switch.\n- Link moves the Drive of all three bands together.\n- In Mehr: Output trims the level after the stage, Mix blends the saturated and the clean signal, and the two crossover frequencies.",
                 "- More Drive = more harmonics and more audible distortion.\n- Lower Mix = subtler, keeps the clean transients.\n- Hard character distorts most at the same Drive.",
                 "- Warm or Tape, Drive 4 to 8 dB, Mix 100 %.\n- For aggressive leads: Hard with Mix 30 to 50 %.",
                 "- Too much drive on S sounds - put the De-esser before it or lower Drive.\n- Judging distortion only on solo; in the mix more is often fine, but check.",
@@ -244,14 +244,14 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- Forgetting the latency: while Pitch is on it adds about 15 ms, which FL Studio and other DAWs compensate automatically. Live monitoring through the plugin is delayed.\n- Using it as pitch correction.",
                 "Place Pitch before Doubler / Choir to double the shifted voice, or after them to shift the whole stack. Effects after Pitch (reverb, delay) follow the new pitch."));
 
-            p.push_back (modulePage ("chop", "Vocal chop",
+            p.push_back (modulePage ("chop", "Stutter",
                 "A tempo-synced gate and stutter: a 16-step pattern plays, mutes or repeats the vocal in time with the song.",
                 "For build-ups, rhythmic breaks and stutter effects.",
                 "- Pattern chooses the 16-step rhythm (the display shows the current step).\n- Step length sets the length of one step, synced to the host tempo (120 BPM when the host sends no tempo).\n- Depth sets how strongly the pattern is applied.\n- Smooth softens the edges of each step.",
                 "- Lower Depth = the muted steps are only quieter, not silent.\n- Higher Smooth = softer, less clicky edges; too high blurs the rhythm.",
-                "- Depth 100 %, Smooth 3 ms, a 1/16 step length.\n- Automate the power button in your DAW to use chops only in certain bars.",
+                "- Depth 100 %, Smooth 3 ms, a 1/16 step length.\n- Automate the power button in your DAW to use the stutter only in certain bars.",
                 "- Leaving it on for the whole song by accident.\n- Very low Smooth on sustained notes (clicks).",
-                "Put Chop before Reverb and Delay so the effects tail through the gaps, or after them to chop the effects too. Pulse is the smoother alternative for volume rhythms."));
+                "Put Stutter before Reverb and Delay so the effects tail through the gaps, or after them to cut the effects too. Pulse is the smoother alternative for volume rhythms."));
 
             p.push_back (modulePage ("delay", "Delay",
                 "Echoes of the vocal, with filters on the repeats and ducking that pushes the echoes down while the vocal is active.",
@@ -323,7 +323,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- Higher Amount = more even; 100 % pulls everything towards the target.\n- Higher Max boost lifts quiet words more, but also breaths and room noise.\n- Higher Response = faster, more audible moves.",
                 "- Amount 60 to 70 %, Max boost and Max cut 6 to 8 dB, Response 50 %.\n- Set Target near the average level of the vocal.\n- Start moderate and raise the intensity step by step.",
                 "- Too much boost makes breaths and room noise louder - raise Ignore below.\n- Very fast Response: the vocal starts to wobble.",
-                "Place it before the Compressor: the compressor then only has to catch short peaks. Pulse and Chop after it are not undone by the rider."));
+                "Place it before the Compressor: the compressor then only has to catch short peaks. Pulse and Stutter after it are not undone by the rider."));
 
             p.push_back ({ "output", "Output", gModules, juce::String() +
                 "## " + moduleSectionHeadings()[0] + "\nThe last stage of the plugin: the stereo width of the whole output, mono safety in the low end, the loudness comparison and the clip guard.\n\n"

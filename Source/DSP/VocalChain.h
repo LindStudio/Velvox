@@ -171,8 +171,10 @@ namespace velvox::dsp
         const DelayModule& getDelay (int instance = 0) const noexcept { return delay[(size_t) clampInstance (ModuleId::delay, instance)]; }   // UI: displayTimeMs
         PulseModule& getPulse() noexcept { return pulse; }
         const PitchModule& getPitch() const noexcept { return pitch; }   // UI: getDetectedHz (lock-free)
+        const SaturationModule& getSaturation (int instance = 0) const noexcept { return saturation[(size_t) clampInstance (ModuleId::sat, instance)]; }   // UI: getMeters()
         SmashModule& getSmash (int instance = 0) noexcept { return smash[(size_t) clampInstance (ModuleId::smash, instance)]; }
         ChoirModule& getChoir (int instance = 0) noexcept { return choir[(size_t) clampInstance (ModuleId::choir, instance)]; }
+        DoublerModule& getDoubler (int instance = 0) noexcept { return doubler[(size_t) clampInstance (ModuleId::doubler, instance)]; }
         SmoothModule& getSmooth (int instance = 0) noexcept { return smooth[(size_t) clampInstance (ModuleId::smooth, instance)]; }
         CheckModule& getCheck() noexcept { return check; }
         RideModule& getRide (int instance = 0) noexcept { return ride[(size_t) clampInstance (ModuleId::ride, instance)]; }

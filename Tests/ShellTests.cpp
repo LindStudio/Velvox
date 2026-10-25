@@ -74,7 +74,7 @@ public:
                 auto e = editorWith (h, "check");
                 auto& ed = asVelvox (*e);
                 expect (ed.isAdvanced() && ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "check (0.5) -> Advanced + VOCAL CHECK");
-                expect (ed.getDetail() != nullptr && ed.getDetail()->getBounds() == VelvoxAudioProcessorEditor::bodyArea(), "check panel over the body");
+                expect (ed.getCheckView().isVisible() && ed.getCheckView().getBounds() == VelvoxAudioProcessorEditor::bodyArea(), "check view over the body");
                 expectEquals (h.proc.getState().state.getProperty ("uiMode").toString(), juce::String ("pro"), "stored again in the 0.6 form");
                 expectEquals (h.proc.getState().state.getProperty ("uiTab").toString(), juce::String ("check"));
             }
@@ -82,7 +82,7 @@ public:
                 Harness h;
                 auto e = editorWith (h, "beginner", "check");
                 expect (! asVelvox (*e).isAdvanced() && asVelvox (*e).getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "Simple + VOCAL CHECK");
-                expect (asVelvox (*e).getDetail() != nullptr, "the check panel in Simple mode too");
+                expect (asVelvox (*e).getCheckView().isVisible(), "the check view in Simple mode too");
             }
         }
 

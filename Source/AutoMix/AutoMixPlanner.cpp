@@ -175,7 +175,7 @@ namespace velvox::automix
             plan.set (id, 0.0f);
         }
         if (creativeWasOn > 0)
-            plan.notes.push_back (de ("Kreativ-Effekte (Pitch, Chop, Pulse, Choir) wurden für den Grundmix ausgeschaltet. Der vorherige Zustand lässt sich wiederherstellen."));
+            plan.notes.push_back (de ("Kreativ-Effekte (Pitch, Stutter, Pulse, Choir) wurden für den Grundmix ausgeschaltet. Der vorherige Zustand lässt sich wiederherstellen."));
 
         bool macrosWereSet = false;
         for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroAggression, pid::macroWidth, pid::macroSpace, pid::macroDensity })

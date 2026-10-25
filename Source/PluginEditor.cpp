@@ -171,6 +171,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
       topBar (p, dialog),
       chainView (p),
       simpleView (p, &spectrum),
+      checkView (p),
       mixView (p),
       analysis (p.getAutoMix())
 {
@@ -182,7 +183,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
 
     for (auto* c : std::initializer_list<juce::Component*> { &topBar, &chainView, &simpleView, &meters })
         canvas.addAndMakeVisible (c);
-    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser })
+    for (auto* c : std::initializer_list<juce::Component*> { &checkView, &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser })
         canvas.addChildComponent (c);
 
     chainView.setLiveData (&live);
@@ -200,8 +201,9 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     };
     topBar.onHelp = [this]
     {
-        showHelp (detail != nullptr && isModulePanelShown() ? help::keyForModule (selected < 0 ? selected : (int) dsp::selectionModule (selected))
-                                                            : juce::String ("start"));
+        showHelp (tab == Tab::vocalCheck ? help::keyForModule ((int) dsp::ModuleId::check)
+                  : detail != nullptr && isModulePanelShown() ? help::keyForModule (selected < 0 ? selected : (int) dsp::selectionModule (selected))
+                                                              : juce::String ("start"));
     };
     simpleView.onAnalyse = [this] { startAnalysis(); };
     simpleView.onShowDetails = [this] { showMixDetails(); };
@@ -298,6 +300,7 @@ VelvoxAudioProcessorEditor::~VelvoxAudioProcessorEditor()
     proc.getAutoMix().removeChangeListener (this);
     auto& animator = juce::Desktop::getInstance().getAnimator();
     animator.cancelAnimation (&simpleView, false);
+    animator.cancelAnimation (&checkView, false);
     if (detail != nullptr)
         animator.cancelAnimation (detail.get(), false);
     setLookAndFeel (nullptr);
@@ -387,6 +390,7 @@ void VelvoxAudioProcessorEditor::applyView (bool animate)
 
     const bool simple = tab == Tab::autoMix && mode == Mode::simple;
     const bool advanced = tab == Tab::autoMix && mode == Mode::advanced;
+    const bool check = tab == Tab::vocalCheck;
     simpleView.setVisible (simple);
     for (auto* c : std::initializer_list<juce::Component*> { &chainView, &meters })
         c->setVisible (advanced);
@@ -394,6 +398,18 @@ void VelvoxAudioProcessorEditor::applyView (bool animate)
         reveal (simpleView, bodyArea());
     else
         simpleView.setBounds (bodyArea());
+
+    // VOCAL CHECK: score + tiles over the whole body (both modes)
+    const bool checkWasVisible = checkView.isVisible();
+    checkView.setVisible (check);
+    if (check)
+    {
+        checkView.refreshNow();
+        if (animate && constructed && ! checkWasVisible)
+            reveal (checkView, bodyArea());
+        else
+            checkView.setBounds (bodyArea());
+    }
 
     chainView.setSelected (advanced ? selected : -2);
     select (selected);
@@ -424,20 +440,15 @@ void VelvoxAudioProcessorEditor::select (int id)
         juce::MessageManager::callAsync ([safe, moduleId] { if (safe != nullptr) safe->openModule (moduleId); });
     };
 
-    // VOCAL CHECK: the check panel over the whole body (both modes)
-    if (tab == Tab::vocalCheck)
-    {
-        detail = createDetailPanel (proc, (int) dsp::ModuleId::check, &spectrum, &live);
-        detail->onOpenModule = openFromPanel;
-        detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };
-        canvas.addAndMakeVisible (*detail);
-        detail->setBounds (bodyArea());
-        detail->refresh();
-    }
-    else if (isModulePanelShown())
+    // (VOCAL CHECK shows checkView, see applyView; no module panel there)
+    if (isModulePanelShown())
     {
         detail = createDetailPanel (proc, id, &spectrum, id >= 0 && dsp::selectionInstance (id) > 0 ? &panelLive : &live);
         detail->onOpenModule = openFromPanel;
+        detail->onShowVocalCheck = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)]
+        {
+            juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->setTab (Tab::vocalCheck); });
+        };
         detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };
         detail->askForName = [this] (const juce::String& title, std::function<void (const juce::String&)> onName)
         {
@@ -619,6 +630,8 @@ void VelvoxAudioProcessorEditor::timerCallback()
 
     if (detail != nullptr)
         detail->refresh();
+    if (checkView.isVisible())
+        checkView.refresh();
     if (detailsOverlay.isVisible() && frame % 6 == 0)
         mixView.refresh();
     if (analysis.isVisible() && frame % 2 == 0)

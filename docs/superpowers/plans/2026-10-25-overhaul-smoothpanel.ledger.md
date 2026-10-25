@@ -79,3 +79,11 @@ smooth / pitch rewritten for the new controls)
 Final: full suite 28737 checks passed, 15 failed — all 15 are the base's PanelFrameTests "sat: reaches satMultiband/…" (13) and
 "pulse: reaches pulseShape/pulseAmount" (2), owned by the satpanel / timepanels tracks. The 12 "smooth: reaches smoothW…" are green.
 Smooth panel suite 141/141, Pitch panel suite 30/30.
+
+Merge feature/automix (0cca7f0: sat / time / check / voices panels + DSP): conflicts resolved in CMakeLists.txt (both test
+lists), VocalChain.h (getPitch + getSaturation), DetailPanels.cpp / ModuleViews.cpp (old Chop / Delay / Pitch panels and views
+all removed; pitch -> createPitchPanel / createPitchStage, chop / delay -> createTimeModulePanel / createTimeModuleView),
+Tests/TestMain.cpp: ONE snapshot overlay parser — ';' tokens (reso, more, route:…, set:…, or the overlay itself); a set: list
+accepts ",more" and "|<overlay>" (the two set: forms of sat and timepanels), values are applied after the preset and followed by
+128 blocks of audio. PanelFrameTests: pendingPanel no longer lists smoothW (doubler entries kept).
+Full suite after the merge: 29845 checks passed, 0 failed.

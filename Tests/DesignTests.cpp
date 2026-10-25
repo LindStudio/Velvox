@@ -151,7 +151,7 @@ public:
             expect (ed.getDetail() == nullptr, "no module panel in Simple mode");
 
             top.selectTab (ui::TopBar::Tab::vocalCheck);
-            expect (ed.getDetail() != nullptr && ed.getDetail()->isVisible(), "VOCAL CHECK shows the check panel");
+            expect (ed.getCheckView().isVisible(), "VOCAL CHECK shows the check view");
             expect (! ed.getSimpleView().isVisible());
             expectEquals (h.proc.getState().state.getProperty ("uiTab").toString(), juce::String ("check"), "tab stored with the project");
 
@@ -349,7 +349,7 @@ public:
             expect (c.segments.contains ("levelMatchMode"), "fair compare as segments");
 
             ed.getTopBar().selectTab (ui::TopBar::Tab::vocalCheck);
-            expect (ed.getDetail() != nullptr && ed.getDetail()->getWidth() >= 980, "VOCAL CHECK uses the whole width");
+            expect (ed.getCheckView().isVisible() && ed.getCheckView().getWidth() >= 980, "VOCAL CHECK uses the whole width");
         }
 
         beginTest ("Design: help and tutorial describe the new interface");

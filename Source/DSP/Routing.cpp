@@ -7,9 +7,9 @@ namespace velvox::dsp
     {
         constexpr const char* keys[numModules]  { "eq", "comp", "deess", "sat", "doubler", "pitch", "delay", "reverb", "chop",
                                                   "pulse", "smash", "choir", "smooth", "check", "ride" };
-        constexpr const char* names[numModules] { "EQ", "Compressor", "De-esser", "Saturation", "Doubler", "Pitch", "Delay", "Reverb", "Chop",
+        constexpr const char* names[numModules] { "EQ", "Compressor", "De-esser", "Saturation", "Doubler", "Pitch", "Delay", "Reverb", "Stutter",
                                                   "Pulse", "Vocal Smash", "Choir", "Smooth", "Vocal Check", "Level Ride" };
-        constexpr const char* shortNames[numModules] { "EQ", "Comp", "De-ess", "Sat", "Doubler", "Pitch", "Delay", "Reverb", "Chop",
+        constexpr const char* shortNames[numModules] { "EQ", "Comp", "De-ess", "Sat", "Doubler", "Pitch", "Delay", "Reverb", "Stutter",
                                                        "Pulse", "Smash", "Choir", "Smooth", "Check", "Ride" };
 
         // Default processing order of 0.3. The nine v0.2 modules keep their relative

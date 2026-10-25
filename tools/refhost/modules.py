@@ -232,16 +232,62 @@ _add(Module(
 # Doubler vs Waves Doubler2; Choir vs Waves Doubler4
 # ---------------------------------------------------------------------------------------------
 _DBL = [("EQLowOnOff", "Off"), ("EQHighOnOff", "Off"), ("Direct OnOff", "On"), ("Direct Gain", "0")]
+# Doubler (0.6 engine). "default" = an old project (Classic mode, the 0.2 controls); "voices2" / "voices4" = the
+# per-voice modes at Waves' own settings. voice_tracking solos every voice (others off, dry off, no wobble) and
+# measures its delay and detune; voice_splice_db = AM roughness of a solo voice at +30 ct (pitch-shifter artefacts).
+def _dbl_solo_headliner(mode, n):
+    def f(i):
+        d = {"doublerVoices": mode, "doublerDry": -60, "doublerModDepth": 0, "doublerMonoSafe": 0, "doublerMix": 100}
+        d.update({f"doublerV{k}On": 1 if k == i + 1 else 0 for k in range(1, n + 1)})
+        return d
+    return f
+
+
+def _dbl_solo_waves(n):
+    def f(i):
+        p = [("Direct OnOff", "Off")]
+        p += [(f"Voice{k} OnOff", "On" if k == i + 1 else "Off") for k in range(1, n + 1)]
+        p += [(f"Voice{k} Depth", "0") for k in range(1, n + 1)]
+        return p
+    return f
+
+
+def _dbl_voices(n, voices, pans_deg, ref_gain):
+    h = {"doublerVoices": 1 if n == 2 else 2, "doublerMix": 50, "doublerWidth": 100, "doublerMonoSafe": 0, "doublerTone": 20000,
+         "doublerLowCut": 20, "doublerModDepth": 3, "doublerModRate": 1.0, "doublerDry": 0}
+    r = []
+    for k, ((d, c), pan) in enumerate(zip(voices, pans_deg), start=1):
+        h.update({f"doublerV{k}On": 1, f"doublerV{k}Delay": d, f"doublerV{k}Detune": c, f"doublerV{k}Gain": 0,
+                  f"doublerV{k}Pan": round(pan / 45.0 * 100.0, 3)})
+        r += [(f"Voice{k} OnOff", "On"), (f"Voice{k} Delay", str(d)), (f"Voice{k} Detune", str(c)), (f"Voice{k} Gain", str(ref_gain)),
+              (f"Voice{k} Pan", str(pan)), (f"Voice{k} Depth", "3")]
+    return h, r
+
+
+_V2 = [(14, 8), (20, -8)]
+_V4 = [(14, 8), (20, -8), (26, 5), (33, -5)]
+_v2h, _v2r = _dbl_voices(2, _V2, [-45, 45], -6)
+_v4h, _v4r = _dbl_voices(4, _V4, [-45, 45, -22.5, 22.5], -9)
+_TRACK = ["voice_tracking", "voice_splice"]
 _add(Module(
     key="doubler", title="Doubler", mix_param="doublerMix",
     refs=[Ref("Doubler2", WAVES, "Doubler2 Stereo",
               params=_DBL + [("Voice1 Delay", "14"), ("Voice2 Delay", "20"), ("Voice1 Detune", "8"), ("Voice2 Detune", "-8"),
-                             ("Voice1 Gain", "-6"), ("Voice2 Gain", "-6"), ("Voice1 Depth", "3"), ("Voice2 Depth", "3")])],
+                             ("Voice1 Gain", "-6"), ("Voice2 Gain", "-6"), ("Voice1 Depth", "3"), ("Voice2 Depth", "3")]),
+          Ref("Doubler4", WAVES, "Doubler4 Stereo", params=list(_DBL))],
     cases=[Case("default", headliner={"doublerMix": 50, "doublerWidth": 80, "doublerDelay": 14, "doublerDetune": 8,
                                       "doublerMonoSafe": 50, "doublerTone": 20000},
-                procedures=["mod_widen", "vocal_width", "nulls", "cpu"])],
+                procedures=["mod_widen", "vocal_width", "nulls", "cpu"], info={"refs": ["Doubler2"]}),
+           Case("voices2", headliner=_v2h, refs={"Doubler2": _v2r}, procedures=["mod_widen", "vocal_width"] + _TRACK,
+                info={"refs": ["Doubler2"], "voices": _V2, "solo": {"Headliner": _dbl_solo_headliner(1, 2), "Doubler2": _dbl_solo_waves(2)},
+                      "splice": {"Headliner": {"doublerV1Detune": 30}, "Doubler2": [("Voice1 Detune", "30")]}}),
+           Case("voices4", headliner=_v4h, refs={"Doubler4": _v4r}, procedures=["mod_widen", "vocal_width"] + _TRACK + ["cpu"],
+                info={"refs": ["Doubler4"], "voices": _V4, "solo": {"Headliner": _dbl_solo_headliner(2, 4), "Doubler4": _dbl_solo_waves(4)},
+                      "splice": {"Headliner": {"doublerV1Detune": 30}, "Doubler4": [("Voice1 Detune", "30")]}})],
     tolerances={"comb_depth_db": ("lower", 1.0), "am_roughness_db": ("lower", 0.5), "lr_corr": ("lower", 0.1),
-                "mono_loss_db": ("lower", 1.0), "cpu_pct": ("lower", 1.0)}))
+                "mono_loss_db": ("lower", 1.0), "cpu_pct": ("lower", 1.0),
+                "voice_delay_err_ms": ("lower", 0.5), "voice_detune_err_cents": ("lower", 0.0, 1.0),
+                "voice_pitch_jitter_cents": ("lower", 0.5), "voice_splice_db": ("lower", 0.5)}))
 
 _add(Module(
     key="choir", title="Choir", mix_param="choirMix",
@@ -251,8 +297,10 @@ _add(Module(
     cases=[Case("default", headliner={"choirVoices": 1, "choirDetune": 10, "choirTiming": 18, "choirHumanize": 50, "choirWidth": 80,
                                       "choirDensity": 50, "choirMix": 35},
                 procedures=["mod_widen", "vocal_width", "nulls", "cpu"])],
-    tolerances={"comb_depth_db": ("lower", 1.0), "am_roughness_db": ("lower", 0.5), "lr_corr": ("lower", 0.1),
-                "mono_loss_db": ("lower", 1.0), "cpu_pct": ("lower", 1.0)}))
+    # Ruling (voices track): the single 440 Hz roughness is beat-phase luck for a 4-voice choir (0.7-3.1 dB at the
+    # same levels); it stays as information, the 6-tone mean is gated instead.
+    tolerances={"comb_depth_db": ("lower", 1.0), "am_roughness_db": ("info", 0.0), "am_roughness_multi_db": ("lower", 0.5),
+                "lr_corr": ("lower", 0.1), "mono_loss_db": ("lower", 1.0), "cpu_pct": ("lower", 1.0)}))
 
 # ---------------------------------------------------------------------------------------------
 # Delay vs Timeless 3 (375 ms, 30 % feedback, 300 Hz - 6 kHz filters, 100 % wet)
