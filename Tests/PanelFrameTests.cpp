@@ -104,9 +104,7 @@ public:
                         const auto base = dsp::splitInstanceParamId (pid).first;
                         const bool pendingPanel = base.startsWith ("doublerV") || base.startsWith ("doublerMod")
                                                || base == "doublerLowCut" || base == "doublerDry"
-                                               || base.startsWith ("smoothW") || base == "pulseShape" || base == "pulseAmount"
-                                               || base.startsWith ("satLow") || base.startsWith ("satMid") || base.startsWith ("satHigh")
-                                               || base.startsWith ("satXover") || base == "satMultiband" || base == "satLink";
+                                               || base.startsWith ("smoothW") || base == "pulseShape" || base == "pulseAmount";
                         if (pendingPanel)
                             continue;
                         expect (isOnSwitch || curveHandle || eqBand || reached.contains (pid), name + ": reaches " + pid);
