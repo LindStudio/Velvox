@@ -3,6 +3,7 @@
 #include "../Parameters/ParameterLayout.h"
 #include "../StateKeys.h"
 #include "../Parameters/EqBands.h"
+#include "../Presets/UndoHistory.h"
 #include <map>
 
 namespace velvox::check
@@ -364,10 +365,26 @@ namespace velvox::check
     }
 
     //==========================================================================
-    void applyResolvedFix (juce::AudioProcessorValueTreeState& apvts, const ResolvedFix& fix)
+    void applyResolvedFix (juce::AudioProcessorValueTreeState& apvts, const ResolvedFix& fix, UndoHistory* history)
     {
         if (fix.empty())
             return;
+        if (history != nullptr)
+        {
+            // The plugin's one global history: the transaction records values and routing before
+            // and after, the gestures inside belong to it
+            const UndoHistory::ScopedTransaction step (*history, fix.name);
+            for (auto& p : fix.params)
+                if (auto* param = apvts.getParameter (p.paramId))
+                {
+                    param->beginChangeGesture();
+                    param->setValueNotifyingHost (param->convertTo0to1 (p.value));
+                    param->endChangeGesture();
+                }
+            if (fix.routing.has_value())
+                apvts.state.setProperty (statekeys::routing, fix.routing->toString(), nullptr);
+            return;
+        }
         auto* undo = apvts.undoManager;
         if (undo != nullptr)
             undo->beginNewTransaction (fix.name);

@@ -72,7 +72,8 @@ namespace velvox
         juce::String transactionName;
         ParameterSnapshot transactionBefore;
         juce::var transactionPreset;
-        int openGestures = 0;                  // gestures begun and not ended yet (nested ones included)
+        std::vector<float> transactionRaw;     // every parameter (normalised) when the transaction began
+        int openGestures = 0;                 // gestures begun and not ended yet (nested ones included)
         std::map<int, float> gestureBefore;    // parameter index -> normalised value when its gesture began
         std::vector<int> gestureOrder;
 

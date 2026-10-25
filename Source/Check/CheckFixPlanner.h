@@ -16,6 +16,11 @@
 // Applying the same finding twice therefore never doubles a cut when the module sits after
 // VOCAL CHECK. When it sits before, the controller restarts the analysis after "Anwenden" and
 // blocks a second apply on the stale measurement (VocalCheckController).
+namespace velvox
+{
+    class UndoHistory;
+}
+
 namespace velvox::check
 {
     using ValueLookup = std::function<float (const juce::String& paramId)>;   // real units, full ids
@@ -72,8 +77,10 @@ namespace velvox::check
     ResolvedFix planFixes (const std::vector<std::pair<FixAction, juce::String>>& fixes, const FixContext& context,
                            const juce::String& name);
 
-    // Message thread. One undo transaction on apvts.undoManager (when the state has one):
-    // every parameter as a gesture, the routing property, then a flush of the parameter values
-    // into the state tree so all of it lands in the same transaction.
-    void applyResolvedFix (juce::AudioProcessorValueTreeState& apvts, const ResolvedFix& fix);
+    // Message thread. Every parameter as a gesture, then the routing property - as ONE undo step:
+    //  - with `history` (the plugin's global undo): one UndoHistory transaction named fix.name;
+    //    apvts.undoManager is not used (one history only, spec Q8)
+    //  - without: one transaction on apvts.undoManager when the state has one (stand-alone use),
+    //    with a flush of the parameter values into the state tree so all of it lands in it.
+    void applyResolvedFix (juce::AudioProcessorValueTreeState& apvts, const ResolvedFix& fix, UndoHistory* history = nullptr);
 }
