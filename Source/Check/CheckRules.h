@@ -32,4 +32,6 @@ namespace velvox::check
     // German number formats used by the texts: "3,5 kHz", "300 Hz", "−3 dB", "+4 dB"
     juce::String hzText (float hz);
     juce::String dbText (float db, bool withPlus = true);
+    // A level in dBFS without the unit, signed on both sides of 0: "+3", "−0,5", "0"
+    juce::String dbfsText (float dbfs);
 }

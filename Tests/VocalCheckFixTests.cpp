@@ -7,6 +7,7 @@
 #include "Check/CheckTypes.h"
 #include "Check/CheckTargets.h"
 #include "Check/CheckFixPlanner.h"
+#include "Check/CheckRules.h"
 #include "Parameters/ParameterLayout.h"
 #include "DSP/Instances.h"
 #include "StateKeys.h"
@@ -105,6 +106,27 @@ public:
         rules();
         fixModel();
         controller();
+
+        beginTest ("Texts: dBFS values carry a sign above 0 dBFS (headroom)");
+        {
+            expectEquals (check::dbfsText (3.0f), juce::String ("+3"));
+            expectEquals (check::dbfsText (-0.5f), juce::String::fromUTF8 ("\xe2\x88\x92" "0,5"));
+            expectEquals (check::dbfsText (0.0f), juce::String ("0"));
+            expectEquals (check::dbfsText (0.2f), juce::String ("0"), "rounds to half dB first");
+            AnalysisResult r;
+            r.enoughMaterial = true;
+            r.voicedSeconds = 12.0f;
+            r.analysedSeconds = 14.0f;
+            r.peakDb = 3.0f;
+            check::evaluate (r, check::Genre::party);
+            const auto* f = findId (r, "headroom");
+            expect (f != nullptr, "headroom finding");
+            if (f != nullptr)
+            {
+                expectEquals (f->problem, juce::String ("Kaum Headroom (+3 dBFS)"));
+                expect (f->detail.contains ("+3 dBFS"), f->detail);
+            }
+        }
 
         beginTest ("Finding schema: id, category, German problem / fix text, confidence above the threshold");
         {
