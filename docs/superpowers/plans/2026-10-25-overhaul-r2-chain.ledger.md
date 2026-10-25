@@ -14,3 +14,14 @@ Ruling: Check cannot be soloed and is never bypassed by a solo — why: it only 
 from listening — cost if wrong: none audible.
 
 Ruling: Solo.h is header-only — why: no edit to the shared VELVOX_SOURCES list (merge hot-spot) — cost if wrong: none.
+
+Task 2: complete (processor solo state: getSolo / setSolo / toggleSolo / isSoloed / isSoloActive, applied in processBlock after
+the macros; 969 checks green. Click test: solo switching is exactly as smooth as making the same changes by hand
+(max curvature 0.00079 with pitch on / 0.00026 without, identical to the by-hand runs); latency and structure switches unchanged)
+
+Ruling: Solo ends when the soloed instance leaves the routing (checked in syncRoutingFromState) and when a state is loaded
+(setStateInformation) — why: nothing may stay silently bypassed; a loaded project must sound as saved — cost if wrong: user
+re-clicks S after an undo that removed and re-added the module.
+
+Ruling: Solo is stored as a selection code in a std::atomic<int> on the processor (like monoMonitor) — why: survives editor
+re-creation within a session (DAW window close/open is handled by the editor rule in Task 3), lock-free for the audio thread.

@@ -3,6 +3,7 @@
 #include "ProductInfo.h"
 #include "StateKeys.h"
 #include "Parameters/RoutingMigration.h"
+#include "DSP/Solo.h"
 
 using namespace velvox;
 
@@ -303,8 +304,29 @@ void VelvoxAudioProcessor::syncRoutingFromState()
     const auto text = apvts.state.getProperty (statekeys::routing).toString();
     const auto routing = text.isEmpty() ? dsp::Routing::defaults() : dsp::Routing::fromString (text);
     routingShared.store (routing);
+    // A soloed instance that left the chain: the solo ends (nothing stays bypassed by it)
+    if (const int solo = getSolo(); solo >= 0 && ! routing.contains (dsp::selectionModule (solo), dsp::selectionInstance (solo)))
+        soloCode.store (-1);
     if (juce::MessageManager::existsAndIsCurrentThread())
         triggerAsyncUpdate();   // latency follows the saturation / pitch instances in the chain
+}
+
+void VelvoxAudioProcessor::setSolo (int code)
+{
+    if (code >= 0)
+    {
+        const auto id = dsp::selectionModule (code);
+        if ((int) id < 0 || (int) id >= dsp::numModules || ! dsp::canSolo (id)
+            || ! getRouting().contains (id, dsp::selectionInstance (code)))
+            return;
+    }
+    soloCode.store (code < 0 ? -1 : code);
+}
+
+bool VelvoxAudioProcessor::toggleSolo (int code)
+{
+    setSolo (isSoloed (code) ? -1 : code);
+    return isSoloed (code);
 }
 
 void VelvoxAudioProcessor::syncMixLawFromState()
@@ -440,6 +462,10 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     mixLawShared.tryLoad (audioMixLaws);
     auto settings = dsp::applyMacros (reader.read (audioRouting, monoMonitor.load (std::memory_order_relaxed)), reader.readMacros());
     settings.mixLaws = audioMixLaws;
+    // Module solo (listening aid): every other instance bypassed, latency unchanged
+    if (const int solo = soloCode.load (std::memory_order_relaxed); solo >= 0)
+        if (audioRouting.contains (dsp::selectionModule (solo), dsp::selectionInstance (solo)))
+            dsp::applySolo (settings, dsp::selectionModule (solo), dsp::selectionInstance (solo));
 
     if (auto* hostPlayHead = getPlayHead())
         if (const auto position = hostPlayHead->getPosition())
@@ -557,6 +583,7 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
 
     auto tree = juce::ValueTree::fromXml (*xml);
     eqbands::ScopedBridgeSuspend noEqBridge (apvts);   // values are restored as they were saved
+    soloCode.store (-1);   // a loaded project is heard as it is (solo is a listening aid, never saved)
 
     if (const auto ab = tree.getChildWithName (abTreeType); ab.isValid())
         tree.removeChild (ab, nullptr);

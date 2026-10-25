@@ -88,6 +88,16 @@ public:
     bool isMonoMonitor() const noexcept { return monoMonitor.load(); }
     void setMonoMonitor (bool shouldBeMono) noexcept { monoMonitor.store (shouldBeMono); }
 
+    // Module solo (0.6.1): every other module instance bypassed, only this one heard (DSP/Solo.h).
+    // A listening aid like mono: not a parameter, not saved, never an undo step. One solo at a time
+    // (selection code, -1 = none). It ends when the instance leaves the chain, a state is loaded or the
+    // editor closes. Message thread for the setters.
+    int getSolo() const noexcept { return soloCode.load (std::memory_order_relaxed); }
+    bool isSoloed (int selectionCode) const noexcept { return selectionCode >= 0 && getSolo() == selectionCode; }
+    bool isSoloActive() const noexcept { return getSolo() >= 0; }
+    void setSolo (int selectionCode);          // -1 ends it; ignored for Check and instances not in the chain
+    bool toggleSolo (int selectionCode);       // returns true when that instance is soloed afterwards
+
     // Beat sidechain status (written by the audio thread, lock-free).
     // Levels are short-term RMS in dBFS (~300 ms), measured before any processing.
     struct SidechainStatus
@@ -170,6 +180,7 @@ private:
     velvox::SettingsReader reader;
 
     std::atomic<bool> monoMonitor { false };
+    std::atomic<int> soloCode { -1 };
     CallbackLoad callbackLoad;
 
     // Sidechain / vocal level (audio thread state + published values)
