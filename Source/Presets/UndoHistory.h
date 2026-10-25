@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ParameterSnapshot.h"
+#include <optional>
 
 namespace velvox
 {
@@ -53,6 +54,11 @@ namespace velvox
         juce::String getRedoName() const;
         int getNumSteps() const;   // steps that can be undone (for tests)
         void clear();
+
+        // Asked before a step is recorded: a state the step must undo to instead of the one it saw
+        // (the processor answers with the auto-mix "Nachher" state while "Vorher" is shown, and ends
+        // that compare). The step then becomes a whole-state step from that state to the current one.
+        std::function<std::optional<ParameterSnapshot>()> takeCompareBase;
 
         // Clock (ms) for coalescing quick repeats; tests set their own, nullptr = the real one
         void setClockForTests (std::function<juce::uint32()> clock) { clockForTests = std::move (clock); }

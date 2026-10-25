@@ -44,6 +44,9 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
     // Undo: the plugin's own gestures, preset loads and the automatic mix (one step each)
     addListener (&gestureListener);
     presetManager.setUndoHistory (&undoHistory);
+    // An edit while the auto-mix "Vorher" is shown ends that compare and keeps the edit; its undo step
+    // leads back to the "Nachher" state (spec Q3 / Q8, final-pass ruling)
+    undoHistory.takeCompareBase = [this] { return autoMix.endCompareForEdit(); };
     autoMix.onApplying = [this] (bool starting, bool asStep)
     {
         if (asStep)

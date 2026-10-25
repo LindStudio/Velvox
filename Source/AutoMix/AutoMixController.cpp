@@ -348,6 +348,17 @@ namespace velvox::automix
         sendChangeMessage();
     }
 
+    std::optional<ParameterSnapshot> AutoMixController::endCompareForEdit()
+    {
+        if (! showingPrevious)
+            return std::nullopt;
+        auto nachher = mixSnapshot;   // what "Nachher" held (the mix with the user's tweaks)
+        showingPrevious = false;
+        mixSnapshot = ParameterSnapshot::capture (apvts, mixSnapshot.name);   // the edited state is the new "Nachher"
+        sendChangeMessage();
+        return nachher;
+    }
+
     void AutoMixController::restorePrevious()
     {
         if (! hasPreviousSnapshot)

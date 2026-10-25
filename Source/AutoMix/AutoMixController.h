@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "AutoMixEngine.h"
 #include "../Presets/ParameterSnapshot.h"
+#include <optional>
 
 namespace velvox::automix
 {
@@ -92,6 +93,11 @@ namespace velvox::automix
         std::function<void (bool starting, bool asUndoStep)> onApplying;
         // Back to the state before the last automatic mix
         void restorePrevious();
+
+        // An edit (an undo step about to be recorded) while "Vorher" is shown: the compare ends and
+        // the edited state is kept as the current one ("Nachher" from now on). Returns the state the
+        // step must undo to - the "Nachher" state the user left - or nothing when no compare is on.
+        std::optional<ParameterSnapshot> endCompareForEdit();
 
         // ---- persistence (called from get/setStateInformation)
         void writeState (juce::ValueTree& pluginState) const;

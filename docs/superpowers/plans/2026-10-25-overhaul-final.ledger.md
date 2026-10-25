@@ -39,3 +39,16 @@ Test (MacroTests): "SPACE drag on a fresh instance: the insert -> send switch is
   to the end of the chain is inaudible, a full-signal fade is not. Cost if wrong: a tiny step in a -30 dB wet signal.
 - Ruling: recording routing side effects in gesture steps also makes "module switched on by a gesture" undo remove the
   instance it inserted (exact undo); before, the instance stayed in the chain after undo (inaudible, off).
+
+Task 4: complete (Vorher/Nachher). An undo step recorded while "Vorher" is shown (a gesture or a transaction) asks
+`UndoHistory::takeCompareBase` → `AutoMixController::endCompareForEdit()`: the compare ends (showingPrevious = false), the
+edited state becomes the new "Nachher" (mixSnapshot), and the step is recorded as a whole-state step from the OLD "Nachher"
+state (the mix with tweaks the user left) to the edited state (+ raw extras for parameters a snapshot leaves out).
+Test (CompareTests): "An edit while Vorher is shown ends the compare and keeps the edit; undo returns to Nachher exactly"
+(failed first: compare stayed on, Nachher discarded the edit, undo landed on a mixed state).
+- Ruling: "editing in Vorher ends the compare and keeps the edit as the new state" (not "Nachher updates the snapshot") — why:
+  nothing is ever discarded silently, the Vorher button still shows the state before the mix afterwards, and the undo history
+  stays exact: Vorher/Nachher switches are not steps, so a step recorded on the Vorher side would otherwise undo into the
+  Nachher state with Vorher values; rebasing the step onto the Nachher state makes undo land exactly where the user was before
+  pressing Vorher, and every older step was recorded on that side. Cost if wrong: after such an edit the auto-mix result is
+  only reachable through undo (one step), not through the Nachher button.

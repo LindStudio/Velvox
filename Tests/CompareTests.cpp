@@ -216,6 +216,49 @@ public:
             h2.proc.getAutoMix().showPrevious (true);
             expectWithinAbsoluteError (h2.get (pid::compRatio), 2.0f, 0.01f);
         }
+
+        beginTest ("An edit while Vorher is shown ends the compare and keeps the edit; undo returns to Nachher exactly");
+        {
+            Harness h;
+            h.set (pid::compRatio, 2.0f);
+            h.set (pid::compThreshold, -30.0f);
+            runMix (h);
+            auto& am = h.proc.getAutoMix();
+            auto& undo = h.proc.getUndo();
+            const auto nachher = ParameterSnapshot::capture (h.proc.getState());
+            am.showPrevious (true);
+            expectWithinAbsoluteError (h.get (pid::compRatio), 2.0f, 0.01f);
+            const int stepsBefore = undo.getNumSteps();
+
+            auto* p = h.proc.getState().getParameter (pid::compRatio);   // the user edits "Vorher"
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 (7.0f));
+            p->endChangeGesture();
+            expect (! am.isShowingPrevious(), "the edit ends the compare");
+            expectWithinAbsoluteError (h.get (pid::compRatio), 7.0f, 0.01f, "the edit is kept");
+            expectWithinAbsoluteError (h.get (pid::compThreshold), -30.0f, 0.01f, "on top of the Vorher state");
+            am.showPrevious (false);   // "Nachher" now: nothing to switch back to, nothing is discarded
+            expectWithinAbsoluteError (h.get (pid::compRatio), 7.0f, 0.01f, "Nachher does not discard the edit");
+            expectEquals (undo.getNumSteps(), stepsBefore + 1, "one step");
+
+            expect (undo.undo());
+            expect (! nachher.differsFrom (h.proc.getState()), "undo returns to the Nachher state exactly");
+            expect (! am.isShowingPrevious());
+            expect (undo.redo());
+            expectWithinAbsoluteError (h.get (pid::compRatio), 7.0f, 0.01f, "redo: the edit again");
+            expectWithinAbsoluteError (h.get (pid::compThreshold), -30.0f, 0.01f);
+
+            // The compare still works afterwards: Vorher = before the mix, Nachher = the edited state
+            am.showPrevious (true);
+            expectWithinAbsoluteError (h.get (pid::compRatio), 2.0f, 0.01f);
+            am.showPrevious (false);
+            expectWithinAbsoluteError (h.get (pid::compRatio), 7.0f, 0.01f);
+
+            // Undo of the Auto-Mix step itself stays consistent too: back to the state before it
+            undo.undo();
+            undo.undo();
+            expectWithinAbsoluteError (h.get (pid::compRatio), 2.0f, 0.01f);
+        }
     }
 };
 

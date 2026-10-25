@@ -187,6 +187,10 @@ namespace velvox
         if (after.values == transactionBefore.values && after.routing == transactionBefore.routing
             && after.mixLaw == transactionBefore.mixLaw && extras.empty())
             return;
+        // Edited while the auto-mix "Vorher" was shown: undo goes back to the "Nachher" state
+        if (takeCompareBase != nullptr)
+            if (auto base = takeCompareBase())
+                transactionBefore = std::move (*base);
         auto action = std::make_unique<SnapshotAction> (*this, std::move (transactionBefore), std::move (after));
         action->extras = std::move (extras);
         action->presetBefore = transactionPreset;
@@ -246,6 +250,22 @@ namespace velvox
         const auto routingNow = apvts.state.getProperty (statekeys::routing), lawNow = apvts.state.getProperty (statekeys::mixLaw);
         if (routingNow != gestureRouting || lawNow != gestureLaw)
             structure = ValueAction::Structure { gestureRouting, routingNow, gestureLaw, lawNow };
+
+        // Edited while the auto-mix "Vorher" was shown: one whole-state step from "Nachher" to here
+        if (takeCompareBase != nullptr)
+            if (auto base = takeCompareBase())
+            {
+                auto after = ParameterSnapshot::capture (apvts, name);
+                std::vector<RawChange> extras;   // edited parameters a snapshot leaves out (input gain ...)
+                for (const auto& c : changes)
+                    if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (params[c.index]); rp != nullptr && after.values.count (rp->getParameterID()) == 0)
+                        extras.push_back ({ c.index, c.before, c.after });
+                auto action = std::make_unique<SnapshotAction> (*this, std::move (*base), std::move (after));
+                action->extras = std::move (extras);
+                action->presetBefore = action->presetAfter = apvts.state.getProperty (presetNameProperty);
+                addStep (std::move (action), name);
+                return;
+            }
 
         // A quick repeat on the same parameter (wheel notches, arrow steps): part of the last step
         if (coalesceCandidate != nullptr && changes.size() == 1 && gestureStartMs - lastStepMs <= coalesceMs
