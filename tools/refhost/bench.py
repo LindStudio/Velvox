@@ -229,7 +229,8 @@ class Ctx:
                 params = list(r.params) + list(c.refs.get(r.name, []))
                 if r.name in self.calibrated.get(c.name, {}):
                     k, v = self.calibrated[c.name][r.name]
-                    params = [p for p in params if p[0] != k] + [(k, v)]
+                    keys = [k] + list(c.calibrate[r.name].also)
+                    params = [p for p in params if p[0] not in keys] + [(kk, v) for kk in keys]
                 out.append(Side(r.name, "ref", r.plugin, r.sub, params, r.setn))
         return out
 
@@ -344,7 +345,7 @@ def calibrate(ctx: Ctx, case: M.Case):
         tried = {}
 
         def measure(v):
-            side = Side(ref_name, "ref", ref.plugin, ref.sub, base + [(cal.param, f"{v:g}")], ref.setn)
+            side = Side(ref_name, "ref", ref.plugin, ref.sub, base + [(p, f"{v:g}") for p in [cal.param] + list(cal.also)], ref.setn)
             r = ctx.render("calib", x, sides=[side], tag=f"_{cal.param.replace(' ', '')}{v:g}")
             tried[v] = probe_value(cal.probe, x, r[ref_name]) if ref_name in r else None
             return tried[v]

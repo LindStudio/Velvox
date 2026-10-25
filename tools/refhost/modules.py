@@ -28,6 +28,7 @@ class Calib:
     param: str
     values: list
     probe: str          # see bench.PROBES
+    also: list = field(default_factory=list)        # further parameters that get the same value (e.g. every band's drive)
 
 
 @dataclass
@@ -175,6 +176,20 @@ _add(Module(
              refs={"Saturn 2": [("Band 1 Style", "Warm Tube")]},
              procedures=["sat_tones"],
              calibrate={"Saturn 2": Calib("Band 1 Drive", [5, 10, 15, 20, 30, 40, 50, 65, 80, 100], "thd_1k")}),
+        # 0.6 multiband: Low / Mid / High at 250 Hz / 4 kHz, Tape in every band, the same drive everywhere
+        # (Saturn 2: 3 bands, 24 dB/oct crossovers; all band drives calibrated together on the 1 kHz THD = mid band)
+        Case("tape3band", headliner={"satDrive": 12, "satCharacter": 1, "satMix": 100, "satOutput": 0, "satMultiband": 1,
+                                     "satXoverLow": 250, "satXoverHigh": 4000,
+                                     "satLowDrive": 12, "satMidDrive": 12, "satHighDrive": 12,
+                                     "satLowChar": 1, "satMidChar": 1, "satHighChar": 1},
+             refs={"Saturn 2": [("Num Active Bands", "3"), ("Band 1 Crossover Frequency", "250"), ("Band 2 Crossover Frequency", "4000"),
+                                ("Band 1 Crossover Slope", "24 dB/oct"), ("Band 2 Crossover Slope", "24 dB/oct"),
+                                ("Band 1 Style", "Warm Tape"), ("Band 2 Style", "Warm Tape"), ("Band 3 Style", "Warm Tape"),
+                                ("Band 2 Mix", "100"), ("Band 3 Mix", "100"), ("Band 2 Dynamics", "0"), ("Band 3 Dynamics", "0"),
+                                ("Band 2 Feedback Amount", "0"), ("Band 3 Feedback Amount", "0")]},
+             procedures=["sat_tones", "vocal", "nulls", "cpu"],
+             calibrate={"Saturn 2": Calib("Band 2 Drive", [5, 10, 15, 20, 30, 40, 50, 65, 80, 100], "thd_1k",
+                                          also=["Band 1 Drive", "Band 3 Drive"])}),
     ],
     tolerances={"aliasing_db": ("lower", 3.0), "thd_1k_db": ("match", 1.0), "thd_1k_m24_db": ("info", 0.0),
                 "crest_reduction_db": ("info", 0.0), "st_loudness_std_lu": ("info", 0.0),

@@ -164,25 +164,35 @@ Calibrated: vocal: soothe2 depth=0
 <!-- BEGIN sat -->
 #### Saturation (`sat`)
 
-Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.25
+Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.25; tape3band: Saturn 2 Band 2 Drive=56.0938
 
 | case | metric | Headliner | Saturn 2 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| tape | thd_1k_db (dB) | -19.8 | -19.9 | 0.07 | ref ± 1.00 | pass |
-| tape | thd_1k_m24_db (dB) | -38.4 | -45.8 | 7.38 | ref − 0.00 | info |
-| tape | h2_h3_db (dB) | -116 | -113 | -2.51 | ref − 0.00 | info |
-| tape | aliasing_db (dB) | -36.6 | -70.2 | 33.6 | ref + 3.00 | FAIL |
-| tape | imd_db (dB) | -5.75 | -2.41 | -3.34 | ref + 3.00 | pass |
-| tape | crest_reduction_db (dB) – mean of clips | 7.41 | 8.72 | -1.31 | ref − 0.00 | info |
+| tape | thd_1k_db (dB) | -19.8 | -19.9 | 0.05 | ref ± 1.00 | pass |
+| tape | thd_1k_m24_db (dB) | -38.4 | -45.8 | 7.35 | ref − 0.00 | info |
+| tape | h2_h3_db (dB) | -116 | -113 | -2.86 | ref − 0.00 | info |
+| tape | aliasing_db (dB) | -91.5 | -70.2 | -21.2 | ref + 3.00 | pass |
+| tape | imd_db (dB) | -5.74 | -2.41 | -3.33 | ref + 3.00 | pass |
+| tape | crest_reduction_db (dB) – mean of clips | 7.38 | 8.72 | -1.34 | ref − 0.00 | info |
 | tape | st_loudness_std_lu (LU) – mean of clips | 3.20 | 3.27 | -0.07 | ref − 0.00 | info |
-| tape | mix0_null_db (dB) – latency 3 | -152 | – | – | ≤ -60.0 | pass |
+| tape | mix0_null_db (dB) – latency 5 | -152 | – | – | ≤ -60.0 | pass |
 | tape | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| tape | cpu_pct (%) – median over this module's renders | 0.37 | 2.51 | -2.13 | ref + 1.00 | pass |
-| tube | thd_1k_db (dB) | -15.2 | -15.3 | 0.08 | ref ± 1.00 | pass |
-| tube | thd_1k_m24_db (dB) | -24.9 | -23.9 | -1.05 | ref − 0.00 | info |
-| tube | h2_h3_db (dB) | 13.2 | -13.5 | 26.7 | ref − 0.00 | info |
-| tube | aliasing_db (dB) | -47.1 | -66.2 | 19.1 | ref + 3.00 | FAIL |
-| tube | imd_db (dB) | -5.32 | -1.52 | -3.79 | ref + 3.00 | pass |
+| tape | cpu_pct (%) – median over this module's renders | 0.93 | 2.50 | -1.57 | ref + 1.00 | pass |
+| tube | thd_1k_db (dB) | -15.3 | -15.3 | 0.07 | ref ± 1.00 | pass |
+| tube | thd_1k_m24_db (dB) | -24.9 | -23.9 | -1.06 | ref − 0.00 | info |
+| tube | h2_h3_db (dB) | 13.3 | -13.5 | 26.8 | ref − 0.00 | info |
+| tube | aliasing_db (dB) | -91.5 | -66.2 | -25.3 | ref + 3.00 | pass |
+| tube | imd_db (dB) | -5.31 | -1.52 | -3.79 | ref + 3.00 | pass |
+| tape3band | thd_1k_db (dB) | -20.0 | -20.1 | 0.12 | ref ± 1.00 | pass |
+| tape3band | thd_1k_m24_db (dB) | -38.6 | -45.9 | 7.35 | ref − 0.00 | info |
+| tape3band | h2_h3_db (dB) | -116 | -111 | -4.92 | ref − 0.00 | info |
+| tape3band | aliasing_db (dB) | -91.5 | -69.0 | -22.6 | ref + 3.00 | pass |
+| tape3band | imd_db (dB) | -109 | -36.7 | -72.1 | ref + 3.00 | pass |
+| tape3band | crest_reduction_db (dB) – mean of clips | 5.48 | 6.28 | -0.80 | ref − 0.00 | info |
+| tape3band | st_loudness_std_lu (LU) – mean of clips | 3.05 | 3.08 | -0.03 | ref − 0.00 | info |
+| tape3band | mix0_null_db (dB) – latency 5 | -152 | – | – | ≤ -60.0 | pass |
+| tape3band | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
+| tape3band | cpu_pct (%) – median over this module's renders | 1.16 | 2.63 | -1.46 | ref + 1.00 | pass |
 <!-- END sat -->
 
 <!-- BEGIN pitch -->
@@ -352,6 +362,10 @@ Stutter, Pulse and Vocal Check pass at baseline.
    THD unchanged (`thd_1k_db` stays the calibration point). The planned 3-band split (spec 5.6) must not add aliasing:
    oversample once around all three shapers. Character note (info): Tube is even-dominant (H2/H3 +13 dB) where Saturn's
    Warm Tube is odd-dominant (−13 dB), and Tape distorts more at −24 dBFS (−38 vs −46 dB) – a choice, not a defect.
+   **Resolved (overhaul/sat):** 4× hiir half-band up, ADAA (double), half-band + order-11 elliptic decimator (stop band
+   from the base Nyquist – a half-band alone lets 5 × 4987 Hz fold back); aliasing −91.5 dB in all cases incl. the new
+   3-band case (Saturn 2 3-band −69.0), THD within 0.12 dB of the calibration, latency 5 samples (was 3), CPU 0.9 % /
+   1.2 % (3 bands) vs Saturn 2 2.5 / 2.6 %. After-renders: `velvox-bench\2026-10-25\modules-after\sat\`.
 2. **EQ – cramping near Nyquist: a 15 kHz bell is 5.5 dB off** its own shape (Pro-Q 4: 0.06 dB). The +6 dB "air" bell
    lands narrower and lower; the 12 kHz shelf in the vocal case is 0.64 dB off. *Do:* Vicanek magnitude-matched
    biquads (or MZTi / 2× oversampling for bands above ~fs/8) for bell, shelves and cuts; the cut/shelf prototypes already

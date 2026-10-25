@@ -67,6 +67,8 @@ namespace velvox
         Raw rideOn, rideTarget, rideAmount, rideMaxBoost, rideMaxCut, rideResponse, ridePhrase, rideTransient, rideSilence;
         Raw reverbEarly, reverbDiffusion, reverbMod, reverbBass, reverbHighCut;
         Raw delaySpread, delayDrive, delayDiffusion, delayMod;
+        Raw satMultiband, satXoverLow, satXoverHigh;            // 0.6 Saturation multiband
+        std::array<Raw, 3> satBandOn, satBandDrive, satBandChar;
         struct EqBandRaw { Raw on, type, freq, gain, q, slope, role; };
         std::array<EqBandRaw, dsp::maxEqBands> eqBands;
         Raw eqLegacyResponse;

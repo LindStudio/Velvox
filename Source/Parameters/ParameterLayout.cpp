@@ -91,6 +91,37 @@ namespace velvox
             }
         }
 
+        // 0.6 Saturation multiband (spec 5.6): off by default = the single-band module of 0.2-0.5
+        void appendSatMultibandSpecs (std::vector<ParameterSpec>& specs)
+        {
+            const juce::StringArray characters { "Warm", "Tape", "Tube", "Hard" };
+            specs.push_back ({ pid::satMultiband, "Sat Multiband", "Saturation", T::Bool, 0, 1, 0, 0, "", {},
+                               "Splits the voice into Low / Mid / High and saturates each band on its own." });
+            specs.push_back ({ pid::satXoverLow, "Sat Crossover Low", "Saturation", T::Float, 60.0f, 1000.0f, 250.0f, 250.0f, "Hz", {},
+                               "Border between the Low and the Mid band." });
+            specs.push_back ({ pid::satXoverHigh, "Sat Crossover High", "Saturation", T::Float, 1000.0f, 12000.0f, 4000.0f, 4000.0f, "Hz", {},
+                               "Border between the Mid and the High band (kept at least 1.5 x the low crossover)." });
+            const struct { const char *on, *drive, *character, *name; int defaultCharacter; } bands[] {
+                { pid::satLowOn, pid::satLowDrive, pid::satLowChar, "Low", 0 },
+                { pid::satMidOn, pid::satMidDrive, pid::satMidChar, "Mid", 1 },
+                { pid::satHighOn, pid::satHighDrive, pid::satHighChar, "High", 1 },
+            };
+            static std::deque<std::string> strings;
+            const auto keep = [] (const juce::String& t) { strings.push_back (t.toStdString()); return strings.back().c_str(); };
+            for (const auto& b : bands)
+            {
+                const juce::String n (b.name);
+                specs.push_back ({ b.on, keep ("Sat " + n + " On"), "Saturation", T::Bool, 0, 1, 1, 0, "", {},
+                                   keep ("Saturates the " + n.toLowerCase() + " band (off: the band passes clean).") });
+                specs.push_back ({ b.drive, keep ("Sat " + n + " Drive"), "Saturation", T::Float, 0.0f, 24.0f, 6.0f, 0.0f, "dB", {},
+                                   keep ("Saturation amount of the " + n.toLowerCase() + " band (level compensated).") });
+                specs.push_back ({ b.character, keep ("Sat " + n + " Character"), "Saturation", T::Choice, 0, 3, (float) b.defaultCharacter, 0, "", characters,
+                                   keep ("Character of the " + n.toLowerCase() + " band.") });
+            }
+            specs.push_back ({ pid::satLink, "Sat Link", "Saturation", T::Bool, 0, 1, 1, 0, "", {},
+                               "Moving one band's drive moves all three together (their differences stay)." });
+        }
+
         // Parameters of instances 2..n, generated from the instance-1 table
         void appendInstanceBanks (std::vector<ParameterSpec>& specs)
         {
@@ -393,6 +424,7 @@ namespace velvox
               "Slow wow and flutter on the repeats, like a tape echo." },
         };
             appendEqBandSpecs (table);
+            appendSatMultibandSpecs (table);
             appendInstanceBanks (table);
             return table;
         }();
