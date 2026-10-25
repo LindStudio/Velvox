@@ -1,4 +1,6 @@
 #include "UndoHistory.h"
+#include "../StateKeys.h"
+#include <optional>
 
 namespace velvox
 {
@@ -69,13 +71,18 @@ namespace velvox
 
         // Coalescing: a single-parameter step that continues this one (same parameter, starting
         // where this one ended) becomes part of it
-        bool extend (const Change& next)
+        bool extend (const Change& next, bool nextChangesStructure)
         {
-            if (changes.size() != 1 || changes[0].index != next.index || std::abs (changes[0].after - next.before) > 1.0e-6f)
+            if (nextChangesStructure || changes.size() != 1 || changes[0].index != next.index || std::abs (changes[0].after - next.before) > 1.0e-6f)
                 return false;
             changes[0].after = next.after;
             return true;
         }
+
+        // Routing / mix law the gesture changed as a side effect (e.g. SPACE turning a fresh delay /
+        // reverb insert into a send): restored after the values, so the step is exact
+        struct Structure { juce::var routingBefore, routingAfter, lawBefore, lawAfter; };
+        std::optional<Structure> structure;
 
         bool perform() override
         {
@@ -86,6 +93,8 @@ namespace velvox
             }
             for (const auto& c : changes)
                 apply (c.index, c.after);
+            if (structure)
+                applyStructure (structure->routingAfter, structure->lawAfter);
             return true;
         }
 
@@ -93,12 +102,21 @@ namespace velvox
         {
             for (auto it = changes.rbegin(); it != changes.rend(); ++it)
                 apply (it->index, it->before);
+            if (structure)
+                applyStructure (structure->routingBefore, structure->lawBefore);
             return true;
         }
 
         int getSizeInUnits() override { return 1; }
 
     private:
+        void applyStructure (const juce::var& routing, const juce::var& law)
+        {
+            const juce::ScopedValueSetter<bool> guard (owner.restoring, true);
+            owner.apvts.state.setProperty (statekeys::routing, routing, nullptr);
+            owner.apvts.state.setProperty (statekeys::mixLaw, law, nullptr);   // after the routing (fresh instances)
+        }
+
         void apply (int index, float value)
         {
             const auto& params = owner.apvts.processor.getParameters();
@@ -185,7 +203,11 @@ namespace velvox
             return;
         // Gestures that start while another one is open belong to it (one step)
         if (openGestures == 0)
+        {
             gestureStartMs = nowMs();
+            gestureRouting = apvts.state.getProperty (statekeys::routing);
+            gestureLaw = apvts.state.getProperty (statekeys::mixLaw);
+        }
         if (gestureBefore.count (index) == 0)
         {
             gestureBefore[index] = params[index]->getValue();
@@ -219,9 +241,15 @@ namespace velvox
         if (changes.empty() || depth > 0 || ! isRecording())
             return;
 
+        // Routing / law changed by code reacting to the gesture (the SPACE macro's insert -> send)
+        std::optional<ValueAction::Structure> structure;
+        const auto routingNow = apvts.state.getProperty (statekeys::routing), lawNow = apvts.state.getProperty (statekeys::mixLaw);
+        if (routingNow != gestureRouting || lawNow != gestureLaw)
+            structure = ValueAction::Structure { gestureRouting, routingNow, gestureLaw, lawNow };
+
         // A quick repeat on the same parameter (wheel notches, arrow steps): part of the last step
         if (coalesceCandidate != nullptr && changes.size() == 1 && gestureStartMs - lastStepMs <= coalesceMs
-            && manager.canUndo() && ! manager.canRedo() && coalesceCandidate->extend (changes[0]))
+            && manager.canUndo() && ! manager.canRedo() && coalesceCandidate->extend (changes[0], structure.has_value()))
         {
             lastStepMs = nowMs();
             sendChangeMessage();
@@ -230,6 +258,7 @@ namespace velvox
 
         const bool single = changes.size() == 1;
         auto action = std::make_unique<ValueAction> (*this, std::move (changes));
+        action->structure = std::move (structure);
         auto* raw = action.get();
         addStep (std::move (action), name);
         if (single)

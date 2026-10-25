@@ -25,3 +25,17 @@ already captured and restored it); `switchToTrueMixLaw` ("Alte Mix-Kurve – ums
 (failed first: 0 steps, undo did not restore).
 - Ruling: only the user command is wrapped, not setLegacyMixLaw itself — markFreshInstances calls it from routing changes that
   can happen inside an open gesture, and a transaction begun there would drop that gesture's start values.
+
+Task 3: complete (SPACE insert -> send). (a) Undo: a gesture step now also records the routing and mix-law strings at the
+outermost gesture's begin and end; when code reacting to the gesture changed them (insertEngagedInstances' SPACE conversion,
+modules switched on by a gesture joining the chain), undo restores them after the values, redo re-applies them. A step with
+such a change never coalesces. (b) No dip: VocalChain::onlySilentSendSwitches() – when the pending routing differs from the
+active one only in the insert/send flag of delay/reverb instances whose return is <= -30 dB and whose dry gain is 1, the new
+routing is taken over at once instead of under the 2 x 8 ms routing fade (no latency change possible: same instances).
+Test (MacroTests): "SPACE drag on a fresh instance: the insert -> send switch is part of the undo step and has no dip"
+(failed first: dip -4.25 dB, undo left the send; now -0.20 dB, undo restores the inserts, redo the send).
+- Ruling: "silent" = return smoother <= -30 dB at the switch (not exactly 0) — in a host the macro value can reach the audio
+  thread one block before the routing, so the return may have started ramping; at -30 dB moving the wet from the insert point
+  to the end of the chain is inaudible, a full-signal fade is not. Cost if wrong: a tiny step in a -30 dB wet signal.
+- Ruling: recording routing side effects in gesture steps also makes "module switched on by a gesture" undo remove the
+  instance it inserted (exact undo); before, the instance stayed in the chain after undo (inaudible, off).

@@ -80,6 +80,7 @@ namespace velvox
         std::map<int, float> gestureBefore;    // parameter index -> normalised value when its gesture began
         std::vector<int> gestureOrder;
         std::function<juce::uint32()> clockForTests;
+        juce::var gestureRouting, gestureLaw;  // routing / mix law when the outermost gesture began
         juce::uint32 nowMs() const;
 
         // Wheel / step coalescing: JUCE's Slider::mouseWheelMove and ValueText::stepBy open and close

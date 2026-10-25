@@ -456,9 +456,15 @@ namespace velvox::dsp
         }
         meters.inputTap.push (io, numChannels, n);
 
-        // A pending routing change starts with a short fade-out of the old routing
+        // A pending routing change starts with a short fade-out of the old routing - except a mere
+        // insert / send switch of a silent delay / reverb, which is taken over at once (no dip)
         if (structureChangePending())
-            routeGain.setTargetValue (0.0f);
+        {
+            if (routeHold == 0 && ! routeGain.isSmoothing() && routeGain.getCurrentValue() >= 1.0f && onlySilentSendSwitches())
+                applyPendingStructure();
+            else
+                routeGain.setTargetValue (0.0f);
+        }
 
         // 3) Serial module instances in routing order
         for (const auto& slot : activeRouting)
@@ -808,6 +814,36 @@ namespace velvox::dsp
     bool VocalChain::structureChangePending() const noexcept
     {
         return pendingRouting != activeRouting || pendingPitchOn != activePitchOn;
+    }
+
+    bool VocalChain::onlySilentSendSwitches() const noexcept
+    {
+        if (pendingPitchOn != activePitchOn || pendingRouting.size() != activeRouting.size())
+            return false;
+        constexpr float silentReturn = 0.0316f;   // -30 dB
+        for (int i = 0; i < activeRouting.size(); ++i)
+        {
+            const auto& a = activeRouting[i];
+            const auto& p = pendingRouting[i];
+            if (a.id != p.id || a.instance != p.instance)
+                return false;
+            if (a.insert == p.insert)
+                continue;
+            const auto k = (size_t) a.instance;
+            if (a.id == ModuleId::delay)
+            {
+                if (delayReturn[k].getCurrentValue() > silentReturn || delayDry[k].getCurrentValue() < 0.999f)
+                    return false;
+            }
+            else if (a.id == ModuleId::reverb)
+            {
+                if (reverbReturn[k].getCurrentValue() > silentReturn || reverbDry[k].getCurrentValue() < 0.999f)
+                    return false;
+            }
+            else
+                return false;
+        }
+        return true;
     }
 
     void VocalChain::applyPendingStructure() noexcept

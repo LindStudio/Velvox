@@ -253,6 +253,10 @@ namespace velvox::dsp
         bool activePitchOn = false, pendingPitchOn = false;
         bool structureChangePending() const noexcept;
         void applyPendingStructure() noexcept;
+        // True when the pending routing differs from the active one only in the insert / send mode of
+        // delay / reverb instances that are silent right now (return <= -30 dB, dry untouched): such
+        // a switch needs no fade (the SPACE macro turning a fresh insert into a send mid-drag)
+        bool onlySilentSendSwitches() const noexcept;
 
         juce::AudioBuffer<float> work, dryForBypass, reverbIn;
         std::array<juce::AudioBuffer<float>, numDelays> delayWet;

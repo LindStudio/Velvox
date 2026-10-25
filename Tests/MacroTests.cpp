@@ -155,6 +155,60 @@ public:
             h2.proc.setStateInformation (block.getData(), (int) block.getSize());
             expectEquals (h2.proc.getState().state.getProperty (statekeys::uiMode).toString(), juce::String ("pro"));
         }
+
+        beginTest ("SPACE drag on a fresh instance: the insert -> send switch is part of the undo step and has no dip");
+        {
+            Harness h;   // fresh: delay / reverb are (unused) inserts
+            expect (h.proc.getRouting().isInsert (dsp::ModuleId::reverb, 0) && h.proc.getRouting().isInsert (dsp::ModuleId::delay, 0));
+            const auto routingBefore = h.proc.getRouting();
+            const auto in = h.noise (0.25f, 2.0, 21);
+            juce::AudioBuffer<float> out (in);
+            juce::MidiBuffer midi;
+            auto* space = h.proc.getState().getParameter (pid::macroSpace);
+            const int bs = h.blockSize, numBlocks = in.getNumSamples() / bs;
+            const int dragFrom = numBlocks / 3, dragTo = dragFrom + 20;
+            for (int b = 0; b < numBlocks; ++b)
+            {
+                if (b == dragFrom)
+                    space->beginChangeGesture();
+                if (b >= dragFrom && b < dragTo)
+                    space->setValueNotifyingHost ((float) (b - dragFrom + 1) / 20.0f);
+                if (b == dragTo)
+                    space->endChangeGesture();
+                juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), out.getNumChannels(), b * bs, bs);
+                h.proc.processBlock (view, midi);
+            }
+            expect (! h.proc.getRouting().isInsert (dsp::ModuleId::reverb, 0), "SPACE made the reverb a send");
+
+            // Level in 1024-sample windows: never more than 1 dB below the level before the drag
+            const int win = 1024;
+            const auto levelAt = [&] (int start)
+            {
+                double sum = 0.0;
+                for (int ch = 0; ch < out.getNumChannels(); ++ch)
+                    for (int i = start; i < start + win; ++i)
+                        sum += (double) out.getSample (ch, i) * out.getSample (ch, i);
+                return 10.0 * std::log10 (sum / (win * out.getNumChannels()) + 1.0e-30);
+            };
+            double ref = 0.0;
+            int refCount = 0;
+            for (int s = dragFrom * bs - 8 * win; s < dragFrom * bs; s += win, ++refCount)
+                ref += levelAt (s);
+            ref /= refCount;
+            double worst = 1.0e9;
+            for (int s = dragFrom * bs; s + win <= (dragTo + 20) * bs; s += win / 2)
+                worst = std::min (worst, levelAt (s) - ref);
+            logMessage ("deepest dip during the SPACE drag: " + juce::String (worst, 2) + " dB");
+            expectGreaterThan (worst, -1.0, "no routing dip");
+
+            auto& undo = h.proc.getUndo();
+            expectEquals (undo.getNumSteps(), 1, "the drag is one step");
+            expect (undo.undo());
+            expectWithinAbsoluteError (h.get (pid::macroSpace), 0.0f, 1.0e-4f);
+            expect (h.proc.getRouting() == routingBefore, "undo brings the inserts back");
+            expect (undo.redo());
+            expect (! h.proc.getRouting().isInsert (dsp::ModuleId::reverb, 0), "redo: send again");
+        }
     }
 };
 
