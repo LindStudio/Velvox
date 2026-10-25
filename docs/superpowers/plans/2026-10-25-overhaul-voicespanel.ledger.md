@@ -57,3 +57,7 @@ normalisation). Mutation run (leaveClassic call removed + pan drag direction inv
 
 Task 4: complete (help pages doubler / choir, screenshots in C:/Users/jakob/dev/velvox-wt/shots-voicespanel, full suite
 29965 checks passed, 0 failed)
+
+Merge: feature/automix 9cd3823 (smooth + pitch panels) merged. Conflicts DetailPanels.cpp / ModuleViews.cpp (overlapping deletions):
+resolved from their side + my deletions and factory lines; PanelFrameTests pendingPanel block removed entirely (no pending
+parameters remain). Full suite after the merge: 30150 checks passed, 0 failed.

@@ -30,7 +30,8 @@ namespace
         {
             if (auto* k = dynamic_cast<ui::Knob*> (child))
             {
-                out.knobs.add (k->getParamId());
+                if (k->getParamId().isNotEmpty())   // unbound knobs (linked controls like Smooth's Speed) have none
+                    out.knobs.add (k->getParamId());
                 out.knobAccents.push_back (k->slider.findColour (juce::Slider::rotarySliderFillColourId));
             }
             else if (auto* s = dynamic_cast<ui::Segments*> (child))

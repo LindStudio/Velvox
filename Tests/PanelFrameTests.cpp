@@ -28,6 +28,11 @@ namespace
         {
             if (const auto id = paramOf (child); id.isNotEmpty())
                 out.addIfNotAlreadyThere (id);
+            // Graph handles of the visual (e.g. Smooth's weighting points and limit edges; their own panel
+            // tests check that every listed parameter really is edited by the graph)
+            if (auto* view = dynamic_cast<ui::ModuleView*> (child))
+                for (const auto& id : view->getEditedParameters())
+                    out.addIfNotAlreadyThere (id);
             if (auto* ch = dynamic_cast<ui::Choice*> (child))
                 juce::ignoreUnused (ch);
             collectParams (*child, out);
@@ -101,12 +106,6 @@ public:
                             expect (! reached.contains (pid), name + ": hidden 0.5 band not shown: " + pid);
                             continue;
                         }
-                        // Parameters added by the DSP-quality tracks whose panel controls come later (AGENT_RULES:
-                        // "Panels for new parameters are done later"). Remove an entry when its panel lands.
-                        const auto base = dsp::splitInstanceParamId (pid).first;
-                        const bool pendingPanel = base.startsWith ("smoothW");
-                        if (pendingPanel)
-                            continue;
                         expect (isOnSwitch || curveHandle || eqBand || reached.contains (pid), name + ": reaches " + pid);
                     }
                 expect (panel->getMoreButton().isVisible() == ! panel->getMoreControls().empty(), name + ": Mehr only when there is more");
