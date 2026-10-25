@@ -285,8 +285,21 @@ void VelvoxAudioProcessor::setRouting (const dsp::Routing& routing)
     apvts.state.setProperty (statekeys::routing, routing.toString(), nullptr);
 }
 
+bool VelvoxAudioProcessor::isStateWriterThread() noexcept
+{
+    // Without a message manager (command-line tools) there is only one thread that writes
+    auto* mm = juce::MessageManager::getInstanceWithoutCreating();
+    return mm == nullptr || mm->currentThreadHasLockedMessageManager();
+}
+
+// routingShared / mixLawShared are SeqLockValues: ONE writer (the message thread, or a thread holding
+// the MessageManagerLock), any number of lock-free readers (audio thread, UI). Two concurrent writers
+// would corrupt the sequence counter. Every store goes through these two functions, which run from the
+// state listener, the constructor and setStateInformation - all on the message thread in every host
+// we support. The assertion catches a host that restores state on another thread (debug builds).
 void VelvoxAudioProcessor::syncRoutingFromState()
 {
+    jassert (isStateWriterThread());   // SeqLockValue: single writer
     const auto text = apvts.state.getProperty (statekeys::routing).toString();
     const auto routing = text.isEmpty() ? dsp::Routing::defaults() : dsp::Routing::fromString (text);
     routingShared.store (routing);
@@ -296,6 +309,7 @@ void VelvoxAudioProcessor::syncRoutingFromState()
 
 void VelvoxAudioProcessor::syncMixLawFromState()
 {
+    jassert (isStateWriterThread());   // SeqLockValue: single writer (see syncRoutingFromState)
     // Absent (projects from 0.5 and older) = every instance on the legacy law
     mixLawShared.store (dsp::MixLaws::fromString (apvts.state.getProperty (statekeys::mixLaw).toString()));
 }

@@ -25,7 +25,9 @@ namespace velvox::dsp
     public:
         explicit SeqLockValue (const T& initial = T {}) noexcept { store (initial); }
 
-        // Single writer
+        // Single writer: never call store() from two threads at once (no lock here - the counter
+        // would get out of step and readers could accept a torn value). The processor writes only
+        // from the message thread (VelvoxAudioProcessor::isStateWriterThread, asserted there).
         void store (const T& value) noexcept
         {
             std::array<std::uint32_t, numWords> buffer {};

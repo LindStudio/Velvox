@@ -73,3 +73,14 @@ test passed on first run; mutation check instead of a red run: reporting latency
 (reported vs chain, impulse at 192 kHz, bypass alignment at both rates) — reverted.
 - Ruling: ± 2 samples for the impulse peak (the linear-phase sat FIR and the pitch splicer put the peak within one sample of
   the nominal delay at 44.1 kHz); the bypass check is exact (1e-4).
+
+Task 8: complete (guards). DynamicsHistory::reset() is now private (only prepare() calls it), with a comment why (it clears the
+SPSC FrameFifo, legal only while neither add() nor pull() runs) — the guard is the compiler: DynamicsQualityTests'
+"Dynamics feed: never blocks, drops when full" called reset() and failed to compile (C2248), now uses prepare(). SeqLockValue's
+single-writer assumption is documented at store() and at syncRoutingFromState / syncMixLawFromState, which jassert
+`VelvoxAudioProcessor::isStateWriterThread()` (message thread or MessageManagerLock holder; true without a message manager,
+so command-line tools and tests without one never trip). Test (RoutingTests): "Routing / mix-law hand-over: only the message
+thread writes (SeqLockValue single writer)" (red = did not compile before the helper existed; true on the message thread,
+false on a juce::Thread).
+- Ruling: jassert (debug only), no runtime lock — a host that restores state off the message thread is a host bug we want to
+  see in debug builds; Release behaviour is unchanged.

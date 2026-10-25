@@ -73,13 +73,6 @@ namespace velvox::dsp
             reset();
         }
 
-        void reset() noexcept
-        {
-            fifo.clear();
-            count = 0;
-            inPeak = outPeak = grPeak = 0.0f;
-        }
-
         void add (float inAbs, float outAbs, float grDb) noexcept
         {
             inPeak = std::max (inPeak, inAbs);
@@ -97,6 +90,16 @@ namespace velvox::dsp
         double frameSeconds() const noexcept { return seconds; }
 
     private:
+        // Clears the queue: only legal while neither the audio thread (add) nor the UI (pull) runs,
+        // i.e. from prepare() (the owner's prepareToPlay). Private on purpose: a reset from the
+        // module's reset() (called while a panel may be pulling) would race FrameFifo::clear().
+        void reset() noexcept
+        {
+            fifo.clear();
+            count = 0;
+            inPeak = outPeak = grPeak = 0.0f;
+        }
+
         FrameFifo<DynamicsFrame, capacity> fifo;
         int samplesPerFrame = 240;
         double seconds = 0.005;

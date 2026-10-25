@@ -74,7 +74,7 @@ public:
             expectEquals (h.pull (frames.data(), (int) frames.size()), DynamicsHistory::capacity);
             expectEquals (frames[0].inputDb, juce::Decibels::gainToDecibels (0.1f, -120.0f));
             // Silence reads as the floor, never -inf
-            h.reset();
+            h.prepare (48000.0, 1.0);   // the only way to clear the queue (reset() is private: prepare only)
             for (int i = 0; i < samplesPerFrame; ++i)
                 h.add (0.0f, 0.0f, 0.0f);
             expectEquals (h.pull (frames.data(), 4), 1);

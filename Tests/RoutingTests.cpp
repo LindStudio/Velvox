@@ -390,6 +390,16 @@ public:
             expectEquals (h.proc.getChain().getLatencyFor (h.proc.getRouting(), false), twoSat);
         }
 
+        beginTest ("Routing / mix-law hand-over: only the message thread writes (SeqLockValue single writer)");
+        {
+            expect (VelvoxAudioProcessor::isStateWriterThread(), "the message thread (tests run on it)");
+            std::atomic<int> onWorker { -1 };
+            juce::Thread::launch ([&onWorker] { onWorker = VelvoxAudioProcessor::isStateWriterThread() ? 1 : 0; });
+            for (int i = 0; i < 200 && onWorker.load() < 0; ++i)
+                juce::Thread::sleep (5);
+            expectEquals (onWorker.load(), 0, "a worker thread is not a writer");
+        }
+
         beginTest ("Combined latency: Sat + Smooth + Ride + Pitch + EQ in one chain (44.1 / 192 kHz)");
         {
             for (double rate : { 44100.0, 192000.0 })

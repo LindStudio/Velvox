@@ -123,6 +123,10 @@ public:
     // True when that module instance is in the chain and audible with the current settings
     bool isInstanceAudible (velvox::dsp::ModuleId id, int instance) const;
 
+    // The thread that may write the routing / mix-law SeqLockValues (single writer): the message
+    // thread (or a thread holding the MessageManagerLock); any thread when no message manager exists
+    static bool isStateWriterThread() noexcept;
+
 private:
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
     void valueTreeRedirected (juce::ValueTree&) override;
