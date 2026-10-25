@@ -54,3 +54,6 @@ normalisation). Mutation run (leaveClassic call removed + pan drag direction inv
   its knob and in hosts. Display only, no ID or value change. — Cost if wrong: none (no other Hz parameter goes below 20 Hz).
 - Ruling: snapshot overlay for Mehr open with parameters: "set:<id>=<v>,…|more" (the existing parser; ",more" at the end of a
   set: list is dropped by the first parse). No change to TestMain.cpp.
+
+Task 4: complete (help pages doubler / choir, screenshots in C:\Users\jakob\develvox-wt\shots-voicespanel, full suite
+29965 checks passed, 0 failed)
