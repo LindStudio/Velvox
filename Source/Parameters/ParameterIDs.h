@@ -189,6 +189,9 @@ namespace velvox::pid
     inline constexpr const char* smoothMode        = "smoothMode";
     inline constexpr const char* smoothOutput      = "smoothOutput";
     inline constexpr const char* smoothDelta       = "smoothDelta";
+    // 0.6: weighting curve, 6 points (frequency in Hz, gain in dB; 0 dB everywhere = flat)
+    inline constexpr const char* smoothWFreq[6] { "smoothW1Freq", "smoothW2Freq", "smoothW3Freq", "smoothW4Freq", "smoothW5Freq", "smoothW6Freq" };
+    inline constexpr const char* smoothWGain[6] { "smoothW1Gain", "smoothW2Gain", "smoothW3Gain", "smoothW4Gain", "smoothW5Gain", "smoothW6Gain" };
 
     // VOCAL CHECK - analysis only (never changes the audio)
     inline constexpr const char* checkOn   = "checkOn";

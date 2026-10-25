@@ -229,7 +229,7 @@ namespace velvox
                   }),
 
             make ("Octave Down Layer", "Creative",
-                  "Dark hypertechno layer: an octave-down copy blended under the lead (adds about 120 ms latency).",
+                  "Dark hypertechno layer: an octave-down copy blended under the lead (adds about 15 ms latency).",
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
                       { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 5 }, { compRelease, 90 },
@@ -241,7 +241,7 @@ namespace velvox
                   }),
 
             make ("Chipmunk Hook", "Creative",
-                  "Pitched-up hook (+12, formants moving with the pitch) for drops and vocal chops (adds about 120 ms latency).",
+                  "Pitched-up hook (+12, formants moving with the pitch) for drops and vocal chops (adds about 15 ms latency).",
                   {
                       { hpfOn, 1 }, { hpfFreq, 200 }, { hpfSlope, slope24 },
                       { compOn, 1 }, { compThreshold, -22 }, { compRatio, 4 }, { compMakeup, 3 },
