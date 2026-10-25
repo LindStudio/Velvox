@@ -47,3 +47,25 @@ test itself (dangling menu temporary) fixed; PanelFrameTests "smooth: reaches sm
   with an inline field, copy / paste) + panel items. Hover card 600 ms ("PUNKT 3 · 1.00 kHz +3.0 dB", "LOW LIMIT · 800 Hz"),
   at once while dragging.
 - Ruling: read-out top-left "MAX −x dB · f" (deepest current cut) only while something is removed — a value, no explanation.
+
+Task 3: complete (Source/UI/PitchPanel.{h,cpp}: pitchnotes, PitchStage, the panel; the 0.5 PitchPanel (DetailPanels.cpp) and PitchView
+(ModuleViews.cpp) deleted; PitchModule::getDetectedHz + VocalChain::getPitch; Tests/PitchPanelTests.cpp 30 checks, watched failing
+first (compile: no getDetectedHz), passed on the first build)
+- Ruling: minimal lock-free feed in PitchModule: `std::atomic<float> detectedHz` (relaxed) = fs / tracker period at the start of
+  every processed chunk, 0 when unvoiced and after activate(); `VocalChain::getPitch() const` — why: the read-out needs the tracker
+  the pitch track already runs (no second analysis in the UI); one relaxed store per chunk, no allocation, no lock. While Pitch is
+  off the module is not processed, so the stage shows "–" whenever pitchOn is off. Cost if wrong: none for the sound (the DSP
+  output is untouched; Velvox pitch quality 643 checks still green).
+- Ruling: layout = the two big controls IN the visual (like Vocal Smash's SMASH): Semitones (dial 110–168 px, snaps through the
+  parameter's 1 st interval, ±24 st = the parameter range, a tick per semitone around it, octaves ±12/±24 longer and labelled, the
+  set value lit) left, Formant (dial ~70 % of it) right, the read-out IN note → OUT note (with Hz and cents) between them. Main row =
+  Fine (Cents), Mix, Formanten erhalten; Mehr is then empty and its button hidden — why: the frame needs 3–5 main-row controls and
+  the brief's "Main row: Semitones, Formant, Mix (+ Cents)" / "Mehr: Cents, Preserve, Mix" cannot both hold without showing a control
+  twice; the user's mockup "Pitch 2" shows exactly this (two dials, "FINE · MIX", "◉ Formanten erhalten" under them). Cost if wrong:
+  Fine/Mix/Preserve are one level more prominent than the spec's "Mehr" (nothing hidden, nothing duplicated).
+- Ruling: no separate ±12 / ±24 range switch for the semitone dial — the dial spans the parameter's ±24 with the ±12 octave marks
+  emphasised; drag 220 px = full range (4.6 px per semitone), Shift fine, wheel = 1 st per notch. Cost if wrong: coarse dragging
+  for users who only use ±12 (wheel / typed values are exact).
+- Ruling: read-out holds the last voiced note 250 ms (consonants / breaths don't flicker it), glides within ±0.04 oct (vibrato)
+  and jumps to a new note; OUT = IN × 2^((st + ct/100)/12), dimmed with less Mix.
+- Ruling: knob label "Semitones" (was "Pitch"); the latency note stays in its hover card.

@@ -2,6 +2,7 @@
 #include "EqPanel.h"
 #include "ReverbPanel.h"
 #include "SmoothPanel.h"
+#include "PitchPanel.h"
 #include "../PluginProcessor.h"
 #include "../DSP/SaturationModule.h"
 #include "../DSP/ChopModule.h"
@@ -487,118 +488,6 @@ namespace velvox::ui
             dsp::DoublerSettings s;
             double time = 0.0;
             Smoothed level, spread;
-        };
-
-        //======================================================================
-        // Pitch: keyboard with the transposition drawn as a glowing arc
-        class PitchView final : public ModuleView
-        {
-        public:
-            void update (const LiveData& d) override
-            {
-                s = d.settings.pitch;
-                shift.target = s.semitones + s.cents / 100.0f;
-                shift.tick (0.14f);
-                formant.target = s.formantShift;
-                formant.tick (0.14f);
-                level = d.level();
-                repaint();
-            }
-
-            void paint (juce::Graphics& g) override
-            {
-                const auto r = getLocalBounds().toFloat().reduced (20.0f, 14.0f);
-                const float alpha = s.enabled ? 1.0f : 0.35f;
-                auto keys = r.withTop (r.getBottom() - r.getHeight() * 0.38f);
-
-                // Read-out
-                const juce::String st = (shift.current > 0.05f ? "+" : "") + juce::String (juce::roundToInt (s.semitones)) + " st";
-                g.setColour (colours::text.withAlpha (0.4f + 0.6f * alpha));
-                g.setFont (display (30.0f));
-                g.drawText (st, r.withHeight (34.0f), juce::Justification::topLeft, false);
-                label (g, juce::String (juce::roundToInt (s.cents)) + " ct fine   " + juce::String (juce::roundToInt (s.mix * 100.0f)) + " % mix",
-                       r.withHeight (12.0f).translated (0.0f, 40.0f));
-                label (g, s.preserveFormants ? "Formants kept  " + juce::String (s.formantShift, 1) + " st" : "Formants follow the pitch",
-                       r.withHeight (12.0f), juce::Justification::topRight);
-
-                // Keyboard: -24 .. +24 semitones around the sung note (0)
-                const int whiteCount = 29;
-                const float ww = keys.getWidth() / (float) whiteCount;
-                int w = 0;
-                std::array<float, 49> centres {};
-                for (int k = -24; k <= 24; ++k)
-                {
-                    const int note = ((k % 12) + 12) % 12;
-                    const bool black = note == 1 || note == 3 || note == 6 || note == 8 || note == 10;
-                    centres[(size_t) (k + 24)] = black ? keys.getX() + ww * (float) w : keys.getX() + ww * ((float) w + 0.5f);
-                    if (! black)
-                    {
-                        const auto key = juce::Rectangle<float> (keys.getX() + ww * (float) w, keys.getY(), ww - 2.0f, keys.getHeight());
-                        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff23252b), 0.0f, key.getY(), juce::Colour (0xff17181c), 0.0f, key.getBottom(), false));
-                        g.fillRoundedRectangle (key, 3.0f);
-                        ++w;
-                    }
-                }
-                for (int k = -24; k <= 24; ++k)
-                {
-                    const int note = ((k % 12) + 12) % 12;
-                    if (note == 1 || note == 3 || note == 6 || note == 8 || note == 10)
-                    {
-                        const auto key = juce::Rectangle<float> (ww * 0.62f, keys.getHeight() * 0.6f).withCentre ({ centres[(size_t) (k + 24)], keys.getY() + keys.getHeight() * 0.3f });
-                        g.setColour (juce::Colour (0xff08090b));
-                        g.fillRoundedRectangle (key, 2.0f);
-                    }
-                }
-
-                const auto keyX = [&] (float semis)
-                {
-                    const float c = juce::jlimit (-24.0f, 24.0f, semis) + 24.0f;
-                    const int i0 = (int) std::floor (c);
-                    const int i1 = std::min (48, i0 + 1);
-                    return centres[(size_t) i0] + (centres[(size_t) i1] - centres[(size_t) i0]) * (c - (float) i0);
-                };
-
-                // Octave labels
-                g.setFont (medium (10.5f));
-                for (int o : { -24, -12, 0, 12, 24 })
-                {
-                    g.setColour (o == 0 ? colours::text : colours::textFaint);
-                    g.drawText ((o > 0 ? "+" : "") + juce::String (o), juce::Rectangle<float> (40.0f, 12.0f).withCentre ({ keyX ((float) o), keys.getBottom() - 9.0f }),
-                                juce::Justification::centred, false);
-                }
-
-                // Sung note and its target, joined by an arc
-                const float x0 = keyX (0.0f), x1 = keyX (shift.current);
-                const float baseY = keys.getY() - 6.0f;
-                drawGlow (g, { x0, baseY }, 14.0f, 0.3f);
-                g.setColour (juce::Colours::white.withAlpha (0.9f));
-                g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ x0, baseY }));
-
-                if (std::abs (x1 - x0) > 1.0f)
-                {
-                    juce::Path arc;
-                    const float lift = 18.0f + std::abs (shift.current) * 2.2f;
-                    arc.startNewSubPath (x0, baseY);
-                    arc.quadraticTo ((x0 + x1) * 0.5f, baseY - lift, x1, baseY);
-                    glowStroke (g, arc, juce::Rectangle<float> (std::min (x0, x1), baseY - lift, std::abs (x1 - x0), lift), 2.0f, alpha * (0.4f + 0.6f * s.mix));
-                }
-                const auto target = juce::Point<float> (x1, baseY);
-                drawGlow (g, target, 22.0f + 10.0f * level, 0.6f * alpha, colours::teal);
-                g.setColour (colours::teal.interpolatedWith (juce::Colours::white, 0.5f).withAlpha (alpha));
-                g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (target));
-
-                // Formant marker (diamond under the keys' top edge)
-                const float fx = keyX (s.preserveFormants ? formant.current : shift.current);
-                juce::Path diamond;
-                diamond.addStar ({ fx, keys.getY() + keys.getHeight() * 0.78f }, 2, 3.0f, 6.0f, juce::MathConstants<float>::halfPi * 0.5f);
-                g.setColour (colours::blue.withAlpha (0.9f * alpha));
-                g.fillPath (diamond);
-            }
-
-        private:
-            dsp::PitchSettings s;
-            Smoothed shift, formant;
-            float level = 0.0f;
         };
 
         //======================================================================
@@ -1428,7 +1317,7 @@ namespace velvox::ui
             case ModuleId::deess:   return std::make_unique<DeEssView> (spectrum);
             case ModuleId::sat:     return std::make_unique<SatView>();
             case ModuleId::doubler: return std::make_unique<DoublerView>();
-            case ModuleId::pitch:   return std::make_unique<PitchView>();
+            case ModuleId::pitch:   return createPitchStage (p);
             case ModuleId::chop:    return std::make_unique<ChopView>();
             case ModuleId::delay:   return std::make_unique<DelayView>();
             case ModuleId::reverb:  return createReverbRoom (p, instance);

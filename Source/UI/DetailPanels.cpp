@@ -2,6 +2,7 @@
 #include "EqPanel.h"
 #include "ReverbPanel.h"
 #include "SmoothPanel.h"
+#include "PitchPanel.h"
 #include "ChainView.h"
 #include "../PluginProcessor.h"
 #include "../Presets/ModulePresets.h"
@@ -766,42 +767,6 @@ namespace velvox::ui
             }
         };
 
-        // PITCH: Pitch, Formant, Fine; keep formants and Mix in Mehr
-        class PitchPanel final : public DetailPanel
-        {
-        public:
-            explicit PitchPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Pitch", help::shortDescription ((int) ModuleId::pitch), pid::pitchOn)
-            {
-                toggle (pid::pitchPreserveFormants, "Formanten erhalten");
-                semis = &knob (pid::pitchSemitones, "Pitch");
-                auto& fine = knob (pid::pitchCents, "Fine");
-                auto& formant = knob (pid::pitchFormant, "Formant");
-                knob (pid::pitchMix, "Mix");
-                setMainControls ({ semis, &formant, &fine });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                // The latency note lives in the hover card, not on the panel
-                if (++frame % 30 != 1)
-                    return;
-                auto withPitch = proc.getRouting();
-                if (! withPitch.contains (dsp::ModuleId::pitch))
-                    withPitch.insertDefault (dsp::ModuleId::pitch, 0);
-                const int latency = proc.getChain().getLatencyFor (withPitch, true) - proc.getChain().getLatencyFor (withPitch, false);
-                const double ms = 1000.0 * latency / std::max (1.0, proc.getSampleRate());
-                const auto* spec = findParameterSpec (pid::pitchSemitones);
-                semis->setDescription (juce::String (spec != nullptr ? spec->description : "") + "\n\n"
-                                       + juce::String::fromUTF8 ("Solange Pitch an ist: ") + juce::String (juce::roundToInt (ms)) + " ms Latenz.");
-            }
-
-        private:
-            Knob* semis = nullptr;
-            int frame = 0;
-        };
-
         // STUTTER (chop): Rate, Gate, Smooth, Pattern
         class ChopPanel final : public DetailPanel
         {
@@ -1406,7 +1371,7 @@ namespace velvox::ui
                 case ModuleId::deess:   panel = std::make_unique<DeEssPanel> (p); break;
                 case ModuleId::sat:     panel = std::make_unique<SatPanel> (p); break;
                 case ModuleId::doubler: panel = std::make_unique<DoublerPanel> (p); break;
-                case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
+                case ModuleId::pitch:   panel = createPitchPanel (p); break;
                 case ModuleId::chop:    panel = std::make_unique<ChopPanel> (p); break;
                 case ModuleId::delay:   panel = std::make_unique<DelayPanel> (p); break;
                 case ModuleId::reverb:  panel = createReverbPanel (p); break;

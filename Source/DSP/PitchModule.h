@@ -43,7 +43,12 @@ namespace velvox::dsp
         // Processes in place; only call while active (enabled)
         void process (float* const* channels, int numChannels, int numSamples) noexcept;
 
+        // For the panel (any thread, lock-free): f0 of the input at the end of the last processed block,
+        // 0 = unvoiced / silent / not processed since activate()
+        float getDetectedHz() const noexcept { return detectedHz.load (std::memory_order_relaxed); }
+
     private:
+        std::atomic<float> detectedHz { 0.0f };
         void processChunk (float* const* ch, int numChannels, int n) noexcept;
 
         double fs = 48000.0;
