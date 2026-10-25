@@ -27,6 +27,8 @@ namespace velvox::dsp
         tracker.reset();
         shifter.reset();
         corrector.reset();
+        // a module that (re)joins the chain starts at its Mix (the chain fades it in)
+        mix.setCurrentAndTargetValue (mix.getTargetValue());
         dryDelay.setDelay (getLatencySamples());
         dryDelay.reset();
     }

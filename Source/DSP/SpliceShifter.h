@@ -12,8 +12,8 @@ namespace velvox::dsp
     // active head drifts out of its band it hands over to a head a whole number of pitch
     // periods away (the jump is refined by normalised cross-correlation, so the two heads play
     // the same waveform and the crossfade is inaudible). No phase vocoder: no phasiness.
-    // Unvoiced / aperiodic input uses 8 ms splices at the best-matching offset with an
-    // equal-power fade. Formants move with the pitch (FormantCorrector puts them back).
+    // Unvoiced / aperiodic input uses 8 ms splices at the best-matching offset with a
+    // correlation-normalised fade. Formants move with the pitch (FormantCorrector puts them back).
     //
     // Latency is constant: the heads' delay oscillates around L = ceil(fs / 70) + 16 samples.
     class SpliceShifter
@@ -45,7 +45,8 @@ namespace velvox::dsp
         std::array<Biquad, aaSections> aa;
 
         double delayA = 0.0, delayB = 0.0;
-        bool fading = false, powerFade = false;
+        bool fading = false;
+        float fadeCorr = 1.0f;
         double fadePos = 0.0, fadeInc = 0.0;
     };
 }

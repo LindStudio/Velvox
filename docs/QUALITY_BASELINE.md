@@ -190,21 +190,31 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 
 | case | metric | Headliner | Graillon 3 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| up12 | pitch_err_cents (ct) | 2.70 | 36.0 | -33.3 | ≤ 2.00 | FAIL |
-| up12 | pitch_jitter_cents (ct) | 0.00 | 0.00 | 0.00 | ≤ 1.00 | pass |
-| up12 | spurious_db (dB) | -73.2 | -44.4 | -28.8 | ≤ -60.0 | pass |
-| up12 | latency_ms (ms) | 120 | 22.4 | 97.6 | ref + 10.0 | FAIL |
-| up12 | vocal_pitch_err_cents (ct) | 1.65 | 1.95 | -0.30 | ref + 1.00 | pass |
-| up12 | hnr_drop_db (dB) | -8.51 | -2.55 | -5.96 | ref − 0.00 | info |
-| up12 | mix0_null_db (dB) – latency 5760 | -152 | – | – | ≤ -60.0 | pass |
+| up12 | pitch_err_cents (ct) | 0.00 | 36.0 | -36.0 | ≤ 2.00 | pass |
+| up12 | pitch_jitter_cents (ct) | 0.00 | 0.00 | -0.00 | ≤ 1.00 | pass |
+| up12 | spurious_db (dB) | -84.4 | -44.4 | -40.0 | ≤ -60.0 | pass |
+| up12 | latency_ms (ms) | 14.6 | 22.4 | -7.75 | ref + 10.0 | pass |
+| up12 | vocal_pitch_err_cents (ct) | 2.20 | 1.95 | 0.25 | ref + 1.00 | pass |
+| up12 | hnr_drop_db (dB) | -2.89 | -2.55 | -0.35 | ref − 0.00 | info |
+| up12 | formant_shift_oct (oct) – mean of 6 vowels | 0.18 | 0.99 | -0.81 | ≤ 0.33 | pass |
+| up12 | sustain_roughness_db (dB) – mean of 6 vowels | 0.15 | 0.01 | 0.14 | ref + 0.50 | pass |
+| up12 | mix0_null_db (dB) – latency 702 | -152 | – | – | ≤ -60.0 | pass |
 | up12 | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| up12 | cpu_pct (%) – median over this module's renders | 2.24 | 0.75 | 1.50 | ref + 2.00 | pass |
-| down5 | pitch_err_cents (ct) | 2.68 | 23.7 | -21.1 | ≤ 2.00 | FAIL |
+| up12 | cpu_pct (%) – median over this module's renders | 1.26 | 0.77 | 0.49 | ref + 2.00 | pass |
+| down5 | pitch_err_cents (ct) | 0.00 | 23.7 | -23.7 | ≤ 2.00 | pass |
 | down5 | pitch_jitter_cents (ct) | 0.00 | 0.00 | -0.00 | ≤ 1.00 | pass |
-| down5 | spurious_db (dB) | -90.9 | -55.4 | -35.4 | ≤ -60.0 | pass |
-| down5 | latency_ms (ms) | 120 | 22.4 | 97.6 | ref + 10.0 | FAIL |
-| down5 | vocal_pitch_err_cents (ct) | 1.02 | 1.14 | -0.12 | ref + 1.00 | pass |
-| down5 | hnr_drop_db (dB) | -4.09 | 0.49 | -4.58 | ref − 0.00 | info |
+| down5 | spurious_db (dB) | -81.6 | -55.4 | -26.2 | ≤ -60.0 | pass |
+| down5 | latency_ms (ms) | 14.6 | 22.4 | -7.75 | ref + 10.0 | pass |
+| down5 | vocal_pitch_err_cents (ct) | 1.34 | 1.14 | 0.20 | ref + 1.00 | pass |
+| down5 | hnr_drop_db (dB) | 0.10 | 0.49 | -0.38 | ref − 0.00 | info |
+| down12 | pitch_err_cents (ct) | 0.01 | 69.9 | -69.9 | ≤ 2.00 | pass |
+| down12 | pitch_jitter_cents (ct) | 0.00 | 0.00 | -0.00 | ≤ 1.00 | pass |
+| down12 | spurious_db (dB) | -85.1 | -57.5 | -27.6 | ≤ -60.0 | pass |
+| down12 | latency_ms (ms) | 14.6 | 22.4 | -7.75 | ref + 10.0 | pass |
+| down12 | vocal_pitch_err_cents (ct) | 2.93 | 3.35 | -0.42 | ref + 1.00 | pass |
+| down12 | hnr_drop_db (dB) | 1.86 | 1.80 | 0.06 | ref − 0.00 | info |
+| down12 | formant_shift_oct (oct) – mean of 6 vowels | 0.11 | 0.99 | -0.88 | ≤ 0.33 | pass |
+| down12 | sustain_roughness_db (dB) – mean of 6 vowels | 0.22 | 0.08 | 0.14 | ref + 0.50 | pass |
 <!-- END pitch -->
 
 <!-- BEGIN doubler -->

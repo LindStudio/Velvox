@@ -188,14 +188,19 @@ _add(Module(
     key="pitch", title="Pitch", mix_param="pitchMix",
     refs=[Ref("Graillon 3", "Auburn Sounds Graillon 3.vst3", params=_GRAILLON)],
     cases=[Case("up12", headliner={"pitchSemitones": 12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
-                refs={"Graillon 3": [("Pitch Shift", "12")]}, procedures=["pitch_tones", "pitch_vocal", "nulls", "cpu"],
+                refs={"Graillon 3": [("Pitch Shift", "12")]}, procedures=["pitch_tones", "pitch_vocal", "pitch_formant", "nulls", "cpu"],
                 info={"semitones": 12}),
            Case("down5", headliner={"pitchSemitones": -5, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
                 refs={"Graillon 3": [("Pitch Shift", "-5")]}, procedures=["pitch_tones", "pitch_vocal"],
-                info={"semitones": -5})],
+                info={"semitones": -5}),
+           Case("down12", headliner={"pitchSemitones": -12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
+                refs={"Graillon 3": [("Pitch Shift", "-12")]}, procedures=["pitch_tones", "pitch_vocal", "pitch_formant"],
+                info={"semitones": -12})],
     # Graillon tracks a pure sine 36 ct flat (its tracker wants a voice), so the tone tests use absolute limits.
+    # 0.6 (pitch track): formants within 1/3 octave (absolute), held-note roughness <= Graillon + 0.5 dB.
     tolerances={"pitch_err_cents": ("lower", 0.0, 2.0), "pitch_jitter_cents": ("lower", 0.0, 1.0), "spurious_db": ("lower", 0.0, -60.0),
                 "vocal_pitch_err_cents": ("lower", 1.0), "latency_ms": ("lower", 10.0),
+                "formant_shift_oct": ("lower", 0.0, 1.0 / 3.0), "sustain_roughness_db": ("lower", 0.5),
                 "cpu_pct": ("lower", 2.0)}))
 
 # ---------------------------------------------------------------------------------------------

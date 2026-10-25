@@ -185,10 +185,12 @@ namespace
         return f[(size_t) best] + off * f0;
     }
 
-    // Spread (std, dB) of the 10 ms RMS envelope: amplitude roughness / beating of a sustained note
-    double envelopeSpreadDb (const juce::AudioBuffer<float>& b, int start, int len, double fs)
+    // Spread (std, dB) of the short-time RMS envelope (10 ms, or `frame` samples - a whole number of
+    // periods for a tone, so the waveform itself does not count): roughness / beating of a held note
+    double envelopeSpreadDb (const juce::AudioBuffer<float>& b, int start, int len, double fs, int frame = 0)
     {
-        const int frame = (int) (0.010 * fs);
+        if (frame <= 0)
+            frame = (int) (0.010 * fs);
         std::vector<double> db;
         for (int s = start; s + frame <= start + len; s += frame)
             db.push_back (juce::Decibels::gainToDecibels ((double) b.getRMSLevel (0, s, frame), -200.0));
@@ -333,10 +335,12 @@ public:
             pitchOnly (h, st);
             const auto in = vowel (h.fs, 3.5, 180.0);
             const auto out = h.run (in);
-            const double dIn = envelopeSpreadDb (in, (int) h.fs, (int) (2.0 * h.fs), h.fs);
-            const double dOut = envelopeSpreadDb (out, (int) h.fs, (int) (2.0 * h.fs), h.fs);
-            logMessage (juce::String (st, 0) + " st: 10 ms envelope spread in " + juce::String (dIn, 2) + " dB, out " + juce::String (dOut, 2) + " dB");
-            expectLessThan (dOut, 0.5);
+            const int frameIn = (int) std::lround (2.0 * h.fs / 180.0);
+            const int frameOut = (int) std::lround (2.0 * h.fs / (180.0 * std::pow (2.0, st / 12.0)));
+            const double dIn = envelopeSpreadDb (in, (int) h.fs, (int) (2.0 * h.fs), h.fs, frameIn);
+            const double dOut = envelopeSpreadDb (out, (int) h.fs, (int) (2.0 * h.fs), h.fs, frameOut);
+            logMessage (juce::String (st, 0) + " st: 2-period envelope spread in " + juce::String (dIn, 2) + " dB, out " + juce::String (dOut, 2) + " dB");
+            expectLessThan (dOut, 0.2);
         }
 
         beginTest ("Noise / unvoiced input keeps its level (no pumping)");
@@ -439,24 +443,6 @@ public:
             for (int i = 0; i < (int) (0.5 * fs); ++i)
                 t.push (0.0f);
             expectEquals (t.getPeriod(), 0.0f, "silence is unvoiced");
-        }
-
-        beginTest ("Lattice: all-zero then all-pole with the same coefficients is the identity");
-        {
-            dsp::LatticePair lat;
-            std::array<float, dsp::LatticePair::order> k {};
-            juce::Random r (9);
-            for (auto& v : k) v = 0.5f * (r.nextFloat() * 2.0f - 1.0f);
-            double err = 0.0, ref = 0.0;
-            for (int i = 0; i < 4000; ++i)
-            {
-                const float x = r.nextFloat() - 0.5f;
-                const float y = lat.processAllPole (lat.processAllZero (x, k.data(), 0), k.data(), 0);
-                err += (double) (y - x) * (y - x);
-                ref += (double) x * x;
-            }
-            logMessage ("lattice round trip error " + juce::String (10.0 * std::log10 (err / ref + 1e-30), 1) + " dB");
-            expectLessThan (10.0 * std::log10 (err / ref + 1e-30), -100.0);
         }
 
         beginTest ("Formant corrector: identity warp passes the signal unchanged");

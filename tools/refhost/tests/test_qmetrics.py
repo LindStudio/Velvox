@@ -216,6 +216,44 @@ class Modulation(unittest.TestCase):
         noisy = y + rng.standard_normal(len(y)) * 0.2
         self.assertGreater(q.hnr_db(y, FS), q.hnr_db(noisy, FS) + 10)
 
+    @staticmethod
+    def _vowel(f0, F1, F2, sec=2.0):
+        t = np.arange(int(sec * FS)) / FS
+        y = np.zeros_like(t)
+        k = 1
+        while k * f0 < 8000:
+            f = k * f0
+            a = 1 / (1 + ((f - F1) / 80) ** 2) + 0.5 / (1 + ((f - F2) / 110) ** 2) + 0.005
+            y += a / np.sqrt(k) * np.sin(2 * np.pi * f * t + 0.3 * k * k)
+            k += 1
+        return 0.3 * y / np.max(np.abs(y))
+
+    def test_formants(self):
+        F1, F2 = q.formants(self._vowel(140, 650, 1700), FS)
+        self.assertLess(abs(np.log2(F1 / 650)), 0.1)
+        self.assertLess(abs(np.log2(F2 / 1700)), 0.1)
+        # same vowel, higher pitch: same formants
+        G1, G2 = q.formants(self._vowel(280, 650, 1700), FS)
+        self.assertLess(abs(np.log2(G1 / 650)), 0.2)
+        self.assertLess(abs(np.log2(G2 / 1700)), 0.2)
+        # formants an octave up are found an octave up
+        H1, H2 = q.formants(self._vowel(140, 900, 2400), FS)
+        self.assertLess(abs(np.log2(H1 / 900)), 0.1)
+        self.assertLess(abs(np.log2(H2 / 2400)), 0.1)
+
+    def test_formant_shift_oct(self):
+        dry = self._vowel(140, 650, 1700)
+        # same vowel an octave higher in pitch: envelope unchanged
+        self.assertLess(abs(q.formant_shift_oct(dry, self._vowel(280, 650, 1700), FS)), 0.12)
+        # chipmunk: formants up an octave
+        self.assertAlmostEqual(q.formant_shift_oct(dry, self._vowel(280, 1300, 3400), FS), 1.0, delta=0.12)
+        # a vowel with a low F1 sung an octave higher: F1 lies below the new f0 and cannot show; the
+        # metric only compares the band above the fundamental, so kept formants still read ~0
+        low = self._vowel(220, 320, 2300)
+        self.assertLess(abs(q.formant_shift_oct(low, self._vowel(440, 320, 2300), FS)), 0.15)
+        # formants down a fifth
+        self.assertAlmostEqual(q.formant_shift_oct(dry, self._vowel(140, 650 / 1.5, 1700 / 1.5), FS), -np.log2(1.5), delta=0.12)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -192,7 +192,7 @@ namespace velvox::dsp
                     const auto s = findSplice (delayA, jump, direction, voiced ? p : 0.0f);
                     delayB = juce::jlimit ((double) guard, maxDelay, delayA + direction * s.jump);
                     fading = true;
-                    powerFade = s.ncc < 0.5f;
+                    fadeCorr = juce::jlimit (0.0f, 1.0f, s.ncc);
                     fadePos = 0.0;
                     fadeInc = 1.0 / std::max (1.0, fade);
                 }
@@ -200,18 +200,14 @@ namespace velvox::dsp
 
             if (fading)
             {
+                // raised-cosine fade, normalised by the heads' correlation so partially similar
+                // waveforms (real voices, noise) keep their level through the splice
                 const float u = (float) fadePos;
-                float gA, gB;
-                if (powerFade)
-                {
-                    gB = std::sin (0.5f * juce::MathConstants<float>::pi * u);
-                    gA = std::cos (0.5f * juce::MathConstants<float>::pi * u);
-                }
-                else
-                {
-                    gB = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * u);
-                    gA = 1.0f - gB;
-                }
+                float gB = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * u);
+                float gA = 1.0f - gB;
+                const float norm = 1.0f / std::sqrt (std::max (1.0e-3f, gA * gA + gB * gB + 2.0f * fadeCorr * gA * gB));
+                gA *= norm;
+                gB *= norm;
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
                     const auto& line = lines[(size_t) ch];

@@ -29,7 +29,7 @@ namespace velvox::dsp
         window = (int) std::lround (0.0213 * fsDec);           // ~21 ms
         tauMin = std::max (2, (int) std::floor (fsDec / 1100.0)); // f0 <= 1100 Hz
         tauMax = (int) std::ceil (fsDec / 65.0);                // f0 >= 65 Hz
-        hop = std::max (1, (int) std::lround (0.005 * fsDec));  // 5 ms
+        hop = std::max (1, (int) std::lround (0.010 * fsDec));  // 10 ms
 
         const int decLen = nextPow2 (window + tauMax + 4);
         dec.assign ((size_t) decLen, 0.0f);
@@ -154,7 +154,7 @@ namespace velvox::dsp
         if (decimation == 1)
             return coarse;
 
-        const int w = window * decimation;
+        const int w = std::min (window * decimation, std::max ((int) (1.5f * coarse), (int) (0.008 * fs)));
         const int centre = (int) std::lround (coarse);
         const int lo = std::max (2, centre - decimation - 1), hi = centre + decimation + 1;
         const int maxTau = (int) full.size() - w - 2;

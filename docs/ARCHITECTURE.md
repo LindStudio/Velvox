@@ -44,9 +44,9 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 
 - Jedes Modul meldet seine Latenz. Die Gesamtlatenz wird dem Host gemeldet (PDC), so wie es professionelle Plugins machen.
 - Der Bypass-Pfad ist um die Gesamtlatenz verzögert.
-- **Pitch (umgesetzt):** etwa 120 ms Latenz, aber nur solange das Modul an ist; sonst bleibt es bei 3 Samples.
+- **Pitch (0.6):** konstante Latenz ceil(fs/70) + 16 Samples (14,6 ms bei 48 kHz), nur solange das Modul an ist; sonst 0. Unabhängig von allen Pitch-Einstellungen.
   - Beim Ein- und Ausschalten wird die neue Latenz auf dem Message-Thread gemeldet (`setLatencySamples`). Der Wechsel in der Kette erfolgt unter derselben Ausblendung wie Routing-Änderungen, und der Bypass-Pfad wird mitgezogen.
-  - Kürzere Analysefenster wurden gemessen (`Tests/PitchDiagnostics.cpp`) und wegen bis zu 70 Cent Verstimmung verworfen.
+  - Engine (0.6, ersetzt Signalsmith Stretch mit 120 ms und 2-7 ct Fehler je nach FFT-Bin-Lage, `Tests/PitchDiagnostics.cpp`): `PitchTracker` (YIN auf ~8 kHz, Verfeinerung in voller Rate), `SpliceShifter` (zwei Leseköpfe mit Tempo = Verhältnis, Sprünge um ganze Perioden per Kreuzkorrelation, korrelationsnormierte Blende, Anti-Alias-Tiefpass bei Hochtransponieren), `FormantCorrector` (cepstrale Hüllkurve des Eingangs, Korrektur E(f/Ziel)/E(f/rho) als minimalphasiges FIR, alle 10 ms überblendet).
 
 ## Sidechain (Ducking)
 
@@ -73,7 +73,7 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 | Modul | Typ | Latenz | Kernprinzip |
 |---|---|---|---|
 | Doubler | seriell, addiert Stimmen | 0 | zwei modulierte Delay-Stimmen, Mid-Anteil per „Mono safe“ reduzierbar |
-| Pitch | seriell | ~120 ms (nur wenn an) | Signalsmith Stretch, latenzrichtiger Dry-Mix |
+| Pitch | seriell | 14,6 ms bei 48 kHz (nur wenn an) | Splice-Resampling + Formantkorrektur (0.6), latenzrichtiger Dry-Mix |
 | Chop | seriell | 0 | 16-Step-Pattern, synchron zur Host-PPQ-Position, Repeat = verzögerter Slice |
 | Ducker | auf Delay-/Reverb-Return | 0 | Gain-Kurve aus Vocal oder Sidechain |
 | StereoStage | Ausgang | 0 | Mid/Side; nur das Seitensignal wird skaliert bzw. gefiltert |
