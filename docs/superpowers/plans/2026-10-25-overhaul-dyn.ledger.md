@@ -110,3 +110,4 @@ Task 8: complete (bench with references, --out velvox-bench\2026-10-25\modules-a
   listen proxies: no denormals in any render, block times 25-42 us mean (no spikes > 110 us), gain step per ms (99.9 %): ride
   0.03-0.07 dB, comp 0.2-0.7 dB (the real 10 ms attack; was 0.1-0.3 with the rippling detector); full suite 29818 checks, 0 failed;
   refhost python tests 30 OK)
+Final: merged feature/automix 9cd3823; full suite 30003 checks, 0 failed.
