@@ -24,16 +24,20 @@ namespace velvox::dsp
         float highCutHz = 12000.0f;  // low-pass on the reverb return
     };
 
-    // Algorithmic reverb (own design, 0.4):
+    // Algorithmic reverb (own design, 0.4; quality pass 0.6):
     //
     //   input -> pre-delay -> low cut -> early reflections (stereo tap pattern of the character)
     //                                 -> input diffusion (6 all-passes per channel, incommensurate lengths)
     //                                 -> 16-line feedback delay network
-    //   late network: every line = modulated delay (cubic interpolation) -> density all-pass
-    //                 -> bass shelf (low decay x bassMultiplier) -> Jot absorption low-pass
-    //                 (mid RT60 = decay, RT60 halved at dampingHz); the lines are mixed by an
+    //   late network: every line = modulated delay (cubic interpolation, one slow sine per line at
+    //                 incommensurate rates) -> short density all-pass -> bass shelf (low decay x
+    //                 bassMultiplier) -> absorption shelf (the longest loop's Jot low-pass law, RT60
+    //                 halved at dampingHz, matched per line at DC / damping / Nyquist so every loop has
+    //                 the same RT60(f) and no mode outlives its neighbours); the lines are mixed by an
     //                 orthogonal 16x16 Hadamard matrix (lossless), so the decay is set by the
     //                 absorption filters alone and can never run away.
+    //   decay: the set decay is the broadband T30 of the tail; decayCompensationFor() lengthens the
+    //          loop T60 (x 1..1.6) for the damping and the build-up of long lines (0.6).
     //   output: early + late -> high cut -> width (mid/side).
     //
     // Outputs WET ONLY; the chain adds the dry signal exactly once. All memory is allocated

@@ -255,30 +255,30 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 
 | case | metric | Headliner | VintageVerb | Pro-R 2 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|---|
-| plate | t30_s (s) – set decay 1.8 s | 1.66 | 1.49 | 1.53 | 0.17 | ref − 0.00 | info |
-| plate | t30_err_pct (%) – set decay 1.8 s | 7.68 | 17.1 | 15.0 | -9.41 | ≤ 10.0 | pass |
-| plate | edt_s (s) | 1.51 | 1.46 | 1.83 | 0.04 | ref − 0.00 | info |
-| plate | curvature_db (dB) | 0.18 | 0.15 | 0.15 | 0.04 | ref + 0.50 | pass |
-| plate | mean_ned | 0.97 | 0.90 | 0.93 | 0.07 | ref − 0.05 | pass |
-| plate | mixing_ms (ms) | 26.0 | 107 | 72.0 | -81.0 | ref + 20.0 | pass |
-| plate | modal_ringing_db (dB) | 11.1 | 7.46 | 8.90 | 3.65 | ref + 2.00 | FAIL |
-| plate | tail_corr | -0.02 | -0.00 | -0.06 | -0.02 | ref + 0.10 | pass |
-| plate | bass_ratio (x) | 0.98 | 1.03 | 1.31 | -0.05 | ref ± 0.20 | pass |
-| plate | treble_ratio (x) | 0.84 | 0.89 | 0.97 | -0.05 | ref ± 0.20 | pass |
+| plate | t30_s (s) – set decay 1.8 s | 1.79 | 1.49 | 1.53 | 0.30 | ref − 0.00 | info |
+| plate | t30_err_pct (%) – set decay 1.8 s | 0.79 | 17.4 | 14.9 | -16.6 | ≤ 10.0 | pass |
+| plate | edt_s (s) | 1.67 | 1.46 | 1.84 | 0.20 | ref − 0.00 | info |
+| plate | curvature_db (dB) | 0.18 | 0.12 | 0.21 | 0.06 | ref + 0.50 | pass |
+| plate | mean_ned | 0.99 | 0.90 | 0.90 | 0.09 | ref − 0.05 | pass |
+| plate | mixing_ms (ms) | 22.0 | 107 | 72.0 | -85.0 | ref + 20.0 | pass |
+| plate | modal_ringing_db (dB) | 8.28 | 6.91 | 8.23 | 1.37 | ref + 2.00 | pass |
+| plate | tail_corr | -0.01 | -0.00 | -0.06 | -0.00 | ref + 0.10 | pass |
+| plate | bass_ratio (x) | 1.03 | 0.98 | 1.24 | 0.04 | ref ± 0.20 | pass |
+| plate | treble_ratio (x) | 0.87 | 0.91 | 0.96 | -0.04 | ref ± 0.20 | pass |
 | plate | dry_leak_db (dB) – burst, 100 % wet | -300 | -151 | -300 | -149 | ≤ -60.0 | pass |
 | plate | mix0_null_db (dB) – latency 0 | -152 | – | – | – | ≤ -60.0 | pass |
 | plate | off_null_db (dB) | -152 | – | – | – | ≤ -100 | pass |
-| plate | cpu_pct (%) – median over this module's renders | 0.79 | 0.24 | 0.64 | 0.55 | ref + 2.00 | pass |
-| hall | t30_s (s) – set decay 2.6 s | 2.21 | 2.66 | 2.24 | -0.45 | ref − 0.00 | info |
-| hall | t30_err_pct (%) – set decay 2.6 s | 15.0 | 2.12 | 13.9 | 12.9 | ≤ 10.0 | FAIL |
-| hall | edt_s (s) | 1.65 | 2.17 | 2.07 | -0.52 | ref − 0.00 | info |
-| hall | curvature_db (dB) | 0.32 | 0.26 | 0.10 | 0.06 | ref + 0.50 | pass |
-| hall | mean_ned | 0.91 | 0.70 | 0.53 | 0.21 | ref − 0.05 | pass |
-| hall | mixing_ms (ms) | 72.0 | 207 | 363 | -135 | ref + 20.0 | pass |
-| hall | modal_ringing_db (dB) | 6.44 | 11.2 | 3.79 | -4.76 | ref + 2.00 | pass |
-| hall | tail_corr | 0.00 | 0.01 | -0.02 | -0.00 | ref + 0.10 | pass |
-| hall | bass_ratio (x) | 1.05 | 1.19 | 1.19 | -0.13 | ref ± 0.20 | pass |
-| hall | treble_ratio (x) | 0.69 | 0.75 | 0.90 | -0.05 | ref ± 0.20 | pass |
+| plate | cpu_pct (%) – median over this module's renders | 0.83 | 0.24 | 0.65 | 0.59 | ref + 2.00 | pass |
+| hall | t30_s (s) – set decay 2.6 s | 2.58 | 2.67 | 2.25 | -0.09 | ref − 0.00 | info |
+| hall | t30_err_pct (%) – set decay 2.6 s | 0.87 | 2.51 | 13.4 | -1.64 | ≤ 10.0 | pass |
+| hall | edt_s (s) | 1.96 | 2.17 | 2.06 | -0.22 | ref − 0.00 | info |
+| hall | curvature_db (dB) | 0.35 | 0.28 | 0.14 | 0.06 | ref + 0.50 | pass |
+| hall | mean_ned | 0.93 | 0.70 | 0.52 | 0.23 | ref − 0.05 | pass |
+| hall | mixing_ms (ms) | 69.0 | 207 | 419 | -138 | ref + 20.0 | pass |
+| hall | modal_ringing_db (dB) | 6.37 | 11.1 | 4.51 | -4.77 | ref + 2.00 | pass |
+| hall | tail_corr | 0.01 | 0.01 | -0.02 | 0.01 | ref + 0.10 | pass |
+| hall | bass_ratio (x) | 1.05 | 1.16 | 1.20 | -0.11 | ref ± 0.20 | pass |
+| hall | treble_ratio (x) | 0.70 | 0.74 | 0.90 | -0.04 | ref ± 0.20 | pass |
 <!-- END reverb -->
 
 <!-- BEGIN smash -->
@@ -369,6 +369,15 @@ Stutter, Pulse and Vocal Check pass at baseline.
    allpasses with incommensurate lengths in the input diffuser, and give each loop its own 1-pole absorption so no mode
    decays slower than its neighbours. *Do (hall):* derive per-line feedback from the actual loop lengths
    (g = 10^(−3·L/(fs·T60))) and calibrate the type's decay scaling so T30 = set decay ± 10 %.
+   **Done (reverb track, 0.6):** passes every gated metric (table above). Plate ringing 8.3 dB (VintageVerb 6.9,
+   Pro-R 2 8.2), T30 within 1 % for plate and hall and within 5.2 % for all 8 types at 1 / 2.6 / 6 s
+   (was 10–31 % short: the damping shortened the highs, where a white impulse has most of its energy).
+   Fixes: broadband decay compensation (`ReverbModule::decayCompensationFor`), per-line absorption shelves on
+   one common RT60(f) law, short in-loop all-passes, deeper per-line modulation at incommensurate rates (a
+   random walk rang 1–2 dB more than sines in the measurements), 6 input all-passes. After-renders:
+   `velvox-bench\2026-10-25\modules-after\reverb\`. Character note (info): Headliner's mixing time (22 / 69 ms)
+   stays much shorter than the references' (72–419 ms) – a denser onset; the mids ring ~10–20 % longer than the
+   set decay so that the whole tail meets it (VintageVerb does the same).
 5. **Smooth – removes broadband instead of targeting resonances.** At more removed energy than soothe2 (Amount 75 vs
    depth 0) the largest stationary resonance drops 0.26 dB (soothe2 0.98 dB) and the STFT peak-to-envelope only 0.05 dB
    (0.20 dB); flatness gain is higher (1.03 vs 0.79) – the hallmark of an overall dulling. Musical noise and transients are
