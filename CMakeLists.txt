@@ -85,7 +85,8 @@ set(VELVOX_SOURCES
     Source/UI/ChainView.cpp
     Source/UI/ModuleBrowser.cpp
     Source/UI/DetailPanels.cpp
-    Source/UI/EqPanel.cpp Source/UI/ReverbPanel.cpp)
+    Source/UI/EqPanel.cpp
+    Source/UI/ReverbPanel.cpp
     Source/UI/AutoMixView.cpp
     Source/UI/AnalysisOverlay.cpp
     Source/UI/TopBar.cpp
