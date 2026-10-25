@@ -140,6 +140,11 @@ _add(Module(
                       ("High-Pass Frequency", "6000"), ("Low-Pass Frequency", "20000")])],
     cases=[Case("vocal", headliner={"deessFreq": 6500, "deessThreshold": -30, "deessRange": 6, "deessMode": 0, "deessListen": 0},
                 procedures=["deess_vocal", "deess_inactive_null", "nulls", "cpu"],
+                calibrate={"Pro-DS": Calib("Threshold", [-60, -55, -50, -45, -40, -35, -30, -25, -20], "sib_reduction")}),
+           # 0.6 option: detection relative to the full-band level (Pro-DS "Single Vocal" is relative as well)
+           Case("relative", headliner={"deessFreq": 6500, "deessThreshold": -30, "deessRange": 6, "deessMode": 0, "deessListen": 0,
+                                       "deessDetection": 1},
+                procedures=["deess_vocal", "deess_inactive_null", "nulls", "cpu"],
                 calibrate={"Pro-DS": Calib("Threshold", [-60, -55, -50, -45, -40, -35, -30, -25, -20], "sib_reduction")})],
     tolerances={"sib_reduction_db": ("higher", 1.0), "nonsib_hf_change_db": ("higher", 0.5), "selectivity_db": ("higher", 1.0),
                 "transient_change_db": ("match", 1.0, 0.0), "inactive_null_db": ("lower", 0.0, -60.0), "cpu_pct": ("lower", 0.5)}))

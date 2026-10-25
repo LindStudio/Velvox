@@ -115,23 +115,23 @@ The tables are generated (`bench.py <module> --update-doc`). gap = Headliner −
 
 | case | metric | Headliner | Pro-C 2 Vocal | Pro-C 2 Clean | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|---|
-| vocal | ratio_measured (:1) | 3.89 | 12.6 | 4.37 | -8.68 | 4.00 ± 0.50 | pass |
-| vocal | threshold_measured_db (dB) | -22.7 | -25.5 | -21.4 | 2.82 | -24.0 ± 2.00 | pass |
-| vocal | curve_dev_db (dB) | 1.13 | 5.51 | 1.63 | -4.37 | ≤ 1.00 | FAIL |
-| vocal | attack_ms (ms) – set 10 ms | 16.0 | 18.0 | 6.50 | -2.00 | ref ± 5.00 | pass |
-| vocal | release_ms (ms) – set 120 ms | 120 | 139 | 66.5 | -19.5 | ref ± 40.0 | pass |
-| vocal | thd_100hz_db (dB) | -48.0 | -57.4 | -41.9 | 9.35 | ref + 3.00 | FAIL |
-| vocal | crest_reduction_db (dB) – mean of clips | 2.29 | 1.97 | 3.05 | 0.32 | ref ± 1.00 | pass |
-| vocal | st_loudness_std_lu (LU) – mean of clips | 2.43 | 2.06 | 2.47 | 0.37 | ref ± 0.50 | pass |
+| vocal | ratio_measured (:1) | 4.00 | 12.6 | 4.37 | -8.56 | 4.00 ± 0.50 | pass |
+| vocal | threshold_measured_db (dB) | -24.0 | -25.5 | -21.4 | 1.53 | -24.0 ± 2.00 | pass |
+| vocal | curve_dev_db (dB) | 0.00 | 5.51 | 1.63 | -5.51 | ≤ 1.00 | pass |
+| vocal | attack_ms (ms) – set 10 ms | 10.5 | 18.0 | 6.50 | -7.50 | 10.0 ± 5.00 | pass |
+| vocal | release_ms (ms) – set 120 ms | 130 | 139 | 66.5 | -9.50 | ref ± 40.0 | pass |
+| vocal | thd_100hz_db (dB) | -122 | -57.4 | -41.9 | -64.3 | ref + 3.00 | pass |
+| vocal | crest_reduction_db (dB) – mean of clips | 1.75 | 1.97 | 3.05 | -0.22 | ref ± 1.00 | pass |
+| vocal | st_loudness_std_lu (LU) – mean of clips | 2.20 | 2.06 | 2.47 | 0.14 | ref ± 0.50 | pass |
 | vocal | mix0_null_db (dB) – latency 0 | -152 | – | – | – | ≤ -60.0 | pass |
 | vocal | off_null_db (dB) | -152 | – | – | – | ≤ -100 | pass |
-| vocal | cpu_pct (%) – median over this module's renders | 0.24 | 0.23 | 0.19 | 0.02 | ref + 0.50 | pass |
+| vocal | cpu_pct (%) – median over this module's renders | 0.29 | 0.23 | 0.19 | 0.06 | ref + 0.50 | pass |
 <!-- END comp -->
 
 <!-- BEGIN deess -->
 #### De-Esser (`deess`)
 
-Calibrated: vocal: Pro-DS Threshold=-50.1562
+Calibrated: vocal: Pro-DS Threshold=-50.1562; relative: Pro-DS Threshold=-36.5625
 
 | case | metric | Headliner | Pro-DS | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
@@ -141,7 +141,14 @@ Calibrated: vocal: Pro-DS Threshold=-50.1562
 | vocal | transient_change_db (dB) | 0.05 | 3.06 | -3.01 | 0.00 ± 1.00 | pass |
 | vocal | inactive_null_db (dB) | -152 | – | – | ≤ -60.0 | pass |
 | vocal | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| vocal | cpu_pct (%) – median over this module's renders | 0.26 | 0.32 | -0.07 | ref + 0.50 | pass |
+| vocal | cpu_pct (%) – median over this module's renders | 0.27 | 0.32 | -0.05 | ref + 0.50 | pass |
+| relative | sib_reduction_db (dB) | 3.48 | 3.53 | -0.05 | ref − 1.00 | pass |
+| relative | nonsib_hf_change_db (dB) | -2.50 | -2.35 | -0.15 | ref − 0.50 | pass |
+| relative | selectivity_db (dB) | 0.98 | 1.18 | -0.20 | ref − 1.00 | pass |
+| relative | transient_change_db (dB) | 0.07 | 3.05 | -2.98 | 0.00 ± 1.00 | pass |
+| relative | inactive_null_db (dB) | -152 | – | – | ≤ -60.0 | pass |
+| relative | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
+| relative | cpu_pct (%) – median over this module's renders | 0.29 | 0.32 | -0.04 | ref + 0.50 | pass |
 <!-- END deess -->
 
 <!-- BEGIN smooth -->
@@ -294,7 +301,7 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 | default | crest_reduction_db (dB) – mean of clips | 0.69 | 1.20 | -0.51 | ref ± 2.00 | pass |
 | default | st_loudness_std_lu (LU) – mean of clips | 3.33 | 3.10 | 0.23 | ref + 0.50 | pass |
 | default | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.37 | 0.15 | 0.21 | ref + 0.50 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.39 | 0.16 | 0.24 | ref + 0.50 | pass |
 <!-- END smash -->
 
 <!-- BEGIN ride -->
@@ -302,10 +309,10 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 
 | case | metric | Headliner | Vocal Rider | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| default | st_loudness_std_lu (LU) – dry: 3.80 LU | 3.30 | 2.92 | 0.38 | ref + 0.30 | FAIL |
-| default | gain_jitter_db (dB) | 0.07 | 0.05 | 0.02 | ref + 0.05 | pass |
-| default | transient_change_db (dB) | -0.26 | -0.04 | -0.22 | ref ± 0.50 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.19 | 0.09 | 0.10 | ref + 0.50 | pass |
+| default | st_loudness_std_lu (LU) – dry: 3.80 LU | 2.35 | 2.92 | -0.57 | ref + 0.30 | pass |
+| default | gain_jitter_db (dB) | 0.09 | 0.05 | 0.04 | ref + 0.05 | pass |
+| default | transient_change_db (dB) | -0.33 | -0.04 | -0.29 | ref ± 0.50 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.24 | 0.09 | 0.15 | ref + 0.50 | pass |
 <!-- END ride -->
 
 <!-- BEGIN chop -->
@@ -381,6 +388,9 @@ Stutter, Pulse and Vocal Check pass at baseline.
    domain (Giannoulis et al. 2012, branching smooth detector) with a short peak-hold (~ one 50 Hz period) or an RMS
    detector option, and a program-dependent release (fast/slow dual release); check the knee polynomial against the
    ideal (the knee is 6 dB wide at threshold −24, ratio 4).
+   **Fixed (overhaul/dyn):** 10 ms decoupled peak hold before the log-domain smoother → THD −122 dB, curve 0.00 dB,
+   attack 10.5 ms (judged against the set 10 ms: Pro-C 2 Vocal/Clean read 18/6.5 ms at the same knob); new options
+   Auto release (dual, program dependent) and Auto makeup. After-renders (all four modules): `velvox-bench\2026-10-25\modules-after\<module>`.
 7. **Choir – narrow and rough:** L/R correlation 0.94 vs 0.79 (Waves Doubler4), AM roughness 2.12 vs 1.62 dB on a
    sustained tone. *Do:* spread voices to fixed, alternating pan positions scaled by Width (outer voices ±80–100 %),
    decorrelate per-voice modulation (independent smoothed random walks, 0.1–0.6 Hz), and normalise the voice sum so
@@ -388,6 +398,9 @@ Stutter, Pulse and Vocal Check pass at baseline.
 8. **Level Ride – evens the vocal less than Vocal Rider:** short-term loudness spread 3.30 LU vs 2.92 LU (dry 3.80) at
    ±8 dB range, with similar smoothness (gain jitter 0.07 vs 0.05 dB). *Do:* faster word-level response (or 50–100 ms
    lookahead with constant latency), raise the effective Amount mapping, keep the transient preservation (−0.26 dB now).
+   **Fixed (overhaul/dyn):** 80 ms lookahead (constant latency while Ride is in the chain), word-level control law,
+   gap/breath hold, phrase level from the first word → 2.35 LU (Vocal Rider 2.92), jitter 0.09 dB, transients −0.33 dB.
+   De-Esser also gained a relative-detection option (case `relative`, passes vs Pro-DS).
 
 Passing modules – what to keep: De-Esser equals Pro-DS at equal sibilance reduction (selectivity 1.16 vs 1.43 dB,
 lisp −2.7 vs −2.35 dB, transients untouched where Pro-DS adds +3 dB) and nulls perfectly when inactive; Delay matches
