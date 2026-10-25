@@ -344,6 +344,19 @@ private:
             panel->refresh();
             auto* knob = findMain<ui::Knob> (*panel, pid::delayTime);
             expect (knob != nullptr && knob->getDialSize() >= 50, "back: large ms knob");
+
+            // Mehr open + synced (the widest main row): the switch labels stay whole
+            panel->setMoreOpen (true);
+            h.set (pid::delaySync, 1.0f);
+            panel->refresh();
+            for (auto* id : { pid::delaySync, pid::delayPingPong })
+                if (auto* t = findMain<ui::Toggle> (*panel, id))
+                {
+                    const int needed = 36 + juce::GlyphArrangement::getStringWidthInt (ui::medium (12.0f), t->getButtonText());
+                    expect (t->getWidth() >= needed, juce::String (id) + ": label fits with Mehr open (" + juce::String (t->getWidth())
+                                                         + " < " + juce::String (needed) + ")");
+                    expect (panel->getMainRowArea().contains (t->getBounds()), "inside the main row");
+                }
         }
     }
 

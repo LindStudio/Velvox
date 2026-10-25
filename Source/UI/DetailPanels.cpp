@@ -558,37 +558,43 @@ namespace velvox::ui
     {
         if (mainControls.empty())
             return;
-        // Preferred widths: knobs 96, segment groups by their number of segments, switches 120
-        std::vector<int> widths;
+        // Preferred widths: knobs 96, segment groups by their number of segments, switches 124. When the row is
+        // too narrow (Mehr open), everything shrinks alike - except switches, which keep room for their label
+        std::vector<int> widths, keep;
         int total = 0;
         for (auto* c : mainControls)
         {
             int w = 96;
             if (auto* s = dynamic_cast<Segments*> (c))
                 w = juce::jlimit (150, 440, 58 * (s->getNumSegments() + (s->getOverflowSegment() >= 0 ? 1 : 0)));
-            else if (dynamic_cast<Toggle*> (c) != nullptr)
-                w = 124;
+            else if (auto* t = dynamic_cast<Toggle*> (c))
+                w = std::min (124, 38 + juce::GlyphArrangement::getStringWidthInt (medium (12.0f), t->getButtonText()));
             else if (dynamic_cast<Choice*> (c) != nullptr)
                 w = 170;
             else if (dynamic_cast<juce::Button*> (c) != nullptr)
                 w = 104;
             widths.push_back (w);
+            keep.push_back (dynamic_cast<Toggle*> (c) != nullptr ? 1 : 0);
             total += w;
         }
         const int gapW = 18;
         total += gapW * ((int) mainControls.size() - 1);
-        const float shrink = total > row.getWidth() ? (float) row.getWidth() / (float) total : 1.0f;
+        int kept = 0;
+        for (size_t i = 0; i < widths.size(); ++i)
+            kept += keep[i] != 0 ? widths[i] : 0;
+        const float shrink = total > row.getWidth() ? (float) std::max (0, row.getWidth() - kept) / (float) std::max (1, total - kept) : 1.0f;
         float x = (float) row.getX() + (float) std::max (0, (row.getWidth() - total) / 2);
         for (size_t i = 0; i < mainControls.size(); ++i)
         {
-            const int w = std::min ((int) ((float) widths[i] * shrink), row.getRight() - (int) x);
+            const float scale = keep[i] != 0 ? 1.0f : shrink;
+            const int w = std::min ((int) ((float) widths[i] * scale), row.getRight() - (int) x);
             auto cell = juce::Rectangle<int> ((int) x, row.getY(), w, row.getHeight());
             auto* c = mainControls[i];
             if (dynamic_cast<Knob*> (c) != nullptr)
                 c->setBounds (cell);
             else
                 c->setBounds (cell.withSizeKeepingCentre (w, dynamic_cast<Choice*> (c) != nullptr ? 30 : 28).translated (0, -8));
-            x += (float) widths[i] * shrink + (float) gapW * shrink;
+            x += (float) widths[i] * scale + (float) gapW * shrink;
         }
     }
 

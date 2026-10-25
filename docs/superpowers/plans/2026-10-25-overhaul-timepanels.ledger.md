@@ -61,3 +61,16 @@ TDD note: the naming checks were written together with the renames, not watched 
 - Ruling: Stutter view = the last 4 s (ChopModule::readDisplay, 2.5 ms frames) aggregated per pixel column; input peak grey,
   what passes (peak × gain) in the module colour (sqrt scale), muted slices (type '.' with gain < 0.5) darkened with edge lines,
   repeated slices tinted with "R"; a 16-cell pattern strip with the current step below. Depth 0 shows no cuts.
+
+Merge: feature/automix (39c0632: eqpanel, reverbpanel, smooth, pitch) merged. Conflicts: DetailPanels.cpp / ModuleViews.cpp (both sides
+deleted neighbouring old panels / views – both deletions kept, factory lines: time panels + createReverbPanel / createReverbRoom),
+Tests/TestMain.cpp (two "set:" overlays – unified into one: values in real units, then 128 blocks of audio so live views fill,
+",more" opens Mehr).
+
+Task 4: complete (frame fix + screenshots + full suite, see below)
+- Ruling: DetailPanel::layoutMainRow – when the main row is too narrow (Mehr open), switches keep the width of their label
+  (38 px + text, max 124) and only the other controls shrink. — "Ping-Pong" was cut to "Ping-Po…" with Mehr open and Sync on;
+  fixing it in the frame helps every panel with a switch in the main row. Test "Delay panel: … label fits with Mehr open" failed
+  first (79 < 87 px), passes after. — Cost if wrong: segments / knobs get a few px less with Mehr open.
+- Screenshots (looked at each): C:\Users\jakob\dev\velvox-wt\shots-timepanels\{delay-pingpong, delay-synced-mehr, pulse-classic,
+  pulse-custom-mehr, stutter, stutter-repeat}-{1000,889}.png. With Mehr open at 889 px the Pulse tiles are ~55 px wide (still readable).
