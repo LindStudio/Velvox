@@ -17,9 +17,9 @@ public:
 
     void runTest() override
     {
-        beginTest ("Version: 0.6.0 in CMake and ProductInfo");
+        beginTest ("Version: 0.6.1 in CMake and ProductInfo");
         {
-            expectEquals (juce::String (product::versionString), juce::String ("0.6.0"));
+            expectEquals (juce::String (product::versionString), juce::String ("0.6.1"));
             expectEquals (juce::String (VELVOX_PROJECT_VERSION), juce::String (product::versionString), "CMake project VERSION");
         }
 
