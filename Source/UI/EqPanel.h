@@ -152,6 +152,7 @@ namespace velvox::ui
 
         void refresh() override;
         void resized() override;
+        void paintOverChildren (juce::Graphics&) override;
 
         void selectBand (int band);   // -1: none
         int getSelectedBand() const noexcept { return selectedBand; }
@@ -167,12 +168,16 @@ namespace velvox::ui
     private:
         void bindSlots();
         void connectGraph();
+        void layoutBandRow();
 
         std::array<Slot*, 5> slots {};
         juce::TextButton* legacyResponse = nullptr;
-        juce::Label* noBand = nullptr;
-        int selectedBand = -1, boundBand = -2, boundKind = -1;
-        bool graphConnected = false;
+        juce::Label noBand;
+        juce::Rectangle<int> badgeArea;
+        juce::String badgeText, badgeTag;   // built when the selection changes, not in paint
+        int selectedBand = -1, boundBand = -2, boundType = -1;
+        bool graphConnected = false, lastLegacyShown = false;
+        inline static std::array<int, 4> lastSelection { -1, -1, -1, -1 };
     };
 
     std::unique_ptr<DetailPanel> createEqPanel (VelvoxAudioProcessor& p);

@@ -830,4 +830,267 @@ namespace velvox::ui
         }
         return false;
     }
+
+    //==========================================================================
+    // One cell of the selected-band row: the control bound to one parameter of the selected band.
+    // Rebinding replaces the control (selection changes are rare, never per frame).
+    class EqPanel::Slot final : public juce::Component
+    {
+    public:
+        enum class Kind { none, knob, choice, toggle };
+
+        void bind (APVTS& state, Kind k, const juce::String& id, const juce::String& label, juce::Colour hue)
+        {
+            if (k == kind && id == boundId)
+                return;
+            child.reset();
+            kind = k;
+            boundId = id;
+            if (k == Kind::knob)
+            {
+                auto kn = std::make_unique<Knob> (state, id.toRawUTF8(), label, hue);
+                kn->setProminence (Knob::Prominence::primary);
+                child = std::move (kn);
+            }
+            else if (k == Kind::choice)
+            {
+                child = std::make_unique<Choice> (state, id.toRawUTF8(), label);
+            }
+            else if (k == Kind::toggle)
+            {
+                child = std::make_unique<Toggle> (state, id.toRawUTF8(), label, hue);
+            }
+            if (child != nullptr)
+                addAndMakeVisible (*child);
+            resized();
+        }
+
+        void setUsable (bool usable)
+        {
+            if (child != nullptr)
+            {
+                child->setEnabled (usable);
+                child->setAlpha (usable ? 1.0f : 0.3f);
+            }
+        }
+
+        void resized() override
+        {
+            if (child == nullptr)
+                return;
+            auto r = getLocalBounds();
+            if (kind == Kind::knob)
+                child->setBounds (r);
+            else if (kind == Kind::choice)
+                child->setBounds (r.withSizeKeepingCentre (r.getWidth(), std::min (r.getHeight(), 62)).translated (0, -6));
+            else
+                child->setBounds (r.withSizeKeepingCentre (std::min (r.getWidth(), 84), 26).translated (0, -8));
+        }
+
+    private:
+        std::unique_ptr<juce::Component> child;
+        Kind kind = Kind::none;
+        juce::String boundId;
+    };
+
+    //==========================================================================
+    EqPanel::EqPanel (VelvoxAudioProcessor& p)
+        : DetailPanel (p, "Equalizer", help::shortDescription ((int) ModuleId::eq), pid::eqOn)
+    {
+        knob (pid::eqMix, "Mix");
+        legacyResponse = &own (std::make_unique<juce::TextButton> (de ("Alte EQ-Kurve – umstellen")));
+        legacyResponse->setTooltip (de ("Dieses EQ nutzt noch die Filterkurven von 0.5 (klingt wie das alte Projekt). "
+                                        "Umstellen: analog genaue Kurven ohne Stauchung nahe 20 kHz."));
+        legacyResponse->onClick = [this]
+        {
+            proc.getUndo().perform (de ("EQ: neue Filterkurven"), [this] { eqbands::clearLegacyResponse (apvts, getInstance()); });
+            refresh();
+        };
+        lastLegacyShown = apvts.getRawParameterValue (pidFor (pid::eqLegacyResponse))->load() > 0.5f;
+        legacyResponse->setVisible (lastLegacyShown);
+
+        for (auto& s : slots)
+            s = &own (std::make_unique<Slot>());
+        setMainControls ({ slots[0], slots[1], slots[2], slots[3], slots[4] });
+
+        noBand.setText ("Kein Band", juce::dontSendNotification);
+        noBand.setFont (semiBold (10.0f, 0.12f));
+        noBand.setColour (juce::Label::textColourId, colours::textFaint);
+        noBand.setJustificationType (juce::Justification::centred);
+        noBand.setInterceptsMouseClicks (false, false);
+        addChildComponent (noBand);
+
+        // Opening: the band selected last time in this EQ, else the first band there is
+        const int k = juce::jlimit (0, 3, getInstance());
+        const auto shown = eqedit::shownBands (proc, k);
+        int first = -1;
+        if (lastSelection[(size_t) k] >= 0 && lastSelection[(size_t) k] < dsp::maxEqBands && shown[(size_t) lastSelection[(size_t) k]].used)
+            first = lastSelection[(size_t) k];
+        for (int i = 0; i < dsp::maxEqBands && first < 0; ++i)
+            if (shown[(size_t) i].used)
+                first = i;
+        selectBand (first);
+    }
+
+    EqPanel::~EqPanel()
+    {
+        if (auto* g = getGraph())
+            g->onSelect = nullptr;
+    }
+
+    std::unique_ptr<DetailPanel> createEqPanel (VelvoxAudioProcessor& p) { return std::make_unique<EqPanel> (p); }
+
+    EqGraph* EqPanel::getGraph() noexcept { return dynamic_cast<EqGraph*> (getVisual()); }
+
+    void EqPanel::connectGraph()
+    {
+        auto* g = getGraph();
+        if (graphConnected || g == nullptr)
+            return;
+        graphConnected = true;
+        g->onSelect = [this] (int band) { selectBand (band); };
+        g->setSelected (selectedBand);
+    }
+
+    void EqPanel::layoutVisual (juce::Rectangle<int>)
+    {
+        connectGraph();
+    }
+
+    void EqPanel::selectBand (int band)
+    {
+        band = band >= 0 && band < dsp::maxEqBands ? band : -1;
+        if (band == selectedBand && boundBand == band)
+            return;
+        selectedBand = band;
+        const int k = getInstance();
+        lastSelection[(size_t) juce::jlimit (0, 3, k)] = band;
+
+        // A band a macro created has no parameters yet: give it its own (same sound, not an edit)
+        if (band >= 0 && eqedit::shownBands (proc, k)[(size_t) band].macroOnly)
+        {
+            proc.getUndo().beginSuppress();
+            eqedit::materialise (proc, k, band);
+            proc.getUndo().endSuppress();
+        }
+        if (auto* g = getGraph(); g != nullptr && g->getSelected() != band)
+            g->setSelected (band);
+        bindSlots();
+    }
+
+    void EqPanel::bindSlots()
+    {
+        using Kind = Slot::Kind;
+        const int k = getInstance();
+        const auto hue = moduleColour (ModuleId::eq);
+        if (selectedBand < 0)
+        {
+            for (auto* s : slots)
+            {
+                s->bind (apvts, Kind::none, {}, {}, hue);
+                s->setVisible (false);
+            }
+            noBand.setVisible (true);
+            boundBand = -1;
+            boundType = -1;
+            layoutBandRow();
+            repaint();
+            return;
+        }
+
+        const auto b = eqedit::parameterBand (proc, k, selectedBand);
+        const auto id = [&] (const char* field) { return eqedit::paramId (k, selectedBand, field); };
+        slots[0]->bind (apvts, Kind::toggle, id (pid::eqband::on), "Ein", hue);
+        slots[1]->bind (apvts, Kind::choice, id (pid::eqband::type), "Typ", hue);
+        slots[2]->bind (apvts, Kind::knob, id (pid::eqband::freq), "Freq", hue);
+        slots[3]->bind (apvts, Kind::knob, id (pid::eqband::gain), "Gain", hue);
+        if (b.isCut())
+            slots[4]->bind (apvts, Kind::choice, id (pid::eqband::slope), "Slope", hue);
+        else
+            slots[4]->bind (apvts, Kind::knob, id (pid::eqband::q), "Q", hue);
+        slots[3]->setUsable (eqedit::hasGain (b.type));
+        slots[4]->setUsable (b.isCut() || eqedit::hasQ (b.type));
+        for (auto* s : slots)
+            s->setVisible (true);
+        noBand.setVisible (false);
+        boundBand = selectedBand;
+        boundType = b.type;
+        badgeText = "BAND " + juce::String (selectedBand + 1);
+        badgeTag = eqedit::roleTag (b.role);
+        layoutBandRow();
+        repaint();
+    }
+
+    void EqPanel::refresh()
+    {
+        DetailPanel::refresh();
+        connectGraph();
+        if (live == nullptr)
+            if (auto* g = getGraph())
+                g->refreshCurves();   // without live data (tests) the graph is not updated by the frame
+
+        if (selectedBand >= 0 && eqedit::parameterBand (proc, getInstance(), selectedBand).type != boundType)
+            bindSlots();
+
+        const bool legacy = apvts.getRawParameterValue (pidFor (pid::eqLegacyResponse))->load() > 0.5f;
+        if (legacy != lastLegacyShown)
+        {
+            lastLegacyShown = legacy;
+            legacyResponse->setVisible (legacy);
+            if (isMoreOpen())
+                resized();
+        }
+    }
+
+    void EqPanel::resized()
+    {
+        DetailPanel::resized();
+        layoutBandRow();
+    }
+
+    void EqPanel::layoutBandRow()
+    {
+        auto row = getMainRowArea().withTrimmedTop (6);
+        if (row.isEmpty())
+            return;
+        badgeArea = row.removeFromLeft (std::min (96, row.getWidth() / 6));
+        const int widths[5] { 96, 150, 96, 96, 132 };
+        const int gap = 16;
+        int total = gap * 4;
+        for (int w : widths)
+            total += w;
+        const float shrink = total > row.getWidth() ? (float) row.getWidth() / (float) total : 1.0f;
+        float x = (float) row.getX() + (float) std::max (0, (row.getWidth() - badgeArea.getWidth() - total) / 2);
+        for (int i = 0; i < 5; ++i)
+        {
+            const int w = (int) ((float) widths[i] * shrink);
+            slots[(size_t) i]->setBounds ((int) x, row.getY(), std::min (w, row.getRight() - (int) x), row.getHeight());
+            x += (float) (widths[i] + gap) * shrink;
+        }
+        noBand.setBounds (row.withSizeKeepingCentre (std::min (row.getWidth(), 220), 20));
+    }
+
+    void EqPanel::paintOverChildren (juce::Graphics& g)
+    {
+        // Badge of the selected band: its colour, number and role
+        if (selectedBand < 0 || badgeArea.isEmpty())
+            return;
+        auto r = badgeArea.toFloat().withSizeKeepingCentre ((float) badgeArea.getWidth(), 44.0f).translated (0.0f, -8.0f);
+        const auto c = eqedit::bandColour (selectedBand);
+        const auto dot = juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ r.getX() + 10.0f, r.getY() + 12.0f });
+        drawGlow (g, dot.getCentre(), 12.0f, 0.3f, c);
+        g.setColour (c);
+        g.fillEllipse (dot);
+        g.setColour (colours::textStrong);
+        g.setFont (semiBold (11.0f, 0.15f));
+        g.drawText (badgeText, juce::Rectangle<float> (r.getX() + 22.0f, r.getY() + 4.0f, r.getWidth() - 22.0f, 16.0f),
+                    juce::Justification::centredLeft, false);
+        if (badgeTag.isNotEmpty())
+        {
+            g.setColour (c.withAlpha (0.85f));
+            g.setFont (semiBold (9.0f, 0.12f));
+            g.drawText (badgeTag, juce::Rectangle<float> (r.getX() + 22.0f, r.getY() + 22.0f, r.getWidth() - 22.0f, 14.0f),
+                        juce::Justification::centredLeft, false);
+        }
+    }
 }

@@ -37,3 +37,23 @@ watched failing (the build would only have failed to link).
 - Ruling: the hover card is drawn by the graph itself (one card per point, values built in update(), not in paint) after
   motion::hoverInfoDelayMs = 600 ms; while dragging it shows at once as a read-out.
 - Ruling: the sum curve shows the EQ Mix as the magnitude approximation |1 + (H - 1) * mix| like the 0.5 curve (phase ignored).
+
+Task 3: complete (EqPanel: selected-band row of 5 re-bindable slots (Ein, Typ, Freq, Gain, Q / Slope for cuts) + band badge,
+Mehr: Mix + 'Alte EQ-Kurve – umstellen' (only while eqLegacyResponse is set, one undo step); old fixed-band EqPanel removed
+from DetailPanels.cpp, createDetailPanel(eq) -> createEqPanel; EQ help page rewritten; EqPanelTests 357 checks, PanelFrameTests
+1413, DesignTests 941). TDD note: panel tests written first, implementation before the first run (not watched failing).
+- Ruling: the main row is five slot components that rebind their control (Knob / Choice / Toggle from Widgets.h, unchanged) when
+  the selection or the band's cut/non-cut kind changes; EqPanel lays the row out itself after DetailPanel::resized() — why: the
+  frame's controls are bound to one fixed ID and the frame (DetailPanels.*, shared with every panel track) needs no change.
+  Cost: the frame's main-knob size check does not see the slot knobs (EqPanelTests checks them instead).
+- Ruling: Gain is shown dimmed and disabled for cuts / notch / band pass, Q for tilt (fixed row, no jumping layout).
+- Ruling: the panel opens with the band selected last time in that EQ (per instance, this session), else the first band.
+- Ruling: selecting a macro-only band in the panel writes it as parameters right away with the undo history suppressed (same
+  sound; not an edit), so the row shows the band's real values — cost: the band then stays as a parameter band (0 dB base) when
+  the macro goes back to 0.
+- Ruling: role bands are not hidden or locked: they show a tag (PRES / WARM / AIR / LC / MUD / AUTO / HC) under the point and in
+  the row badge; the role itself is not a control (it is the owner tag the macros use); delete resets it with the other six.
+- Removed assertion families (deliberately): DesignTests 'EQ slopes and band types as segments' + 'EQ cut switches'
+  (hpfSlope/lowType/highType segments, hpfOn/lpfOn toggles) -> 'EQ Mix' + 'EQ hides' the 0.5 IDs; PanelFrameTests exemption
+  'eqBand* belong to the panels track' -> hidden 0.5 fixed-band IDs must NOT be reached, eqBand* / eqLegacyResponse are checked
+  band by band in 'Headliner EQ panel'; UiTests EQ wheel test now drives the new graph (eqBand1Q_2 instead of midQ_2).

@@ -4,6 +4,7 @@
 #include "TestHelpers.h"
 #include "UI/EqPanel.h"
 #include "Parameters/EqBands.h"
+#include "PluginEditor.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -78,6 +79,48 @@ namespace
         w.isSmooth = false;
         w.isInertial = false;
         return w;
+    }
+
+    juce::String paramOf (juce::Component* c)
+    {
+        if (auto* k = dynamic_cast<ui::Knob*> (c)) return k->getParamId();
+        if (auto* s = dynamic_cast<ui::Segments*> (c)) return s->getParamId();
+        if (auto* t = dynamic_cast<ui::Toggle*> (c)) return t->getParamId();
+        if (auto* ch = dynamic_cast<ui::Choice*> (c)) return ch->getParamId();
+        return {};
+    }
+
+    void collectParams (juce::Component& c, juce::StringArray& out)
+    {
+        for (auto* child : c.getChildren())
+        {
+            if (const auto id = paramOf (child); id.isNotEmpty())
+                out.addIfNotAlreadyThere (id);
+            collectParams (*child, out);
+        }
+    }
+
+    juce::StringArray mainRowParams (ui::DetailPanel& panel)
+    {
+        juce::StringArray ids;
+        for (auto* c : panel.getMainControls())
+            if (c->isVisible())
+            {
+                if (const auto id = paramOf (c); id.isNotEmpty())
+                    ids.add (id);
+                collectParams (*c, ids);
+            }
+        return ids;
+    }
+
+    std::unique_ptr<ui::EqPanel> eqPanel (Harness& h, int instance)
+    {
+        auto p = ui::createDetailPanel (h.proc, dsp::selectionCode (ModuleId::eq, instance));
+        p->setBounds (VelvoxAudioProcessorEditor::panelArea().withZeroOrigin());
+        auto* eq = dynamic_cast<ui::EqPanel*> (p.get());
+        if (eq != nullptr)
+            p.release();
+        return std::unique_ptr<ui::EqPanel> (eq);
     }
 
     juce::Array<int> menuIds (const juce::PopupMenu& menu)
@@ -446,6 +489,145 @@ public:
             g.mouseWheelMove (mouse (g, p, p, false), wheel (0.22f));
             expect (value (h, "eqBand1Q_2") > 1.3f, "wheel on EQ 2");
             expectWithinAbsoluteError (value (h, "eqBand1Q"), 1.0f, 1.0e-4f, "EQ 1 Q untouched");
+        }
+
+        beginTest ("Panel: the main row shows the selected band (On, Type, Freq, Gain, Q - Slope for cuts)");
+        {
+            Harness h;
+            withEq (h, 0);
+            auto panel = eqPanel (h, 0);
+            expect (panel != nullptr, "the EQ panel");
+            if (panel == nullptr)
+                return;
+            expect (panel->getGraph() != nullptr, "its visual is the graph");
+            expectEquals (panel->getSelectedBand(), -1, "no bands, nothing selected");
+            expect (mainRowParams (*panel).isEmpty(), "empty row without a band");
+            expectEquals ((int) panel->getMainControls().size(), 5);
+
+            ui::eqedit::addBand (h.proc, 0, 300.0f, -2.0f);
+            ui::eqedit::addBand (h.proc, 0, 3000.0f, 2.0f);
+            ui::eqedit::addBand (h.proc, 0, 8000.0f, 1.0f);
+            panel->refresh();
+            panel->selectBand (2);
+            expectEquals (panel->getGraph()->getSelected(), 2, "graph follows the panel");
+            auto ids = mainRowParams (*panel);
+            for (auto* f : { pid::eqband::on, pid::eqband::type, pid::eqband::freq, pid::eqband::gain, pid::eqband::q })
+                expect (ids.contains (pid::eqBandId (3, f)), juce::String ("band 3 ") + f);
+            expect (! ids.contains (pid::eqBandId (3, pid::eqband::slope)), "no slope for a Bell");
+            for (auto& id : ids)
+                expect (id.startsWith ("eqBand3"), "only band 3: " + id);
+
+            panel->getGraph()->setSelected (0);
+            expectEquals (panel->getSelectedBand(), 0, "panel follows the graph");
+            expect (mainRowParams (*panel).contains (pid::eqBandId (1, pid::eqband::freq)));
+
+            ui::eqedit::setType (h.proc, 0, 0, EqBandType::lowCut);
+            panel->refresh();
+            ids = mainRowParams (*panel);
+            expect (ids.contains (pid::eqBandId (1, pid::eqband::slope)), "a cut shows its slope");
+            expect (! ids.contains (pid::eqBandId (1, pid::eqband::q)), "instead of Q");
+
+            // Main knobs are large, values editable through them
+            for (auto* c : panel->getMainControls())
+                for (auto* child : c->getChildren())
+                    if (auto* k = dynamic_cast<ui::Knob*> (child))
+                        expect (k->getDialSize() >= 50, "main knob large");
+
+            // Delete the selected band through the graph: the row follows
+            panel->getGraph()->performMenu (0, ui::EqGraph::menuDelete);
+            expectEquals (panel->getSelectedBand(), 1, "next band");
+            expect (mainRowParams (*panel).contains (pid::eqBandId (2, pid::eqband::gain)));
+        }
+
+        beginTest ("Panel: no 0.5 fixed band shown; every band parameter reachable; Mix in Mehr");
+        {
+            Harness h;
+            withEq (h, 0);
+            auto panel = eqPanel (h, 0);
+            if (panel == nullptr)
+                return;
+            juce::StringArray all;
+            collectParams (*panel, all);
+            for (auto* legacy : { pid::hpfOn, pid::hpfFreq, pid::hpfSlope, pid::lowType, pid::lowFreq, pid::lowGain, pid::lowQ,
+                                  pid::midFreq, pid::midGain, pid::midQ, pid::highType, pid::highFreq, pid::highGain, pid::highQ,
+                                  pid::lpfOn, pid::lpfFreq, pid::lpfSlope })
+                expect (! all.contains (legacy), juce::String ("hidden: ") + legacy);
+
+            bool mixInMehr = false;
+            for (auto* c : panel->getMoreControls())
+                if (auto* k = dynamic_cast<ui::Knob*> (c))
+                    mixInMehr = mixInMehr || k->getParamId() == pid::eqMix;
+            expect (mixInMehr, "Mix in Mehr");
+
+            for (int b = 0; b < dsp::maxEqBands; ++b)
+            {
+                for (auto type : { EqBandType::bell, EqBandType::highCut })
+                {
+                    setValue (h, ui::eqedit::paramId (0, b, pid::eqband::type), (float) type);
+                    panel->selectBand (b);
+                    panel->refresh();
+                    juce::StringArray ids;
+                    collectParams (*panel, ids);
+                    for (auto* f : { pid::eqband::on, pid::eqband::type, pid::eqband::freq })
+                        expect (ids.contains (pid::eqBandId (b + 1, f)), "reaches " + pid::eqBandId (b + 1, f));
+                    if (type == EqBandType::bell)
+                        expect (ids.contains (pid::eqBandId (b + 1, pid::eqband::gain)) && ids.contains (pid::eqBandId (b + 1, pid::eqband::q)),
+                                "reaches gain / Q of band " + juce::String (b + 1));
+                    else
+                        expect (ids.contains (pid::eqBandId (b + 1, pid::eqband::slope)), "reaches the slope of band " + juce::String (b + 1));
+                }
+            }
+        }
+
+        beginTest ("Panel: Alte EQ-Kurve - umstellen only while eqLegacyResponse is set, one undo step; EQ 3 binds _3");
+        {
+            Harness h;
+            withEq (h, 0);
+            auto panel = eqPanel (h, 0);
+            if (panel == nullptr)
+                return;
+            panel->setMoreOpen (true);
+            panel->refresh();
+            expect (! panel->getLegacyResponseButton().isVisible(), "hidden for a 0.6 state");
+            setValue (h, pid::eqLegacyResponse, 1.0f);
+            panel->refresh();
+            expect (panel->getLegacyResponseButton().isVisible(), "shown for a migrated state");
+            expect (panel->getMoreDrawer().getLocalBounds().contains (panel->getLegacyResponseButton().getBounds()), "inside Mehr");
+            h.proc.getUndo().clear();
+            panel->getLegacyResponseButton().onClick();
+            expect (value (h, pid::eqLegacyResponse) < 0.5f, "cleared");
+            expectEquals (steps (h), 1, "one step");
+            panel->refresh();
+            expect (! panel->getLegacyResponseButton().isVisible(), "gone again");
+
+            Harness h3;
+            withEq (h3, 2);
+            ui::eqedit::addBand (h3.proc, 2, 500.0f, 3.0f);
+            auto p3 = eqPanel (h3, 2);
+            if (p3 == nullptr)
+                return;
+            expectEquals (p3->getSelectedBand(), 0, "the first band is selected on opening");
+            for (auto& id : mainRowParams (*p3))
+                expect (id.endsWith ("_3"), "EQ 3 controls: " + id);
+        }
+
+        beginTest ("Panel: a macro band selected in the panel shows its processed values");
+        {
+            Harness h;
+            withEq (h, 0);
+            h.proc.getState().getParameter (pid::macroPresence)->setValueNotifyingHost (1.0f);
+            auto panel = eqPanel (h, 0);
+            if (panel == nullptr)
+                return;
+            panel->refresh();
+            const auto before = response (h, 0);
+            panel->selectBand (0);
+            expectEquals (band (h, 0, 0).role, (int) dsp::EqRole::air, "the panel binds the macro band's own parameters");
+            expectWithinAbsoluteError (band (h, 0, 0).freq, 10000.0f, 1.0f, "at the macro's frequency");
+            const auto after = response (h, 0);
+            for (size_t i = 0; i < before.size(); ++i)
+                expectWithinAbsoluteError (after[i], before[i], 0.01, "sound unchanged");
+            expectEquals (steps (h), 0, "selecting is not an edit");
         }
     }
 };

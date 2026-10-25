@@ -1,4 +1,5 @@
 #include "DetailPanels.h"
+#include "EqPanel.h"
 #include "ChainView.h"
 #include "../PluginProcessor.h"
 #include "../Presets/ModulePresets.h"
@@ -668,36 +669,6 @@ namespace velvox::ui
     {
         float grFrom (const LiveData* live, const LiveData::History LiveData::* h) { return live != nullptr ? (live->*h).ago (0) : 0.0f; }
 
-
-        // EQ (the eq track replaces the band model and this panel): curve with draggable bands
-        class EqPanel final : public DetailPanel
-        {
-        public:
-            explicit EqPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Equalizer", help::shortDescription ((int) ModuleId::eq), pid::eqOn)
-            {
-                auto& lcOn = toggle (pid::hpfOn, "Low Cut");
-                auto& hcOn = toggle (pid::lpfOn, "High Cut");
-                juce::ignoreUnused (lcOn, hcOn);
-                segments (pid::hpfSlope);
-                segments (pid::lowType);
-                segments (pid::lpfSlope);
-                segments (pid::highType);
-                auto& lcFreq = knob (pid::hpfFreq, "Low Cut");
-                knob (pid::lowFreq, "Low Freq");
-                auto& lowGain = knob (pid::lowGain, "Low Gain");
-                knob (pid::lowQ, "Low Q");
-                auto& midFreq = knob (pid::midFreq, "Mid Freq");
-                auto& midGain = knob (pid::midGain, "Mid Gain");
-                knob (pid::midQ, "Mid Q");
-                knob (pid::highFreq, "High Freq");
-                auto& highGain = knob (pid::highGain, "High Gain");
-                knob (pid::highQ, "High Q");
-                knob (pid::lpfFreq, "High Cut");
-                knob (pid::eqMix, "Mix");
-                setMainControls ({ &lcFreq, &lowGain, &midFreq, &midGain, &highGain });
-            }
-        };
 
         // COMPRESSOR: history + transfer curve, GR meter; Threshold, Ratio, Attack, Release
         class CompPanel final : public DetailPanel
@@ -1491,7 +1462,7 @@ namespace velvox::ui
         {
             switch (dsp::selectionModule (id))
             {
-                case ModuleId::eq:      panel = std::make_unique<EqPanel> (p); break;
+                case ModuleId::eq:      panel = createEqPanel (p); break;
                 case ModuleId::comp:    panel = std::make_unique<CompPanel> (p); break;
                 case ModuleId::deess:   panel = std::make_unique<DeEssPanel> (p); break;
                 case ModuleId::sat:     panel = std::make_unique<SatPanel> (p); break;
