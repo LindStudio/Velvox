@@ -1,12 +1,15 @@
 #include "DetailPanels.h"
 #include "EqPanel.h"
 #include "ReverbPanel.h"
+#include "SatPanel.h"
 #include "ChainView.h"
 #include "../PluginProcessor.h"
 #include "../Presets/ModulePresets.h"
 #include "Icons.h"
 #include "HelpContent.h"
 #include "UserSettings.h"
+#include "VocalCheckView.h"
+#include "TimePanels.h"
 
 namespace velvox::ui
 {
@@ -557,37 +560,43 @@ namespace velvox::ui
     {
         if (mainControls.empty())
             return;
-        // Preferred widths: knobs 96, segment groups by their number of segments, switches 120
-        std::vector<int> widths;
+        // Preferred widths: knobs 96, segment groups by their number of segments, switches 124. When the row is
+        // too narrow (Mehr open), everything shrinks alike - except switches, which keep room for their label
+        std::vector<int> widths, keep;
         int total = 0;
         for (auto* c : mainControls)
         {
             int w = 96;
             if (auto* s = dynamic_cast<Segments*> (c))
                 w = juce::jlimit (150, 440, 58 * (s->getNumSegments() + (s->getOverflowSegment() >= 0 ? 1 : 0)));
-            else if (dynamic_cast<Toggle*> (c) != nullptr)
-                w = 124;
+            else if (auto* t = dynamic_cast<Toggle*> (c))
+                w = std::min (124, 38 + juce::GlyphArrangement::getStringWidthInt (medium (12.0f), t->getButtonText()));
             else if (dynamic_cast<Choice*> (c) != nullptr)
                 w = 170;
             else if (dynamic_cast<juce::Button*> (c) != nullptr)
                 w = 104;
             widths.push_back (w);
+            keep.push_back (dynamic_cast<Toggle*> (c) != nullptr ? 1 : 0);
             total += w;
         }
         const int gapW = 18;
         total += gapW * ((int) mainControls.size() - 1);
-        const float shrink = total > row.getWidth() ? (float) row.getWidth() / (float) total : 1.0f;
+        int kept = 0;
+        for (size_t i = 0; i < widths.size(); ++i)
+            kept += keep[i] != 0 ? widths[i] : 0;
+        const float shrink = total > row.getWidth() ? (float) std::max (0, row.getWidth() - kept) / (float) std::max (1, total - kept) : 1.0f;
         float x = (float) row.getX() + (float) std::max (0, (row.getWidth() - total) / 2);
         for (size_t i = 0; i < mainControls.size(); ++i)
         {
-            const int w = std::min ((int) ((float) widths[i] * shrink), row.getRight() - (int) x);
+            const float scale = keep[i] != 0 ? 1.0f : shrink;
+            const int w = std::min ((int) ((float) widths[i] * scale), row.getRight() - (int) x);
             auto cell = juce::Rectangle<int> ((int) x, row.getY(), w, row.getHeight());
             auto* c = mainControls[i];
             if (dynamic_cast<Knob*> (c) != nullptr)
                 c->setBounds (cell);
             else
                 c->setBounds (cell.withSizeKeepingCentre (w, dynamic_cast<Choice*> (c) != nullptr ? 30 : 28).translated (0, -8));
-            x += (float) widths[i] * shrink + (float) gapW * shrink;
+            x += (float) widths[i] * scale + (float) gapW * shrink;
         }
     }
 
@@ -731,21 +740,6 @@ namespace velvox::ui
             GainReductionMeter gr { colours::accent, "GR" };
         };
 
-        // SATURATION: Character, Drive, Mix; Output in Mehr
-        class SatPanel final : public DetailPanel
-        {
-        public:
-            explicit SatPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Saturation", help::shortDescription ((int) ModuleId::sat), pid::satOn)
-            {
-                auto& character = segments (pid::satCharacter);
-                auto& drive = knob (pid::satDrive, "Drive");
-                knob (pid::satOutput, "Output");
-                auto& mix = knob (pid::satMix, "Mix");
-                setMainControls ({ &character, &drive, &mix });
-            }
-        };
-
         // DOUBLER (the dsp tracks replace the engine): Width, Detune, Timing, Mix
         class DoublerPanel final : public DetailPanel
         {
@@ -799,70 +793,6 @@ namespace velvox::ui
         private:
             Knob* semis = nullptr;
             int frame = 0;
-        };
-
-        // STUTTER (chop): Rate, Gate, Smooth, Pattern
-        class ChopPanel final : public DetailPanel
-        {
-        public:
-            explicit ChopPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Stutter", help::shortDescription ((int) ModuleId::chop), pid::chopOn)
-            {
-                auto& rate = segments (pid::chopRate);
-                auto& pattern = choice (pid::chopPattern, {});
-                setCaption (pattern, "Pattern");
-                auto& depth = knob (pid::chopDepth, "Gate");
-                auto& smooth = knob (pid::chopSmooth, "Smooth");
-                setMainControls ({ &rate, &depth, &smooth, &pattern });
-            }
-        };
-
-        // DELAY: Note value, Sync, Feedback, Mix, Ping-Pong; everything else in Mehr
-        class DelayPanel final : public DetailPanel
-        {
-        public:
-            explicit DelayPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Delay", help::shortDescription ((int) ModuleId::delay), pid::delayOn)
-            {
-                division = &segments (pid::delayDivision, { "1/4", "1/4D", "1/8", "1/8D", "1/8T", "1/16" }, true);
-                auto& sync = toggle (pid::delaySync, "Sync");
-                auto& pingPong = toggle (pid::delayPingPong, "Ping-Pong");
-                segments (pid::duckSource, { "Vocal", "Sidechain" });
-                time = &knob (pid::delayTime, "Time");
-                auto& feedback = knob (pid::delayFeedback, "Feedback");
-                knob (pid::delaySpread, "Offset");
-                knob (pid::delayLowCut, "Low Cut");
-                knob (pid::delayHighCut, "High Cut");
-                knob (pid::delayMod, "Wobble");
-                knob (pid::delayDrive, "Drive");
-                knob (pid::delayDiffusion, "Diffusion");
-                knob (pid::delayToReverb, "Into Reverb");
-                auto& mix = knob (pid::delayMix, "Mix");
-                knob (pid::delayDuckAmount, "Ducking");
-                knob (pid::delayDuckThreshold, "Duck Thresh");
-                knob (pid::delayDuckAttack, "Duck Attack");
-                knob (pid::delayDuckRelease, "Duck Release");
-                setCaption (*division, "Time");
-                setMainControls ({ division, &sync, &feedback, &mix, &pingPong });
-                setMixKnob (&mix);
-                gr.setTooltip ("Ducking (dB)");
-                placeInVisual ({ &gr });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                gr.push (grFrom (live, &LiveData::delayDuck));
-                const bool synced = apvts.getRawParameterValue (pidFor (pid::delaySync))->load() > 0.5f;
-                time->setEnabled (! synced);
-                division->setEnabled (synced);
-            }
-
-        private:
-            void layoutVisual (juce::Rectangle<int> area) override { placeMeter (gr, area); }
-            Segments* division = nullptr;
-            Knob* time = nullptr;
-            GainReductionMeter gr { colours::accent, "Duck" };
         };
 
         // OUTPUT: stereo image + loudness; Input Gain, Vocal Level, Width, Level Match;
@@ -935,49 +865,6 @@ namespace velvox::ui
             CorrelationView correlation;
             juce::Label inValue, procValue, matchValue;
             juce::TextButton* monoButton = nullptr;
-        };
-
-        //======================================================================
-        // PULSE: Depth, Rate, Curve; shape, timing and manual tempo in Mehr
-        class PulsePanel final : public DetailPanel
-        {
-        public:
-            explicit PulsePanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Pulse", help::shortDescription ((int) ModuleId::pulse), pid::pulseOn)
-            {
-                auto& rate = segments (pid::pulseRate, pulseRateLabels (p), true);
-                auto& interp = segments (pid::pulseInterp);
-                auto& depth = knob (pid::pulseDepth, "Depth");
-                knob (pid::pulseTension, "Shape");
-                knob (pid::pulseSmooth, "Smooth");
-                knob (pid::pulseAttack, "Attack");
-                knob (pid::pulseRelease, "Release");
-                bpm = &knob (pid::pulseBpm, "Manual BPM");
-                knob (pid::pulseMix, "Mix");
-                setMainControls ({ &depth, &rate, &interp });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                // The manual tempo only matters when the host sends none
-                const bool host = proc.getChain().getPulse().displayHostTempo.load();
-                bpm->setAlpha (host ? 0.4f : (apvts.getRawParameterValue (pid::pulseOn)->load() > 0.5f ? 1.0f : 0.55f));
-            }
-
-        private:
-            // The design's five rates, mapped onto the parameter's names where they exist
-            static juce::StringArray pulseRateLabels (VelvoxAudioProcessor& p)
-            {
-                juce::StringArray out;
-                if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p.getState().getParameter (pid::pulseRate)))
-                    for (auto* name : { "1/2", "1/4", "1/8", "1/16", "1/32" })
-                        if (c->choices.contains (name))
-                            out.add (name);
-                return out;
-            }
-
-            Knob* bpm = nullptr;
         };
 
         // VOCAL SMASH: the big SMASH control in the visual next to the GR meter; Mix, Tone, Output
@@ -1080,263 +967,9 @@ namespace velvox::ui
         };
 
         //======================================================================
-        // VOCAL CHECK results: measured facts, what the last automatic mix changed, and the
-        // diagnoses (issue, evidence, confidence, why it matters, suggestion, whether the
-        // chain already takes care of it). Scrolls when it does not fit.
-        class FindingsList final : public juce::Component
-        {
-        public:
-            explicit FindingsList (VelvoxAudioProcessor& p) : proc (p), content (*this)
-            {
-                viewport.setViewedComponent (&content, false);
-                viewport.setScrollBarsShown (true, false);
-                viewport.setScrollBarThickness (8);
-                addAndMakeVisible (viewport);
-            }
-
-            std::function<void (int moduleId)> onOpen;
-
-            void resized() override
-            {
-                viewport.setBounds (getLocalBounds());
-                content.layout (getWidth() - 10);
-            }
-
-            void refresh (bool moduleOn)
-            {
-                const auto& r = proc.getLatestAnalysis();
-                juce::String key = juce::String ((int) moduleOn) + juce::String ((int) r.enoughMaterial) + juce::String (juce::roundToInt (r.voicedSeconds * 2.0f))
-                                   + juce::String (juce::roundToInt (r.peakDb)) + juce::String (r.clipEvents) + juce::String ((int) proc.getAutoMix().getReport().valid);
-                for (auto& f : r.findings)
-                    key << f.title << (int) f.certainty << (int) f.handling << juce::roundToInt (f.confidence * 20.0f);
-                if (key != lastKey)
-                {
-                    lastKey = key;
-                    on = moduleOn;
-                    content.layout (getWidth() - 10);
-                }
-            }
-
-        private:
-            struct Content final : public juce::Component
-            {
-                explicit Content (FindingsList& o) : owner (o) {}
-
-                struct Card
-                {
-                    juce::Rectangle<float> bounds, link;
-                    int module = -1;
-                    juce::TextLayout body;
-                };
-
-                void layout (int width)
-                {
-                    width = std::max (300, width);
-                    cards.clear();
-                    const auto& r = owner.proc.getLatestAnalysis();
-                    float y = 0.0f;
-
-                    // Facts strip and auto-mix summary
-                    factsHeight = owner.on && (r.analysedSeconds > 0.0f || r.peakDb > -99.0f) ? 58.0f : 0.0f;
-                    y += factsHeight;
-                    const auto& report = owner.proc.getAutoMix().getReport();
-                    summary = {};
-                    if (owner.on && report.valid && ! report.steps.empty())
-                    {
-                        juce::AttributedString a;
-                        a.append ("What the automatic mix changed\n", font (13.5f, true), colours::text);
-                        int n = 0;
-                        for (auto& s : report.steps)
-                            if (n++ < 6)
-                                a.append (juce::String::fromUTF8 ("\xe2\x80\xa2  ") + s.title + "\n", font (13.0f), colours::textDim);
-                        summary.createLayout (a, (float) width - 32.0f);
-                        summaryBounds = { 0.0f, y, (float) width, summary.getHeight() + 22.0f };
-                        y += summaryBounds.getHeight() + 10.0f;
-                    }
-
-                    for (auto& f : r.findings)
-                    {
-                        Card c;
-                        juce::AttributedString a;
-                        const auto label = [&] (const juce::String& head, const juce::String& text, juce::Colour colour)
-                        {
-                            if (text.isEmpty())
-                                return;
-                            a.append (head + "  ", caps (10.5f), colours::textFaint);
-                            a.append (text + "\n", font (13.5f), colour);
-                        };
-                        a.append (f.title + "\n", font (15.5f, true), colours::text);
-                        label ("EVIDENCE", f.detail, colours::textDim);
-                        label ("WHY IT MATTERS", f.why, colours::textDim);
-                        label ("SUGGESTION", f.advice, colours::cyan.interpolatedWith (colours::text, 0.45f));
-                        if (f.handlingText.isNotEmpty())
-                            label (f.handling == dsp::Finding::Handling::appliedBefore ? "ALREADY BEFORE" : "HANDLED", f.handlingText,
-                                   f.handling == dsp::Finding::Handling::appliedBefore ? colours::bypass : colours::ok);
-                        else
-                            label ("STATUS", f.module.has_value() ? juce::String ("Not applied automatically - your choice.")
-                                                                  : juce::String ("Needs a change before the plugin (recording or track level)."), colours::textFaint);
-                        c.body.createLayout (a, (float) width - 150.0f);
-                        c.bounds = { 0.0f, y, (float) width, std::max (64.0f, c.body.getHeight() + 22.0f) };
-                        c.module = f.module.has_value() ? (int) *f.module : -1;
-                        if (c.module >= 0)
-                            c.link = { c.bounds.getRight() - 130.0f, c.bounds.getY() + 44.0f, 118.0f, 24.0f };
-                        y += c.bounds.getHeight() + 8.0f;
-                        cards.push_back (std::move (c));
-                    }
-
-                    status.clear();
-                    if (! owner.on)
-                        status = "VOCAL CHECK is off. Switch it on with the power button - it analyses the signal at its place in the chain and never changes the sound.";
-                    else if (! r.enoughMaterial)
-                        status = "Collecting material: " + juce::String (r.voicedSeconds, 1) + " of " + juce::String (juce::roundToInt (dsp::VocalAnalyzer::minVoicedSeconds))
-                                 + " s of voice. Play the vocal - pauses are ignored.";
-                    else if (r.findings.empty())
-                        status = "Nothing stands out in " + juce::String (r.voicedSeconds, 1) + " s of voice: level, tone, sibilance, dynamics"
-                                 + (r.stereo ? ", stereo" : "") + " and noise are inside the usual range.";
-                    if (status.isNotEmpty())
-                        y += 46.0f;
-
-                    setSize (width, (int) std::ceil (y) + 4);
-                    repaint();
-                }
-
-                void paint (juce::Graphics& g) override
-                {
-                    const auto& r = owner.proc.getLatestAnalysis();
-                    float y = 0.0f;
-
-                    // Measured facts (no judgement)
-                    if (factsHeight > 0.0f)
-                    {
-                        drawCaption (g, "Measured at this point of the chain", { 0.0f, 0.0f, (float) getWidth(), 16.0f },
-                                     juce::Justification::centredLeft, colours::textFaint, 9.5f);
-                        juce::StringArray facts;
-                        facts.add ("Peak " + (r.peakDb > -99.0f ? juce::String (r.peakDb, 1) + " dBFS" : juce::String ("-")));
-                        if (r.loudnessRangeDb > 0.0f)
-                            facts.add ("Level range " + juce::String (r.loudnessRangeDb, 1) + " dB");
-                        if (r.crestDb > 0.0f)
-                            facts.add ("Crest " + juce::String (r.crestDb, 1) + " dB");
-                        if (r.sibilanceVsVowelDb > -99.0f)
-                            facts.add ("S vs vowels " + juce::String (r.sibilanceVsVowelDb, 1) + " dB");
-                        if (r.noiseFloorDb > -199.0f)
-                            facts.add ("Noise floor " + juce::String (r.noiseFloorDb, 0) + " dBFS (" + juce::String (r.snrDb, 0) + " dB below voice)");
-                        if (r.stereo)
-                            facts.add ("Correlation " + juce::String (r.correlation, 2));
-                        facts.add ("Voice " + juce::String (r.voicedSeconds, 1) + " s");
-                        float x = 0.0f;
-                        for (auto& t : facts)
-                        {
-                            const float w = (float) juce::GlyphArrangement::getStringWidthInt (medium (12.0f), t) + 22.0f;
-                            if (x + w > (float) getWidth())
-                                break;
-                            const auto chip = juce::Rectangle<float> (x, 22.0f, w, 26.0f);
-                            g.setColour (colours::accent.withAlpha (0.035f));
-                            g.fillRoundedRectangle (chip, 13.0f);
-                            g.setColour (colours::lineSoft.brighter (0.3f));
-                            g.drawRoundedRectangle (chip.reduced (0.5f), 13.0f, 1.0f);
-                            g.setColour (colours::textDim);
-                            g.setFont (medium (12.0f));
-                            g.drawText (t, chip, juce::Justification::centred, false);
-                            x += w + 8.0f;
-                        }
-                        y = factsHeight;
-                    }
-
-                    if (! summaryBounds.isEmpty())
-                    {
-                        g.setColour (colours::ok.withAlpha (0.05f));
-                        g.fillRoundedRectangle (summaryBounds, 10.0f);
-                        g.setColour (colours::ok.withAlpha (0.35f));
-                        g.drawRoundedRectangle (summaryBounds.reduced (0.5f), 10.0f, 1.0f);
-                        summary.draw (g, summaryBounds.reduced (16.0f, 11.0f));
-                    }
-
-                    for (size_t i = 0; i < cards.size() && i < r.findings.size(); ++i)
-                    {
-                        const auto& c = cards[i];
-                        const auto& f = r.findings[i];
-                        const bool sure = f.certainty == dsp::Finding::Certainty::sure;
-                        g.setColour (colours::accent.withAlpha (0.028f));
-                        g.fillRoundedRectangle (c.bounds, 10.0f);
-                        g.setColour (sure ? colours::cyan.withAlpha (0.28f) : colours::lineSoft.brighter (0.25f));
-                        g.drawRoundedRectangle (c.bounds.reduced (0.5f), 10.0f, 1.0f);
-
-                        // Kind and confidence, as text (never colour alone)
-                        auto right = c.bounds.withTrimmedLeft (c.bounds.getWidth() - 130.0f).reduced (6.0f, 10.0f);
-                        auto badge = right.removeFromTop (22.0f).withSizeKeepingCentre (118.0f, 22.0f);
-                        if (sure)
-                        {
-                            g.setGradientFill (auroraGradient (badge.getTopLeft(), badge.getTopRight(), 0.85f));
-                            g.fillRoundedRectangle (badge, 11.0f);
-                            drawCaption (g, "Likely problem", badge, juce::Justification::centred, colours::background, 9.0f);
-                        }
-                        else
-                        {
-                            g.setColour (colours::line.brighter (0.5f));
-                            g.drawRoundedRectangle (badge.reduced (0.5f), 11.0f, 1.0f);
-                            drawCaption (g, "Observation", badge, juce::Justification::centred, colours::textDim, 9.0f);
-                        }
-                        drawCaption (g, "Confidence " + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %",
-                                     right.removeFromTop (16.0f).translated (0.0f, 2.0f), juce::Justification::centred, colours::textFaint, 9.0f);
-                        if (c.module >= 0)
-                        {
-                            g.setColour (colours::cyan.withAlpha (hoveredLink == (int) i ? 0.18f : 0.08f));
-                            g.fillRoundedRectangle (c.link, 12.0f);
-                            drawCaption (g, juce::String ("Open ") + dsp::moduleDisplayName ((dsp::ModuleId) c.module), c.link,
-                                         juce::Justification::centred, colours::cyan, 9.0f);
-                        }
-                        c.body.draw (g, c.bounds.reduced (16.0f, 11.0f).withTrimmedRight (124.0f));
-                        y = c.bounds.getBottom() + 8.0f;
-                    }
-
-                    if (status.isNotEmpty())
-                    {
-                        g.setColour (colours::textDim);
-                        g.setFont (font (14.0f));
-                        g.drawFittedText (status, juce::Rectangle<float> (0.0f, y + 4.0f, (float) getWidth(), 40.0f).toNearestInt(),
-                                          juce::Justification::centredLeft, 2);
-                    }
-                }
-
-                void mouseMove (const juce::MouseEvent& e) override
-                {
-                    int over = -1;
-                    for (size_t i = 0; i < cards.size(); ++i)
-                        if (cards[i].module >= 0 && cards[i].link.contains (e.position))
-                            over = (int) i;
-                    if (over != hoveredLink)
-                    {
-                        hoveredLink = over;
-                        setMouseCursor (over >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
-                        repaint();
-                    }
-                }
-
-                void mouseUp (const juce::MouseEvent& e) override
-                {
-                    for (auto& c : cards)
-                        if (c.module >= 0 && c.link.contains (e.position) && owner.onOpen)
-                            owner.onOpen (c.module);
-                }
-
-                FindingsList& owner;
-                std::vector<Card> cards;
-                juce::TextLayout summary;
-                juce::Rectangle<float> summaryBounds;
-                float factsHeight = 0.0f;
-                juce::String status;
-                int hoveredLink = -1;
-            };
-
-            VelvoxAudioProcessor& proc;
-            bool on = false;
-            juce::String lastKey;
-            juce::Viewport viewport;
-            Content content;
-        };
-
-        // VOCAL CHECK (the check track replaces this with score + tiles): live view and the findings in the
-        // visual area; analysis mode, Start / Stop, Reset and the status as the main row
+        // VOCAL CHECK module in the chain: its live picture (spectrum, balance) and a compact summary
+        // (score, number of findings, link to the VOCAL CHECK tab, where the tiles with Ignorieren /
+        // Anwenden live); analysis mode, Start / Stop, Reset as the main row
         class CheckPanel final : public DetailPanel
         {
         public:
@@ -1344,7 +977,7 @@ namespace velvox::ui
                 : DetailPanel (p, "Vocal Check", help::shortDescription ((int) ModuleId::check), pid::checkOn),
                   findings (p)
             {
-                auto& mode = segments (pid::checkMode);
+                auto& mode = segments (pid::checkMode, { "Laufend", "Capture" });   // as on the VOCAL CHECK tab
                 setCaption (mode, "Analyse");
                 auto& startStop = own (std::make_unique<juce::TextButton> ("Start"));
                 auto& resetButton = own (std::make_unique<juce::TextButton> ("Reset"));
@@ -1365,7 +998,7 @@ namespace velvox::ui
                 };
                 resetButton.setTooltip (juce::String::fromUTF8 ("Alles bisher Analysierte vergessen (auch Spitzen und Clips)"));
                 resetButton.onClick = [this] { proc.getAnalyzer().clear(); proc.refreshAnalysis(); };
-                findings.onOpen = [this] (int id) { if (onOpenModule) onOpenModule (id); };
+                findings.onOpenTab = [this] { if (onShowVocalCheck) onShowVocalCheck(); };
             }
 
             void refresh() override
@@ -1386,22 +1019,24 @@ namespace velvox::ui
                                                   : "Laufend, letzte " + juce::String (juce::roundToInt (std::min (30.0f, r.analysedSeconds))) + " s";
                 if (statusLabel.getText() != text)
                     statusLabel.setText (text, juce::dontSendNotification);
-                findings.refresh (on);
+                if (++summaryTick % 6 == 0)
+                    findings.refresh();
             }
 
         private:
             void layoutVisual (juce::Rectangle<int> area) override
             {
                 auto r = area.reduced (10);
-                auto left = r.removeFromLeft (std::min (300, r.getWidth() / 3));
-                statusLabel.setBounds (left.removeFromBottom (20));
-                r.removeFromLeft (12);
-                findings.setBounds (r);
+                auto right = r.removeFromRight (std::min (250, r.getWidth() / 3));
+                findings.setBounds (right.removeFromTop (96));
+                statusLabel.setBounds (right.removeFromTop (22).withTrimmedLeft (6));
+                r.removeFromRight (12);
                 if (auto* v = getVisual())
-                    v->setBounds (left.reduced (1));
+                    v->setBounds (r.reduced (1));
             }
 
-            FindingsList findings;
+            CheckSummary findings;
+            int summaryTick = 0;
             juce::Label statusLabel;
             juce::TextButton* start = nullptr;
             juce::TextButton* reset = nullptr;
@@ -1423,13 +1058,13 @@ namespace velvox::ui
                 case ModuleId::eq:      panel = createEqPanel (p); break;
                 case ModuleId::comp:    panel = std::make_unique<CompPanel> (p); break;
                 case ModuleId::deess:   panel = std::make_unique<DeEssPanel> (p); break;
-                case ModuleId::sat:     panel = std::make_unique<SatPanel> (p); break;
+                case ModuleId::sat:     panel = createSatPanel (p); break;   // SatPanel.cpp
                 case ModuleId::doubler: panel = std::make_unique<DoublerPanel> (p); break;
                 case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
-                case ModuleId::chop:    panel = std::make_unique<ChopPanel> (p); break;
-                case ModuleId::delay:   panel = std::make_unique<DelayPanel> (p); break;
+                case ModuleId::chop:    panel = createTimeModulePanel (p, ModuleId::chop); break;
+                case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
                 case ModuleId::reverb:  panel = createReverbPanel (p); break;
-                case ModuleId::pulse:   panel = std::make_unique<PulsePanel> (p); break;
+                case ModuleId::pulse:   panel = createTimeModulePanel (p, ModuleId::pulse); break;
                 case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;
                 case ModuleId::choir:   panel = std::make_unique<ChoirPanel> (p); break;
                 case ModuleId::smooth:  panel = std::make_unique<SmoothPanel> (p); break;

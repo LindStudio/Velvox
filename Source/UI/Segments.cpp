@@ -49,6 +49,17 @@ namespace velvox::ui
 
         void mouseDoubleClick (const juce::MouseEvent&) override { owner.resetToDefault(); }
 
+        void paintButton (juce::Graphics& g, bool highlighted, bool down) override
+        {
+            const int index = owner.buttons.indexOf (this);
+            if (owner.tilePainter != nullptr && index >= 0 && this != owner.overflow)
+            {
+                owner.tilePainter (g, index, getLocalBounds().toFloat(), getToggleState(), highlighted || down);
+                return;
+            }
+            juce::TextButton::paintButton (g, highlighted, down);
+        }
+
         void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& wheel) override
         {
             const float d = std::abs (wheel.deltaX) > std::abs (wheel.deltaY) ? -wheel.deltaX : wheel.deltaY;
@@ -168,6 +179,13 @@ namespace velvox::ui
                             [safe] (int result) { if (safe != nullptr && result > 0) safe->chooseFromOverflow (result - 1); });
     }
 
+    void Segments::setTilePainter (TilePainter painter)
+    {
+        tilePainter = std::move (painter);
+        resized();
+        repaint();
+    }
+
     void Segments::setAccent (juce::Colour accent)
     {
         for (auto* b : buttons)
@@ -198,6 +216,8 @@ namespace velvox::ui
 
     void Segments::paint (juce::Graphics& g)
     {
+        if (tilePainter != nullptr)
+            return;   // tiles paint themselves, no group bar
         g.setColour (colours::control);
         g.fillRoundedRectangle (getLocalBounds().toFloat(), 7.0f);
     }
@@ -206,6 +226,15 @@ namespace velvox::ui
     {
         if (buttons.isEmpty())
             return;
+        if (tilePainter != nullptr)
+        {
+            // Separate tiles with a gap, all of the group's height
+            const int gap = 8, n = buttons.size();
+            const float w = (float) (getWidth() - gap * (n - 1)) / (float) n;
+            for (int i = 0; i < n; ++i)
+                buttons[i]->setBounds (juce::roundToInt ((w + (float) gap) * (float) i), 0, juce::roundToInt (w), getHeight());
+            return;
+        }
         auto r = getLocalBounds().reduced (3);
         // The overflow segment is a little wider so a name like "1/16T" fits
         const float weightTotal = (float) choiceIndex.size() + (overflow != nullptr ? 1.2f : 0.0f);

@@ -7,6 +7,7 @@
 #include "Check/CheckTypes.h"
 #include "Check/CheckTargets.h"
 #include "Check/CheckFixPlanner.h"
+#include "Check/CheckRules.h"
 #include "Parameters/ParameterLayout.h"
 #include "DSP/Instances.h"
 #include "StateKeys.h"
@@ -105,6 +106,27 @@ public:
         rules();
         fixModel();
         controller();
+
+        beginTest ("Texts: dBFS values carry a sign above 0 dBFS (headroom)");
+        {
+            expectEquals (check::dbfsText (3.0f), juce::String ("+3"));
+            expectEquals (check::dbfsText (-0.5f), juce::String::fromUTF8 ("\xe2\x88\x92" "0,5"));
+            expectEquals (check::dbfsText (0.0f), juce::String ("0"));
+            expectEquals (check::dbfsText (0.2f), juce::String ("0"), "rounds to half dB first");
+            AnalysisResult r;
+            r.enoughMaterial = true;
+            r.voicedSeconds = 12.0f;
+            r.analysedSeconds = 14.0f;
+            r.peakDb = 3.0f;
+            check::evaluate (r, check::Genre::party);
+            const auto* f = findId (r, "headroom");
+            expect (f != nullptr, "headroom finding");
+            if (f != nullptr)
+            {
+                expectEquals (f->problem, juce::String ("Kaum Headroom (+3 dBFS)"));
+                expect (f->detail.contains ("+3 dBFS"), f->detail);
+            }
+        }
 
         beginTest ("Finding schema: id, category, German problem / fix text, confidence above the threshold");
         {
@@ -742,6 +764,93 @@ public:
                 expect (b >= 0 && eqbands::readBand (a, 0, b).slope == 3, "plosives: the steeper cut (24 dB/oct) won");
             }
             expectEquals (vc.applyAll(), 0, "nothing left on this measurement");
+        }
+
+        // Every parameter (normalised) and the routing: the whole state an undo must restore
+        struct FullState
+        {
+            std::vector<float> values;
+            juce::String routing;
+            static FullState of (VelvoxAudioProcessor& p)
+            {
+                FullState s;
+                for (auto* param : p.getParameters())
+                    s.values.push_back (param->getValue());
+                s.routing = p.getState().state.getProperty (statekeys::routing).toString();
+                return s;
+            }
+            int differences (const FullState& o) const
+            {
+                int n = routing != o.routing ? 1 : 0;
+                for (size_t i = 0; i < values.size(); ++i)
+                    n += std::abs (values[i] - o.values[i]) > 1.0e-6f ? 1 : 0;
+                return n;
+            }
+        };
+
+        beginTest ("Controller: Anwenden is one step of the global undo (every parameter and the routing)");
+        {
+            Harness h;
+            prepare (h, true);
+            runThroughPlugin (h, v);
+            h.proc.getAnalyzer().stopCapture();
+            h.proc.refreshAnalysis();
+            auto& vc = h.proc.getVocalCheck();
+            auto& undo = h.proc.getUndo();
+            undo.clear();
+            const auto before = FullState::of (h.proc);
+            expect (vc.apply ("rumble"));
+            const auto after = FullState::of (h.proc);
+            expectGreaterThan (after.differences (before), 1, "parameters and routing changed");
+            expectEquals (undo.getNumSteps(), 1, "one step");
+            expect (undo.getUndoName().startsWith ("Vocal Check"), undo.getUndoName());
+            expect (vc.wasApplied ("rumble") && ! vc.canApply ("rumble"));
+
+            expect (undo.undo());
+            expectEquals (FullState::of (h.proc).differences (before), 0, "one undo restores everything");
+            expect (! undo.canUndo());
+            expect (! vc.wasApplied ("rumble") && vc.canApply ("rumble"), "after undo it can be applied again");
+            expect (undo.redo());
+            expectEquals (FullState::of (h.proc).differences (after), 0, "redo");
+        }
+
+        beginTest ("Controller: Alles anwenden is one step of the global undo");
+        {
+            Harness h;
+            prepare (h, true);
+            runThroughPlugin (h, v);
+            h.proc.getAnalyzer().stopCapture();
+            h.proc.refreshAnalysis();
+            auto& vc = h.proc.getVocalCheck();
+            auto& undo = h.proc.getUndo();
+            undo.clear();
+            const auto before = FullState::of (h.proc);
+            expectGreaterThan (vc.applyAll(), 1);
+            const auto after = FullState::of (h.proc);
+            expectEquals (undo.getNumSteps(), 1, "one step");
+            expect (undo.getUndoName().startsWith ("Vocal Check"), undo.getUndoName());
+            expect (undo.undo());
+            expectEquals (FullState::of (h.proc).differences (before), 0, "one undo restores everything");
+            expect (undo.redo());
+            expectEquals (FullState::of (h.proc).differences (after), 0, "redo");
+        }
+
+        beginTest ("Undo: a fix of the input gain (excluded from presets) is undoable too");
+        {
+            Harness h;
+            auto& undo = h.proc.getUndo();
+            undo.clear();
+            const float gainBefore = h.get (pid::inputGain);
+            check::ResolvedFix fix;
+            fix.name = "Vocal Check: Sehr leise";
+            fix.params.push_back ({ pid::inputGain, gainBefore + 6.0f });
+            check::applyResolvedFix (h.proc.getState(), fix, &undo);
+            expectWithinAbsoluteError (h.get (pid::inputGain), gainBefore + 6.0f, 0.01f);
+            expectEquals (undo.getNumSteps(), 1);
+            expect (undo.undo());
+            expectWithinAbsoluteError (h.get (pid::inputGain), gainBefore, 0.01f, "undo restores the input gain");
+            expect (undo.redo());
+            expectWithinAbsoluteError (h.get (pid::inputGain), gainBefore + 6.0f, 0.01f, "redo");
         }
 
         beginTest ("Controller: Ignorieren hides a finding, leaves the score, persists in the project, restore brings it back");

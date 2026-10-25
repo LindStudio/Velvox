@@ -255,15 +255,35 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 <!-- BEGIN doubler -->
 #### Doubler (`doubler`)
 
-| case | metric | Headliner | Doubler2 | gap | tolerance | verdict |
-|---|---|---|---|---|---|---|
-| default | comb_depth_db (dB) | 0.32 | 0.52 | -0.21 | ref + 1.00 | pass |
-| default | am_roughness_db (dB) | 0.92 | 1.90 | -0.97 | ref + 0.50 | pass |
-| default | lr_corr | 0.85 | 0.79 | 0.06 | ref + 0.10 | pass |
-| default | mono_loss_db (dB) | 0.34 | 0.47 | -0.14 | ref + 1.00 | pass |
-| default | mix0_null_db (dB) – latency 0 | -152 | – | – | ≤ -60.0 | pass |
-| default | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.34 | 0.26 | 0.08 | ref + 1.00 | pass |
+| case | metric | Headliner | Doubler2 | Doubler4 | gap | tolerance | verdict |
+|---|---|---|---|---|---|---|---|
+| default | comb_depth_db (dB) | 0.35 | 0.52 | – | -0.18 | ref + 1.00 | pass |
+| default | am_roughness_db (dB) | 1.05 | 1.90 | – | -0.84 | ref + 0.50 | pass |
+| default | am_roughness_multi_db (dB) – 6 tones | 0.97 | 2.00 | – | -1.03 | ref + 0.50 | pass |
+| default | lr_corr | 0.84 | 0.79 | – | 0.04 | ref + 0.10 | pass |
+| default | mono_loss_db (dB) | 0.37 | 0.47 | – | -0.10 | ref + 1.00 | pass |
+| default | mix0_null_db (dB) – latency 0 | -152 | – | – | – | ≤ -60.0 | pass |
+| default | off_null_db (dB) | -152 | – | – | – | ≤ -100 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.34 | 0.26 | – | 0.08 | ref + 1.00 | pass |
+| voices2 | comb_depth_db (dB) | 0.53 | 0.52 | – | 0.01 | ref + 1.00 | pass |
+| voices2 | am_roughness_db (dB) | 1.69 | 1.90 | – | -0.21 | ref + 0.50 | pass |
+| voices2 | am_roughness_multi_db (dB) – 6 tones | 2.15 | 2.00 | – | 0.15 | ref + 0.50 | pass |
+| voices2 | lr_corr | 0.80 | 0.79 | – | 0.00 | ref + 0.10 | pass |
+| voices2 | mono_loss_db (dB) | 0.47 | 0.47 | – | -0.00 | ref + 1.00 | pass |
+| voices2 | voice_delay_err_ms (ms) | 1.25 | 1.48 | – | -0.24 | ref + 0.50 | pass |
+| voices2 | voice_detune_err_cents (ct) | 0.00 | 0.00 | – | 0.00 | ≤ 1.00 | pass |
+| voices2 | voice_pitch_jitter_cents (ct) | 0.02 | 0.10 | – | -0.08 | ref + 0.50 | pass |
+| voices2 | voice_splice_db (dB) – +30 ct | 0.02 | 0.02 | – | 0.00 | ref + 0.50 | pass |
+| voices4 | comb_depth_db (dB) | 0.53 | – | 0.61 | -0.08 | ref + 1.00 | pass |
+| voices4 | am_roughness_db (dB) | 1.54 | – | 2.31 | -0.76 | ref + 0.50 | pass |
+| voices4 | am_roughness_multi_db (dB) – 6 tones | 2.02 | – | 3.07 | -1.06 | ref + 0.50 | pass |
+| voices4 | lr_corr | 0.87 | – | 0.87 | 0.00 | ref + 0.10 | pass |
+| voices4 | mono_loss_db (dB) | 0.31 | – | 0.31 | 0.00 | ref + 1.00 | pass |
+| voices4 | voice_delay_err_ms (ms) | 1.32 | – | 1.36 | -0.05 | ref + 0.50 | pass |
+| voices4 | voice_detune_err_cents (ct) | 0.00 | – | 0.00 | -0.00 | ≤ 1.00 | pass |
+| voices4 | voice_pitch_jitter_cents (ct) | 0.01 | – | 0.10 | -0.08 | ref + 0.50 | pass |
+| voices4 | voice_splice_db (dB) – +30 ct | 0.02 | – | 0.02 | 0.00 | ref + 0.50 | pass |
+| voices4 | cpu_pct (%) – median over this module's renders | 0.35 | 0.26 | 0.29 | 0.08 | ref + 1.00 | pass |
 <!-- END doubler -->
 
 <!-- BEGIN choir -->
@@ -271,14 +291,28 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 
 | case | metric | Headliner | Doubler4 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| default | comb_depth_db (dB) | 0.56 | 0.53 | 0.02 | ref + 1.00 | pass |
-| default | am_roughness_db (dB) | 2.12 | 1.62 | 0.50 | ref + 0.50 | FAIL |
-| default | lr_corr | 0.94 | 0.79 | 0.14 | ref + 0.10 | FAIL |
-| default | mono_loss_db (dB) | 0.14 | 0.47 | -0.32 | ref + 1.00 | pass |
+| default | comb_depth_db (dB) | 0.53 | 0.53 | -0.00 | ref + 1.00 | pass |
+| default | am_roughness_db (dB) | 2.89 | 1.62 | 1.27 | ref − 0.00 | info |
+| default | am_roughness_multi_db (dB) – 6 tones | 1.89 | 2.57 | -0.68 | ref + 0.50 | pass |
+| default | lr_corr | 0.83 | 0.79 | 0.04 | ref + 0.10 | pass |
+| default | mono_loss_db (dB) | 0.38 | 0.47 | -0.09 | ref + 1.00 | pass |
 | default | mix0_null_db (dB) – latency 0 | -152 | – | – | ≤ -60.0 | pass |
 | default | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.56 | 0.29 | 0.27 | ref + 1.00 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.58 | 0.29 | 0.29 | ref + 1.00 | pass |
 <!-- END choir -->
+
+**Doubler / Choir after the 0.6 engines (voices track).** `default` = an old project (Classic mode, the 0.2 controls);
+`voices2` / `voices4` = per-voice modes at Waves' own settings. 0.5 engine on the same bench (old build, `default`):
+comb 0.32, roughness 0.92 (6 tones 1.05), L/R 0.85, mono loss 0.34 – the 0.6 Classic mode: 0.35 / 1.05 (6 tones 0.97) /
+0.84 / 0.37, i.e. close (the 440 Hz roughness moves with the beat phases of the random-walk path; the 6-tone mean is
+lower than before). Old-project mapping: Classic voice 1 = Delay, voice 2 = 1.37 x Delay, pans ∓Width, no static detune,
+Detune = wobble depth, Tone = high cut, low cut 120 Hz, dry 0 dB; differences against a frozen copy of the 0.5 engine are
+pinned in VelvoxTests ("Doubler: Classic is close to the 0.2 engine": level ≤ +0.4 dB – the Lagrange taps keep the highs –
+L/R within 0.05, roughness within +0.33 dB). Per voice the new engine is exact (detune error 0.00 ct, pitch jitter
+0.01-0.02 ct vs 0.10 ct Waves, splice artefacts equal to Waves at +30 ct, mean voice delay error 1.25 / 1.32 ms vs
+1.48 / 1.36 ms Waves over a 6 s window – a delay-line shifter must move its tap; the per-cycle mean is exact).
+Choir: the single 440 Hz roughness is information only (Ruling): with the measured voice levels, beat phases alone give
+0.7-3.1 dB; the 6-tone mean is gated (Headliner 1.89, Doubler4 2.57, 0.5 engine 2.02).
 
 <!-- BEGIN delay -->
 #### Delay (`delay`)
@@ -459,6 +493,7 @@ Stutter, Pulse and Vocal Check pass at baseline.
    sustained tone. *Do:* spread voices to fixed, alternating pan positions scaled by Width (outer voices ±80–100 %),
    decorrelate per-voice modulation (independent smoothed random walks, 0.1–0.6 Hz), and normalise the voice sum so
    beating between equal-gain voices does not dominate (slightly different voice gains / delays).
+   *Done (voices track):* L/R 0.83, 6-tone roughness 1.89 dB (Doubler4 2.57, 0.5 engine 2.02) – see the note below.
 8. **Level Ride – evens the vocal less than Vocal Rider:** short-term loudness spread 3.30 LU vs 2.92 LU (dry 3.80) at
    ±8 dB range, with similar smoothness (gain jitter 0.07 vs 0.05 dB). *Do:* faster word-level response (or 50–100 ms
    lookahead with constant latency), raise the effective Amount mapping, keep the transient preservation (−0.26 dB now).
@@ -505,7 +540,7 @@ A DSP change that improves the key metric but makes another gated metric FAIL is
   measured here; those stay unit tests in `VelvoxTests` (the delay agent should add one).
 - Metrics are objective proxies. They catch aliasing, cramping, ringing, ballistics distortion and broadband-vs-targeted
   removal reliably; they do not replace the user's listening test (files in `listen\`).
-- Doubler/Choir: Headliner's current Doubler has no per-voice controls, so only global behaviour is compared; the new
-  engine (spec §5.8) should get per-voice delay/detune tracking added to `proc_mod_widen`.
+- Doubler/Choir: the tables above are the 0.6 engines (voices track, renders in `...\2026-10-25\modules-after\`).
+  Per-voice delay/detune tracking is `voice_tracking` (solo voice, dry off, no wobble) and `voice_splice` (+30 ct).
 - CPU is single-instance wall time per 512-sample block on this PC (28 cores, other builds running in parallel) – compare
   ratios, not absolute values.

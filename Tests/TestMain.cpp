@@ -319,11 +319,19 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report),
 //          "eq" (EQ panel with user bands, a macro band and a selection), "eqmore" (+ Mehr, migrated legacy curve),
 //          "eqcard" (+ a point being dragged: its value card)
-//          "set:<id>=<value>,..." (parameters in real units)
+//          "set:<id>=<value>,...[|<overlay>]" (parameters in real units, then an optional other overlay)
+//          "set:<id>=<value>,...[,more]" (parameters in real units, then ~1.4 s of audio so live views fill; ",more" opens Mehr)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
-                           const juce::String& mode, int selection, const juce::String& overlay)
+                           const juce::String& mode, int selection, const juce::String& overlayArg)
 {
     using namespace velvox;
+    juce::String overlay = overlayArg;
+    juce::StringArray assignments;
+    if (overlay.startsWith ("set:"))
+    {
+        assignments.addTokens (overlay.fromFirstOccurrenceOf ("set:", false, false).upToFirstOccurrenceOf ("|", false, false), ",", "");
+        overlay = overlay.contains ("|") ? overlay.fromFirstOccurrenceOf ("|", false, false) : juce::String();
+    }
     // Never touch the real user preferences; the welcome card only when asked for
     const auto prefs = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("velvox-snapshot.settings");
     prefs.deleteFile();
@@ -341,6 +349,9 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     for (int i = 0; i < pm.getEntries().size(); ++i)
         if (pm.getEntries()[i].name == presetName)
             pm.loadPreset (i);
+    for (const auto& a : assignments)
+        if (auto* prm = proc.getState().getParameter (a.upToFirstOccurrenceOf ("=", false, false).trim()))
+            prm->setValueNotifyingHost (prm->convertTo0to1 (a.fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
 
     auto& am = proc.getAutoMix();
     if (overlay != "intro" && overlay != "welcome")
@@ -376,7 +387,13 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     pump (40);
 
     // "check": VOCAL CHECK in the chain after a problematic take (rumble, resonance, noise, big level range)
-    if (overlay == "check")
+    // "checktab" (+ "+ignored", "+empty", "+off"): the same on the VOCAL CHECK tab
+    const bool checkTab = overlay.startsWith ("checktab");
+    if (checkTab)
+        proc.getState().state.setProperty ("uiTab", "check", nullptr);
+    if (overlay == "checktab+empty")
+        proc.getState().getParameter ("checkOn")->setValueNotifyingHost (1.0f);
+    if (overlay == "check" || (checkTab && overlay != "checktab+empty" && overlay != "checktab+off"))
     {
         proc.getState().getParameter ("checkOn")->setValueNotifyingHost (1.0f);
         test::VocalSpec s;
@@ -422,11 +439,14 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
         proc.getState().getParameter ("bypass")->setValueNotifyingHost (1.0f);
     if (overlay.startsWith ("hide:"))
         proc.getState().state.setProperty ("uiHiddenModules", overlay.fromFirstOccurrenceOf (":", false, false), nullptr);
-    // "set:<id>=<value>,<id>=<value>": parameters in real units (e.g. set:reverbType=3,reverbMix=40)
+    // "set:<id>=<value>,<id>=<value>[,more]": parameter values in real units (e.g. "set:delayOn=1,delayFeedback=55")
     if (overlay.startsWith ("set:"))
-        for (auto& pair : juce::StringArray::fromTokens (overlay.fromFirstOccurrenceOf (":", false, false), ",", ""))
-            if (auto* p = proc.getState().getParameter (pair.upToFirstOccurrenceOf ("=", false, false).trim()))
-                p->setValueNotifyingHost (p->convertTo0to1 (pair.fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
+    {
+        for (const auto& token : juce::StringArray::fromTokens (overlay.fromFirstOccurrenceOf (":", false, false), ",", ""))
+            if (auto* prm = proc.getState().getParameter (token.upToFirstOccurrenceOf ("=", false, false).trim()))
+                prm->setValueNotifyingHost (prm->convertTo0to1 (token.fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
+        pump (128);   // live views (stutter waveform, echo lights) fill up
+    }
     if (overlay == "edit")
         proc.getState().getParameter ("compRatio")->setValueNotifyingHost (0.6f);
     if (overlay == "listening" || overlay == "capturing" || overlay == "analysing")
@@ -447,7 +467,7 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
         }
         if (overlay.startsWith ("focus:"))
             ed->getChainView().onSelect (overlay.fromFirstOccurrenceOf (":", false, false).getIntValue());
-        if (overlay == "more" && ed->getDetail() != nullptr)
+        if ((overlay == "more" || (overlay.startsWith ("set:") && overlay.endsWith (",more"))) && ed->getDetail() != nullptr)
             ed->getDetail()->setMoreOpen (true);
         if (auto* eqp = dynamic_cast<ui::EqPanel*> (ed->getDetail()))
         {
@@ -467,6 +487,14 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
             ed->showMixDetails();
         if (overlay == "mixed+done")
             ed->getAnalysisOverlay().showProgress();
+        if (overlay == "checktab+ignored")
+        {
+            auto& vc = proc.getVocalCheck();
+            const auto visible = vc.visibleFindings();
+            for (size_t i = 0; i < std::min<size_t> (2, visible.size()); ++i)
+                vc.ignore (visible[visible.size() - 1 - i]->id);
+            ed->getCheckView().setIgnoredExpanded (true);
+        }
     }
 
     // Let the editor timer run a few frames (and the capture fill up for "capturing")

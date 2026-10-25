@@ -89,6 +89,31 @@ class Doc(unittest.TestCase):
         self.assertTrue(text.startswith("intro"))
 
 
+class VoiceTracking(unittest.TestCase):
+    def test_delay_and_detune_of_a_known_voice(self):
+        from scipy import signal as sps
+        xn = signals.white_noise(FS, 3.0, -20.0)
+        d = int(round(0.0175 * FS))
+        yn = np.concatenate([np.zeros(d), xn[:-d]])
+        xt = signals.sine(FS, 440, -12, 4.0)
+        yt = signals.sine(FS, 440 * 2 ** (8 / 1200), -12, 4.0)
+        delay, cents, jitter = bench.voice_tracking_values(xn, yn, xt, yt, 440.0)
+        self.assertAlmostEqual(delay, 17.5, delta=0.05)
+        self.assertAlmostEqual(cents, 8.0, delta=0.2)
+        self.assertLess(jitter, 0.2)
+
+    def test_doubler_cases_compare_against_one_reference_each(self):
+        m = modules.MODULES["doubler"]
+        refs = {c.name: c.info.get("refs") for c in m.cases}
+        self.assertEqual(refs["voices2"], ["Doubler2"])
+        self.assertEqual(refs["voices4"], ["Doubler4"])
+        h = m.cases[2].headliner
+        self.assertEqual(h["doublerVoices"], 2)
+        self.assertEqual(h["doublerV4Delay"], 33)
+        solo = m.cases[2].info["solo"]["Headliner"](2)
+        self.assertEqual((solo["doublerV3On"], solo["doublerV1On"], solo["doublerDry"]), (1, 0, -60))
+
+
 class MissingReference(unittest.TestCase):
     @unittest.skipUnless(os.path.exists(bench.HOST), "HeadlinerRefHost not built")
     def test_bench_missing_reference(self):

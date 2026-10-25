@@ -248,6 +248,9 @@ std::optional<float> VelvoxAudioProcessor::effectiveValueOf (const juce::String&
     if (id == pid::lowGain)          return e.eq.lowGain;
     if (id == pid::deessRange)       return e.deess.rangeDb;
     if (id == pid::satDrive)         return e.sat.driveDb;
+    if (id == pid::satLowDrive)      return e.sat.bands[0].driveDb;
+    if (id == pid::satMidDrive)      return e.sat.bands[1].driveDb;
+    if (id == pid::satHighDrive)     return e.sat.bands[2].driveDb;
     if (id == pid::satMix)           return e.sat.enabled ? e.sat.mix * 100.0f : 0.0f;
     if (id == pid::compThreshold)    return e.comp.thresholdDb;
     if (id == pid::compRatio)        return e.comp.ratio;

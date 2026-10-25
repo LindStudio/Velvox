@@ -115,8 +115,8 @@ namespace velvox::check
                 {
                     const float amount = halfDb (std::min (-0.5f, -3.0f - r.peakDb));
                     auto& f = add ("headroom", Category::level, conf (r.peakDb, t.peakMax, 0.9f), severity (r.peakDb, t.peakMax, 0.6f), std::nullopt,
-                                   de ("Kaum Headroom (") + dbText (r.peakDb, false) + " dBFS)", de ("Input ") + dbText (amount),
-                                   de ("Höchster Pegel ") + dbText (r.peakDb, false) + " dBFS.",
+                                   de ("Kaum Headroom (") + dbfsText (r.peakDb) + " dBFS)", de ("Input ") + dbText (amount),
+                                   de ("Höchster Pegel ") + dbfsText (r.peakDb) + " dBFS.",
                                    de ("Ohne Reserve übersteuert jede spätere Anhebung."), false);
                     f.action.params.push_back ({ pid::inputGain, amount, K::amount, 0.0f });
                 }
@@ -472,6 +472,12 @@ namespace velvox::check
         const auto body = whole ? juce::String (juce::roundToInt (std::abs (v))) : num (std::abs (v), 1);
         const juce::String sign = v < 0.0f ? juce::String::fromUTF8 ("\xe2\x88\x92") : (withPlus && v > 0.0f ? juce::String ("+") : juce::String());
         return sign + body + (withPlus ? " dB" : "");
+    }
+
+    juce::String dbfsText (float dbfs)
+    {
+        // Peaks above full scale must read "+3", never "3" (which looks like a value below 0)
+        return dbText (dbfs, true).upToFirstOccurrenceOf (" dB", false, false);
     }
 
     CheckTargets targetsFor (const dsp::AnalysisResult& r, Genre genre)
