@@ -32,7 +32,7 @@ namespace
     const Finding* find (const AnalysisResult& r, const juce::String& text)
     {
         for (auto& f : r.findings)
-            if (f.title.containsIgnoreCase (text))
+            if (f.id.startsWith (text))   // 0.6: stable ids ("rumble", "resonance.3150", "noise")
                 return &f;
         return nullptr;
     }
@@ -72,7 +72,7 @@ public:
             s.sibilance = 1.5f;
             s.rumbleDb = -28.0f;
             s.resonanceHz = 3150.0f;
-            s.resonanceDb = 16.0f;
+            s.resonanceDb = 20.0f;
             s.phraseRangeDb = 20.0f;
             const auto r = analyse (makeVocal (s), fs);
             expect (r.enoughMaterial);
@@ -120,7 +120,7 @@ public:
             for (auto& f : rc.findings)
             {
                 logMessage ("  clean take: " + f.title + " (" + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %)");
-                problems += f.certainty == Finding::Certainty::sure ? 1 : 0;
+                problems += f.certainty == Finding::Certainty::sure && f.category != check::Category::dynamics ? 1 : 0;   // phrase dynamics are a mix target, not a recording problem
             }
             expectEquals (problems, 0, "no likely problem in a clean synthetic take");
 

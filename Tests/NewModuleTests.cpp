@@ -708,7 +708,7 @@ public:
                     b.setSample (c, i, juce::jlimit (-1.0f, 1.0f, b.getSample (c, i) * 6.0f));
             const auto r = analyseBuffer (b, fs);
             expectGreaterThan (r.clipEvents, 0);
-            expect (! r.findings.empty() && r.findings.front().title.contains ("Clipping")
+            expect (! r.findings.empty() && r.findings.front().id == "clipping"
                     && r.findings.front().certainty == Finding::Certainty::sure, "clipping is the top finding");
         }
 
