@@ -1,4 +1,5 @@
 #include "DetailPanels.h"
+#include "SatPanel.h"
 #include "ChainView.h"
 #include "../PluginProcessor.h"
 #include "../Presets/ModulePresets.h"
@@ -759,21 +760,6 @@ namespace velvox::ui
             GainReductionMeter gr { colours::accent, "GR" };
         };
 
-        // SATURATION: Character, Drive, Mix; Output in Mehr
-        class SatPanel final : public DetailPanel
-        {
-        public:
-            explicit SatPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Saturation", help::shortDescription ((int) ModuleId::sat), pid::satOn)
-            {
-                auto& character = segments (pid::satCharacter);
-                auto& drive = knob (pid::satDrive, "Drive");
-                knob (pid::satOutput, "Output");
-                auto& mix = knob (pid::satMix, "Mix");
-                setMainControls ({ &character, &drive, &mix });
-            }
-        };
-
         // DOUBLER (the dsp tracks replace the engine): Width, Detune, Timing, Mix
         class DoublerPanel final : public DetailPanel
         {
@@ -1494,7 +1480,7 @@ namespace velvox::ui
                 case ModuleId::eq:      panel = std::make_unique<EqPanel> (p); break;
                 case ModuleId::comp:    panel = std::make_unique<CompPanel> (p); break;
                 case ModuleId::deess:   panel = std::make_unique<DeEssPanel> (p); break;
-                case ModuleId::sat:     panel = std::make_unique<SatPanel> (p); break;
+                case ModuleId::sat:     panel = createSatPanel (p); break;   // SatPanel.cpp
                 case ModuleId::doubler: panel = std::make_unique<DoublerPanel> (p); break;
                 case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
                 case ModuleId::chop:    panel = std::make_unique<ChopPanel> (p); break;

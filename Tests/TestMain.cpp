@@ -315,11 +315,19 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //   VelvoxTests --snapshot out.png [presetName] [width] [beginner|pro] [moduleId|-1] [overlay]
 // overlay: "help:<page>", "welcome", "tutorial:<step>", "bypass", "hide:<key,key>", "focus:<moduleId>", "edit",
 //          "intro" (analysis popup), "listening", "capturing", "analysing", "mixed" (overview after a synthetic auto mix),
-//          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report)
+//          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report),
+//          "set:<id>=<value>,<id>=<value>[|<overlay>]" (parameter values in real units, then an optional other overlay)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
-                           const juce::String& mode, int selection, const juce::String& overlay)
+                           const juce::String& mode, int selection, const juce::String& overlayArg)
 {
     using namespace velvox;
+    juce::String overlay = overlayArg;
+    juce::StringArray assignments;
+    if (overlay.startsWith ("set:"))
+    {
+        assignments.addTokens (overlay.fromFirstOccurrenceOf ("set:", false, false).upToFirstOccurrenceOf ("|", false, false), ",", "");
+        overlay = overlay.contains ("|") ? overlay.fromFirstOccurrenceOf ("|", false, false) : juce::String();
+    }
     // Never touch the real user preferences; the welcome card only when asked for
     const auto prefs = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("velvox-snapshot.settings");
     prefs.deleteFile();
@@ -337,6 +345,9 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     for (int i = 0; i < pm.getEntries().size(); ++i)
         if (pm.getEntries()[i].name == presetName)
             pm.loadPreset (i);
+    for (const auto& a : assignments)
+        if (auto* prm = proc.getState().getParameter (a.upToFirstOccurrenceOf ("=", false, false).trim()))
+            prm->setValueNotifyingHost (prm->convertTo0to1 (a.fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
 
     auto& am = proc.getAutoMix();
     if (overlay != "intro" && overlay != "welcome")

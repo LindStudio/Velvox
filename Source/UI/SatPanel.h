@@ -64,6 +64,7 @@ namespace velvox::ui
         bool isMultiband() const noexcept { return multiband; }
         // Selected band 0 / 1 / 2 (Low / Mid / High); -1 while multiband is off
         int getSelectedBand() const noexcept { return multiband ? selected : -1; }
+        int getChosenBand() const noexcept { return selected; }   // kept while multiband is off
         void setSelectedBand (int band);
         std::function<void (int band)> onSelectBand;   // the user picked a band (click or drag)
 
@@ -116,4 +117,10 @@ namespace velvox::ui
     };
 
     std::unique_ptr<ModuleView> createSatView (VelvoxAudioProcessor& p, int instance);
+
+    // The Saturation panel (spec 5.6 "Sat 2" + Low / Mid / High): main row = character tiles of the selected
+    // band, Multiband, Link; the big Drive of the selected band beside the strip; Mehr: Mix, Output and the
+    // two crossovers. Multiband off: the single-band character and drive. Instance from
+    // DetailPanel::constructionInstance (createDetailPanel sets it).
+    std::unique_ptr<DetailPanel> createSatPanel (VelvoxAudioProcessor& p);
 }

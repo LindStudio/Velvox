@@ -70,6 +70,63 @@ namespace
         live->settings = h.proc.readEffectiveSettings();
         return live;
     }
+
+    // Visible all the way up to `root`
+    bool shownIn (juce::Component& c, juce::Component& root)
+    {
+        for (auto* p = &c; p != nullptr && p != &root; p = p->getParentComponent())
+            if (! p->isVisible())
+                return false;
+        return true;
+    }
+
+    template <typename T>
+    std::vector<T*> findAll (juce::Component& root, bool visibleOnly)
+    {
+        std::vector<T*> out;
+        std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+        {
+            for (auto* child : c.getChildren())
+            {
+                if (auto* t = dynamic_cast<T*> (child); t != nullptr && (! visibleOnly || shownIn (*child, root)))
+                    out.push_back (t);
+                walk (*child);
+            }
+        };
+        walk (root);
+        return out;
+    }
+
+    juce::StringArray shownSegments (juce::Component& panel)
+    {
+        juce::StringArray ids;
+        for (auto* s : findAll<ui::Segments> (panel, true))
+            ids.add (s->getParamId());
+        return ids;
+    }
+
+    // The big Drive: the visible knob with the largest dial
+    ui::Knob* bigKnob (juce::Component& panel)
+    {
+        ui::Knob* best = nullptr;
+        for (auto* k : findAll<ui::Knob> (panel, true))
+            if (best == nullptr || k->getDialSize() > best->getDialSize())
+                best = k;
+        return best;
+    }
+
+    std::unique_ptr<ui::DetailPanel> satPanel (Harness& h, int instance = 0)
+    {
+        auto r = h.proc.getRouting();
+        for (int k = 0; k <= instance; ++k)
+            if (! r.contains (ModuleId::sat, k))
+                r.insertDefault (ModuleId::sat, k);
+        h.proc.setRouting (r);
+        auto panel = ui::createDetailPanel (h.proc, dsp::selectionCode (ModuleId::sat, instance));
+        panel->setBounds (VelvoxAudioProcessorEditor::panelArea().withZeroOrigin());
+        panel->refresh();
+        return panel;
+    }
 }
 
 class SatPanelTests final : public juce::UnitTest
@@ -83,9 +140,98 @@ public:
         testTilePainter();
         testChainAccessor();
         testView();
+        testPanel();
     }
 
 private:
+    void testPanel()
+    {
+        beginTest ("Panel: main row = character tiles, Multiband, Link; big Drive in the visual; Mehr: Mix, Output, crossovers");
+        {
+            Harness h;
+            auto panel = satPanel (h);
+            const auto& main = panel->getMainControls();
+            expectEquals ((int) main.size(), 3);
+            if (main.size() == 3)
+            {
+                auto tiles = findAll<ui::Segments> (*main[0], true);
+                expect (tiles.size() == 1 && tiles[0]->hasTilePainter() && tiles[0]->getNumSegments() == 4, "four character tiles");
+                auto* mb = dynamic_cast<ui::Toggle*> (main[1]);
+                auto* link = dynamic_cast<ui::Toggle*> (main[2]);
+                expect (mb != nullptr && mb->getParamId() == juce::String (pid::satMultiband), "Multiband switch");
+                expect (link != nullptr && link->getParamId() == juce::String (pid::satLink), "Link switch");
+                expect (main[0]->getHeight() >= 60, "tiles are tall " + main[0]->getBounds().toString());
+            }
+            expect (shownSegments (*panel) == juce::StringArray (pid::satCharacter), "single band: satCharacter");
+            auto* drive = bigKnob (*panel);
+            expect (drive != nullptr && drive->getParamId() == juce::String (pid::satDrive) && drive->getDialSize() >= 100, "big Drive = satDrive");
+            expect (drive != nullptr && panel->getVisualArea().contains (drive->getBounds()), "Drive in the visual");
+
+            juce::StringArray more;
+            for (auto* c : panel->getMoreControls())
+                if (auto* k = dynamic_cast<ui::Knob*> (c))
+                    more.add (k->getParamId());
+            for (auto* id : { pid::satMix, pid::satOutput, pid::satXoverLow, pid::satXoverHigh })
+                expect (more.contains (id), juce::String ("Mehr has ") + id);
+        }
+
+        beginTest ("Panel: multiband shows the selected band's tiles and Drive; the strip selects; automation follows");
+        {
+            Harness h;
+            auto panel = satPanel (h);
+            setPlain (h, pid::satMultiband, 1.0f);   // automation
+            panel->refresh();
+            auto views = findAll<ui::SatView> (*panel, true);
+            expect (views.size() == 1, "the visual");
+            if (views.empty())
+                return;
+            auto& view = *views[0];
+            auto live = liveFor (h);
+            view.update (*live);
+            expect (shownSegments (*panel) == juce::StringArray (pid::satMidChar), "Mid selected: its tiles");
+            expect (bigKnob (*panel)->getParamId() == juce::String (pid::satMidDrive), "Mid Drive");
+            expectEquals (bigKnob (*panel)->getLabel(), juce::String ("MID DRIVE"));
+
+            clickOn (view.getBandArea (0));
+            expect (shownSegments (*panel) == juce::StringArray (pid::satLowChar), "Low tiles after a click on the low band");
+            expect (bigKnob (*panel)->getParamId() == juce::String (pid::satLowDrive), "Low Drive");
+
+            // Tiles set the selected band's character
+            auto tiles = findAll<ui::Segments> (*panel, true);
+            if (! tiles.empty())
+                tiles[0]->clickSegment (2);
+            expectEquals ((int) value (h, pid::satLowChar), 2, "Low = Tube");
+            expectEquals ((int) value (h, pid::satCharacter), 0, "single band untouched");
+
+            // Link through the panel's Drive: a user gesture moves all bands
+            setPlain (h, pid::satLink, 1.0f);
+            userEdit (h, pid::satLowDrive, { 10.0f });
+            expectWithinAbsoluteError (value (h, pid::satHighDrive), 10.0f, 0.01f, "linked");
+
+            setPlain (h, pid::satMultiband, 0.0f);
+            panel->refresh();
+            view.update (*live);
+            expect (shownSegments (*panel) == juce::StringArray (pid::satCharacter), "back to single band");
+            expect (bigKnob (*panel)->getParamId() == juce::String (pid::satDrive));
+            expectEquals (bigKnob (*panel)->getLabel(), juce::String ("DRIVE"));
+        }
+
+        beginTest ("Panel: the second instance binds its own parameters and meters");
+        {
+            Harness h;
+            auto panel = satPanel (h, 1);
+            setPlain (h, id (pid::satMultiband, 1), 1.0f);
+            panel->refresh();
+            for (auto* s : findAll<ui::Segments> (*panel, false))
+                expect (s->getParamId().endsWith ("_2"), "segments " + s->getParamId());
+            for (auto* k : findAll<ui::Knob> (*panel, false))
+                expect (k->getParamId().endsWith ("_2"), "knob " + k->getParamId());
+            for (auto* t : findAll<ui::Toggle> (*panel, false))
+                expect (t->getParamId().endsWith ("_2"), "switch " + t->getParamId());
+            expect (shownSegments (*panel) == juce::StringArray (id (pid::satMidChar, 1)), "instance 2 multiband: mid tiles");
+        }
+    }
+
     void testView()
     {
         beginTest ("SatView: log axis, multiband strip with three bands and two crossovers");

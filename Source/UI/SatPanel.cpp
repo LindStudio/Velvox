@@ -564,7 +564,7 @@ namespace velvox::ui
         strip = r.removeFromTop (std::max (96.0f, std::floor (r.getHeight() * 0.58f)));
         r.removeFromTop (18.0f);   // frequency labels under the strip
         auto mini = r;
-        curveBox = mini.removeFromLeft (std::min (mini.getHeight() * 1.3f, mini.getWidth() * 0.34f));
+        curveBox = mini.removeFromLeft (std::min (mini.getHeight() * 1.15f, mini.getWidth() * 0.34f));
         mini.removeFromLeft (16.0f);
         harmonicsBox = mini;
         layoutChildren();
@@ -721,11 +721,13 @@ namespace velvox::ui
                                                      c.withAlpha (0.015f * a), br.getX(), br.getBottom(), false));
             g.fillRoundedRectangle (br, 8.0f);
 
-            // Live drive meter: rises from the bottom with input level + drive (-42 .. +6 dB)
+            // Live drive meter: rises from the bottom with input level + drive (-42 .. +6 dB), below the labels
+            const float top = br.getY() + (multiband ? 36.0f : 12.0f);
             const float level = juce::jlimit (0.0f, 1.0f, juce::jmap (meterDb[(size_t) b], -42.0f, 6.0f, 0.0f, 1.0f));
             if (on && level > 0.001f)
             {
-                const auto heat = br.withTop (br.getBottom() - (br.getHeight() - 4.0f) * level);
+                const float room = std::max (8.0f, br.getBottom() - (top + 46.0f));
+                const auto heat = br.withTop (br.getBottom() - room * level);
                 g.setGradientFill (juce::ColourGradient (c.withAlpha (0.34f * a), heat.getX(), heat.getY(),
                                                          c.withAlpha (0.05f * a), heat.getX(), heat.getBottom(), false));
                 g.fillRoundedRectangle (heat, 6.0f);
@@ -737,7 +739,6 @@ namespace velvox::ui
             g.drawRoundedRectangle (br.reduced (0.5f), 8.0f, isSelected ? 1.4f : 1.0f);
 
             // Character icon + name, drive value (as far as the band is wide)
-            const float top = br.getY() + (multiband ? 36.0f : 12.0f);
             auto text = juce::Rectangle<float> (br.getX() + 10.0f, top, br.getWidth() - 18.0f, 18.0f);
             if (text.getWidth() >= 18.0f)
             {
@@ -830,5 +831,149 @@ namespace velvox::ui
     std::unique_ptr<ModuleView> createSatView (VelvoxAudioProcessor& p, int instance)
     {
         return std::make_unique<SatView> (p, instance);
+    }
+
+    //==========================================================================
+    namespace
+    {
+        // Shows one of its children at its full size (the tiles of the selected band)
+        class Stack final : public juce::Component
+        {
+        public:
+            void resized() override
+            {
+                for (auto* c : getChildren())
+                    c->setBounds (getLocalBounds());
+            }
+        };
+
+        class SatPanel final : public DetailPanel
+        {
+        public:
+            explicit SatPanel (VelvoxAudioProcessor& p)
+                : DetailPanel (p, "Saturation", help::shortDescription ((int) dsp::ModuleId::sat), pid::satOn),
+                  link (p.getState(), getInstance())
+            {
+                // Index 0 = single band (the 0.2 - 0.5 parameters), 1 - 3 = Low / Mid / High
+                const char* const charBases[4] { pid::satCharacter, pid::satLowChar, pid::satMidChar, pid::satHighChar };
+                const char* const driveBases[4] { pid::satDrive, pid::satLowDrive, pid::satMidDrive, pid::satHighDrive };
+                auto& stack = own (std::make_unique<Stack>());
+                for (int i = 0; i < 4; ++i)
+                {
+                    auto& t = segments (charBases[i], { "Warm", "Tape", "Tube", "Hard" });
+                    auto* tp = &t;
+                    t.setTilePainter ([tp] (juce::Graphics& g, int segment, juce::Rectangle<float> r, bool selected, bool hover)
+                    {
+                        satlook::drawCharacterTile (g, tp->getChoiceForSegment (segment), r, selected, hover);
+                    });
+                    stack.addChildComponent (t);   // out of Mehr, into the main row
+                    tiles[(size_t) i] = &t;
+
+                    auto& d = knob (driveBases[i], "Drive");
+                    d.setDialSize (120);
+                    drives[(size_t) i] = &d;
+                }
+                auto& multibandSwitch = toggle (pid::satMultiband, "Multiband");
+                linkSwitch = &toggle (pid::satLink, "Link");
+                knob (pid::satMix, "Mix");
+                knob (pid::satOutput, "Output");
+                xovers[0] = &knob (pid::satXoverLow, "Low / Mid");
+                xovers[1] = &knob (pid::satXoverHigh, "Mid / High");
+
+                tileStack = &stack;
+                multiband = &multibandSwitch;
+                setMainControls ({ &stack, &multibandSwitch, linkSwitch });
+                placeInVisual ({ drives[0], drives[1], drives[2], drives[3] });
+                multibandId = pidFor (pid::satMultiband);
+                sync();
+            }
+
+            void refresh() override
+            {
+                DetailPanel::refresh();
+                sync();
+            }
+
+            void resized() override
+            {
+                DetailPanel::resized();
+                // Main row: tall character tiles, then the two switches, centred
+                auto row = getMainRowArea().withTrimmedTop (6);
+                if (row.isEmpty() || tileStack == nullptr)
+                    return;
+                const int swW = row.getWidth() > 700 ? 128 : 108, gap = row.getWidth() > 700 ? 28 : 16;
+                const int tilesW = juce::jlimit (160, 372, row.getWidth() - 2 * (swW + gap));
+                const int total = tilesW + 2 * (swW + gap);
+                int x = row.getX() + std::max (0, (row.getWidth() - total) / 2);
+                tileStack->setBounds (juce::Rectangle<int> (x, row.getY(), tilesW, row.getHeight()).withSizeKeepingCentre (tilesW, std::min (76, row.getHeight() - 8)));
+                x += tilesW + gap;
+                multiband->setBounds (juce::Rectangle<int> (x, row.getY(), swW, row.getHeight()).withSizeKeepingCentre (swW, 28));
+                x += swW + gap;
+                linkSwitch->setBounds (juce::Rectangle<int> (x, row.getY(), swW, row.getHeight()).withSizeKeepingCentre (swW, 28));
+            }
+
+        private:
+            void layoutVisual (juce::Rectangle<int> area) override
+            {
+                // The big Drive in its own column right of the strip, the picture gets the rest
+                const int column = juce::jlimit (150, 196, area.getWidth() / 4);
+                auto r = area.reduced (8);
+                const auto driveArea = r.removeFromRight (column);
+                for (auto* d : drives)
+                    if (d != nullptr)
+                        d->setBounds (driveArea.withSizeKeepingCentre (column, std::min (driveArea.getHeight(), 196)));
+                if (auto* v = dynamic_cast<SatView*> (getVisual()))
+                {
+                    v->setBounds (area.withTrimmedRight (column + 8).reduced (1));
+                    if (view != v)
+                    {
+                        view = v;
+                        juce::Component::SafePointer<SatPanel> safe (this);
+                        v->onSelectBand = [safe] (int) { if (safe != nullptr) safe->sync(); };
+                        sync();
+                    }
+                }
+            }
+
+            // Which band the tiles and the Drive show: single band, or the band selected in the strip
+            void sync()
+            {
+                const bool mb = apvts.getRawParameterValue (multibandId)->load() > 0.5f;
+                const int index = mb ? 1 + (view != nullptr ? view->getChosenBand() : 1) : 0;
+                if (index != shownIndex)
+                {
+                    shownIndex = index;
+                    for (int i = 0; i < 4; ++i)
+                    {
+                        tiles[(size_t) i]->setVisible (i == index);
+                        drives[(size_t) i]->setVisible (i == index);
+                    }
+                    static const char* const names[4] { "Drive", "Low Drive", "Mid Drive", "High Drive" };
+                    drives[(size_t) index]->setLabel (names[index]);
+                }
+                // Link and the crossovers only matter with three bands
+                const bool on = apvts.getRawParameterValue (pidFor (pid::satOn))->load() > 0.5f;
+                const float a = (on ? 1.0f : 0.55f) * (mb ? 1.0f : 0.45f);
+                for (juce::Component* c : { (juce::Component*) linkSwitch, (juce::Component*) xovers[0], (juce::Component*) xovers[1] })
+                    if (c != nullptr && std::abs (c->getAlpha() - a) > 0.001f)
+                        c->setAlpha (a);
+            }
+
+            SatLink link;
+            std::array<Segments*, 4> tiles {};
+            std::array<Knob*, 4> drives {};
+            std::array<Knob*, 2> xovers {};
+            juce::Component* tileStack = nullptr;
+            Toggle* multiband = nullptr;
+            Toggle* linkSwitch = nullptr;
+            SatView* view = nullptr;
+            juce::String multibandId;
+            int shownIndex = -1;
+        };
+    }
+
+    std::unique_ptr<DetailPanel> createSatPanel (VelvoxAudioProcessor& p)
+    {
+        return std::make_unique<SatPanel> (p);
     }
 }
