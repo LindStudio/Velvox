@@ -100,7 +100,7 @@ namespace velvox::ui
 
         constexpr Shape shapes[8] {
             { 0.60f, 0.80f, 0.54f, false },   // Room: compact, close
-            { 0.80f, 0.58f, 0.58f, false },   // Plate: wide and shallow, low
+            { 0.80f, 0.64f, 0.58f, false },   // Plate: wide and shallow, low
             { 0.82f, 0.92f, 0.34f, false },   // Hall
             { 0.94f, 0.98f, 0.25f, false },   // Large Hall
             { 0.54f, 0.70f, 0.60f, false },   // Ambience: small studio air
@@ -366,7 +366,7 @@ namespace velvox::ui
         for (size_t i = 0; i < decayCurve.size(); ++i)
         {
             const float x = area.getX() + area.getWidth() * (float) i / (float) (decayCurve.size() - 1);
-            const float y = area.getBottom() - area.getHeight() * 0.85f * decayCurve[i] / maxRt;
+            const float y = area.getBottom() - area.getHeight() * 0.7f * decayCurve[i] / maxRt;
             if (i == 0)
             {
                 curve.startNewSubPath (x, y);
@@ -378,9 +378,9 @@ namespace velvox::ui
         }
         fill.lineTo (area.getRight(), area.getBottom());
         fill.closeSubPath();
-        g.setColour (hue.withAlpha (0.07f * a));
+        g.setColour (hue.withAlpha (0.035f * a));
         g.fillPath (fill);
-        g.setColour (hue.withAlpha (0.38f * a));
+        g.setColour (hue.withAlpha (0.30f * a));
         g.strokePath (curve, juce::PathStrokeType (1.1f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
@@ -589,16 +589,30 @@ namespace velvox::ui
                 setMixKnob (&mix);
                 gr.setTooltip ("Ducking (dB)");
                 placeInVisual ({ &gr });
+                gr.setVisible (apvts.getRawParameterValue (pidFor (pid::reverbDuckAmount))->load() > 0.0f);
             }
 
             void refresh() override
             {
                 DetailPanel::refresh();
                 gr.push (live != nullptr ? live->reverbDuck.ago (0) : 0.0f);
+                // The ducking meter only while ducking is set (the room keeps the whole width otherwise)
+                const bool ducking = apvts.getRawParameterValue (pidFor (pid::reverbDuckAmount))->load() > 0.0f;
+                if (ducking != gr.isVisible())
+                {
+                    gr.setVisible (ducking);
+                    resized();
+                }
             }
 
+            bool showsDuckMeter() const noexcept { return gr.isVisible(); }
+
         private:
-            void layoutVisual (juce::Rectangle<int> area) override { placeMeter (gr, area); }
+            void layoutVisual (juce::Rectangle<int> area) override
+            {
+                if (gr.isVisible())
+                    placeMeter (gr, area);
+            }
             GainReductionMeter gr { colours::accent, "Duck" };
         };
     }

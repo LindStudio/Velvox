@@ -191,6 +191,29 @@ public:
             expect (room.view.getReadout().contains ("Mix 45 %"), room.view.getReadout());
         }
 
+        beginTest ("The ducking meter shows only while ducking is set");
+        {
+            Harness h;
+            auto panel = createDetailPanel (h.proc, (int) ModuleId::reverb);
+            panel->setBounds (panelSize());
+            const auto meterShown = [&]
+            {
+                for (auto* c : panel->getChildren())
+                    if (dynamic_cast<GainReductionMeter*> (c) != nullptr)
+                        return c->isVisible();
+                return false;
+            };
+            panel->refresh();
+            expect (! meterShown(), "no ducking: no meter");
+            const int roomW = panel->getVisualArea().getWidth();
+            setReal (h, pid::reverbDuckAmount, 6.0f);
+            panel->refresh();
+            expect (meterShown(), "ducking: meter");
+            for (auto* c : panel->getChildren())
+                if (auto* r = dynamic_cast<ReverbRoom*> (c))
+                    expect (r->getWidth() < roomW - 40, "the room makes space for it");
+        }
+
         beginTest ("Room shape follows type and size");
         {
             Harness h;

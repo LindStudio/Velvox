@@ -315,7 +315,8 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //   VelvoxTests --snapshot out.png [presetName] [width] [beginner|pro] [moduleId|-1] [overlay]
 // overlay: "help:<page>", "welcome", "tutorial:<step>", "bypass", "hide:<key,key>", "focus:<moduleId>", "edit",
 //          "intro" (analysis popup), "listening", "capturing", "analysing", "mixed" (overview after a synthetic auto mix),
-//          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report)
+//          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report),
+//          "set:<id>=<value>,..." (parameters in real units)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
                            const juce::String& mode, int selection, const juce::String& overlay)
 {
@@ -398,6 +399,11 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
         proc.getState().getParameter ("bypass")->setValueNotifyingHost (1.0f);
     if (overlay.startsWith ("hide:"))
         proc.getState().state.setProperty ("uiHiddenModules", overlay.fromFirstOccurrenceOf (":", false, false), nullptr);
+    // "set:<id>=<value>,<id>=<value>": parameters in real units (e.g. set:reverbType=3,reverbMix=40)
+    if (overlay.startsWith ("set:"))
+        for (auto& pair : juce::StringArray::fromTokens (overlay.fromFirstOccurrenceOf (":", false, false), ",", ""))
+            if (auto* p = proc.getState().getParameter (pair.upToFirstOccurrenceOf ("=", false, false).trim()))
+                p->setValueNotifyingHost (p->convertTo0to1 (pair.fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
     if (overlay == "edit")
         proc.getState().getParameter ("compRatio")->setValueNotifyingHost (0.6f);
     if (overlay == "listening" || overlay == "capturing" || overlay == "analysing")
