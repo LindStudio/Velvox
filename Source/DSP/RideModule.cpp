@@ -14,6 +14,9 @@ namespace velvox::dsp
         fs = sampleRate;
         bandHpf.setCoeffs (design::highPass (fs, 100.0, 0.7071));
         bandLpf.setCoeffs (design::lowPass (fs, std::min (8000.0, fs * 0.45), 0.7071));
+        sibilantHpf.setCoeffs (design::highPass (fs, std::min (4500.0, fs * 0.3), 0.7071));
+        sibilantLpf.setCoeffs (design::lowPass (fs, std::min (12000.0, fs * 0.45), 0.7071));
+        bodyLpf.setCoeffs (design::lowPass (fs, 2000.0, 0.7071));
         fastCoeff = timeConstantCoeff (5.0f, fs);
         syllableCoeff = timeConstantCoeff (syllableMs, fs);
         enabled.reset (sampleRate, 0.05);
@@ -60,7 +63,10 @@ namespace velvox::dsp
     {
         bandHpf.reset();
         bandLpf.reset();
-        fastPower = syllablePower = 0.0f;
+        fastPower = syllablePower = sibilantPower = bodyPower = 0.0f;
+        sibilantHpf.reset();
+        sibilantLpf.reset();
+        bodyLpf.reset();
         phraseDb = -100.0f;
         phrasePower = 0.0f;
         freezeSamples = 0;
@@ -135,7 +141,10 @@ namespace velvox::dsp
         // longer is a quieter passage and is ridden normally.
         const bool dip = phraseDb > -90.0f && fastDb < phraseDb - wordGapDb;
         dipRun = dip ? dipRun + controlInterval : 0;
-        const bool singing = voiced && ! (dip && dipRun < (int) (pauseHoldMs * 0.001 * fs));
+        // S sounds (4.5 .. 12 kHz far above the body of the voice, 100 Hz .. 2 kHz) are not words to
+        // be lifted: the gain holds through them, so the rider never pushes sibilance up
+        const bool sibilant = sibilantPower > sibilantRatio * bodyPower;
+        const bool singing = voiced && ! sibilant && ! (dip && dipRun < (int) (pauseHoldMs * 0.001 * fs));
         if (singing)
             pauseSamples = 0;
 
@@ -339,10 +348,15 @@ namespace velvox::dsp
             for (int c = 0; c < numChannels; ++c)
                 mid += ch[c][i];
             mid /= (float) numChannels;
-            const float v = bandLpf.process (bandHpf.process (mid, 0), 0);
+            const float hp = bandHpf.process (mid, 0);
+            const float v = bandLpf.process (hp, 0);
+            const float body = bodyLpf.process (hp, 0);
+            bodyPower = body * body + fastCoeff * (bodyPower - body * body);
             const float p = v * v;
             powers[(size_t) i] = p;
             fastPower = p + fastCoeff * (fastPower - p);
+            const float hf = sibilantLpf.process (sibilantHpf.process (mid, 0), 0);
+            sibilantPower = hf * hf + fastCoeff * (sibilantPower - hf * hf);
 
             // Spikes far above the usual singing level do not count for the syllable level
             const float reference = std::max (syllablePower, phrasePower);

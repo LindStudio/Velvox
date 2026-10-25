@@ -659,8 +659,8 @@ public:
                 lo.push_back (rmsDbOf (out, in.words[k].first, in.words[k].second));
             }
             logMessage ("Word level spread: input " + juce::String (stdOf (li), 2) + " dB, output " + juce::String (stdOf (lo), 2) + " dB");
-            // defaults blend 40 % of the phrase level in, so words are evened by about a third
-            expectLessThan (stdOf (lo), 0.7 * stdOf (li));
+            // defaults blend 40 % of the phrase level in and correct 70 %: words are evened by about a quarter (0.5: none)
+            expectLessThan (stdOf (lo), 0.75 * stdOf (li));
         }
 
         beginTest ("LEVEL RIDE: breaths in the gaps between words are not lifted");

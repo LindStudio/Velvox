@@ -191,6 +191,27 @@ namespace velvox::automix
                 compGr.push_back (gr);
         }
 
+        // Latency compensation (e.g. LEVEL RIDE's lookahead, SMOOTH's STFT): like a host, align the
+        // output with the input - the analysis (S frames, levels) refers to input positions
+        if (const int latency = chain->getLatencySamples(); latency > 0)
+        {
+            std::vector<std::vector<float>> tail ((size_t) channels, std::vector<float> ((size_t) latency, 0.0f));
+            for (int start = 0; start < latency; start += block)
+            {
+                const int len = std::min (block, latency - start);
+                for (int ch = 0; ch < channels; ++ch)
+                    ptrs[(size_t) ch] = tail[(size_t) ch].data() + start;
+                juce::AudioBuffer<float> view (ptrs.data(), channels, len);
+                chain->process (view, channels, s, nullptr);
+            }
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                auto& v = out.vocal[(size_t) ch];
+                v.erase (v.begin(), v.begin() + std::min (latency, n));
+                v.insert (v.end(), tail[(size_t) ch].begin(), tail[(size_t) ch].begin() + std::min (latency, n));
+            }
+        }
+
         measureInto (m, out);
         m.compGrMedianDb = percentile (compGr, 0.5f);
         m.compGrMaxDb = compGr.empty() ? 0.0f : *std::max_element (compGr.begin(), compGr.end());

@@ -449,8 +449,9 @@ public:
             Harness full;
             full.proc.setStateInformation (v03.getData(), (int) v03.getSize());
             // (0.6: without the idle SMOOTH - it now delays by its constant STFT latency even when off, and the
-            // tempo-locked Stutter after it then gates a shifted signal; covered by "SMOOTH in the chain")
-            full.proc.setRouting (Routing::fromString ("v2,sat,eq,ride,comp,smash,deess,doubler,choir,pitch,delay:send,reverb:insert,chop,pulse,check"));
+            // tempo-locked Stutter after it then gates a shifted signal; covered by "SMOOTH in the chain".
+            // The same holds for LEVEL RIDE and its constant lookahead; covered by "LEVEL RIDE: constant lookahead")
+            full.proc.setRouting (Routing::fromString ("v2,sat,eq,comp,smash,deess,doubler,choir,pitch,delay:send,reverb:insert,chop,pulse,check"));
             const auto in = h.noise (0.2f, 1.0, 59);
             const double d = maxDiff (h.run (in), full.run (in), 0);
             logMessage ("pruned vs full 0.3 chain: max difference " + juce::String (d, 9));

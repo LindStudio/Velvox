@@ -67,7 +67,7 @@ namespace velvox::dsp
         static float effectiveAmount (float amount) noexcept
         {
             const float a = juce::jlimit (0.0f, 1.0f, amount);
-            return 1.0f - (1.0f - a) * (1.0f - a);
+            return a;
         }
 
         // Word segmentation for the UI feed: a segment opens when the voice gets active, ends when it
@@ -111,8 +111,10 @@ namespace velvox::dsp
         double fs = 48000.0;
         RideSettings settings;
 
-        Biquad bandHpf, bandLpf;
-        float fastPower = 0.0f, syllablePower = 0.0f;
+        Biquad bandHpf, bandLpf, sibilantHpf, sibilantLpf, bodyLpf;
+        float fastPower = 0.0f, syllablePower = 0.0f, sibilantPower = 0.0f, bodyPower = 0.0f;
+        // 4.5-12 kHz power this many times the 100 Hz-2 kHz power = S sound (+9 dB; white noise reads +6)
+        static constexpr float sibilantRatio = 8.0f;
         float fastCoeff = 0.0f, syllableCoeff = 0.0f;
         float transientClamp = 1000.0f;   // power ratio above the syllable level that is ignored
         int freezeSamples = 0;            // hold after a transient

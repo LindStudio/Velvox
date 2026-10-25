@@ -552,9 +552,11 @@ public:
             for (int ch = 0; ch < 2; ++ch)
                 in.copyFrom (ch, 0, audio.vocal[(size_t) ch].data(), audio.numSamples());
             const auto out = h.run (in);
+            // 0.6: the offline render is latency compensated like a host (output aligned to the input)
+            const int L = h.proc.getLatencySamples();
             float maxDiff = 0.0f;
-            for (int i = 0; i < out.getNumSamples(); ++i)
-                maxDiff = std::max (maxDiff, std::abs (out.getSample (0, i) - rendered.vocal[0][(size_t) i]));
+            for (int i = 0; i + L < out.getNumSamples(); ++i)
+                maxDiff = std::max (maxDiff, std::abs (out.getSample (0, i + L) - rendered.vocal[0][(size_t) i]));
             expect (maxDiff < 1.0e-4f, "plugin and offline render agree (max diff " + juce::String (maxDiff) + ")");
         }
     }
