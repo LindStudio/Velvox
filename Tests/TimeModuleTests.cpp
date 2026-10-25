@@ -246,6 +246,9 @@ private:
                 }
             });
             const auto out = runChop (*m, s, sine (2.0, 440.0, 0.5f), 120.0);
+            // The render takes milliseconds: give a late-starting reader time to see frames
+            for (int wait = 0; wait < 1000 && seen.load() == 0; ++wait)
+                std::this_thread::sleep_for (std::chrono::milliseconds (1));
             running = false;
             reader.join();
             expectEquals (bad.load(), 0, "every frame read concurrently is valid");

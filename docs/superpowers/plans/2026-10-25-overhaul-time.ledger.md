@@ -62,3 +62,21 @@ repeat crossfade linear → raised cosine: repeat-edge splatter −74…−78 dB
   misaligned read). — "Stutter end" (4 × 1/8) needs 3 s at 40 BPM. Pure fix. — Cost if wrong: +1.5 MB memory per instance.
 - Ruling: chop repeat crossfade raised cosine instead of linear (same 1.5 ms). — Quality fix, ~20 dB less splatter; changes old
   projects only inside the 1.5 ms repeat edges (CHANGELOG). — Cost if wrong: none.
+
+Task 6: complete (HeadlinerRefHost rebuilt; `bench.py delay|pulse|chop --out ...\2026-10-25\modules-after --update-doc`: 0 FAIL;
+new cases delay/tape (listening), pulse/classic and pulse/gate16 (splatter −150/−151 dB), vocal_listen renders for chop and pulse;
+listen-proxy: all renders finite, no new clicks (largest curvature outlier in chop/m9_breathy is in the dry clip itself);
+CPU delay 0.33 %, pulse 0.19 %, chop 0.22 % (budget 1 %); delay/plain differs from the 0.5 render by −26…−49 dB – entirely the
+loop limiter (old tanh compressed echo peaks of hot clips by up to 1.2 dB), aligned to the sample.
+Full suite: 24511 checks, 0 failed (after merging feature/automix incl. EQ). Afterwards the stutter display test's reader got a
+wait for late thread start (it failed once under full-suite load with 0 frames seen); 5 reruns green.)
+
+- Ruling: no bench case for chop repeats. — The gate_tone procedure's gate_depth tolerance (≤ −40 dB) is per module, a repeat
+  pattern has no mutes and would FAIL it by construction; repeat splatter is gated in VelvoxTests (≤ −80 dB). — Cost if wrong: none.
+
+## CHANGELOG notes (pure quality fixes that change old projects slightly)
+- Delay: loop limiter now linear up to −2 dBFS (old: soft tanh everywhere → up to 1.2 dB peak compression and −50 dB THD at
+  −10 dBFS on repeats). Drive is 2× oversampled (aliasing −30 → −80 dB). Delay-time automation glides tape-style (small moves) or
+  crossfades (jumps) – no flutter during sweeps. Modulation without zipper (per-sample).
+- Stutter: repeat edges crossfade with a raised cosine (≈ 20 dB less splatter); long repeat runs at slow tempos replay the right slice.
+- Pulse: unchanged for old projects (bit-identical); new Amount macro and pump shapes.
