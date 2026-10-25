@@ -1296,8 +1296,11 @@ public:
                 const bool chop = juce::String (gate) == pid::chopOn;
                 const auto before = render (chop ? "smooth,chop" : "smooth,pulse", gate);
                 const auto after = render (chop ? "chop,smooth" : "pulse,smooth", gate);
+                // Skip the start-up: the legacy routing string completes the chain with every module, so
+                // LEVEL RIDE's lookahead (0.6) is in it too - the output starts ~4870 samples late and the
+                // gate's slew from its start state differs there between the two orders
                 double d = 0.0;
-                for (int i = 2048; i < before.getNumSamples(); ++i)
+                for (int i = 12000; i < before.getNumSamples(); ++i)
                     d = std::max (d, (double) std::abs (before.getSample (0, i) - after.getSample (0, i)));
                 logMessage (juce::String (gate) + ": max difference smooth-first vs gate-first " + juce::String (d, 6));
                 expectLessThan (d, 1.0e-3, gate);

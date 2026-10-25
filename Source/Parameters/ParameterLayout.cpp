@@ -479,6 +479,11 @@ namespace velvox
             { pid::delayMod,       "Delay Modulation","Delay", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Slow wow and flutter on the repeats, like a tape echo." },
 
+            // ---------------- Pulse (0.6, "like Kickstart") ----------------
+            { pid::pulseShape,  "Pulse Curve",  "Pulse", T::Choice, 0, (float) (dsp::PulseModule::shapeNames().size() - 1), 0, 0, "",
+              dsp::PulseModule::shapeNames(), "Pump shape: Custom uses the drawn curve; Classic, Punch, Swell and Gate are ready-made pumps." },
+            { pid::pulseAmount, "Pulse Amount", "Pulse", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {},
+              "How hard the vocal pumps: 0 = untouched, 50 = the Depth setting, 100 = ducked fully at the beat." },
             // ---------------- Dynamics options (0.6) ----------------
             { pid::compAutoRelease, "Comp Auto Release", "Compressor", T::Bool, 0, 1, 0, 0, "", {},
               "Program-dependent release: short peaks recover quickly, sustained compression recovers slowly and smoothly." },
@@ -486,11 +491,6 @@ namespace velvox
               "Adds back the gain the compressor takes from a voice at about -18 dBFS, so the level stays similar." },
             { pid::deessDetection,  "De-Ess Detection",  "De-Esser", T::Choice, 0, 1, 0, 0, "", { "Absolute", "Relative" },
               "Relative compares the S band with the whole voice, so loud and quiet phrases are de-essed alike." },
-            // ---------------- Pulse (0.6, "like Kickstart") ----------------
-            { pid::pulseShape,  "Pulse Curve",  "Pulse", T::Choice, 0, (float) (dsp::PulseModule::shapeNames().size() - 1), 0, 0, "",
-              dsp::PulseModule::shapeNames(), "Pump shape: Custom uses the drawn curve; Classic, Punch, Swell and Gate are ready-made pumps." },
-            { pid::pulseAmount, "Pulse Amount", "Pulse", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {},
-              "How hard the vocal pumps: 0 = untouched, 50 = the Depth setting, 100 = ducked fully at the beat." },
         };
             appendEqBandSpecs (table);
             appendDoublerSpecs (table);

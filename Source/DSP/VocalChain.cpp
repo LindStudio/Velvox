@@ -781,8 +781,7 @@ namespace velvox::dsp
             float g = 0.0f;
             if (routeHold > 0)
             {
-                // The new path is longer (a latent module joined): latent modules after it still
-                // release audio of the old path. Stay silent until the new path's audio arrives.
+                // The new path is longer (a latent module joined): see below
                 if (--routeHold == 0)
                     routeGain.setTargetValue (1.0f);
             }
@@ -797,7 +796,10 @@ namespace velvox::dsp
         {
             const int before = getLatencySamples();
             applyPendingStructure();
-            routeHold = std::max (0, getLatencySamples() - before);
+            // Latent modules that were already in the path still hold up to `before` samples of
+            // the old path's audio; when the path got longer, that audio would end in the silence
+            // of the newly joined module's empty buffer - mute it instead (no hard cut)
+            routeHold = getLatencySamples() > before ? before : 0;
             if (routeHold == 0)
                 routeGain.setTargetValue (1.0f);
         }

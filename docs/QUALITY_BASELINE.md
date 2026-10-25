@@ -125,7 +125,7 @@ The tables are generated (`bench.py <module> --update-doc`). gap = Headliner −
 | vocal | st_loudness_std_lu (LU) – mean of clips | 2.20 | 2.06 | 2.47 | 0.14 | ref ± 0.50 | pass |
 | vocal | mix0_null_db (dB) – latency 0 | -152 | – | – | – | ≤ -60.0 | pass |
 | vocal | off_null_db (dB) | -152 | – | – | – | ≤ -100 | pass |
-| vocal | cpu_pct (%) – median over this module's renders | 0.29 | 0.23 | 0.19 | 0.06 | ref + 0.50 | pass |
+| vocal | cpu_pct (%) – median over this module's renders | 0.28 | 0.23 | 0.19 | 0.05 | ref + 0.50 | pass |
 <!-- END comp -->
 
 <!-- BEGIN deess -->
@@ -148,7 +148,7 @@ Calibrated: vocal: Pro-DS Threshold=-50.1562; relative: Pro-DS Threshold=-36.562
 | relative | transient_change_db (dB) | 0.07 | 3.05 | -2.98 | 0.00 ± 1.00 | pass |
 | relative | inactive_null_db (dB) | -152 | – | – | ≤ -60.0 | pass |
 | relative | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| relative | cpu_pct (%) – median over this module's renders | 0.29 | 0.32 | -0.04 | ref + 0.50 | pass |
+| relative | cpu_pct (%) – median over this module's renders | 0.28 | 0.32 | -0.04 | ref + 0.50 | pass |
 <!-- END deess -->
 
 <!-- BEGIN smooth -->
@@ -374,7 +374,7 @@ Choir: the single 440 Hz roughness is information only (Ruling): with the measur
 | default | crest_reduction_db (dB) – mean of clips | 0.69 | 1.20 | -0.51 | ref ± 2.00 | pass |
 | default | st_loudness_std_lu (LU) – mean of clips | 3.33 | 3.10 | 0.23 | ref + 0.50 | pass |
 | default | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.39 | 0.16 | 0.24 | ref + 0.50 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.39 | 0.15 | 0.24 | ref + 0.50 | pass |
 <!-- END smash -->
 
 <!-- BEGIN ride -->
@@ -382,10 +382,10 @@ Choir: the single 440 Hz roughness is information only (Ruling): with the measur
 
 | case | metric | Headliner | Vocal Rider | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| default | st_loudness_std_lu (LU) – dry: 3.80 LU | 2.35 | 2.92 | -0.57 | ref + 0.30 | pass |
+| default | st_loudness_std_lu (LU) – dry: 3.80 LU | 2.56 | 2.92 | -0.36 | ref + 0.30 | pass |
 | default | gain_jitter_db (dB) | 0.09 | 0.05 | 0.04 | ref + 0.05 | pass |
-| default | transient_change_db (dB) | -0.33 | -0.04 | -0.29 | ref ± 0.50 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.24 | 0.09 | 0.15 | ref + 0.50 | pass |
+| default | transient_change_db (dB) | -0.14 | -0.04 | -0.10 | ref ± 0.50 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.25 | 0.09 | 0.16 | ref + 0.50 | pass |
 <!-- END ride -->
 
 <!-- BEGIN chop -->
@@ -498,7 +498,8 @@ Stutter, Pulse and Vocal Check pass at baseline.
    ±8 dB range, with similar smoothness (gain jitter 0.07 vs 0.05 dB). *Do:* faster word-level response (or 50–100 ms
    lookahead with constant latency), raise the effective Amount mapping, keep the transient preservation (−0.26 dB now).
    **Fixed (overhaul/dyn):** 80 ms lookahead (constant latency while Ride is in the chain), word-level control law,
-   gap/breath hold, phrase level from the first word → 2.35 LU (Vocal Rider 2.92), jitter 0.09 dB, transients −0.33 dB.
+   gap/breath and S-sound hold, phrase level from the first word → 2.56 LU (Vocal Rider 2.92), jitter 0.090 dB
+   (limit 0.101 – the thinnest margin), transients −0.14 dB.
    De-Esser also gained a relative-detection option (case `relative`, passes vs Pro-DS).
 
 Passing modules – what to keep: De-Esser equals Pro-DS at equal sibilance reduction (selectivity 1.16 vs 1.43 dB,
