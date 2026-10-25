@@ -2,6 +2,7 @@
 
 #include "DspUtilities.h"
 #include "MixLaw.h"
+#include "SpliceShifter.h"
 
 namespace velvox::dsp
 {
@@ -100,44 +101,24 @@ namespace velvox::dsp
         std::atomic<int> voiceCount { 2 };
 
     private:
-        // Smooth random walk: raised-cosine moves between random targets of alternating sign
-        struct Walk
-        {
-            juce::Random rng;
-            double from = 0.0, to = 0.0, pos = 0.0, len = 1.0;
-            double value() const noexcept;
-            void advance (double samples, double meanLength) noexcept;
-        };
-
         struct Voice
         {
-            Walk walk1, walk2;
+            SmoothRandomWalk walk1, walk2;
             double rateFactor = 1.0;
             double mod = 0.0, modStep = 0.0;      // delay offset of the wobble (samples), per-sample step
-            double shift = 0.0;                   // splice shifter: offset of the playing tap (samples)
-            double fadeShift = 0.0;               // offset of the tap that fades out
-            int fadeLeft = 0;                     // samples left of the crossfade (0 = one tap)
-            double turn = 0.0;                    // |offset| where the sweep turns (= its landing point)
+            SpliceShifter shifter;                // static detune
             float detune = 0.0f;
             bool started = false;
             juce::SmoothedValue<float> delayMs { 14.0f }, gain { 0.0f }, pan { 0.0f };
         };
 
-        float tap (double delaySamples) const noexcept;
-        double findJump (double delayA, double direction, double minJ, double maxJ) const noexcept;
         void updateFilters() noexcept;
         void updateModulation (Voice& v, int samples) noexcept;
 
         double fs = 48000.0;
-        std::vector<float> buffer;
-        int mask = 0;
-        int writePos = 0;
-        int fadeLength = 1440;                    // 30 ms
-        double shiftLimit = 576.0;                // splice shifter: tap offset within +-12 ms
-        double minLanding = 96.0;                 // ... landing at least 2 ms from the centre
-        double minDelaySamples = 48.0;            // 1 ms
+        LagrangeDelayLine line;
+        SpliceConfig splice;
         double maxModSamples = 480.0;             // 10 ms per walk
-        int corrLength = 768;
 
         Biquad lowCut, highCut;
         std::array<Voice, maxVoices> voices;
