@@ -62,3 +62,12 @@ touchpads) and smooth trackpad deltas (1:1 pixels, 512 per unit) follow without 
 
 Ruling: isTileFullyVisible() now counts the edge arrows as covering, and scrollToShow keeps 28 px clear of them — why: a
 selected tile under an arrow is not "nothing cut off" — cost if wrong: none (existing tests stay green).
+
+Task 5: complete (help page "Organising modules" gains Solo + "More modules than fit"; full suite 31676 checks, 0 failed
+(before the help-text commit; afterwards Chain solo / UX / Help / Design / Shell / Panel frame / UI groups re-run green);
+Velvox_VST3 target builds (not installed). Snapshots in C:\Users\jakob\dev\velvox-wt\shots-r2-chain\ (looked at):
+before-full-1000/min (0.6.0), full-start-1000, full-mid-min (889 px), full-end-1000, full-end-2000, full-mid-select-1000,
+full-solo-sat2-1000, full-solo-min, zoom-*.png (chain row 2x))
+
+Ruling: Hover-only S could not be captured in --snapshot (the hover fade runs on the VBlank, which does not tick offscreen);
+its behaviour is covered by the click / tooltip tests — cost if wrong: a cosmetic issue in the hover fade only.

@@ -66,6 +66,12 @@ Click a tile: its panel appears below the chain.
 ## Switch on and off
 Click the switch of a tile, or the one in the panel header. A switched-off module is bypassed: it is removed from the active processing and costs no CPU.
 
+## Solo
+Click the S on a tile (it appears when the mouse is over the tile), Alt-click the tile, or click the S next to the switch in the panel header: only this module plays, every other one is bypassed. The soloed tile is framed in yellow, the others are dimmed and OUTPUT shows SOLO. Click again (or on SOLO) to release. Solo is a listening aid: it is not saved, not an undo step, keeps the latency and ends when you close the window.
+
+## More modules than fit
+The row scrolls: mouse wheel (also with Shift), tilt wheel or a two-finger swipe, the arrows at its edges, the thin bar under the tiles, or drag the row with Shift held (or with the middle mouse button). A selected module always slides fully into view.
+
 ## Change the order
 Drag a tile: a glowing marker shows where it will land, and the audio order changes at the same moment (with a short, click-free crossfade). Dragging starts only after the mouse has moved a few pixels, so a click never moves a module.
 
