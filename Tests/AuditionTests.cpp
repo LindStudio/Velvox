@@ -12,6 +12,7 @@
 #include "UI/EqPanel.h"
 #include "UI/SatPanel.h"
 #include "UI/AuditionButton.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 
 using namespace velvox;
 using namespace velvox::test;
@@ -78,6 +79,21 @@ namespace
         eq->setSettings (s);
         eq->prepare (fsA, 256);
         return eq;
+    }
+
+    // Largest amplitude of a tone in [from, to) of channel 0 (narrow band pass, Q 20)
+    double toneAmplitude (const juce::AudioBuffer<float>& b, int from, int to, double freq, double fs = fsA)
+    {
+        juce::IIRFilter f;
+        f.setCoefficients (juce::IIRCoefficients::makeBandPass (fs, freq, 20.0));
+        double m = 0.0;
+        for (int i = 0; i < std::min (to, b.getNumSamples()); ++i)
+        {
+            const double y = f.processSingleSampleRaw (b.getSample (0, i));
+            if (i >= from)
+                m = std::max (m, std::abs (y));
+        }
+        return m;
     }
 
     // Largest second difference inside [from, to) relative to a reference stretch (clicks = spikes)
@@ -170,6 +186,26 @@ public:
             const double dv = dbOf (rmsOf (vb, (int) fsA, (int) fsA * 2) / rmsOf (vin, (int) fsA, (int) fsA * 2));
             logMessage ("level match, vocal: " + juce::String (dv, 2) + " dB");
             expect (std::abs (dv) < 3.0, "vocal: " + juce::String (dv, 2) + " dB");
+
+            // Sibilance through a high region: matched in RMS, but its peaks stay below the input's
+            VocalSpec sib;
+            sib.seconds = 4.0;
+            sib.channels = 2;
+            sib.sibilance = 1.0f;
+            sib.levelDb = -20.0f;   // input peaks below -1 dBFS
+            const auto sv = makeVocal (sib);
+            juce::AudioBuffer<float> sb (2, sv.numSamples());
+            for (int ch = 0; ch < 2; ++ch)
+                sb.copyFrom (ch, 0, sv.vocal[(size_t) ch].data(), sv.numSamples());
+            const float inPeak = std::max (sb.getMagnitude (0, 0, sb.getNumSamples()), sb.getMagnitude (1, 0, sb.getNumSamples()));
+            auto eq3 = makeEq (oneBand (makeBand (EqBandType::highShelf, 9000.0f, 3.0f, 0.7f)));
+            eq3->setAuditionBand (0);
+            runEq (*eq3, sb);
+            const float outPeak = std::max (sb.getMagnitude (0, 0, sb.getNumSamples()), sb.getMagnitude (1, 0, sb.getNumSamples()));
+            logMessage ("high region peak vs input peak: " + juce::String (dbOf (outPeak / inPeak), 2) + " dB, out "
+                        + juce::String (dbOf (outPeak), 2) + " dBFS");
+            const float allowed = std::max (inPeak, std::min (2.0f * inPeak, 0.891f));
+            expect (outPeak <= allowed * 1.06f && outPeak < 0.95f, "peaks capped: " + juce::String (dbOf (outPeak), 2) + " dBFS");
         }
 
         beginTest ("Never requested: bit-identical to the EQ alone; released: back to bit-identical");
@@ -210,6 +246,22 @@ public:
                 expectEquals (maxAbsDiff (a, b), 0.0);
             }
             expectEquals (eq->getAuditionBand(), -1);   // out of range is stored as none
+        }
+
+        beginTest ("From one band to another: a crossfade between the regions, never a blip of the full signal");
+        {
+            dsp::EqSettings s;
+            s.bands[0] = makeBand (EqBandType::bell, 300.0f, 0.0f, 8.0f);
+            s.bands[1] = makeBand (EqBandType::bell, 5000.0f, 0.0f, 8.0f);
+            auto eq = makeEq (s);
+            eq->setAuditionBand (0);
+            const int total = (int) fsA * 2, at = 256 * 188;   // ~1 s, block aligned
+            auto buf = sines ({ 300.0, 1200.0, 5000.0 }, -20.0, total);
+            runEq (*eq, buf, 256, [&] (int start) { if (start == at) eq->setAuditionBand (1); });
+            const double outside = toneAmplitude (buf, at - (int) (0.05 * fsA), at + (int) (0.06 * fsA), 1200.0);
+            const double tone = std::pow (10.0, -20.0 / 20.0);
+            logMessage ("1.2 kHz (in neither region) around the hop: " + juce::String (dbOf (outside / tone), 1) + " dB");
+            expect (dbOf (outside / tone) < -15.0, juce::String (dbOf (outside / tone), 1) + " dB");
         }
 
         beginTest ("Click-free: on, off, to another band, type change and a dragged band");
@@ -392,6 +444,18 @@ public:
             expect (maxAbsDiff (a, b, 4096 * 3 + 512 + (int) (fsA * 0.03)) == 0.0, "identical after the release");
             expect (maxAbsDiff (a, b, 4096) > 1.0e-3, "the solo was audible");
             expectEquals (dsp::SaturationModule().getSoloBand(), -1);
+        }
+
+        beginTest ("From one band to another: band to band, never a blip of the full signal");
+        {
+            const int at = 512 * 47;   // ~0.5 s, block aligned
+            const auto out = renderSat (multiband(), in, 0, [at] (dsp::SaturationModule& s, int start) { if (start == at) s.setSoloBand (2); });
+            const auto normal = renderSat (multiband(), in, -100);
+            const double mid = toneAmplitude (out, at - (int) (0.05 * fsA), at + (int) (0.08 * fsA), 1000.0);
+            const double full = toneAmplitude (normal, at - (int) (0.05 * fsA), at + (int) (0.08 * fsA), 1000.0);
+            expect (full > 0.02 && at + (int) (0.08 * fsA) < out.getNumSamples(), "the window holds the tone");
+            logMessage ("1 kHz (Mid) around the hop Low -> High: " + juce::String (dbOf (mid / full), 1) + " dB");
+            expect (dbOf (mid / full) < -20.0, juce::String (dbOf (mid / full), 1) + " dB");
         }
 
         beginTest ("Click-free: on, to another band, multiband off, off");
@@ -646,3 +710,166 @@ public:
 };
 
 static AuditionUiTests auditionUiTests;
+
+//==============================================================================
+// Listen renders of dry vocals (only with VELVOX_AUDITION_RENDER=<out dir>; inputs from
+// VELVOX_AUDITION_INPUTS=<dir> or the bench's EQ inputs): EQ / Saturation normal, each solo, and a
+// render that switches the solo every second. Writes WAVs and summary.txt (levels, clicks).
+class AuditionRenders final : public juce::UnitTest
+{
+public:
+    AuditionRenders() : juce::UnitTest ("Velvox audition renders (env VELVOX_AUDITION_RENDER)", "Velvox") {}
+
+    void runTest() override
+    {
+        beginTest ("Renders");
+        const auto outPath = juce::SystemStats::getEnvironmentVariable ("VELVOX_AUDITION_RENDER", {});
+        if (outPath.isEmpty())
+        {
+            logMessage ("skipped (VELVOX_AUDITION_RENDER not set)");
+            return;
+        }
+        const juce::File out (outPath);
+        out.createDirectory();
+        const juce::File inputs (juce::SystemStats::getEnvironmentVariable ("VELVOX_AUDITION_INPUTS",
+                                                                            "C:\\Users\\jakob\\dev\\velvox-bench\\2026-10-25\\modules\\eq\\_inputs"));
+        juce::String summary = "file | render | rms dBFS | peak dBFS | vs dry dB | switch click ratio (<= 1: none)\n";
+
+        juce::AudioFormatManager formats;
+        formats.registerBasicFormats();
+        for (auto name : { "mylk_chorus", "f8_belt", "m8_caro", "m9_breathy" })
+        {
+            std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (inputs.getChildFile (juce::String (name) + ".wav")));
+            if (reader == nullptr)
+            {
+                logMessage (juce::String ("missing input ") + name);
+                continue;
+            }
+            const double fs = reader->sampleRate;
+            const int n = (int) std::min<juce::int64> (reader->lengthInSamples, (juce::int64) (fs * 30.0));
+            juce::AudioBuffer<float> dry (2, n);
+            reader->read (&dry, 0, n, 0, true, true);
+            write (out.getChildFile (juce::String (name) + "__dry.wav"), dry, fs);
+
+            // EQ: a typical vocal curve (low cut 100 Hz, mud cut, presence bell, air shelf)
+            dsp::EqSettings eqs;
+            eqs.bands[0] = makeBand (EqBandType::lowCut, 100.0f, 0.0f, 0.7f);
+            eqs.bands[1] = makeBand (EqBandType::bell, 320.0f, -3.0f, 1.4f);
+            eqs.bands[2] = makeBand (EqBandType::bell, 3200.0f, 2.5f, 4.0f);
+            eqs.bands[3] = makeBand (EqBandType::highShelf, 9000.0f, 3.0f, 0.7f);
+            const auto eqNormal = renderEq (eqs, dry, fs, [] (EqualizerModule&, int) {});
+            record (summary, name, "eq normal", eqNormal, dry, eqNormal, out, fs);
+            const char* bandNames[4] { "eq solo lowcut100", "eq solo bell320", "eq solo bell3k2 q4", "eq solo highshelf9k" };
+            for (int b = 0; b < 4; ++b)
+                record (summary, name, bandNames[b], renderEq (eqs, dry, fs, [b] (EqualizerModule& m, int) { m.setAuditionBand (b); }), dry, eqNormal, out, fs);
+            const auto eqSwitch = renderEq (eqs, dry, fs, [fs] (EqualizerModule& m, int start)
+            {
+                const int second = (int) (start / fs);
+                m.setAuditionBand (second % 5 == 4 ? -1 : second % 5);
+            });
+            record (summary, name, "eq switching", eqSwitch, dry, eqNormal, out, fs, 256);
+
+            // Saturation multiband: Warm low, Tube mid, Tape high
+            dsp::SatSettings sat = multiband();
+            const auto satNormal = renderSatFile (sat, dry, fs, [] (dsp::SaturationModule&, int) {});
+            record (summary, name, "sat normal", satNormal, dry, satNormal, out, fs);
+            const char* satNames[3] { "sat solo low", "sat solo mid", "sat solo high" };
+            for (int b = 0; b < 3; ++b)
+                record (summary, name, satNames[b], renderSatFile (sat, dry, fs, [b] (dsp::SaturationModule& m, int) { m.setSoloBand (b); }), dry, satNormal, out, fs);
+            const auto satSwitch = renderSatFile (sat, dry, fs, [fs] (dsp::SaturationModule& m, int start)
+            {
+                const int second = (int) (start / fs);
+                m.setSoloBand (second % 4 == 3 ? -1 : second % 4);
+            });
+            record (summary, name, "sat switching", satSwitch, dry, satNormal, out, fs, 512);
+        }
+        out.getChildFile ("summary.txt").replaceWithText (summary);
+        logMessage (summary);
+    }
+
+private:
+    template <typename Fn>
+    static juce::AudioBuffer<float> renderEq (const dsp::EqSettings& s, const juce::AudioBuffer<float>& in, double fs, Fn&& before)
+    {
+        auto eq = std::make_unique<EqualizerModule>();
+        eq->setSettings (s);
+        eq->prepare (fs, 256);
+        auto buf = in;
+        juce::AudioBuffer<float> blockIn (2, 256);
+        for (int start = 0; start < buf.getNumSamples(); start += 256)
+        {
+            before (*eq, start);
+            const int n = std::min (256, buf.getNumSamples() - start);
+            std::array<float*, 2> p { buf.getWritePointer (0, start), buf.getWritePointer (1, start) };
+            for (int ch = 0; ch < 2; ++ch)
+                blockIn.copyFrom (ch, 0, buf, ch, start, n);
+            eq->process (p.data(), 2, n);
+            eq->processAudition (blockIn.getArrayOfReadPointers(), p.data(), 2, n);
+        }
+        return buf;
+    }
+
+    template <typename Fn>
+    static juce::AudioBuffer<float> renderSatFile (const dsp::SatSettings& s, const juce::AudioBuffer<float>& in, double fs, Fn&& before)
+    {
+        auto sat = std::make_unique<dsp::SaturationModule>();
+        sat->setSettings (s);
+        sat->prepare (fs, 512);
+        auto buf = in;
+        for (int start = 0; start < buf.getNumSamples(); start += 512)
+        {
+            before (*sat, start);
+            const int n = std::min (512, buf.getNumSamples() - start);
+            std::array<float*, 2> p { buf.getWritePointer (0, start), buf.getWritePointer (1, start) };
+            sat->process (p.data(), 2, n);
+        }
+        return buf;
+    }
+
+    static double levelDb (const juce::AudioBuffer<float>& b) { return dbOf (rmsOf (b, 0, b.getNumSamples())); }
+
+    // switchBlock > 0: the solo changed every second at the first block of `switchBlock` samples
+    // after the full second; reports the largest second difference in the 30 ms after a switch
+    // relative to the 50 - 300 ms before and after it (a click shows up as > 1)
+    void record (juce::String& summary, const char* file, const char* render, const juce::AudioBuffer<float>& b,
+                 const juce::AudioBuffer<float>& dry, const juce::AudioBuffer<float>& normal, const juce::File& out, double fs,
+                 int switchBlock = 0)
+    {
+        juce::ignoreUnused (normal);
+        const double peak = dbOf (std::max (b.getMagnitude (0, 0, b.getNumSamples()), b.getMagnitude (1, 0, b.getNumSamples())));
+        double click = 0.0;
+        if (switchBlock > 0)
+            for (int second = 1; second * fs + 0.35 * fs < b.getNumSamples(); ++second)
+            {
+                const int s = (int) std::ceil (second * fs / switchBlock) * switchBlock;
+                const double around = std::max (secondDiff (b, s - (int) (0.3 * fs), s - (int) (0.05 * fs)),
+                                                secondDiff (b, s + (int) (0.05 * fs), s + (int) (0.3 * fs)));
+                if (around > 1.0e-4)
+                    click = std::max (click, secondDiff (b, s - 64, s + (int) (0.03 * fs)) / around);
+            }
+        summary << file << " | " << render << " | " << juce::String (levelDb (b), 1) << " | " << juce::String (peak, 1) << " | "
+                << juce::String (levelDb (b) - levelDb (dry), 1) << " | " << (switchBlock > 0 ? juce::String (click, 2) : juce::String ("-")) << "\n";
+        if (switchBlock > 0)
+            expect (click < 1.5, juce::String (file) + " " + render + ": switching click ratio " + juce::String (click, 2));
+        bool finite = true;
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < b.getNumSamples(); ++i)
+                finite = finite && std::isfinite (b.getSample (ch, i));
+        expect (finite, juce::String (file) + " " + render + ": finite");
+        expect (peak < 0.0, juce::String (file) + " " + render + ": no overs");
+        write (out.getChildFile (juce::String (file) + "__" + juce::String (render).replaceCharacter (' ', '_') + ".wav"), b, fs);
+    }
+
+    static void write (const juce::File& f, const juce::AudioBuffer<float>& audio, double fs)
+    {
+        f.deleteFile();
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::OutputStream> stream (f.createOutputStream().release());
+        if (stream != nullptr)
+            if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions().withSampleRate (fs)
+                                                                                         .withNumChannels (audio.getNumChannels()).withBitsPerSample (24)))
+                writer->writeFromAudioSampleBuffer (audio, 0, audio.getNumSamples());
+    }
+};
+
+static AuditionRenders auditionRenders;

@@ -533,7 +533,7 @@ namespace velvox::ui
             }
 
             // The sum: bright, with a soft glow
-            const float sumAlpha = active * (solo >= 0 ? 0.5f : 1.0f);
+            const float sumAlpha = active * (solo >= 0 ? 0.35f : 1.0f);
             g.setColour (eqColour.withAlpha (0.05f * sumAlpha));
             g.fillPath (sumFill);
             g.setColour (eqColour.withAlpha (0.16f * sumAlpha));

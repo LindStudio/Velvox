@@ -49,3 +49,38 @@ stays visible while the band is soloed. The badge of the selected-band row grows
 — Cost if wrong: layout constants.
 Ruling: the solo stays with its band when the selection changes; the row button shows the selected band's state, and a
 click there moves the solo to the selected band (one solo per EQ instance). — Cost if wrong: small.
+
+Task 4: complete (SatView: AuditionButton per band at the top right, multiband only, accent = band character colour,
+others dimmed while one is soloed; solo cleared when multiband goes off, the view is destroyed or hidden in a window.
+SatPanel: satMix knob is the 4th main control (MIX), laid out after Link; the existing SatPanelTests main-row test was
+updated to the spec (4 main controls, Mix not in Mehr) and failed before the change. "Headliner audition panels" 52 checks,
+"Headliner saturation panel" 109 checks.)
+
+Task 5: complete (listen renders, snapshots, docs).
+Listen renders (env-gated test "Velvox audition renders", VELVOX_AUDITION_RENDER=dir) of 4 dry vocals (mylk_chorus,
+VocalSet val f8_belt, m8_caro, m9_breathy from the bench's EQ inputs): dry, EQ normal, each EQ band solo, EQ switching every
+second, Sat normal, each Sat band solo, Sat switching -> C:\Users\jakob\dev\velvox-bench\2026-10-25\modules-after\audition
+(+ summary.txt). The first round found two real problems, both fixed with tests that fail on the old code:
+  1. Overs: RMS level matching lifted sibilance-rich high regions to +6.6 dBFS peaks (unit test: +22 dB on a synthetic
+     sibilant vocal). Fix: peak cap (region peaks <= max(input peak, min(2 x input peak, -1 dBFS))). Now no render peaks
+     above -1.0 dBFS.
+  2. Hopping from one band to another faded out to the NORMAL output and back in: a ~30 ms blip of the full signal
+     (click ratio up to 13 x in the renders; unit test: a tone in neither region at -1.7 dB / -1.2 dB). Fix: two listening
+     paths in the EQ (crossfade region to region), per-band solo weights in the Saturation (band to band). Now -21 dB /
+     -43 dB, switch click ratios 0.75 - 1.24 (<= 1.5 everywhere; 1.0 = like the surrounding audio).
+  Also: the level match starts at half (in dB) of the pink-spectrum estimate and adapts fast for 150 ms (the full
+  estimate overshot narrow regions of tonal input by ~10 dB for the first ~200 ms).
+Snapshots (looked at): C:\Users\jakob\dev\velvox-wt\shots-r2-audition\ eq-solo-1000.png, eq-hover-1000.png,
+eq-solo-889.png, sat-solo-1000.png, sat-solo-889.png, sat-single-1000.png (889 = minimum scale 8/9). Snapshot tokens
+"solo:<band>" and "hoverpoint" added to the --snapshot renderer.
+
+Ruling (supersedes the Task 1 ruling on switching): hopping between bands / shapes crossfades region to region (two EQ
+paths; Sat per-band weights), never through the normal output. — Cost if wrong: none audible; 2 x filter CPU only during
+the 15 ms crossfade.
+Ruling: level match peak cap = region peaks at most 6 dB above the input's and never above -1 dBFS unless the input's are.
+Level-matched means RMS; peaks are a safety limit. — Cost if wrong: very peaky regions (sibilance) play up to a few dB
+quieter than the input RMS.
+Ruling: no level match for the Saturation solo (it plays what the band contributes, quieter for small bands — e.g. High on
+a dark voice -12 to -34 dB). Spec says "only that band's processed output". — Cost if wrong: add BandAudition-style gain.
+Ruling: CHANGELOG gets a [0.6.1] section (other 0.6.1 tracks add to it).
+Full suite on the branch (before merging feature/automix): 30636 checks passed, 0 failed.
