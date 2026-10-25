@@ -55,3 +55,4 @@ build; PanelFrameTests: the temporary dyn exemption (compAutoRelease / compAutoM
 Task 5: complete (snapshots in C:\Users\jakob\dev\velvox-wt\shots-dynpanel\: comp-1000, comp-mehr, comp-889, deess-1000,
 deess-mehr-889 (Relative), smash-1000, smash-mehr, smash-889, ride-1000, ride-889, ride-mehr-889; reviewed; fixes after review:
 Ride's Ausgleich dial shrinks with the visual width (Mehr open: the bars keep ~60 % of the width), Smash history fill lighter)
+Final: full suite 30449 checks passed, 0 failed (b054a6a).
