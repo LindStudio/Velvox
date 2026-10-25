@@ -77,6 +77,8 @@ namespace velvox::ui
         }
 
         static void drawFrequencyGrid (juce::Graphics& g, juce::Rectangle<float> r, bool withLabels);
+        // The labels alone, each on a small dark backing: drawn after (above) the spectrum fill
+        static void drawFrequencyLabels (juce::Graphics& g, juce::Rectangle<float> r);
 
     private:
         juce::Path makePath (const SpectrumSource::Curve& curve, juce::Rectangle<float> r) const;

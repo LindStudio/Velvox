@@ -119,10 +119,14 @@ namespace velvox::ui
     {
         const auto r = getLocalBounds().toFloat();
         if (grid)
-            drawFrequencyGrid (g, r, labels);
+            drawFrequencyGrid (g, r, false);   // lines under the spectrum, labels on top (below)
 
         if (spectrum == nullptr)
+        {
+            if (grid && labels)
+                drawFrequencyLabels (g, r);
             return;
+        }
 
         // Input: faint outline for reference
         const auto inPath = makePath (spectrum->getInput(), r);
@@ -160,6 +164,28 @@ namespace velvox::ui
             juce::PathStrokeType (1.2f).createDashedStroke (dashed, inPath, dashes, 2);
             g.setColour (colours::textSoft.withAlpha (0.6f * intensity));
             g.fillPath (dashed);
+        }
+
+        // Frequency labels last: above the fill, on a subtle backing, so they stay readable
+        if (grid && labels)
+            drawFrequencyLabels (g, r);
+    }
+
+    void SpectrumView::drawFrequencyLabels (juce::Graphics& g, juce::Rectangle<float> r)
+    {
+        // Fixed strings (paint never allocates); widths from the font
+        static const char* const texts[] { "50", "100", "200", "500", "1k", "2k", "5k", "10k" };
+        static const float freqs[] { 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f };
+        g.setFont (medium (11.0f));
+        for (int i = 0; i < 8; ++i)
+        {
+            const float x = xForFrequency (freqs[i], r);
+            const float w = (float) juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), texts[i]);
+            const juce::Rectangle<float> box (x + 2.0f, r.getBottom() - 18.0f, w + 6.0f, 14.0f);
+            g.setColour (colours::background.withAlpha (0.72f));
+            g.fillRoundedRectangle (box, 3.0f);
+            g.setColour (colours::textSoft.withAlpha (0.85f));
+            g.drawText (texts[i], box.withTrimmedLeft (3.0f), juce::Justification::centredLeft, false);
         }
     }
 }

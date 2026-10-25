@@ -37,8 +37,8 @@ namespace velvox::ui::help
 - SIMPEL: the live spectrum of your vocal (before = dashed line, after = filled curve), "Vocal analysieren", and six macro faders: Presence, Space, Width, Punch, Warmth, Vocal Level. Small IN / OUT meters at the bottom.
 - ADVANCED: the module chain on top and the panel of the selected module below - a large live picture, the main controls, and everything else behind "Mehr".
 
-## The tabs AUTO MIX and VOCAL CHECK
-- AUTO MIX: your mix, in SIMPEL or ADVANCED.
+## The tabs
+- AUTO MIX (in SIMPEL) or MODULE (in ADVANCED): your mix - the macros, or the module chain. The tab names what you see.
 - VOCAL CHECK: a diagnosis of the recording with suggestions.
 Switching mode or tab never changes or resets a value.
 

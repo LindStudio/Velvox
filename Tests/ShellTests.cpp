@@ -204,6 +204,66 @@ public:
             const auto lane = view.getLaneBounds();
             expect (lane.contains (view.getTileBounds (ModuleId::delay)), "sends sit behind the divider");
         }
+
+        beginTest ("The tab row names the view: Advanced shows MODULE | VOCAL CHECK, Simple AUTO MIX | VOCAL CHECK");
+        {
+            Harness h;
+            auto e = editorWith (h, "pro");
+            auto& ed = asVelvox (*e);
+            auto& top = ed.getTopBar();
+            using T = ui::TopBar;
+            expectEquals (top.getTabButton (T::Tab::autoMix).getButtonText(), juce::String ("MODULE"), "Advanced: the chain is MODULE");
+            expect (top.getTabButton (T::Tab::autoMix).getToggleState() && ! top.getTabButton (T::Tab::vocalCheck).getToggleState());
+            expect (! buttonTexts (top).contains ("AUTO MIX"), "no AUTO MIX tab while the chain is shown");
+            top.selectTab (T::Tab::vocalCheck);
+            expect (ed.getCheckView().isVisible() && ! top.getTabButton (T::Tab::autoMix).getToggleState());
+            top.selectTab (T::Tab::autoMix);
+            top.selectMode (T::Mode::simple);
+            expectEquals (top.getTabButton (T::Tab::autoMix).getButtonText(), juce::String ("AUTO MIX"), "Simple: AUTO MIX");
+            expect (ed.getSimpleView().isVisible() && top.getTabButton (T::Tab::autoMix).getToggleState());
+            top.selectMode (T::Mode::advanced);
+            expectEquals (top.getTabButton (T::Tab::autoMix).getButtonText(), juce::String ("MODULE"));
+        }
+
+        beginTest ("Simple spectrum: the frequency labels are drawn above the fill, on a backing");
+        {
+            dsp::SampleTap inTap, outTap;
+            ui::SpectrumSource source (inTap, outTap);
+            juce::Random random (3);
+            std::vector<float> block (512);
+            for (int k = 0; k < 300; ++k)
+            {
+                for (auto& s : block)
+                    s = random.nextFloat() * 1.6f - 0.8f;   // loud white noise: the fill covers the floor
+                const float* p[] { block.data() };
+                inTap.push (p, 1, (int) block.size());
+                outTap.push (p, 1, (int) block.size());
+                source.update (48000.0);
+            }
+            ui::SpectrumView view (&source);
+            view.setInputDashed (true);
+            view.setRange (-84.0f, -6.0f);   // as in the Simple view
+            view.setBounds (0, 0, 640, 200);
+            juce::Image image (juce::Image::ARGB, 640, 200, true);
+            {
+                juce::Graphics g (image);
+                g.fillAll (ui::colours::panelInset);
+                view.paintEntireComponent (g, false);
+            }
+            // Contrast inside the label box of "1k": brightest (text) against darkest (backing / fill)
+            const auto r = view.getLocalBounds().toFloat();
+            const int x0 = (int) ui::SpectrumView::xForFrequency (1000.0f, r) + 4, y0 = (int) r.getBottom() - 18;
+            float lo = 1.0f, hi = 0.0f;
+            for (int y = y0; y < y0 + 14; ++y)
+                for (int x = x0; x < x0 + 18; ++x)
+                {
+                    const float b = image.getPixelAt (x, y).getPerceivedBrightness();
+                    lo = std::min (lo, b);
+                    hi = std::max (hi, b);
+                }
+            logMessage ("label contrast " + juce::String (hi - lo, 3));
+            expectGreaterThan (hi - lo, 0.3f, "the label stands out from the spectrum fill");
+        }
     }
 };
 

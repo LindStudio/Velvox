@@ -84,3 +84,17 @@ thread writes (SeqLockValue single writer)" (red = did not compile before the he
 false on a juce::Thread).
 - Ruling: jassert (debug only), no runtime lock — a host that restores state off the message thread is a host bug we want to
   see in debug builds; Release behaviour is unchanged.
+
+Task 9: complete (UI). (a) The first header tab names the view: "AUTO MIX" in SIMPEL, "MODULE" in ADVANCED (TopBar::setMode
+sets text + tooltip); the highlight still follows the shown tab, so in Advanced "MODULE" is lit while the chain is shown and
+"VOCAL CHECK" while the check panel is shown. Help ("The tabs") and the tutorial step reworded. (b) SpectrumView draws the grid
+lines under the spectrum and the frequency labels last, each on a rounded backing (background 72 %, text textSoft 85 %); new
+static SpectrumView::drawFrequencyLabels (other users of drawFrequencyGrid unchanged). Tests (ShellTests): "The tab row names
+the view: Advanced shows MODULE | VOCAL CHECK, Simple AUTO MIX | VOCAL CHECK" (failed first: AUTO MIX in Advanced) and "Simple
+spectrum: the frequency labels are drawn above the fill, on a backing" (label-box contrast 0.043 before, 0.566 after; gate 0.3).
+Snapshots looked at: C:\Users\jakob\dev\velvox-wt\shots-final\simple-mixed.png (labels readable over the filled spectrum),
+C:\Users\jakob\dev\velvox-wt\shots-final\advanced-tabs.png (SIMPEL | ADVANCED, MODULE lit | VOCAL CHECK).
+- Ruling: rename the tab in Advanced ("MODULE") rather than show no highlighted tab — a lit tab that names exactly what is on
+  screen is the clearest; the stored view state (uiMode / uiTab) is unchanged, Auto Mix stays reachable via SIMPEL and the
+  Details overlay. Cost if wrong: one label.
+Full suite after Tasks 1-9: 30527 checks, 0 failed (+ Headliner/Velvox categories re-run after the help text edit: 0 failed).

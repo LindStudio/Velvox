@@ -243,6 +243,10 @@ namespace velvox::ui
         mode = m;
         modeButtons[0]->setToggleState (m == Mode::simple, juce::dontSendNotification);
         modeButtons[1]->setToggleState (m == Mode::advanced, juce::dontSendNotification);
+        // The first tab names what it shows: the macros (AUTO MIX) in Simple, the module chain in Advanced
+        tabs[0]->setButtonText (m == Mode::simple ? "AUTO MIX" : "MODULE");
+        tabs[0]->setTooltip (m == Mode::simple ? de ("Auto Mix: Spektrum, „Vocal analysieren“ und die Makros")
+                                               : de ("Module: die Kette mit dem Panel des gewählten Moduls (Auto Mix: Modus Simpel)"));
     }
 
     void TopBar::selectMode (Mode m)
