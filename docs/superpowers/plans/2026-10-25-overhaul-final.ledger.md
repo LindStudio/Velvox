@@ -61,3 +61,6 @@ bands"): "The bridge suspend is per plugin instance (two processors)" (failed fi
 suspended by A and its edit did not reach the role band).
 - Ruling: a mutex, not an atomic map — the suspend can be taken by setStateInformation on a host thread; it is never used on
   the audio thread (parameterChanged returns before isActive off the message thread).
+
+Task 6: complete (`git rm --cached tools/refhost/tests/__pycache__/*.pyc`; `__pycache__/` was already in .gitignore).
+Check: `git ls-files | grep pycache` is empty. No unit test (repository hygiene, Ruling: nothing to execute).
