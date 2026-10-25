@@ -1,5 +1,6 @@
 #include "DetailPanels.h"
 #include "EqPanel.h"
+#include "ReverbPanel.h"
 #include "ChainView.h"
 #include "../PluginProcessor.h"
 #include "../Presets/ModulePresets.h"
@@ -864,49 +865,6 @@ namespace velvox::ui
             GainReductionMeter gr { colours::accent, "Duck" };
         };
 
-        // REVERB: Room, Size, Decay, Mix; everything else in Mehr
-        class ReverbPanel final : public DetailPanel
-        {
-        public:
-            explicit ReverbPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Reverb", help::shortDescription ((int) ModuleId::reverb), pid::reverbOn)
-            {
-                auto& type = segments (pid::reverbType);
-                setCaption (type, "Room");
-                segments (pid::duckSource, { "Vocal", "Sidechain" });
-                auto& size = knob (pid::reverbSize, "Size");
-                auto& decay = knob (pid::reverbDecay, "Decay");
-                knob (pid::reverbPreDelay, "Pre-Delay");
-                knob (pid::reverbDamping, "Damping");
-                knob (pid::reverbWidth, "Width");
-                knob (pid::reverbLowCut, "Low Cut");
-                knob (pid::reverbHighCut, "High Cut");
-                knob (pid::reverbMod, "Modulation");
-                knob (pid::reverbEarly, "Early");
-                knob (pid::reverbDiffusion, "Diffusion");
-                knob (pid::reverbBass, "Bass Decay");
-                auto& mix = knob (pid::reverbMix, "Mix");
-                knob (pid::reverbDuckAmount, "Ducking");
-                knob (pid::reverbDuckThreshold, "Duck Thresh");
-                knob (pid::reverbDuckAttack, "Duck Attack");
-                knob (pid::reverbDuckRelease, "Duck Release");
-                setMainControls ({ &type, &size, &decay, &mix });
-                setMixKnob (&mix);
-                gr.setTooltip ("Ducking (dB)");
-                placeInVisual ({ &gr });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                gr.push (grFrom (live, &LiveData::reverbDuck));
-            }
-
-        private:
-            void layoutVisual (juce::Rectangle<int> area) override { placeMeter (gr, area); }
-            GainReductionMeter gr { colours::accent, "Duck" };
-        };
-
         // OUTPUT: stereo image + loudness; Input Gain, Vocal Level, Width, Level Match;
         // Mehr: mono below, max correction, measure window, clip guard, mono listening
         class OutputPanel final : public DetailPanel
@@ -1470,7 +1428,7 @@ namespace velvox::ui
                 case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
                 case ModuleId::chop:    panel = std::make_unique<ChopPanel> (p); break;
                 case ModuleId::delay:   panel = std::make_unique<DelayPanel> (p); break;
-                case ModuleId::reverb:  panel = std::make_unique<ReverbPanel> (p); break;
+                case ModuleId::reverb:  panel = createReverbPanel (p); break;
                 case ModuleId::pulse:   panel = std::make_unique<PulsePanel> (p); break;
                 case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;
                 case ModuleId::choir:   panel = std::make_unique<ChoirPanel> (p); break;

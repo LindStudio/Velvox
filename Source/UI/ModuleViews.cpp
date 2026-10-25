@@ -1,5 +1,6 @@
 #include "ModuleViews.h"
 #include "EqPanel.h"
+#include "ReverbPanel.h"
 #include "../PluginProcessor.h"
 #include "../DSP/SaturationModule.h"
 #include "../DSP/ChopModule.h"
@@ -794,118 +795,6 @@ namespace velvox::ui
         };
 
         //======================================================================
-        // Reverb: the tail - pre-delay gap, early reflections, diffuse decay
-        class ReverbView final : public ModuleView
-        {
-        public:
-            void update (const LiveData& d) override
-            {
-                s = d.settings.reverb;
-                on = d.settings.reverbOn;
-                mix = d.settings.reverbMix;
-                duck.target = juce::Decibels::decibelsToGain (-d.reverbDuck.ago (0));
-                duck.tick (0.2f);
-                time = d.time;
-                repaint();
-            }
-
-            void paint (juce::Graphics& g) override
-            {
-                auto r = getLocalBounds().toFloat().reduced (20.0f, 14.0f);
-                const float alpha = on ? 1.0f : 0.4f;
-                label (g, s.type == 0 ? "Room" : "Plate", r.withHeight (12.0f));
-                label (g, "RT60 " + juce::String (s.decaySeconds, 2) + " s   pre " + juce::String (juce::roundToInt (s.preDelayMs)) + " ms",
-                       r.withHeight (12.0f), juce::Justification::topRight, colours::text);
-                auto plot = r.withTrimmedTop (18.0f).withTrimmedBottom (16.0f);
-
-                const float pre = s.preDelayMs / 1000.0f;
-                const float total = juce::jmax (0.6f, pre + s.decaySeconds * 1.05f);
-                const auto xFor = [&] (float t) { return plot.getX() + plot.getWidth() * t / total; };
-                const float cy = plot.getY() + plot.getHeight() * 0.62f;
-                const float up = cy - plot.getY(), downScale = (plot.getBottom() - cy) * s.width;
-                const auto env = [&] (float t) { return t < pre ? 0.0f : std::pow (10.0f, -3.0f * (t - pre) / std::max (0.1f, s.decaySeconds)); };
-                const float gain = duck.current * (0.5f + 0.5f * juce::jlimit (0.0f, 1.0f, mix * 3.0f));
-
-                // Time axis
-                g.setFont (medium (10.5f));
-                const float step = total > 4.0f ? 1.0f : 0.5f;
-                for (float t = step; t < total; t += step)
-                {
-                    g.setColour (colours::accent.withAlpha (0.03f));
-                    g.fillRect (juce::Rectangle<float> (xFor (t), plot.getY(), 1.0f, plot.getHeight()));
-                    g.setColour (colours::textFaint);
-                    g.drawText (juce::String (t, 1) + " s", juce::Rectangle<float> (xFor (t) - 20.0f, plot.getBottom() + 3.0f, 40.0f, 11.0f),
-                                juce::Justification::centred, false);
-                }
-
-                // Envelope (top = left channel feel, bottom scaled by width)
-                juce::Path top, shape;
-                for (int i = 0; i <= 200; ++i)
-                {
-                    const float t = total * (float) i / 200.0f;
-                    const float y = cy - env (t) * up * gain;
-                    if (i == 0) { top.startNewSubPath (xFor (t), y); shape.startNewSubPath (xFor (t), y); }
-                    else { top.lineTo (xFor (t), y); shape.lineTo (xFor (t), y); }
-                }
-                for (int i = 200; i >= 0; --i)
-                {
-                    const float t = total * (float) i / 200.0f;
-                    shape.lineTo (xFor (t), cy + env (t) * downScale * gain);
-                }
-                shape.closeSubPath();
-                g.setGradientFill (auroraGradient (plot.getTopLeft(), plot.getTopRight(), 0.16f * alpha));
-                g.fillPath (shape);
-
-                // Diffuse texture: denser with size, darker with damping
-                juce::Random rnd (11);
-                const int lines = 120 + (int) (s.size * 260.0f);
-                for (int i = 0; i < lines; ++i)
-                {
-                    const float t = pre + rnd.nextFloat() * (total - pre);
-                    const float e = env (t) * gain * (0.25f + 0.75f * rnd.nextFloat());
-                    const float shimmer = 0.6f + 0.4f * std::sin ((float) time * 3.0f + (float) i);
-                    g.setColour (aurora (t / total, 0.28f * alpha * shimmer));
-                    g.fillRect (juce::Rectangle<float> (xFor (t), cy - e * up, 1.0f, e * (up + downScale)));
-                }
-
-                // Early reflections
-                const int er = s.type == 0 ? 6 : 12;
-                for (int i = 0; i < er; ++i)
-                {
-                    const float t = pre + (0.004f + 0.07f * (float) i / (float) er) * (0.5f + s.size);
-                    const float h = (0.95f - 0.06f * (float) i) * up * gain;
-                    g.setColour (colours::teal.interpolatedWith (juce::Colours::white, 0.4f).withAlpha (0.8f * alpha));
-                    g.fillRect (juce::Rectangle<float> (xFor (t) - 0.75f, cy - h, 1.5f, h));
-                }
-
-                glowStroke (g, top, plot, 1.6f, alpha);
-
-                // Damping darkens the far end of the tail
-                const float damp = 1.0f - juce::jlimit (0.0f, 1.0f, (s.dampingHz - 1000.0f) / 19000.0f);
-                g.setGradientFill (juce::ColourGradient (colours::background.withAlpha (0.0f), plot.getCentreX(), 0.0f,
-                                                         colours::background.withAlpha (0.65f * damp), plot.getRight(), 0.0f, false));
-                g.fillRect (plot.withLeft (plot.getCentreX()));
-
-                // Pre-delay bracket
-                if (pre > 0.002f)
-                {
-                    g.setColour (colours::textDim);
-                    g.drawLine (xFor (0.0f), cy + 6.0f, xFor (pre), cy + 6.0f, 1.0f);
-                }
-                drawGlow (g, { xFor (0.0f), cy }, 16.0f, 0.3f);
-                g.setColour (juce::Colours::white);
-                g.fillEllipse (juce::Rectangle<float> (5.0f, 5.0f).withCentre ({ xFor (0.0f), cy }));
-            }
-
-        private:
-            dsp::ReverbSettings s;
-            bool on = false;
-            float mix = 0.2f;
-            double time = 0.0;
-            Smoothed duck { 1.0f, 1.0f };
-        };
-
-        //======================================================================
         // Output: goniometer and loudness over time
         class OutputView final : public ModuleView
         {
@@ -1615,7 +1504,7 @@ namespace velvox::ui
             case ModuleId::pitch:   return std::make_unique<PitchView>();
             case ModuleId::chop:    return std::make_unique<ChopView>();
             case ModuleId::delay:   return std::make_unique<DelayView>();
-            case ModuleId::reverb:  return std::make_unique<ReverbView>();
+            case ModuleId::reverb:  return createReverbRoom (p, instance);
             case ModuleId::pulse:   return std::make_unique<PulseView> (p);
             case ModuleId::smash:   return std::make_unique<SmashView> (p, instance);
             case ModuleId::choir:   return std::make_unique<ChoirView> (p, instance);

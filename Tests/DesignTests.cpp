@@ -20,7 +20,7 @@ namespace
     // Every parameter-bound control of a panel: knobs, segment groups, switches
     struct BoundControls
     {
-        juce::StringArray knobs, segments, toggles;
+        juce::StringArray knobs, segments, toggles, choices;
         std::vector<juce::Colour> knobAccents;
     };
 
@@ -37,6 +37,8 @@ namespace
                 out.segments.add (s->getParamId());
             else if (auto* t = dynamic_cast<ui::Toggle*> (child))
                 out.toggles.add (t->getParamId());
+            else if (auto* ch = dynamic_cast<ui::Choice*> (child))
+                out.choices.add (ch->getParamId());
             collect (*child, out);
         }
     }
@@ -268,7 +270,7 @@ public:
                 expect (ride.knobs.contains (pid), juce::String ("LEVEL RIDE has ") + pid);
             expect (found[(int) ModuleId::delay].segments.contains ("delayDivision"), "DELAY time as segments");
             expect (found[(int) ModuleId::delay].toggles.contains ("delaySync") && found[(int) ModuleId::delay].toggles.contains ("delayPingPong"), "DELAY switches");
-            expect (found[(int) ModuleId::reverb].segments.contains ("reverbType"), "REVERB room list");
+            expect (found[(int) ModuleId::reverb].choices.contains ("reverbType"), "REVERB room list (dropdown, 0.6)");
             expect (found[(int) ModuleId::pulse].segments.contains ("pulseRate"), "PULSE rate as segments");
             expect (found[(int) ModuleId::choir].segments.contains ("choirVoices"), "CHOIR voices as segments");
             expect (found[(int) ModuleId::smooth].segments.contains ("smoothMode") && found[(int) ModuleId::smooth].toggles.contains ("smoothDelta"), "SMOOTH character + delta");
