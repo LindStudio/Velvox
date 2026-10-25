@@ -271,7 +271,7 @@ namespace velvox
 
             // ---------------- Pitch (0.2) ----------------
             { pid::pitchOn,        "Pitch On",       "Pitch", T::Bool, 0, 1, 0, 0, "", {},
-              "Enables the creative pitch shifter. Adds about 120 ms latency while on (compensated by the DAW)." },
+              "Enables the creative pitch shifter. Adds about 15 ms latency while on (compensated by the DAW)." },
             { pid::pitchSemitones, "Pitch",          "Pitch", T::Float, -24.0f, 24.0f, 0.0f, 0.0f, "st", {}, "Transposition in semitones.", 1.0f },
             { pid::pitchCents,     "Pitch Fine",     "Pitch", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "ct", {}, "Fine tuning in cents." },
             { pid::pitchPreserveFormants, "Pitch Keep Formants", "Pitch", T::Bool, 0, 1, 1, 0, "", {},
