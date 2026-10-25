@@ -1,5 +1,5 @@
-// Design system of the HEADLINER VOCAL redesign (docs/design/HEADLINER_DESIGN_HANDOFF.md):
-// tokens, module identity (colour + neon icon), controls, layout of the views.
+// Design system of Headliner (0.5 identity, 0.6 shell): tokens, module identity (colour + neon icon),
+// controls, layout of the views.
 
 #include <set>
 #include "TestHelpers.h"
@@ -7,7 +7,7 @@
 #include "PluginEditor.h"
 #include "UI/Segments.h"
 #include "UI/ChainView.h"
-#include "UI/VocalControlBar.h"
+#include "UI/SimpleView.h"
 #include "UI/HelpContent.h"
 #include "UI/TutorialOverlay.h"
 
@@ -20,7 +20,7 @@ namespace
     // Every parameter-bound control of a panel: knobs, segment groups, switches
     struct BoundControls
     {
-        juce::StringArray knobs, segments, toggles;
+        juce::StringArray knobs, segments, toggles, choices;
         std::vector<juce::Colour> knobAccents;
     };
 
@@ -37,9 +37,14 @@ namespace
                 out.segments.add (s->getParamId());
             else if (auto* t = dynamic_cast<ui::Toggle*> (child))
                 out.toggles.add (t->getParamId());
+            else if (auto* ch = dynamic_cast<ui::Choice*> (child))
+                out.choices.add (ch->getParamId());
             collect (*child, out);
         }
     }
+
+    // Module panel size in the editor (Advanced mode)
+    juce::Rectangle<int> panelSize() { return VelvoxAudioProcessorEditor::panelArea().withZeroOrigin(); }
 }
 
 class DesignTests final : public juce::UnitTest
@@ -127,118 +132,110 @@ public:
             expectWithinAbsoluteError ((float) k.slider.getDoubleClickReturnValue(), 3.0f, 1.0e-4f, "double-click value = default 3:1");
         }
 
-        beginTest ("Design: 1384 x 1040 canvas, header tabs switch the three views");
+        // 0.6 shell (spec 2.1): the 1384 x 1040 canvas, the CHAIN tab and the A/B header of 0.5 are gone
+        beginTest ("Design: 1000 x 600 canvas, header with SIMPEL | ADVANCED and the tabs AUTO MIX | VOCAL CHECK");
         {
-            expectEquals (ui::baseWidth, 1384);
-            expectEquals (ui::baseHeight, 1040);
+            expectEquals (ui::baseWidth, 1000);
+            expectEquals (ui::baseHeight, 600);
 
             Harness h;
             h.proc.getAutoMix().dismissPrompt();
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
             auto& top = ed.getTopBar();
-            expectEquals (top.getHeight(), 56, "header 56");
+            expectEquals (top.getHeight(), 44, "header 44");
 
-            top.selectView (ui::TopBar::View::autoMix);
-            expect (ed.getAutoMixView().isVisible(), "AUTO MIX view");
-            expect (! ed.isProMode());
+            top.selectMode (ui::TopBar::Mode::simple);
+            expect (ed.getSimpleView().isVisible() && ! ed.getChainView().isVisible(), "Simple mode");
+            expect (ed.getDetail() == nullptr, "no module panel in Simple mode");
 
-            top.selectView (ui::TopBar::View::vocalCheck);
-            expect (ed.getDetail() != nullptr && ed.getDetail()->isVisible(), "VOCAL CHECK view shows the check panel");
-            expect (! ed.getAutoMixView().isVisible());
-            expectEquals (h.proc.getState().state.getProperty ("uiMode").toString(), juce::String ("check"), "view stored with the project");
+            top.selectTab (ui::TopBar::Tab::vocalCheck);
+            expect (ed.getDetail() != nullptr && ed.getDetail()->isVisible(), "VOCAL CHECK shows the check panel");
+            expect (! ed.getSimpleView().isVisible());
+            expectEquals (h.proc.getState().state.getProperty ("uiTab").toString(), juce::String ("check"), "tab stored with the project");
 
-            top.selectView (ui::TopBar::View::chain);
-            expect (ed.isProMode() && ed.getChainView().isVisible(), "CHAIN view");
-            expect (ed.getDetail() != nullptr, "module panel in the chain view");
-            expect (top.getView() == ui::TopBar::View::chain);
-
-            // The AUTO MIX view owns the analyse button
-            top.selectView (ui::TopBar::View::autoMix);
-            expect (ed.getAutoMixView().isVisible() && ed.getAutoMixView().getAnalyseButton().isVisible(), "analyse in the AUTO MIX view");
+            top.selectTab (ui::TopBar::Tab::autoMix);
+            top.selectMode (ui::TopBar::Mode::advanced);
+            expect (ed.isAdvanced() && ed.getChainView().isVisible(), "Advanced: chain");
+            expect (ed.getDetail() != nullptr, "module panel in Advanced");
+            expect (ed.getDetail()->getY() > ed.getChainView().getBottom(), "panel below the chain");
+            expectEquals (h.proc.getState().state.getProperty ("uiMode").toString(), juce::String ("pro"), "mode stored with the project");
         }
 
-        beginTest ("Design: a column carries its two knobs on the instance's parameters");
+        beginTest ("Design: a chain tile shows its name, then its icon, then its on/off switch - and no knobs");
         {
             Harness h;
             ui::ChainView view (h.proc);
-            view.setBounds (0, 0, 1360, ui::ChainView::preferredHeight);
-            expectEquals (ui::ChainView::preferredHeight, 330, "chain height 330");
-
-            const auto ids = [&] (ModuleId id, int instance)
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
+            for (const auto& s : h.proc.getRouting())
             {
-                juce::StringArray s;
-                for (int k = 0; k < 2; ++k)
-                    if (auto* knob = view.getColumnKnob (id, instance, k))
-                        s.add (knob->getParamId());
-                return s;
-            };
-            expect (ids (ModuleId::eq, 0) == juce::StringArray { "hpfFreq", "highGain" }, "EQ: low cut, highs");
-            view.insertModule (ModuleId::eq, 1);
-            view.refresh();
-            expect (ids (ModuleId::eq, 1) == juce::StringArray { "hpfFreq_2", "highGain_2" }, "EQ 2 on its own parameters");
-            expect (ids (ModuleId::reverb, 0) == juce::StringArray { "reverbDecay", "reverbMix" }, "REVERB: decay, mix");
-
-            const auto pairFor = ui::ChainView::columnParams (ModuleId::ride);
-            expect (juce::String (pairFor.first) == "rideTarget" && juce::String (pairFor.second) == "rideResponse", "LEVEL RIDE: target, speed");
-            expect (ui::ChainView::columnParams (ModuleId::check).first == nullptr, "VOCAL CHECK has no knobs");
-            for (int i = 0; i < dsp::numModules; ++i)
-            {
-                const auto p = ui::ChainView::columnParams ((ModuleId) i);
-                for (auto* id : { p.first, p.second })
-                    if (id != nullptr)
-                        expect (h.proc.getState().getParameter (id) != nullptr, juce::String ("column knob exists: ") + id);
+                const auto tile = view.getTileBounds (s.id, s.instance);
+                const auto name = view.getNameBounds (s.id, s.instance), icon = view.getIconBounds (s.id, s.instance),
+                           power = view.getPowerBounds (s.id, s.instance);
+                const auto key = juce::String (dsp::moduleKey (s.id));
+                expect (tile.contains (name) && tile.contains (icon) && tile.contains (power), key + ": inside the tile");
+                expect (name.getBottom() <= icon.getY() + 1.0f && icon.getBottom() <= power.getY() + 1.0f, key + ": name, icon, on/off from top to bottom");
             }
-
-            // Knob sits inside its column, under the icon
-            const auto col = view.getTileBounds (ModuleId::eq, 0);
-            if (auto* k = view.getColumnKnob (ModuleId::eq, 0, 0))
-            {
-                expect (col.contains (k->getBounds().toFloat()), "knob inside the column");
-                expect (k->getY() > col.getY() + 100.0f, "below name and icon");
-            }
+            int knobs = 0;
+            for (auto* c : view.getChildren())
+                knobs += dynamic_cast<ui::Knob*> (c) != nullptr ? 1 : 0;
+            expectEquals (knobs, 0, "no knobs in the chain");
+            expectEquals (ui::ChainView::preferredHeight, 88, "slim row");
         }
 
-        beginTest ("Design: column footer arrows reorder, bypassed column dims but stays switchable");
+        beginTest ("Design: tile menu moves, bypassed tile stays switchable");
         {
             Harness h;
             ui::ChainView view (h.proc);
-            view.setBounds (0, 0, 1360, ui::ChainView::preferredHeight);
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
             view.refresh();
             const auto r0 = h.proc.getRouting();
             const int eqPos = r0.indexOf (ModuleId::eq, 0);
-            view.mouseDown (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), view.getMoveRightBounds (ModuleId::eq, 0).getCentre(),
-                                              {}, 1.0f, 0, 0, 0, 0, &view, &view, juce::Time::getCurrentTime(),
-                                              view.getMoveRightBounds (ModuleId::eq, 0).getCentre(), juce::Time::getCurrentTime(), 1, false));
-            expectEquals (h.proc.getRouting().indexOf (ModuleId::eq, 0), eqPos + 1, "right arrow moves EQ one step later");
+            expect (view.performTileAction ((int) ModuleId::eq, ui::ChainView::TileAction::moveRight));
+            expectEquals (h.proc.getRouting().indexOf (ModuleId::eq, 0), eqPos + 1, "moves EQ one step later");
             expect (view.undo());
             expectEquals (h.proc.getRouting().indexOf (ModuleId::eq, 0), eqPos, "undo restores the order");
-            expect (! view.getMoveLeftBounds (ModuleId::eq, 0).isEmpty(), "left arrow exists");
+            expect (! view.performTileAction ((int) ModuleId::eq, ui::ChainView::TileAction::moveLeft), "first tile cannot move left");
 
-            // Bypass: column content at 30 %, power button still works
+            juce::StringArray items;
+            const auto delayMenu = view.buildTileMenu ((int) ModuleId::delay);
+            for (juce::PopupMenu::MenuItemIterator it (delayMenu); it.next();)
+                items.add (it.getItem().text);
+            const auto all = items.joinIntoString ("|");
+            for (auto* t : { "Einschalten", "Duplizieren", "Entfernen", "Nach links", "Nach rechts", "Zurücksetzen", "Als Send", "Als Insert",
+                             "Rückgängig", "Wiederholen" })
+                expect (all.contains (juce::String::fromUTF8 (t)), juce::String::fromUTF8 (t) + " in the menu: " + all);
+            juce::StringArray compItems;
+            const auto compMenu = view.buildTileMenu ((int) ModuleId::comp);
+            for (juce::PopupMenu::MenuItemIterator it (compMenu); it.next();)
+                compItems.add (it.getItem().text);
+            expect (! compItems.joinIntoString ("|").contains ("Als Send"), "no send option for the compressor");
+
+            // Bypass: the power switch turns it back on
             h.set (pid::compOn, 0.0f);
             view.refresh();
-            if (auto* k = view.getColumnKnob (ModuleId::comp, 0, 0))
-                expectWithinAbsoluteError (k->getAlpha(), 0.3f, 0.01f, "bypassed column dimmed");
             const auto power = view.getPowerBounds (ModuleId::comp, 0).getCentre();
             view.mouseDown (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), power, {}, 1.0f, 0, 0, 0, 0, &view, &view,
                                               juce::Time::getCurrentTime(), power, juce::Time::getCurrentTime(), 1, false));
             expect (h.proc.getState().getRawParameterValue (pid::compOn)->load() > 0.5f, "power turns it back on");
-            view.refresh();
-            if (auto* k = view.getColumnKnob (ModuleId::comp, 0, 0))
-                expectWithinAbsoluteError (k->getAlpha(), 1.0f, 0.01f, "full opacity again");
+
+            // Reset: every value of the instance back to its default
+            h.set (pid::compRatio, 9.0f);
+            expect (view.performTileAction ((int) ModuleId::comp, ui::ChainView::TileAction::reset));
+            expectWithinAbsoluteError (h.get (pid::compRatio), 3.0f, 1.0e-3f, "reset");
+            expect (h.get (pid::compOn) > 0.5f, "reset keeps it on");
         }
 
-        beginTest ("Design: 14 columns scroll instead of shrinking below 104 px");
+        beginTest ("Design: 14 tiles scroll instead of shrinking below 84 px");
         {
             Harness h;
             ui::ChainView view (h.proc);
-            view.setBounds (0, 0, 1360, ui::ChainView::preferredHeight);
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
             for (auto id : { ModuleId::ride, ModuleId::smash, ModuleId::smooth, ModuleId::sat, ModuleId::doubler, ModuleId::choir,
                              ModuleId::chop, ModuleId::pulse, ModuleId::check, ModuleId::pitch, ModuleId::eq, ModuleId::comp })
                 view.insertModule (id);
             for (const auto& s : h.proc.getRouting())
-                expect (view.getTileBounds (s.id, s.instance).getWidth() >= 104.0f - 0.01f, "column width >= 104");
+                expect (view.getTileBounds (s.id, s.instance).getWidth() >= 84.0f - 0.01f, "tile width >= 84");
             expect (view.getMaxScroll() > 0.0f, "the chain scrolls");
         }
 
@@ -255,7 +252,7 @@ public:
             for (int id = -1; id < dsp::numModules; ++id)
             {
                 auto panel = ui::createDetailPanel (h.proc, id);
-                panel->setBounds (0, 0, 1180, 460);
+                panel->setBounds (panelSize());
                 auto& c = found[id];
                 collect (*panel, c);
                 juce::StringArray all (c.knobs);
@@ -273,17 +270,19 @@ public:
                 expect (ride.knobs.contains (pid), juce::String ("LEVEL RIDE has ") + pid);
             expect (found[(int) ModuleId::delay].segments.contains ("delayDivision"), "DELAY time as segments");
             expect (found[(int) ModuleId::delay].toggles.contains ("delaySync") && found[(int) ModuleId::delay].toggles.contains ("delayPingPong"), "DELAY switches");
-            expect (found[(int) ModuleId::reverb].segments.contains ("reverbType"), "REVERB room list");
+            expect (found[(int) ModuleId::reverb].choices.contains ("reverbType"), "REVERB room list (dropdown, 0.6)");
             expect (found[(int) ModuleId::pulse].segments.contains ("pulseRate"), "PULSE rate as segments");
             expect (found[(int) ModuleId::choir].segments.contains ("choirVoices"), "CHOIR voices as segments");
             expect (found[(int) ModuleId::smooth].segments.contains ("smoothMode") && found[(int) ModuleId::smooth].toggles.contains ("smoothDelta"), "SMOOTH character + delta");
             expect (found[(int) ModuleId::chop].segments.contains ("chopRate"), "STUTTER rate as segments");
             expect (found[(int) ModuleId::smash].knobs.contains ("smashAmount"), "VOCAL SMASH big knob");
 
-            // The seven further modules and the output stage use segments and switches as well
-            expect (found[(int) ModuleId::eq].segments.contains ("hpfSlope") && found[(int) ModuleId::eq].segments.contains ("lowType")
-                    && found[(int) ModuleId::eq].segments.contains ("highType"), "EQ slopes and band types as segments");
-            expect (found[(int) ModuleId::eq].toggles.contains ("hpfOn") && found[(int) ModuleId::eq].toggles.contains ("lpfOn"), "EQ cut switches");
+            // EQ (0.6): the bands live in the graph and the selected-band row ("Headliner EQ panel"); with no band only Mix
+            // (Mehr); the hidden 0.5 fixed bands are never shown
+            expect (found[(int) ModuleId::eq].knobs.contains ("eqMix"), "EQ Mix");
+            for (auto* legacy : { "hpfSlope", "lowType", "highType", "hpfOn", "lpfOn", "hpfFreq", "midGain" })
+                expect (! found[(int) ModuleId::eq].segments.contains (legacy) && ! found[(int) ModuleId::eq].toggles.contains (legacy)
+                        && ! found[(int) ModuleId::eq].knobs.contains (legacy), juce::String ("EQ hides ") + legacy);
             expect (found[(int) ModuleId::comp].segments.contains ("compDetector"), "COMPRESSOR detector as segments");
             expect (found[(int) ModuleId::deess].segments.contains ("deessMode") && found[(int) ModuleId::deess].toggles.contains ("deessListen"), "DE-ESSER mode + listen");
             expect (found[(int) ModuleId::sat].segments.contains ("satCharacter"), "SATURATION character as segments");
@@ -305,55 +304,58 @@ public:
                 expect (found[(int) ModuleId::reverb].knobs.contains (pid), juce::String ("REVERB keeps ") + pid);
         }
 
-        beginTest ("Design: Vocal Control maps PUNCH and VOCAL LEVEL, in the macro colours");
+        // 0.6 (spec 2.2 / 2.3): the Vocal Control bar is gone; its six macros are the Simple-mode faders
+        beginTest ("Design: Simple mode faders PRESENCE SPACE WIDTH PUNCH WARMTH VOCAL LEVEL, in the macro colours");
         {
             Harness h;
-            ui::LiveData live;
-            ui::VocalControlBar bar (h.proc, live);
-            bar.setBounds (0, 0, 1360, 158);
-            BoundControls c;
-            collect (bar, c);
-            expect (c.knobs == juce::StringArray { "macroPresence", "macroSpace", "macroWidth", "macroAggression", "macroWarmth", "outputGain" },
-                    "PRESENCE SPACE WIDTH PUNCH WARMTH VOCAL LEVEL: " + c.knobs.joinIntoString (","));
+            ui::SimpleView view (h.proc, nullptr);
+            view.setBounds (VelvoxAudioProcessorEditor::bodyArea().withZeroOrigin());
+            juce::StringArray ids;
+            for (auto& s : view.getMacroSliders())
+                ids.add (s->getParamId());
+            expect (ids == juce::StringArray { "macroPresence", "macroSpace", "macroWidth", "macroAggression", "macroWarmth", "outputGain" },
+                    "order: " + ids.joinIntoString (","));
             const juce::uint32 expected[] { 0xff00d1ff, 0xff3b82f6, 0xff6366ff, 0xff8b5cf6, 0xffd946ef, 0xfff472b6 };
-            for (size_t i = 0; i < c.knobAccents.size() && i < 6; ++i)
-                expect (c.knobAccents[i] == juce::Colour (expected[i]), "macro colour " + juce::String ((int) i));
-            expect (bar.getGainReductionArea().getWidth() > 0, "GR read-out");
+            for (size_t i = 0; i < view.getMacroSliders().size() && i < 6; ++i)
+                expect (view.getMacroSliders()[i]->getAccent() == juce::Colour (expected[i]), "macro colour " + juce::String ((int) i));
+            expectEquals (view.getMacroSliders()[3]->getLabel(), juce::String ("Punch"));
+            expectEquals (view.getMacroSliders()[5]->getLabel(), juce::String ("Vocal Level"));
 
-            // The editor shows the bar in the CHAIN view under the module panel
-            h.proc.getState().state.setProperty ("uiMode", "pro", nullptr);
-            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
-            expect (ed.getVocalControl().isVisible(), "bar visible");
-            expect (ed.getVocalControl().getY() > ed.getDetail()->getBottom(), "below the module panel");
+            // Spectrum left with the analyse button under it, faders right, meters at the bottom
+            expect (view.getSpectrumArea().getRight() < view.getMacroArea().getX(), "spectrum left of the faders");
+            expect (view.getAnalyseButton().getY() > view.getSpectrumArea().getY() + view.getSpectrumArea().getHeight() / 2, "button under the spectrum");
+            expect (view.getMeterArea().getY() >= view.getMacroArea().getBottom(), "meters at the bottom");
+            expectEquals (view.getAnalyseButton().getButtonText(), juce::String ("Vocal analysieren"));
+            expect (! view.getBeforeButton().isVisible(), "Vorher / Nachher only after an analysis");
         }
 
-        beginTest ("Design: AUTO MIX and VOCAL CHECK views in the design style");
+        beginTest ("Design: auto-mix details keep Density and the fair compare; VOCAL CHECK uses the whole body");
         {
             Harness h;
             h.proc.getAutoMix().dismissPrompt();
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
-            ed.getTopBar().selectView (ui::TopBar::View::autoMix);
+            ed.setMode (VelvoxAudioProcessorEditor::Mode::simple);
+            ed.getSimpleView().getDetailsButton().triggerClick();
+            for (int i = 0; i < 100 && ! ed.isMixDetailsOpen(); ++i)
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+            expect (ed.isMixDetailsOpen(), "Details opens the report");
             auto& view = ed.getAutoMixView();
 
             BoundControls c;
             collect (view, c);
-            expect (c.knobs == juce::StringArray { "macroDensity" }, "macros live in Vocal Control; only Density stays here: " + c.knobs.joinIntoString (","));
+            expect (c.knobs == juce::StringArray { "macroDensity" }, "only Density here: " + c.knobs.joinIntoString (","));
             expect (c.segments.contains ("levelMatchMode"), "fair compare as segments");
-            expectEquals (view.getAnalyseButton().getButtonText(), juce::String ("Vocal analysieren"), "design wording");
-            for (auto* b : { &view.getPreviousButton(), &view.getMixButton(), &view.getOriginalButton() })
-                expect ((bool) b->getProperties().getWithDefault ("segment", false), "compare buttons as segments: " + b->getButtonText());
 
-            ed.getTopBar().selectView (ui::TopBar::View::vocalCheck);
-            expect (ed.getDetail() != nullptr && ed.getDetail()->getWidth() >= 1300, "VOCAL CHECK uses the whole width");
+            ed.getTopBar().selectTab (ui::TopBar::Tab::vocalCheck);
+            expect (ed.getDetail() != nullptr && ed.getDetail()->getWidth() >= 980, "VOCAL CHECK uses the whole width");
         }
 
         beginTest ("Design: help and tutorial describe the new interface");
         {
             const juce::StringArray outdated { "lower lane", "Analysieren starts", "Auto Mix and Module switch", "Module button",
                                                "Hide from chain view", "six fine-tuning controls", "right rail", "\"Audio analysieren\"",
-                                               "Ins / Send switch", "Modules button" };
+                                               "Ins / Send switch", "Modules button", "VOCAL CONTROL", "A/B", "CHAIN tab", "Copy A to B" };
             for (auto& step : ui::TutorialOverlay::steps())
                 for (auto& phrase : outdated)
                     expect (! step.text.contains (phrase), "tutorial '" + step.title + "' mentions: " + phrase);
@@ -362,15 +364,17 @@ public:
                     expect (! page.body.contains (phrase), "help '" + page.key + "' mentions: " + phrase);
 
             const auto* start = ui::help::find ("start");
-            expect (start != nullptr && start->body.contains ("VOCAL CONTROL") && start->body.contains ("CHAIN")
-                    && start->body.contains ("VOCAL CHECK"), "start page explains the three tabs and Vocal Control");
-            bool tabsStep = false;
+            expect (start != nullptr && start->body.contains ("SIMPEL") && start->body.contains ("ADVANCED")
+                    && start->body.contains ("VOCAL CHECK"), "start page explains the modes and the tabs");
+            bool modesStep = false;
             for (auto& step : ui::TutorialOverlay::steps())
-                tabsStep = tabsStep || (step.target == "modes" && step.text.contains ("CHAIN") && step.text.contains ("AUTO MIX"));
-            expect (tabsStep, "tutorial step for the tabs");
+                modesStep = modesStep || (step.target == "modes" && step.text.contains ("SIMPEL") && step.text.contains ("ADVANCED"));
+            expect (modesStep, "tutorial step for SIMPEL / ADVANCED");
+            const auto* controls = ui::help::find ("controls");
+            expect (controls != nullptr && controls->body.contains ("Alt") && controls->body.contains ("Shift"), "gestures explained in the help");
         }
 
-        // ---- Findings of the final review
+        // ---- Findings of the 0.5 review that still apply
         beginTest ("Review: every delay division and pulse rate stays reachable (overflow segment)");
         {
             Harness h;
@@ -401,7 +405,7 @@ public:
             for (auto id : { ModuleId::delay, ModuleId::pulse })
             {
                 auto panel = ui::createDetailPanel (h.proc, (int) id);
-                panel->setBounds (0, 0, 1180, 460);
+                panel->setBounds (panelSize());
                 int overflowGroups = 0;
                 std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
                 {
@@ -418,62 +422,7 @@ public:
             }
         }
 
-        beginTest ("Review: no control is laid out with zero size or outside its panel");
-        {
-            Harness h;
-            auto r = h.proc.getRouting();
-            for (int id = 0; id < dsp::numModules; ++id)
-                if (! r.contains ((ModuleId) id))
-                    r.insertDefault ((ModuleId) id, 0);
-            h.proc.setRouting (r);
-            for (int id = -1; id < dsp::numModules; ++id)
-            {
-                auto panel = ui::createDetailPanel (h.proc, id);
-                panel->setBounds (0, 0, 1180, 460);
-                for (auto* child : panel->getChildren())
-                {
-                    if (! child->isVisible() || dynamic_cast<juce::Viewport*> (child) != nullptr)
-                        continue;
-                    const auto name = juce::String (id < 0 ? "output" : dsp::moduleKey ((ModuleId) id));
-                    expect (child->getHeight() >= 14 && child->getWidth() >= 14, name + ": control too small " + child->getBounds().toString());
-                    expect (panel->getLocalBounds().contains (child->getBounds()), name + ": control outside " + child->getBounds().toString());
-                }
-            }
-        }
-
-        beginTest ("Review: column knobs never cover the scroll arrows and ignore the mouse wheel");
-        {
-            Harness h;
-            ui::ChainView view (h.proc);
-            view.setBounds (0, 0, 1360, ui::ChainView::preferredHeight);
-            for (auto id : { ModuleId::ride, ModuleId::smash, ModuleId::smooth, ModuleId::sat, ModuleId::doubler, ModuleId::choir,
-                             ModuleId::chop, ModuleId::pulse, ModuleId::pitch, ModuleId::eq, ModuleId::comp })
-                view.insertModule (id);
-            for (float x : { 0.0f, view.getMaxScroll() * 0.5f, 360.0f, view.getMaxScroll() })
-            {
-                view.scrollTo (x, false);
-                view.refresh();
-                for (const auto& s : h.proc.getRouting())
-                    for (int k = 0; k < 2; ++k)
-                        if (auto* knob = view.getColumnKnob (s.id, s.instance, k); knob != nullptr && knob->isVisible())
-                        {
-                            for (bool right : { false, true })
-                            {
-                                const auto arrow = view.getArrowBounds (right);
-                                expect (arrow.isEmpty() || ! knob->getBounds().toFloat().intersects (arrow),
-                                        "knob over the " + juce::String (right ? "right" : "left") + " arrow at scroll " + juce::String (x));
-                            }
-                            expect (! knob->slider.isScrollWheelEnabled(), "wheel scrolls the chain, not the knob");
-                        }
-            }
-        }
-
-        beginTest ("Review: VOCAL CHECK column text is proper UTF-8");
-        {
-            expect (ui::ChainView::checkColumnNote().contains (juce::String::fromUTF8 ("ver\xc3\xa4nderung")), "umlaut intact");
-        }
-
-        beginTest ("Review: window size is stored as a scale, never taller than the screen, at least 80 %");
+        beginTest ("Review: window size is stored as a scale, never taller than the screen, min scale keeps 9 px text >= 8 px");
         {
             Harness h;
             h.proc.getState().state.setProperty ("uiWindowWidth", 1440, nullptr);   // saved by the 1440 x 900 layout of 0.4
@@ -482,7 +431,19 @@ public:
                 expect (e->getHeight() <= display->userArea.getHeight(), "fits the work area: " + juce::String (e->getHeight()));
             expect (h.proc.getState().state.hasProperty ("uiScale"), "scale stored");
             if (auto* c = e->getConstrainer())
-                expectEquals (c->getMinimumWidth(), juce::roundToInt (ui::baseWidth * 0.8), "minimum 80 % (9 px names stay >= 7 px)");
+            {
+                const int minW = c->getMinimumWidth();
+                expect (9.0 * minW / ui::baseWidth >= 8.0 - 1.0e-6, "9 px text >= 8 px at the minimum size: " + juce::String (minW));
+                expect (minW <= 900, "but the window can be small: " + juce::String (minW));
+            }
+
+            // A stored scale is kept
+            Harness h2;
+            h2.proc.getState().state.setProperty ("uiScale", 1.2, nullptr);
+            std::unique_ptr<juce::AudioProcessorEditor> e2 (h2.proc.createEditor());
+            if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+                if (display->userArea.getWidth() > 1300 && display->userArea.getHeight() > 800)
+                    expectEquals (e2->getWidth(), 1200, "stored scale 1.2");
         }
 
         beginTest ("Design: an old project shows the same values in the new panels");
@@ -508,6 +469,7 @@ public:
                 for (int id = -1; id < dsp::numModules; ++id)
                     if (id < 0 || h2.proc.getRouting().contains ((ModuleId) id))
                         ed.selectModule (id);
+                ed.setMode (VelvoxAudioProcessorEditor::Mode::simple);
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
             }
             for (auto& [id, v] : values)

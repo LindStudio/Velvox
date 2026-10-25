@@ -156,8 +156,10 @@ namespace velvox::dsp
         // Latency of the currently active configuration
         int getLatencySamples() const noexcept { return getLatencyFor (activeRouting, activePitchOn); }
         // Latency of a routing with the pitch module on / off (for host reporting):
-        // every saturation instance in the chain plus the pitch shifter while it is on
+        // every saturation and smooth instance in the chain plus the pitch shifter while it is on
         int getLatencyFor (const Routing& routing, bool pitchOn) const noexcept;
+        // Latency of the active chain in front of a module (tempo-locked modules follow the song position late by it)
+        int latencyBefore (ModuleId id) const noexcept;
 
         // Module instances (instance 0 = the module of 0.1-0.3)
         CompressorModule& getCompressor (int instance = 0) noexcept { return comp[(size_t) clampInstance (ModuleId::comp, instance)]; }
@@ -165,6 +167,8 @@ namespace velvox::dsp
         Ducker& getDelayDucker (int instance = 0) noexcept { return delayDucker[(size_t) clampInstance (ModuleId::delay, instance)]; }
         Ducker& getReverbDucker (int instance = 0) noexcept { return reverbDucker[(size_t) clampInstance (ModuleId::reverb, instance)]; }
         int getChopStep() const noexcept { return chop.getDisplayStep(); }
+        const ChopModule& getChop() const noexcept { return chop; }   // UI: readDisplay() (lock-free)
+        const DelayModule& getDelay (int instance = 0) const noexcept { return delay[(size_t) clampInstance (ModuleId::delay, instance)]; }   // UI: displayTimeMs
         PulseModule& getPulse() noexcept { return pulse; }
         SmashModule& getSmash (int instance = 0) noexcept { return smash[(size_t) clampInstance (ModuleId::smash, instance)]; }
         ChoirModule& getChoir (int instance = 0) noexcept { return choir[(size_t) clampInstance (ModuleId::choir, instance)]; }

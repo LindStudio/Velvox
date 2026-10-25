@@ -8,14 +8,22 @@ namespace velvox::dsp
         constexpr float maxFeedback = 0.9f;
         constexpr int updateInterval = 32;
         constexpr double crossfadeSeconds = 0.06;
+        constexpr double glideSeconds = 0.05;       // tape-style follow time for small moves
+        constexpr float maxGlideRate = 0.08f;       // |d delay / dt|: about +-1.4 semitones
+        constexpr double jumpSeconds = 0.015;       // farther away than this: crossfade instead
         constexpr double twoPi = 6.283185307179586;
         constexpr float diffuserMs[maxChannels][3] { { 2.1f, 3.7f, 5.3f }, { 2.4f, 3.3f, 5.9f } };
         constexpr float maxModMs = 2.5f;
 
-        // Transparent below ~0.5, smoothly bounded to +-1.5 above
+        // Exactly linear up to 0.8 (0.6: the old plain tanh added -50 dB THD at -10 dBFS),
+        // then a C1-continuous soft knee that is bounded to +-1.5 like before
         inline float loopLimiter (float x) noexcept
         {
-            return 1.5f * std::tanh (x * (1.0f / 1.5f));
+            constexpr float knee = 0.8f, range = 1.5f - knee;
+            const float a = std::abs (x);
+            if (a <= knee)
+                return x;
+            return std::copysign (knee + range * std::tanh ((a - knee) * (1.0f / range)), x);
         }
     }
 
@@ -27,9 +35,85 @@ namespace velvox::dsp
         return (float) std::min ((double) maxDelayMs, ms);
     }
 
+    namespace
+    {
+        // Loop filters' gain at 1 kHz (one pass), as the processing designs them
+        double loopGainAt1k (const DelaySettings& s, double fs)
+        {
+            const double lo = juce::jlimit (20.0, 20000.0, (double) s.lowCutHz);
+            const double hi = std::min (juce::jlimit (200.0, 20000.0, (double) s.highCutHz), 0.45 * fs);
+            return design::magnitude (design::highPass (fs, lo, 0.70710678), 1000.0, fs)
+                 * design::magnitude (design::lowPass (fs, hi, 0.70710678), 1000.0, fs);
+        }
+    }
+
+    int DelayModule::echoTaps (const DelaySettings& s, double sampleRate, EchoTap* out, int maxTaps, float floorDb) noexcept
+    {
+        if (out == nullptr || maxTaps <= 0 || sampleRate <= 0.0)
+            return 0;
+        const double t = juce::jlimit (1.0, (double) maxDelayMs, (double) s.timeMs);
+        const double sp = juce::jlimit (0.0, (double) maxSpreadMs, (double) s.spreadMs);
+        const double fb = juce::jlimit (0.0, (double) maxFeedback, (double) s.feedback);
+        const double g = loopGainAt1k (s, sampleRate);
+        const double floorGain = juce::Decibels::decibelsToGain ((double) floorDb);
+        int count = 0;
+
+        if (s.pingPong)
+        {
+            // Mono sum enters on the left: repeat k is on L for odd k, R for even k; every
+            // pass through the right line adds the spread
+            double level = g;
+            for (int k = 1; count < maxTaps && level >= floorGain; ++k)
+            {
+                const bool left = (k % 2) == 1;
+                out[count++] = { (float) (k * t + (k / 2) * sp), left ? (float) level : 0.0f, left ? 0.0f : (float) level };
+                level *= fb * g;
+                if (fb <= 0.0)
+                    break;
+            }
+            return count;
+        }
+
+        // Independent sides: L repeats every t, R every t + spread; merged in time order
+        int kl = 1, kr = 1;
+        double levelL = g, levelR = g;
+        const double tr = t + sp;
+        while (count < maxTaps && (levelL >= floorGain || levelR >= floorGain))
+        {
+            const double timeL = levelL >= floorGain ? kl * t : 1.0e30;
+            const double timeR = levelR >= floorGain ? kr * tr : 1.0e30;
+            EchoTap tap { 0.0f, 0.0f, 0.0f };
+            const bool takeL = timeL <= timeR + 1.0e-9, takeR = timeR <= timeL + 1.0e-9;
+            tap.timeMs = (float) std::min (timeL, timeR);
+            if (takeL)
+            {
+                tap.levelL = (float) levelL;
+                levelL = fb > 0.0 ? levelL * fb * g : 0.0;
+                ++kl;
+            }
+            if (takeR)
+            {
+                tap.levelR = (float) levelR;
+                levelR = fb > 0.0 ? levelR * fb * g : 0.0;
+                ++kr;
+            }
+            out[count++] = tap;
+        }
+        return count;
+    }
+
+    float DelayModule::feedbackForRatio (const DelaySettings& s, double sampleRate, float ratio) noexcept
+    {
+        const double g = std::max (1.0e-6, loopGainAt1k (s, sampleRate));
+        return (float) juce::jlimit (0.0, (double) maxFeedback, (double) ratio / g);
+    }
+
     void DelayModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
+        glideCoeff = (float) std::exp (-1.0 / (glideSeconds * sampleRate));
+        maxGlideStep = maxGlideRate;
+        jumpSamples = (float) (jumpSeconds * sampleRate);
 
         for (int ch = 0; ch < maxChannels; ++ch)
         {
@@ -54,9 +138,45 @@ namespace velvox::dsp
         modulation.reset (sampleRate, 0.1);
         lowCut.reset (sampleRate, 0.05);
         highCut.reset (sampleRate, 0.05);
+        driveAmount.reset (sampleRate, 0.02);
+
+        // Half-band low-pass at the 2x rate: h[c] = 1/2, every second tap beside it zero
+        {
+            constexpr int c = halfbandTaps / 2;
+            const double beta = 8.0;
+            const auto bessel0 = [] (double x)
+            {
+                double sum = 1.0, term = 1.0;
+                for (int k = 1; k < 30; ++k)
+                {
+                    term *= (x / (2.0 * k)) * (x / (2.0 * k));
+                    sum += term;
+                }
+                return sum;
+            };
+            double evenSum = 0.0;
+            for (int j = 0; j < halfbandTaps; ++j)
+            {
+                const int m = j - c;
+                double v = 0.0;
+                if (m == 0)
+                    v = 0.5;
+                else if (m % 2 != 0)
+                {
+                    const double r = (double) m / c;
+                    const double w = bessel0 (beta * std::sqrt (std::max (0.0, 1.0 - r * r))) / bessel0 (beta);
+                    v = std::sin (0.5 * juce::MathConstants<double>::pi * m) / (juce::MathConstants<double>::pi * m) * w;
+                    evenSum += v;
+                }
+                halfband[(size_t) j] = (float) v;
+            }
+            for (int j = 0; j < halfbandTaps; ++j)   // unity at DC: the side taps sum to exactly 1/2
+                if (j != c)
+                    halfband[(size_t) j] = (float) (halfband[(size_t) j] * 0.5 / evenSum);
+        }
 
         setSettings (settings);
-        for (auto* s : { &feedback, &spread, &drive, &diffusion, &modulation })
+        for (auto* s : { &feedback, &spread, &drive, &diffusion, &modulation, &driveAmount })
             s->setCurrentAndTargetValue (s->getTargetValue());
         snapTime = true;
         updateFilters (true);
@@ -74,6 +194,8 @@ namespace velvox::dsp
                 d.pos = 0;
             }
         writePos = 0;
+        driveStages = {};
+        drivePos = 0;
         hp.reset();
         lp.reset();
         // After a reset nothing is in the line: jump straight to the requested time
@@ -88,6 +210,7 @@ namespace velvox::dsp
         feedback.setTargetValue (juce::jlimit (0.0f, maxFeedback, s.feedback));
         spread.setTargetValue ((float) (juce::jlimit (0.0f, maxSpreadMs, s.spreadMs) * 0.001 * fs));
         drive.setTargetValue (juce::jlimit (0.0f, 1.0f, s.drive));
+        driveAmount.setTargetValue (s.drive > 0.0002f ? 1.0f : 0.0f);   // the old code saturated above k = 1.001
         diffusion.setTargetValue (juce::jlimit (0.0f, 1.0f, s.diffusion));
         modulation.setTargetValue (juce::jlimit (0.0f, 1.0f, s.modulation));
         lowCut.setTargetValue (juce::jlimit (20.0f, 20000.0f, s.lowCutHz));
@@ -130,6 +253,36 @@ namespace velvox::dsp
         return ((c3 * frac + c2) * frac + c1) * frac + c0;
     }
 
+    // One base-rate sample through the drive stage (latency driveLatency in both paths):
+    // up 2x (polyphase half-band), tanh(k x)/k at 2x, down 2x; blended with the undriven,
+    // equally delayed tap by `amount`
+    float DelayModule::driveSample (int ch, float t, float k, float amount) noexcept
+    {
+        auto& st = driveStages[(size_t) ch];
+        const int p = drivePos;
+        st.x[(size_t) (p & 31)] = t;
+        const float undriven = st.x[(size_t) ((p - driveLatency) & 31)];
+        if (amount <= 0.0f)
+            return undriven;
+
+        constexpr int sideTaps = halfbandTaps / 2 + 1;   // 24 even taps h[0], h[2], ... h[46]
+        constexpr int c = halfbandTaps / 2;
+        float even = 0.0f;
+        for (int i = 0; i < sideTaps; ++i)
+            even += halfband[(size_t) (2 * i)] * st.x[(size_t) ((p - i) & 31)];
+        even *= 2.0f;
+        const float odd = st.x[(size_t) ((p - (c + 1) / 2) & 31)];   // the centre tap: x[n - 12]
+
+        const float inv = 1.0f / k;
+        st.even[(size_t) (p & 31)] = std::tanh (k * even) * inv;
+        st.odd[(size_t) (p & 15)] = std::tanh (k * odd) * inv;
+
+        float y = 0.5f * st.odd[(size_t) ((p - (c - 1) / 2) & 15)];  // s[2n - 23]: the odd sample of 11 steps ago
+        for (int i = 0; i < sideTaps; ++i)
+            y += halfband[(size_t) (2 * i)] * st.even[(size_t) ((p - i) & 31)];
+        return undriven + amount * (y - undriven);
+    }
+
     void DelayModule::process (const float* const* input, float* const* wetOut, int numChannels, int numSamples) noexcept
     {
         const bool pingPong = settings.pingPong && numChannels > 1;
@@ -137,7 +290,8 @@ namespace velvox::dsp
 
         if (snapTime)
         {
-            currentDelay = nextDelay = targetDelay;
+            nextDelay = targetDelay;
+            currentDelay = targetDelay;
             fade = 1.0f;
             fadeStep = 0.0f;
             snapTime = false;
@@ -154,33 +308,46 @@ namespace velvox::dsp
                 updateFilters (false);
             }
 
-            // A new time starts a crossfade (one at a time; a later change waits for it)
-            if (fadeStep == 0.0f && std::abs (targetDelay - currentDelay) > 0.5f)
-            {
-                nextDelay = targetDelay;
-                fade = 0.0f;
-                fadeStep = fadeIncrement;
-            }
-
             diffusion.skip (n);
             const float apGain = 0.62f * diffusion.getCurrentValue();
             drive.skip (n);
             const float k = 1.0f + 5.0f * drive.getCurrentValue();
-            const bool saturate = k > 1.001f;
 
-            // Slow wow (0.6 Hz) plus a faster flutter component (4.7 Hz)
-            modulation.skip (n);
-            modPhase1 += twoPi * 0.6 * n / fs;
-            modPhase2 += twoPi * 4.7 * n / fs;
-            if (modPhase1 > twoPi) modPhase1 -= twoPi;
-            if (modPhase2 > twoPi) modPhase2 -= twoPi;
-            const float modDepth = modulation.getCurrentValue() * maxModMs * 0.001f * (float) fs;
-            const float mod = modDepth * (float) (0.5 * (1.0 + std::sin (modPhase1)) + 0.08 * std::sin (modPhase2));
+            // Slow wow (0.6 Hz) plus a faster flutter component (4.7 Hz), evaluated per
+            // sample: a stepped read position would add zipper sidebands
+            const double inc1 = twoPi * 0.6 / fs, inc2 = twoPi * 4.7 / fs;
+            const float modScale = maxModMs * 0.001f * (float) fs;
 
             for (int i = start; i < start + n; ++i)
             {
                 const float fb = feedback.getNextValue();
                 const float sp = spread.getNextValue();
+
+                float mod = 0.0f;
+                const float modAmount = modulation.getNextValue();
+                modPhase1 += inc1;
+                modPhase2 += inc2;
+                if (modPhase1 > twoPi) modPhase1 -= twoPi;
+                if (modPhase2 > twoPi) modPhase2 -= twoPi;
+                if (modAmount > 0.0f)
+                    mod = modAmount * modScale * (float) (0.5 * (1.0 + std::sin (modPhase1)) + 0.08 * std::sin (modPhase2));
+
+                // Time: glide toward small moves, crossfade to jumps (one fade at a time)
+                if (fadeStep == 0.0f)
+                {
+                    const double gap = (double) targetDelay - currentDelay;
+                    if (std::abs (gap) > (double) jumpSamples)
+                    {
+                        nextDelay = targetDelay;
+                        fade = 0.0f;
+                        fadeStep = fadeIncrement;
+                    }
+                    else if (gap != 0.0)
+                    {
+                        const double step = juce::jlimit (-(double) maxGlideStep, (double) maxGlideStep, gap * (1.0 - (double) glideCoeff));
+                        currentDelay = std::abs (gap) < 1.0e-4 ? (double) targetDelay : currentDelay + step;
+                    }
+                }
 
                 float x = 1.0f;
                 if (fadeStep != 0.0f)
@@ -195,23 +362,24 @@ namespace velvox::dsp
                     x = fade;
                 }
 
+                const float driveMix = driveAmount.getNextValue();
                 float taps[maxChannels] {};
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
-                    // The diffusion all-passes add their length: read that much earlier
-                    const float offset = (ch == 1 ? sp : 0.0f) + mod - (float) diffuserLatency[(size_t) ch];
-                    float t = readInterpolated (lines[(size_t) ch], currentDelay + offset);
+                    // The diffusion all-passes and the drive stage add their length: read that much earlier
+                    const float offset = (ch == 1 ? sp : 0.0f) + mod - (float) (diffuserLatency[(size_t) ch] + driveLatency);
+                    float t = readInterpolated (lines[(size_t) ch], (float) currentDelay + offset);
                     if (fadeStep != 0.0f || x < 1.0f)
                         t += x * (readInterpolated (lines[(size_t) ch], nextDelay + offset) - t);
 
                     for (auto& ap : diffusers[(size_t) ch])
                         t = ap.process (t, apGain);
                     t = lp.process (hp.process (t, ch), ch);
-                    if (saturate)
-                        t = std::tanh (k * t) / k;
+                    t = driveSample (ch, t, k, driveMix);
                     taps[ch] = t;
                     wetOut[ch][i] = t;
                 }
+                drivePos = (drivePos + 1) & 1023;
 
                 if (pingPong)
                 {
@@ -230,6 +398,8 @@ namespace velvox::dsp
                     writePos = 0;
             }
         }
+
+        displayTimeMs.store ((float) ((fadeStep != 0.0f ? (double) nextDelay : currentDelay) * 1000.0 / fs), std::memory_order_relaxed);
 
         if (! hp.isStateFinite() || ! lp.isStateFinite())
             reset();

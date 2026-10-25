@@ -60,14 +60,18 @@ namespace velvox
         Raw macroPresence, macroWarmth, macroAggression, macroWidth, macroSpace, macroDensity;
         Raw pulseOn, pulseRate, pulseDepth, pulseAttack, pulseRelease, pulseSmooth, pulseInterp, pulseTension, pulseMix, pulseBpm;
         std::array<Raw, 6> pulseX, pulseY;
+        Raw pulseShape, pulseAmount;   // 0.6
         Raw smashOn, smashAmount, smashBlend, smashAttack, smashRelease, smashTone, smashOutput;
         Raw choirOn, choirVoices, choirDetune, choirTiming, choirHumanize, choirWidth, choirDensity, choirMix;
         Raw smoothOn, smoothAmount, smoothSensitivity, smoothLow, smoothHigh, smoothAttack, smoothRelease, smoothMode, smoothOutput, smoothDelta;
+        std::array<Raw, 6> smoothWFreq, smoothWGain;
         Raw checkOn, checkMode;
         Raw rideOn, rideTarget, rideAmount, rideMaxBoost, rideMaxCut, rideResponse, ridePhrase, rideTransient, rideSilence;
         Raw reverbEarly, reverbDiffusion, reverbMod, reverbBass, reverbHighCut;
         Raw delaySpread, delayDrive, delayDiffusion, delayMod;
         Raw compAutoRelease, compAutoMakeup, deessDetection;
+        Raw satMultiband, satXoverLow, satXoverHigh;            // 0.6 Saturation multiband
+        std::array<Raw, 3> satBandOn, satBandDrive, satBandChar;
         struct EqBandRaw { Raw on, type, freq, gain, q, slope, role; };
         std::array<EqBandRaw, dsp::maxEqBands> eqBands;
         Raw eqLegacyResponse;

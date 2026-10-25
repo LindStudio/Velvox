@@ -189,6 +189,9 @@ namespace velvox::pid
     inline constexpr const char* smoothMode        = "smoothMode";
     inline constexpr const char* smoothOutput      = "smoothOutput";
     inline constexpr const char* smoothDelta       = "smoothDelta";
+    // 0.6: weighting curve, 6 points (frequency in Hz, gain in dB; 0 dB everywhere = flat)
+    inline constexpr const char* smoothWFreq[6] { "smoothW1Freq", "smoothW2Freq", "smoothW3Freq", "smoothW4Freq", "smoothW5Freq", "smoothW6Freq" };
+    inline constexpr const char* smoothWGain[6] { "smoothW1Gain", "smoothW2Gain", "smoothW3Gain", "smoothW4Gain", "smoothW5Gain", "smoothW6Gain" };
 
     // VOCAL CHECK - analysis only (never changes the audio)
     inline constexpr const char* checkOn   = "checkOn";
@@ -236,6 +239,21 @@ namespace velvox::pid
     }
     inline juce::String eqBandId (int band1to16, const char* field) { return "eqBand" + juce::String (band1to16) + field; }
 
+    // ---- added in 0.6: Saturation multiband (off = the single-band module) ----
+    inline constexpr const char* satMultiband = "satMultiband";
+    inline constexpr const char* satXoverLow  = "satXoverLow";
+    inline constexpr const char* satXoverHigh = "satXoverHigh";
+    inline constexpr const char* satLowOn     = "satLowOn";
+    inline constexpr const char* satLowDrive  = "satLowDrive";
+    inline constexpr const char* satLowChar   = "satLowChar";
+    inline constexpr const char* satMidOn     = "satMidOn";
+    inline constexpr const char* satMidDrive  = "satMidDrive";
+    inline constexpr const char* satMidChar   = "satMidChar";
+    inline constexpr const char* satHighOn    = "satHighOn";
+    inline constexpr const char* satHighDrive = "satHighDrive";
+    inline constexpr const char* satHighChar  = "satHighChar";
+    inline constexpr const char* satLink      = "satLink";   // UI behaviour only (dsp::linkedBandDrives)
+
     // Hidden per EQ instance: 1 = bands use the 0.5 bilinear designs (set only by the migration)
     inline constexpr const char* eqLegacyResponse = "eqLegacyResponse";
 
@@ -243,4 +261,7 @@ namespace velvox::pid
     inline constexpr const char* compAutoRelease = "compAutoRelease";
     inline constexpr const char* compAutoMakeup  = "compAutoMakeup";
     inline constexpr const char* deessDetection  = "deessDetection";
+    // ---- added in 0.6: Pulse "like Kickstart" (defaults = the 0.5 sound) ----
+    inline constexpr const char* pulseShape  = "pulseShape";    // choice: Custom (the pulseX/Y curve), Classic, Punch, Swell, Gate
+    inline constexpr const char* pulseAmount = "pulseAmount";   // %, 50 = pulseDepth exactly; 0 none, 100 full ducking
 }

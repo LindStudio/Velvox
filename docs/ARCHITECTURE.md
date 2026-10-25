@@ -30,6 +30,7 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 - `Role` (versteckt, nicht automatisierbar): none (Nutzer), presence, warmth, air, lowcut, mud, auto, highcut. Makros (Presence -> air, Warmth -> warmth + air) und Auto-Mix (lowcut, warmth, auto, air, highcut) schreiben nur Bänder ihrer Rolle und legen fehlende in einem freien Slot an; Nutzerbänder werden nie verändert. Freier Slot = Band mit allen Werten auf Default (das "Löschen" im Panel setzt ein Band auf Default zurück).
 - Migration: Ein State/Preset ohne `eqBand*`-Werte wird beim Laden umgesetzt: HPF/Low/Mid/High/LPF -> Bänder 1-5 mit Rollen lowcut/warmth/auto/air/highcut und `eqLegacyResponse = 1` (alte RBJ-Bilinear-Designs, klingt identisch; Null-Test <= -120 dB). Die 17 alten Festband-IDs bleiben registriert, versteckt und nicht automatisierbar. Eine `LegacyBridge` leitet Änderungen dieser IDs im Message-Thread (altes EQ-Panel, Assistent) in die Rollenbänder.
 - APIs (`Parameters/EqBands.h`): `findOrCreateEqBand (apvts, role, type, freqHz, gainDb, q, instance = 0)` (Vocal Check, Message-Thread, gibt Band 0..15 oder -1), `eqbands::clearLegacyResponse (apvts, instance)`, `eqbands::accessFor/readBand/writeBand/findBand/findFreeBand`. Kurven fürs Panel: `EqualizerModule::responseDb / bandResponseDb / responseCurveDb` auf einer Kopie von `processor.readEffectiveSettings().instance (k).eq` (atomare Reads, thread-safe; enthält die von Makros erzeugten Bänder).
+- Panel (`UI/EqPanel.*`): `eqedit` (Band-Operationen, je ein Undo-Schritt; `materialise` schreibt ein nur von einem Makro erzeugtes Band mit 0 dB Basis als Parameter, damit der Makro-Anteil nicht doppelt wirkt), `EqGraph` (Spektrum, Bandkurven, Summenkurve, Punkte, alle Gesten, Hover-Karte), `EqPanel` (Hauptzeile = gewähltes Band: Ein, Typ, Freq, Gain, Q bzw. Slope; Mehr: Mix, „Alte EQ-Kurve – umstellen“). Die 17 alten Festband-IDs werden nicht angezeigt.
 
 ## Routing
 
@@ -44,9 +45,9 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 
 - Jedes Modul meldet seine Latenz. Die Gesamtlatenz wird dem Host gemeldet (PDC), so wie es professionelle Plugins machen.
 - Der Bypass-Pfad ist um die Gesamtlatenz verzögert.
-- **Pitch (umgesetzt):** etwa 120 ms Latenz, aber nur solange das Modul an ist; sonst bleibt es bei 3 Samples.
+- **Pitch (0.6):** konstante Latenz ceil(fs/70) + 16 Samples (14,6 ms bei 48 kHz), nur solange das Modul an ist; sonst 0. Unabhängig von allen Pitch-Einstellungen.
   - Beim Ein- und Ausschalten wird die neue Latenz auf dem Message-Thread gemeldet (`setLatencySamples`). Der Wechsel in der Kette erfolgt unter derselben Ausblendung wie Routing-Änderungen, und der Bypass-Pfad wird mitgezogen.
-  - Kürzere Analysefenster wurden gemessen (`Tests/PitchDiagnostics.cpp`) und wegen bis zu 70 Cent Verstimmung verworfen.
+  - Engine (0.6, ersetzt Signalsmith Stretch mit 120 ms und 2-7 ct Fehler je nach FFT-Bin-Lage, `Tests/PitchDiagnostics.cpp`): `PitchTracker` (YIN auf ~8 kHz, Verfeinerung in voller Rate), `SpliceShifter` (zwei Leseköpfe mit Tempo = Verhältnis, Sprünge um ganze Perioden per Kreuzkorrelation, korrelationsnormierte Blende, Anti-Alias-Tiefpass bei Hochtransponieren), `FormantCorrector` (cepstrale Hüllkurve des Eingangs, Korrektur E(f/Ziel)/E(f/rho) als minimalphasiges FIR, alle 10 ms überblendet).
 
 ## Sidechain (Ducking)
 
@@ -73,7 +74,7 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 | Modul | Typ | Latenz | Kernprinzip |
 |---|---|---|---|
 | Doubler | seriell, addiert Stimmen | 0 | zwei modulierte Delay-Stimmen, Mid-Anteil per „Mono safe“ reduzierbar |
-| Pitch | seriell | ~120 ms (nur wenn an) | Signalsmith Stretch, latenzrichtiger Dry-Mix |
+| Pitch | seriell | 14,6 ms bei 48 kHz (nur wenn an) | Splice-Resampling + Formantkorrektur (0.6), latenzrichtiger Dry-Mix |
 | Chop | seriell | 0 | 16-Step-Pattern, synchron zur Host-PPQ-Position, Repeat = verzögerter Slice |
 | Ducker | auf Delay-/Reverb-Return | 0 | Gain-Kurve aus Vocal oder Sidechain |
 | StereoStage | Ausgang | 0 | Mid/Side; nur das Seitensignal wird skaliert bzw. gefiltert |

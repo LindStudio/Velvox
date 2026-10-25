@@ -204,7 +204,10 @@ public:
           goldens.push_back ({ "stereo with rumble", s, "Dynamik leichter + De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,smash,deess,sat,delay:send,reverb:send",
                                126.5934f, 1, 200.0f, -2.3243f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 2.7278f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = -3.0f; s.f0 = 150.0f; s.sampleRate = 44100.0;
-          goldens.push_back ({ "dark 44.1 kHz", s, "Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
+          // 0.6 reverb track: the reverb now reaches its set decay (T30 +-10 %), so the base plan's send already
+          // gives enough space here (score 0.454 vs 0.471 for "Mehr Raum (Large Hall)", was the other way round);
+          // the EQ / output decisions below are unchanged
+          goldens.push_back ({ "dark 44.1 kHz", s, "Basisplan", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
                                70.0f, 0, 200.0f, -3.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 3.5252f }); }
 
         const auto current = defaultValues();

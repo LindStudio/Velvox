@@ -27,14 +27,19 @@ namespace velvox
         entries.clear();
 
         for (const auto& p : getFactoryPresets())
-            entries.add ({ p.name, p.category, true, {} });
+            entries.add ({ p.name, p.category, true, {}, p.description });
 
         if (userDirectory.isDirectory())
         {
             auto files = userDirectory.findChildFiles (juce::File::findFiles, false, "*" + fileExtension);
             files.sort();
             for (const auto& f : files)
-                entries.add ({ f.getFileNameWithoutExtension(), "User", false, f });
+            {
+                juce::String description;
+                if (const auto xml = juce::XmlDocument::parse (f))
+                    description = xml->getStringAttribute ("description");
+                entries.add ({ f.getFileNameWithoutExtension(), "User", false, f, description });
+            }
         }
     }
 
@@ -42,7 +47,16 @@ namespace velvox
     {
         if (! juce::isPositiveAndBelow (index, entries.size()))
             return false;
+        if (undo == nullptr)
+            return applyEntry (index);
 
+        bool ok = false;
+        undo->perform ("Preset: " + entries.getReference (index).name, [&] { ok = applyEntry (index); });
+        return ok;
+    }
+
+    bool PresetManager::applyEntry (int index)
+    {
         const auto& entry = entries.getReference (index);
 
         if (entry.isFactory)
@@ -121,6 +135,36 @@ namespace velvox
         refresh();
         if (getCurrentPresetName() == entry.name)
             setCurrentPresetName ({});
+        return true;
+    }
+
+    bool PresetManager::renameUserPreset (int index, const juce::String& rawName)
+    {
+        if (! juce::isPositiveAndBelow (index, entries.size()))
+            return false;
+        const auto entry = entries[index];
+        const auto name = juce::File::createLegalFileName (rawName.trim());
+        if (entry.isFactory || name.isEmpty())
+            return false;
+        const auto target = userDirectory.getChildFile (name + fileExtension);
+        if (target.exists() || ! entry.file.moveFileTo (target))
+            return false;
+
+        // The name inside the file follows
+        if (const auto xml = juce::XmlDocument::parse (target))
+        {
+            auto tree = juce::ValueTree::fromXml (*xml);
+            tree.setProperty ("name", name, nullptr);
+            if (const auto out = tree.createXml())
+                out->writeTo (target);
+        }
+        const bool wasCurrent = getCurrentPresetName() == entry.name;
+        refresh();
+        if (wasCurrent)
+        {
+            referenceName.clear();
+            setCurrentPresetName (name);
+        }
         return true;
     }
 

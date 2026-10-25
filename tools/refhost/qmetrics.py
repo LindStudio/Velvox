@@ -587,6 +587,70 @@ def hnr_db(y, fs, frame=2048, hop=512):
     return float(np.median(vals)) if vals else float("nan")
 
 
+def lpc_envelope_db(y, fs, order=14, rate=12000, frame_s=0.04, hop_s=0.01, fmax=5000.0, npts=500):
+    """Mean LPC spectral envelope (dB) of the louder frames on a 0..fmax grid; returns (freqs, env_db).
+    Analysis at `rate` Hz with pre-emphasis 0.9 so the poles sit on the formants, not the tilt."""
+    from scipy.linalg import solve_toeplitz
+    m = mono(y)
+    g = math.gcd(int(fs), int(rate))
+    x = signal.resample_poly(m, rate // g, int(fs) // g)
+    x = np.append(x[0], x[1:] - 0.9 * x[:-1])
+    n, h = int(frame_s * rate), int(hop_s * rate)
+    win = np.hanning(n)
+    st = np.arange(0, len(x) - n, h)
+    if len(st) == 0:
+        return np.linspace(0, fmax, npts), np.zeros(npts)
+    e = np.array([np.sum((x[s:s + n] * win) ** 2) for s in st])
+    keep = st[e > e.max() * 10 ** (-25 / 10)]
+    f = np.linspace(0, fmax, npts)
+    acc = np.zeros(npts)
+    for s in keep:
+        fr = x[s:s + n] * win
+        r = np.correlate(fr, fr, "full")[n - 1:n + order] * np.exp(-0.5 * (2 * np.pi * 40 * np.arange(order + 1) / rate) ** 2)
+        r[0] *= 1 + 1e-9
+        a = solve_toeplitz(r[:order], -r[1:order + 1])
+        _, H = signal.freqz(1.0, np.concatenate([[1.0], a]), worN=f, fs=rate)
+        acc += 20 * np.log10(np.abs(H) + EPS)
+    return f, acc / len(keep)
+
+
+def formants(y, fs, **kw):
+    """(F1, F2) in Hz: the first two peaks of the mean LPC envelope (F1 in 200-1300 Hz, F2 above F1 + 150 Hz)."""
+    f, env = lpc_envelope_db(y, fs, **kw)
+    pk = [i for i in range(1, len(f) - 1) if env[i] > env[i - 1] and env[i] >= env[i + 1]]
+
+    def refine(i):
+        y0, y1, y2 = env[i - 1], env[i], env[i + 1]
+        den = y0 - 2 * y1 + y2
+        return f[i] + (0.5 * (y0 - y2) / den if den != 0 else 0.0) * (f[1] - f[0])
+
+    p1 = [i for i in pk if 200 <= f[i] <= 1300]
+    if not p1:
+        return float("nan"), float("nan")
+    F1 = refine(p1[0])
+    p2 = [i for i in pk if f[i] > F1 + 150 and f[i] <= 3500]
+    return F1, (refine(p2[0]) if p2 else float("nan"))
+
+
+def formant_shift_oct(dry, wet, fs, fmin=250.0, fmax=4000.0, search_oct=1.5):
+    """Frequency scaling (octaves, signed) that best maps the dry vowel's mean LPC envelope onto the wet one:
+    the wet envelope is compared with dry(f / 2^s) on a log-frequency grid (level removed); 0 = formants kept.
+    Robust to the pitch change (no peak picking)."""
+    f, ed = lpc_envelope_db(dry, fs, fmax=8000.0, npts=1600)
+    _, ew = lpc_envelope_db(wet, fs, fmax=8000.0, npts=1600)
+    g = np.geomspace(fmin, fmax, 200)
+    w = np.interp(g, f, ew)
+    w -= w.mean()
+    best, best_s = None, 0.0
+    for s in np.linspace(-search_oct, search_oct, 301):
+        d = np.interp(g / 2 ** s, f, ed)
+        d -= d.mean()
+        err = float(np.mean((w - d) ** 2))
+        if best is None or err < best:
+            best, best_s = err, float(s)
+    return best_s
+
+
 def cpu_percent(mean_block_us, block, fs):
     """Share of real time one block takes (percent)."""
     return 100.0 * mean_block_us * 1e-6 / (block / fs)

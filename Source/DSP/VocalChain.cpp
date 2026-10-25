@@ -129,12 +129,14 @@ namespace velvox::dsp
         chop.prepare (sampleRate, bs);
         pulse.prepare (sampleRate, bs);
 
-        // Room for the largest possible latency: every saturation instance plus pitch
+        // Room for the largest possible latency: every saturation and smooth instance plus pitch
         int maxLatency = pitch.getLatencySamples();
         for (auto& sat : saturation)
             maxLatency += sat.getLatencySamples();
         for (auto& r : ride)
             maxLatency += r.getLatencySamples();
+        for (auto& sm : smooth)
+            maxLatency += sm.getLatencySamples();
         bypassDelay.prepare (std::max (1, maxLatency));
         bypassDelay.setDelay (getLatencySamples());
 
@@ -191,7 +193,8 @@ namespace velvox::dsp
         pulse.reset();
         resetAll (smash);
         resetAll (choir);
-        resetAll (smooth);
+        for (auto& m : smooth)
+            m.reset (false);   // a fresh start: nothing to fade in
         resetAll (ride);
         resetAll (delayDucker);
         resetAll (reverbDucker);
@@ -216,7 +219,8 @@ namespace velvox::dsp
             case ModuleId::reverb:  reverb[(size_t) k].reset(); reverbDucker[(size_t) k].reset(); break;
             case ModuleId::smash:   smash[(size_t) k].reset(); break;
             case ModuleId::choir:   choir[(size_t) k].reset(); break;
-            case ModuleId::smooth:  smooth[(size_t) k].reset(); break;
+            // joining mid-stream: silent until its delay line is filled, then a fade-in (no restart click)
+            case ModuleId::smooth:  smooth[(size_t) k].reset (! adoptRoutingImmediately); break;
             case ModuleId::ride:    ride[(size_t) k].reset(); break;
             case ModuleId::chop:    chop.reset(); break;
             case ModuleId::pulse:   pulse.reset(); break;
@@ -310,9 +314,7 @@ namespace velvox::dsp
 
         pitch.setSettings (s.pitch);
         chop.setSettings (s.chop);
-        chop.setTransport (s.hostBpm, s.hostPpq, s.hostPlaying);
         pulse.setSettings (s.pulse);
-        pulse.setTransport (s.hostBpm, s.hostPpq, s.hostPlaying);
         check.setEnabled (s.checkOn);
         delayIntoReverb.setTargetValue (juce::jlimit (0.0f, 1.0f, s.delayIntoReverb));
 
@@ -330,6 +332,35 @@ namespace velvox::dsp
             applyPendingStructure();
             adoptRoutingImmediately = false;
         }
+
+        // Tempo-locked modules after latent ones (SMOOTH, saturation, pitch) see the signal late; the
+        // host shifts the output back by the whole latency, so they follow the song position delayed
+        // by the latency in front of them and stay on the grid
+        const auto transportFor = [&] (ModuleId id)
+        {
+            if (! s.hostPlaying || ! (s.hostBpm > 20.0 && s.hostBpm < 999.0) || fs <= 0.0)
+                return s.hostPpq;
+            return std::max (0.0, s.hostPpq - latencyBefore (id) / fs * s.hostBpm / 60.0);
+        };
+        chop.setTransport (s.hostBpm, transportFor (ModuleId::chop), s.hostPlaying);
+        pulse.setTransport (s.hostBpm, transportFor (ModuleId::pulse), s.hostPlaying);
+    }
+
+    int VocalChain::latencyBefore (ModuleId id) const noexcept
+    {
+        int latency = 0;
+        for (const auto& slot : activeRouting)
+        {
+            if (slot.id == id)
+                return latency;
+            if (slot.id == ModuleId::sat)
+                latency += saturation[(size_t) slot.instance].getLatencySamples();
+            else if (slot.id == ModuleId::smooth)
+                latency += smooth[(size_t) slot.instance].getLatencySamples();
+            else if (slot.id == ModuleId::pitch && activePitchOn)
+                latency += pitch.getLatencySamples();
+        }
+        return latency;
     }
 
     void VocalChain::process (juce::AudioBuffer<float>& buffer, int numChannels, const ChainSettings& s,
@@ -788,10 +819,14 @@ namespace velvox::dsp
     {
         int latency = 0;
         for (const auto& slot : routing)
+        {
             if (slot.id == ModuleId::sat)
                 latency += saturation[(size_t) slot.instance].getLatencySamples();
             else if (slot.id == ModuleId::ride)   // lookahead, constant while in the chain
                 latency += ride[(size_t) slot.instance].getLatencySamples();
+            else if (slot.id == ModuleId::smooth)   // STFT: constant while in the chain (also when off)
+                latency += smooth[(size_t) slot.instance].getLatencySamples();
+        }
         if (pitchOn && routing.contains (ModuleId::pitch))
             latency += pitch.getLatencySamples();
         return latency;

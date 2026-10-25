@@ -448,7 +448,9 @@ public:
             // The same chain with every module (0.3 behaviour) sounds identical
             Harness full;
             full.proc.setStateInformation (v03.getData(), (int) v03.getSize());
-            full.proc.setRouting (Routing::fromString ("sat,eq,ride,comp,smash,deess,smooth,doubler,choir,pitch,delay:send,reverb:insert,chop,pulse,check"));
+            // (0.6: without the idle SMOOTH - it now delays by its constant STFT latency even when off, and the
+            // tempo-locked Stutter after it then gates a shifted signal; covered by "SMOOTH in the chain")
+            full.proc.setRouting (Routing::fromString ("v2,sat,eq,ride,comp,smash,deess,doubler,choir,pitch,delay:send,reverb:insert,chop,pulse,check"));
             const auto in = h.noise (0.2f, 1.0, 59);
             const double d = maxDiff (h.run (in), full.run (in), 0);
             logMessage ("pruned vs full 0.3 chain: max difference " + juce::String (d, 9));
@@ -478,21 +480,6 @@ public:
             expect (h.proc.getRouting() == Routing::legacyDefaults(), "format 1 preset -> default routing: " + h.proc.getRouting().toString());
         }
 
-        beginTest ("A/B slots include routing and repeated instances");
-        {
-            Harness h;
-            auto r = Routing::defaults();
-            r.insertAt (1, ModuleId::eq, 1);
-            h.proc.selectSlot (1);
-            h.proc.setRouting (r);
-            setId (h, "midGain_2", 5.0f);
-            h.proc.selectSlot (0);
-            expect (h.proc.getRouting() == Routing::defaults());
-            expectWithinAbsoluteError (getId (h, "midGain_2"), 0.0f, 0.01f);
-            h.proc.selectSlot (1);
-            expect (h.proc.getRouting() == r);
-            expectWithinAbsoluteError (getId (h, "midGain_2"), 5.0f, 0.01f);
-        }
     }
 };
 

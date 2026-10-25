@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DspUtilities.h"
+#include "DisplayRing.h"
 
 namespace velvox::dsp
 {
@@ -22,7 +23,9 @@ namespace velvox::dsp
     public:
         static constexpr int numSteps = 16;
         static constexpr double fallbackBpm = 120.0;
-        static constexpr double maxRepeatSeconds = 2.0;
+        // 0.6: 4 s (was 2 s) - the longest run (4 repeats of 1/8) fits down to 30 BPM;
+        // beyond that a repeat replays the oldest whole slice that still fits
+        static constexpr double maxRepeatSeconds = 4.0;
 
         struct Pattern { const char* name; const char* steps; };
         static const std::vector<Pattern>& patterns();
@@ -43,8 +46,24 @@ namespace velvox::dsp
         int getCurrentStep() const noexcept { return currentStep; }
         int getDisplayStep() const noexcept { return displayStep.load (std::memory_order_relaxed); }
 
+        // "Cuts on the waveform" feed (0.6): one frame per 2.5 ms of processed audio -
+        // the input peak (mono sum, before the chop), the lowest gate gain applied in the
+        // frame (0 = muted), the step and its type ('x' play, '.' mute, 'r' repeat).
+        // Lock-free (DisplayRing): readDisplay() from any thread, newest ~5 s.
+        static constexpr double displayFrameSeconds = 0.0025;
+        static constexpr int displayCapacity = 2048;
+        struct DisplayFrame { float peak; float gain; int step; char type; };
+        static std::uint64_t pack (const DisplayFrame& f) noexcept;
+        static DisplayFrame unpack (std::uint64_t word) noexcept;
+        int readDisplay (DisplayFrame* dest, int maxFrames) const noexcept;   // oldest first; returns the count
+        std::uint64_t displayFramesWritten() const noexcept { return display.written(); }
+
     private:
         char stepType (int step) const noexcept;
+
+        DisplayRing<displayCapacity> display;
+        int frameLength = 120, frameFill = 0;
+        float framePeak = 0.0f, frameGain = 1.0f;
 
         double fs = 48000.0;
         ChopSettings settings;

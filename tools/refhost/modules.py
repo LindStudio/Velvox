@@ -28,6 +28,8 @@ class Calib:
     param: str
     values: list
     probe: str          # see bench.PROBES
+    also: list = field(default_factory=list)        # further parameters that get the same value (e.g. every band's drive)
+    step: float = 0.0   # > 0: the bisection stays on this grid (plugins that reject other values)
 
 
 @dataclass
@@ -152,13 +154,22 @@ _add(Module(
 # ---------------------------------------------------------------------------------------------
 # Smooth vs soothe2, depth calibrated to the same removed energy
 # ---------------------------------------------------------------------------------------------
+_SMOOTH = {"smoothAmount": 75, "smoothSensitivity": 50, "smoothLow": 800, "smoothHigh": 12000,
+           "smoothAttack": 5, "smoothRelease": 80, "smoothMode": 0, "smoothOutput": 0, "smoothDelta": 0}
+_SOOTHE_DEPTH = Calib("depth", [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10], "delta_energy", step=0.1)
 _add(Module(
     key="smooth", title="Smooth",
     refs=[Ref("soothe2", "oeksound/soothe2_x64.vst3", params=[("mode", "soft"), ("mix", "100"), ("delta", "off")])],
-    cases=[Case("vocal", headliner={"smoothAmount": 75, "smoothSensitivity": 50, "smoothLow": 800, "smoothHigh": 12000,
-                                    "smoothAttack": 5, "smoothRelease": 80, "smoothMode": 0, "smoothOutput": 0, "smoothDelta": 0},
+    cases=[Case("vocal", headliner=_SMOOTH,
                 procedures=["resonance_vocal", "nulls", "cpu"],
-                calibrate={"soothe2": Calib("depth", [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10], "delta_energy")})],
+                calibrate={"soothe2": _SOOTHE_DEPTH}),
+           # more settings (0.6 smooth track): lighter, more selective, hard mode - each calibrated to equal removed energy
+           Case("light", headliner=dict(_SMOOTH, smoothAmount=35), procedures=["resonance_vocal"],
+                calibrate={"soothe2": _SOOTHE_DEPTH}),
+           Case("sharp", headliner=dict(_SMOOTH, smoothSensitivity=85), procedures=["resonance_vocal"],
+                calibrate={"soothe2": _SOOTHE_DEPTH}),
+           Case("hard", headliner=dict(_SMOOTH, smoothAmount=60, smoothMode=1), refs={"soothe2": [("mode", "hard")]},
+                procedures=["resonance_vocal"], calibrate={"soothe2": _SOOTHE_DEPTH})],
     # delta_db is the calibration match (soothe2 depth 0 already removes ~15 dB below the dry level on f7_row, so
     # Headliner runs at Amount 75 to act comparably); informative only.
     tolerances={"delta_db": ("info", 0.0), "pte_reduction_db": ("higher", 0.3), "ltas_reduction_db": ("higher", 0.5), "flatness_gain_db": ("higher", 0.2),
@@ -181,6 +192,20 @@ _add(Module(
              refs={"Saturn 2": [("Band 1 Style", "Warm Tube")]},
              procedures=["sat_tones"],
              calibrate={"Saturn 2": Calib("Band 1 Drive", [5, 10, 15, 20, 30, 40, 50, 65, 80, 100], "thd_1k")}),
+        # 0.6 multiband: Low / Mid / High at 250 Hz / 4 kHz, Tape in every band, the same drive everywhere
+        # (Saturn 2: 3 bands, 24 dB/oct crossovers; all band drives calibrated together on the 1 kHz THD = mid band)
+        Case("tape3band", headliner={"satDrive": 12, "satCharacter": 1, "satMix": 100, "satOutput": 0, "satMultiband": 1,
+                                     "satXoverLow": 250, "satXoverHigh": 4000,
+                                     "satLowDrive": 12, "satMidDrive": 12, "satHighDrive": 12,
+                                     "satLowChar": 1, "satMidChar": 1, "satHighChar": 1},
+             refs={"Saturn 2": [("Num Active Bands", "3"), ("Band 1 Crossover Frequency", "250"), ("Band 2 Crossover Frequency", "4000"),
+                                ("Band 1 Crossover Slope", "24 dB/oct"), ("Band 2 Crossover Slope", "24 dB/oct"),
+                                ("Band 1 Style", "Warm Tape"), ("Band 2 Style", "Warm Tape"), ("Band 3 Style", "Warm Tape"),
+                                ("Band 2 Mix", "100"), ("Band 3 Mix", "100"), ("Band 2 Dynamics", "0"), ("Band 3 Dynamics", "0"),
+                                ("Band 2 Feedback Amount", "0"), ("Band 3 Feedback Amount", "0")]},
+             procedures=["sat_tones", "vocal", "nulls", "cpu"],
+             calibrate={"Saturn 2": Calib("Band 2 Drive", [5, 10, 15, 20, 30, 40, 50, 65, 80, 100], "thd_1k",
+                                          also=["Band 1 Drive", "Band 3 Drive"])}),
     ],
     tolerances={"aliasing_db": ("lower", 3.0), "thd_1k_db": ("match", 1.0), "thd_1k_m24_db": ("info", 0.0),
                 "crest_reduction_db": ("info", 0.0), "st_loudness_std_lu": ("info", 0.0),
@@ -194,14 +219,19 @@ _add(Module(
     key="pitch", title="Pitch", mix_param="pitchMix",
     refs=[Ref("Graillon 3", "Auburn Sounds Graillon 3.vst3", params=_GRAILLON)],
     cases=[Case("up12", headliner={"pitchSemitones": 12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
-                refs={"Graillon 3": [("Pitch Shift", "12")]}, procedures=["pitch_tones", "pitch_vocal", "nulls", "cpu"],
+                refs={"Graillon 3": [("Pitch Shift", "12")]}, procedures=["pitch_tones", "pitch_vocal", "pitch_formant", "nulls", "cpu"],
                 info={"semitones": 12}),
            Case("down5", headliner={"pitchSemitones": -5, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
                 refs={"Graillon 3": [("Pitch Shift", "-5")]}, procedures=["pitch_tones", "pitch_vocal"],
-                info={"semitones": -5})],
+                info={"semitones": -5}),
+           Case("down12", headliner={"pitchSemitones": -12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
+                refs={"Graillon 3": [("Pitch Shift", "-12")]}, procedures=["pitch_tones", "pitch_vocal", "pitch_formant"],
+                info={"semitones": -12})],
     # Graillon tracks a pure sine 36 ct flat (its tracker wants a voice), so the tone tests use absolute limits.
+    # 0.6 (pitch track): formants within 1/3 octave (absolute), held-note roughness <= Graillon + 0.5 dB.
     tolerances={"pitch_err_cents": ("lower", 0.0, 2.0), "pitch_jitter_cents": ("lower", 0.0, 1.0), "spurious_db": ("lower", 0.0, -60.0),
                 "vocal_pitch_err_cents": ("lower", 1.0), "latency_ms": ("lower", 10.0),
+                "formant_shift_oct": ("lower", 0.0, 1.0 / 3.0), "sustain_roughness_db": ("lower", 0.5),
                 "cpu_pct": ("lower", 2.0)}))
 
 # ---------------------------------------------------------------------------------------------
@@ -247,7 +277,12 @@ _add(Module(
                                     "delayHighCut": 6000, "delayPingPong": 0, "delaySpread": 0, "delayDrive": 0, "delayDiffusion": 0,
                                     "delayMod": 0, "delayDuckAmount": 0},
                 procedures=["delay_ir", "dry_leak", "vocal_listen", "nulls", "cpu"],
-                info={"time_ms": 375, "feedback": 0.30})],
+                info={"time_ms": 375, "feedback": 0.30}),
+           # 0.6 characters for listening (drive 2x oversampled, modulation, ping-pong); timing must stay exact
+           Case("tape", headliner={"delaySync": 0, "delayTime": 375, "delayFeedback": 45, "delayMix": 100, "delayLowCut": 300,
+                                   "delayHighCut": 6000, "delayPingPong": 1, "delaySpread": 0, "delayDrive": 60, "delayDiffusion": 30,
+                                   "delayMod": 40, "delayDuckAmount": 0},
+                procedures=["vocal_listen", "cpu"])],
     tolerances={"echo_time_err_ms": ("lower", 0.5), "feedback_db_per_repeat": ("match", 1.0), "echo_smear_ms": ("lower", 1.0),
                 "inter_echo_floor_db": ("lower", 3.0), "dry_leak_db": ("lower", 0.0, -60.0), "cpu_pct": ("lower", 1.0)}))
 
@@ -314,13 +349,18 @@ _add(Module(
 _add(Module(
     key="chop", title="Stutter", refs=[],
     cases=[Case("gate", headliner={"chopPattern": 0, "chopRate": 1, "chopDepth": 100, "chopSmooth": 3},
-                procedures=["gate_tone", "nulls", "cpu"])],
+                procedures=["gate_tone", "vocal_listen", "nulls", "cpu"])],
     tolerances={"edge_splatter_db": ("lower", 0.0, -60.0), "gate_depth_db": ("lower", 0.0, -40.0), "cpu_pct": ("lower", 0.0, 1.0)}))
 
 _add(Module(
     key="pulse", title="Pulse", refs=[], mix_param="pulseMix",
     cases=[Case("default", headliner={"pulseRate": 2, "pulseDepth": 100, "pulseMix": 100},
-                procedures=["gate_tone", "nulls", "cpu"])],
+                procedures=["gate_tone", "vocal_listen", "nulls", "cpu"]),
+           # 0.6 pump shapes (pulseShape 1 = Classic, 4 = Gate), driven by the Amount macro
+           Case("classic", headliner={"pulseRate": 2, "pulseShape": 1, "pulseDepth": 60, "pulseAmount": 100, "pulseMix": 100},
+                procedures=["gate_tone", "vocal_listen", "cpu"]),
+           Case("gate16", headliner={"pulseRate": 4, "pulseShape": 4, "pulseDepth": 60, "pulseAmount": 100, "pulseMix": 100},
+                procedures=["gate_tone", "cpu"])],
     tolerances={"edge_splatter_db": ("lower", 0.0, -60.0), "gate_depth_db": ("lower", 0.0, -30.0), "cpu_pct": ("lower", 0.0, 1.0)}))
 
 _add(Module(

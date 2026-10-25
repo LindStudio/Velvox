@@ -23,6 +23,11 @@ namespace velvox::ui
         void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height, float sliderPos,
                                float rotaryStartAngle, float rotaryEndAngle, juce::Slider&) override;
 
+        // Horizontal fader (HSlider): slim track, lit in the accent up to the value (bipolar from 0)
+        void drawLinearSlider (juce::Graphics&, int x, int y, int width, int height, float sliderPos,
+                               float minSliderPos, float maxSliderPos, juce::Slider::SliderStyle, juce::Slider&) override;
+        int getSliderThumbRadius (juce::Slider&) override { return 7; }
+
         juce::Label* createSliderTextBox (juce::Slider&) override;
 
         void drawToggleButton (juce::Graphics&, juce::ToggleButton&, bool highlighted, bool down) override;
