@@ -237,6 +237,11 @@ if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Tests/SatPanelTests.cpp)
 endif()
 
+# Chain solo + scrolling tests (0.6.1)
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/ChainSoloTests.cpp)
+endif()
+
 # Time module panels (0.6: Delay echo map, Pulse like Kickstart, Stutter cuts on the waveform)
 target_sources(Velvox PRIVATE Source/UI/TimePanels.cpp)
 if(VELVOX_BUILD_TESTS)
