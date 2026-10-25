@@ -1031,7 +1031,11 @@ namespace velvox::ui
         soloButton.setDescription (de ("Nur dieses Band hören. Klick: an / aus, gedrückt halten: solange gehalten."));
         soloButton.onChange = [this] (bool on)
         {
-            proc.getChain().getEqualizer (getInstance()).setAuditionBand (on ? selectedBand : -1);
+            auto& eq = proc.getChain().getEqualizer (getInstance());
+            if (on)
+                eq.setAuditionBand (selectedBand);
+            else if (eq.getAuditionBand() == selectedBand)
+                eq.setAuditionBand (-1);
         };
         addChildComponent (soloButton);
 

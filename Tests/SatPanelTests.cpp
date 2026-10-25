@@ -146,14 +146,21 @@ public:
 private:
     void testPanel()
     {
-        beginTest ("Panel: main row = character tiles, Multiband, Link; big Drive in the visual; Mehr: Mix, Output, crossovers");
+        beginTest ("Panel: main row = character tiles, Multiband, Link, Mix (0.6.1); big Drive in the visual; Mehr: Output, crossovers");
         {
             Harness h;
             auto panel = satPanel (h);
             const auto& main = panel->getMainControls();
-            expectEquals ((int) main.size(), 3);
-            if (main.size() == 3)
+            expectEquals ((int) main.size(), 4);
+            if (main.size() == 4)
             {
+                auto* mix = dynamic_cast<ui::Knob*> (main[3]);
+                expect (mix != nullptr && mix->getParamId() == juce::String (pid::satMix), "Mix in the main row");
+                expect (mix != nullptr && mix->getLabel() == "MIX", "labelled MIX");
+                expect (mix != nullptr && panel->getMainRowArea().contains (mix->getBounds().getCentre()) && mix->getWidth() >= 60,
+                        "placed in the row " + (mix != nullptr ? mix->getBounds().toString() : juce::String()));
+                for (int i = 0; i < 3 && mix != nullptr; ++i)
+                    expect (! main[(size_t) i]->getBounds().intersects (mix->getBounds()), "no overlap with main control " + juce::String (i));
                 auto tiles = findAll<ui::Segments> (*main[0], true);
                 expect (tiles.size() == 1 && tiles[0]->hasTilePainter() && tiles[0]->getNumSegments() == 4, "four character tiles");
                 auto* mb = dynamic_cast<ui::Toggle*> (main[1]);
@@ -171,8 +178,9 @@ private:
             for (auto* c : panel->getMoreControls())
                 if (auto* k = dynamic_cast<ui::Knob*> (c))
                     more.add (k->getParamId());
-            for (auto* id : { pid::satMix, pid::satOutput, pid::satXoverLow, pid::satXoverHigh })
+            for (auto* id : { pid::satOutput, pid::satXoverLow, pid::satXoverHigh })
                 expect (more.contains (id), juce::String ("Mehr has ") + id);
+            expect (! more.contains (pid::satMix), "Mix is no longer (only) in Mehr: one control per parameter");
         }
 
         beginTest ("Panel: multiband shows the selected band's tiles and Drive; the strip selects; automation follows");

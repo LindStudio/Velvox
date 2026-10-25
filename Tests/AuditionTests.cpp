@@ -585,6 +585,63 @@ public:
             panel.reset();
             expectEquals (h.proc.getChain().getEqualizer (0).getAuditionBand(), -1);
         }
+
+        satTests();
+    }
+
+    void satTests()
+    {
+        beginTest ("Saturation strip: a headphone per band in multiband only; one solo at a time; multiband off ends it");
+        {
+            Harness h;
+            h.set (pid::satOn, 1.0f);
+            auto& sat = h.proc.getChain().getSaturation (0);
+            auto view = std::make_unique<ui::SatView> (h.proc, 0);
+            view->setBounds (0, 0, 760, 300);
+            auto live = std::make_unique<ui::LiveData>();
+            live->settings = h.proc.readEffectiveSettings();
+            view->update (*live);
+            for (int b = 0; b < 3; ++b)
+                expect (! view->getSoloButton (b).isVisible(), "single band: no headphones");
+
+            h.set (pid::satMultiband, 1.0f);
+            live->settings = h.proc.readEffectiveSettings();
+            view->update (*live);
+            for (int b = 0; b < 3; ++b)
+            {
+                auto& s = view->getSoloButton (b);
+                expect (s.isVisible(), "multiband: headphone " + juce::String (b));
+                expect (view->getBandBounds (b).contains (s.getBounds().toFloat().getCentre()), "inside its band");
+                expect (! s.getBounds().intersects (view->getBandSwitch (b).getBounds()), "beside the band's on switch");
+            }
+
+            const auto values = allValues (h);
+            h.proc.getUndo().clear();
+            clickAt (view->getSoloButton (0), centreOf (view->getSoloButton (0)));
+            expectEquals (sat.getSoloBand(), 0);
+            clickAt (view->getSoloButton (2), centreOf (view->getSoloButton (2)));
+            expectEquals (sat.getSoloBand(), 2, "the other band takes over");
+            view->update (*live);
+            expect (view->getSoloButton (2).isActive() && ! view->getSoloButton (0).isActive(), "buttons show it");
+            expect (allValues (h) == values, "no parameter");
+            expectEquals (h.proc.getUndo().getNumSteps(), 0, "no undo step");
+            clickAt (view->getSoloButton (2), centreOf (view->getSoloButton (2)));
+            expectEquals (sat.getSoloBand(), -1, "second click ends it");
+
+            clickAt (view->getSoloButton (1), centreOf (view->getSoloButton (1)));
+            h.set (pid::satMultiband, 0.0f);
+            live->settings = h.proc.readEffectiveSettings();
+            view->update (*live);
+            expectEquals (sat.getSoloBand(), -1, "multiband off: solo ends");
+
+            h.set (pid::satMultiband, 1.0f);
+            live->settings = h.proc.readEffectiveSettings();
+            view->update (*live);
+            clickAt (view->getSoloButton (1), centreOf (view->getSoloButton (1)));
+            expectEquals (sat.getSoloBand(), 1);
+            view.reset();
+            expectEquals (sat.getSoloBand(), -1, "closing the panel ends it");
+        }
     }
 };
 
