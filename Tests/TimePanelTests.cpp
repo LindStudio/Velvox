@@ -86,6 +86,9 @@ public:
     {
         delayMap();
         delayPanel();
+        pulsePanel();
+        pulseTiles();
+        pulseCurve();
     }
 
 private:
@@ -340,6 +343,184 @@ private:
             panel->refresh();
             auto* knob = findMain<ui::Knob> (*panel, pid::delayTime);
             expect (knob != nullptr && knob->getDialSize() >= 50, "back: large ms knob");
+        }
+    }
+
+    void pulsePanel()
+    {
+        beginTest ("Pulse panel: big Amount in the visual, shape tiles, rate buttons in the main row");
+        {
+            Harness h;
+            auto panel = ui::createDetailPanel (h.proc, (int) ModuleId::pulse);
+            panel->setBounds (VelvoxAudioProcessorEditor::panelArea().withZeroOrigin());
+            const auto visual = panel->getVisualArea();
+
+            auto* amount = findIn<ui::Knob> (*panel, pid::pulseAmount);
+            expect (amount != nullptr && amount->getDialSize() >= 100, "one big Amount control");
+            expect (amount != nullptr && visual.contains (amount->getBounds()), "Amount sits in the visual");
+
+            ui::PulseShapeTiles* tiles = nullptr;
+            for (auto* c : panel->getChildren())
+                if (auto* t = dynamic_cast<ui::PulseShapeTiles*> (c))
+                    tiles = t;
+            expect (tiles != nullptr, "shape tiles");
+            if (tiles != nullptr)
+            {
+                expect (visual.contains (tiles->getBounds()), "tiles in the visual");
+                expectEquals (tiles->getNumTiles(), 5, "Custom + 4 shapes");
+                expectEquals (tiles->getProperties()["paramId"].toString(), juce::String (pid::pulseShape), "bound to pulseShape");
+                for (int i = 0; i < tiles->getNumTiles(); ++i)
+                    expect (tiles->getTileBounds (i).getWidth() >= 70 && tiles->getTileBounds (i).getHeight() >= 40, "tiles large enough");
+            }
+
+            auto* rate = findMain<ui::Segments> (*panel, pid::pulseRate);
+            expect (rate != nullptr, "rate buttons in the main row");
+            if (rate != nullptr)
+            {
+                const auto& names = dsp::PulseModule::rateNames();
+                juce::StringArray shown;
+                for (int i = 0; i < rate->getNumSegments(); ++i)
+                    shown.add (names[rate->getChoiceForSegment (i)]);
+                expectEquals (shown.joinIntoString (" "), juce::String ("1/1 1/2 1/4 1/8 1/16"));
+                expect (rate->getOverflowSegment() >= 0, "triplets / dotted behind the overflow");
+            }
+            expectEquals ((int) panel->getMainControls().size(), 3);
+            for (auto* id : { pid::pulseMix, pid::pulseSmooth })
+                expect (findMain<ui::Knob> (*panel, id) != nullptr, juce::String ("main: ") + id);
+            for (auto* id : { pid::pulseDepth, pid::pulseAttack, pid::pulseRelease, pid::pulseTension, pid::pulseBpm })
+                expect (findIn<ui::Knob> (panel->getMoreDrawer(), id) != nullptr, juce::String ("Mehr: ") + id);
+            expect (findIn<ui::Segments> (panel->getMoreDrawer(), pid::pulseInterp) != nullptr, "Mehr: interpolation");
+        }
+    }
+
+    void pulseTiles()
+    {
+        beginTest ("Pulse tiles: click = one undo step, double-click / Alt+click = Custom, wheel = previous / next");
+        {
+            Harness h;
+            ui::PulseShapeTiles tiles (h.proc);
+            tiles.setBounds (0, 0, 640, 64);
+            const auto refresh = [&] { tiles.refresh (h.proc.readEffectiveSettings().pulse); };
+            refresh();
+            expectEquals (tiles.getSelectedTile(), 0, "old states: Custom");
+
+            const int before = h.proc.getUndo().getNumSteps();
+            const auto at = tiles.getTileBounds (2).getCentre().toFloat();
+            tiles.mouseDown (mouseAt (tiles, at, at, false));
+            tiles.mouseUp (mouseAt (tiles, at, at, false));
+            expectEquals ((int) h.get (pid::pulseShape), 2, "click chooses");
+            expectEquals (h.proc.getUndo().getNumSteps(), before + 1, "one undo step");
+            refresh();
+            expectEquals (tiles.getSelectedTile(), 2);
+
+            tiles.mouseDoubleClick (mouseAt (tiles, at, at, false, {}, 2));
+            expectEquals ((int) h.get (pid::pulseShape), 0, "double-click: Custom");
+
+            h.set (pid::pulseShape, 3.0f);
+            const auto at4 = tiles.getTileBounds (4).getCentre().toFloat();
+            tiles.mouseDown (mouseAt (tiles, at4, at4, false, alt));
+            expectEquals ((int) h.get (pid::pulseShape), 0, "Alt+click: Custom");
+
+            h.set (pid::pulseShape, 2.0f);
+            refresh();
+            tiles.mouseWheelMove (mouseAt (tiles, at, at, false), wheel (-0.25f));
+            expectEquals ((int) h.get (pid::pulseShape), 3, "wheel down = next");
+            tiles.mouseWheelMove (mouseAt (tiles, at, at, false), wheel (0.25f));
+            expectEquals ((int) h.get (pid::pulseShape), 2, "wheel up = previous");
+        }
+
+        beginTest ("Pulse tiles: switching shapes never touches the custom points");
+        {
+            Harness h;
+            h.set (pid::pulseX[2], 0.33f);
+            h.set (pid::pulseY[2], 0.4f);
+            ui::PulseShapeTiles tiles (h.proc);
+            tiles.setBounds (0, 0, 640, 64);
+            tiles.chooseTile (1);
+            tiles.chooseTile (4);
+            tiles.chooseTile (0);
+            expectEquals ((int) h.get (pid::pulseShape), 0);
+            expectWithinAbsoluteError (h.get (pid::pulseX[2]), 0.33f, 1.0e-4f);
+            expectWithinAbsoluteError (h.get (pid::pulseY[2]), 0.4f, 1.0e-4f);
+        }
+    }
+
+    void pulseCurve()
+    {
+        beginTest ("Pulse curve: the drawn gain is PulseModule::gainAt (shape, amount, depth)");
+        {
+            Harness h;
+            ui::PulseCurveView view (h.proc);
+            view.setBounds (0, 0, 720, 220);
+            for (int shape = 0; shape < 5; ++shape)
+                for (float amount : { 0.0f, 25.0f, 50.0f, 100.0f })
+                {
+                    h.set (pid::pulseShape, (float) shape);
+                    h.set (pid::pulseAmount, amount);
+                    const auto live = liveFor (h);
+                    view.update (live);
+                    float worst = 0.0f;
+                    for (int i = 0; i <= 50; ++i)
+                    {
+                        const float ph = (float) i / 50.0f * 0.999f;
+                        worst = std::max (worst, std::abs (view.drawnGainAt (ph) - dsp::PulseModule::gainAt (live.settings.pulse, ph)));
+                    }
+                    expectLessThan (worst, 0.01f, "shape " + juce::String (shape) + " amount " + juce::String (amount));
+                    expect (view.yForGain (1.0f) < view.yForGain (0.0f), "gain 1 at the top");
+                }
+        }
+
+        beginTest ("Pulse curve: Custom shows the 6 points as handles, a curated shape hides them");
+        {
+            Harness h;
+            ui::PulseCurveView view (h.proc);
+            view.setBounds (0, 0, 720, 220);
+            h.set (pid::pulseShape, 0.0f);
+            view.update (liveFor (h));
+            expect (view.showsPoints(), "Custom: points");
+            const auto plot = view.getPlotArea();
+            for (int i = 0; i < 6; ++i)
+            {
+                const auto pt = view.pointPosition (i);
+                expectWithinAbsoluteError (pt.x, plot.getX() + plot.getWidth() * h.get (pid::pulseX[i]), 0.5f);
+                expectWithinAbsoluteError (pt.y, plot.getBottom() - plot.getHeight() * h.get (pid::pulseY[i]), 0.5f);
+            }
+
+            h.set (pid::pulseShape, 2.0f);
+            view.update (liveFor (h));
+            expect (! view.showsPoints(), "curated: no points");
+            const int before = h.proc.getUndo().getNumSteps();
+            const float x2 = h.get (pid::pulseX[2]);
+            drag (view, view.pointPosition (2), view.pointPosition (2).translated (40.0f, -30.0f));
+            expectEquals (h.proc.getUndo().getNumSteps(), before, "nothing to drag");
+            expectWithinAbsoluteError (h.get (pid::pulseX[2]), x2, 1.0e-6f);
+        }
+
+        beginTest ("Pulse curve: dragging a point is one undo step, Shift = fine, double-click = default point");
+        {
+            Harness h;
+            ui::PulseCurveView view (h.proc);
+            view.setBounds (0, 0, 720, 220);
+            view.update (liveFor (h));
+            const auto plot = view.getPlotArea();
+            const float x0 = h.get (pid::pulseX[2]), y0 = h.get (pid::pulseY[2]);
+            const int before = h.proc.getUndo().getNumSteps();
+            const auto from = view.pointPosition (2);
+            drag (view, from, from.translated (0.1f * plot.getWidth(), -0.1f * plot.getHeight()));
+            expectWithinAbsoluteError (h.get (pid::pulseX[2]), x0 + 0.1f, 0.005f);
+            expectWithinAbsoluteError (h.get (pid::pulseY[2]), y0 + 0.1f, 0.005f);
+            expectEquals (h.proc.getUndo().getNumSteps(), before + 1, "one step for x and y");
+
+            view.update (liveFor (h));
+            const auto from2 = view.pointPosition (2);
+            drag (view, from2, from2.translated (0.1f * plot.getWidth(), 0.0f), shift);
+            expectWithinAbsoluteError (h.get (pid::pulseX[2]), x0 + 0.11f, 0.005f, "Shift: a tenth");
+
+            view.update (liveFor (h));
+            const auto at = view.pointPosition (2);
+            view.mouseDoubleClick (mouseAt (view, at, at, false, {}, 2));
+            expectWithinAbsoluteError (h.get (pid::pulseX[2]), 0.28f, 1.0e-4f, "default x");
+            expectWithinAbsoluteError (h.get (pid::pulseY[2]), 0.7f, 1.0e-4f, "default y");
         }
     }
 };

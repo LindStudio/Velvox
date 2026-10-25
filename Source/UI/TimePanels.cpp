@@ -424,6 +424,466 @@ namespace velvox::ui
     }
 
     //==========================================================================
+    // PULSE: gain curve with the live playhead
+
+    namespace
+    {
+        bool sameCurve (const dsp::PulseSettings& a, const dsp::PulseSettings& b) noexcept
+        {
+            return a.shape == b.shape && a.amount == b.amount && a.depth == b.depth && a.interpolation == b.interpolation
+                   && a.tension == b.tension && a.x == b.x && a.y == b.y;
+        }
+
+        juce::String percent (float v) { return juce::String (juce::roundToInt (v * 100.0f)) + " %"; }
+    }
+
+    PulseCurveView::PulseCurveView (VelvoxAudioProcessor& p) : proc (p)
+    {
+        settings.shape = -1;   // first update builds the paths
+        info = std::make_unique<HoverInfo> (*this,
+                                            [this] { return hovered >= 0 ? "Punkt " + juce::String (hovered + 1) : juce::String ("Pulse"); },
+                                            [this] { return hoverText; },
+                                            [this] { return hovered >= 0 ? de ("Ziehen: Position im Takt und Lautstärke.")
+                                                                         : de ("Die Lautstärke über einen Zyklus."); });
+    }
+
+    PulseCurveView::~PulseCurveView()
+    {
+        for (auto* prm : gestureParams)
+            prm->endChangeGesture();
+    }
+
+    void PulseCurveView::resized()
+    {
+        auto r = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
+        r.removeFromTop (18.0f);
+        meter = r.removeFromRight (8.0f);
+        r.removeFromRight (18.0f);
+        plot = r.reduced (8.0f, 8.0f);
+        pathsValid = false;
+        rebuildPaths();
+    }
+
+    float PulseCurveView::yForGain (float g) const noexcept
+    {
+        return plot.getBottom() - plot.getHeight() * juce::jlimit (0.0f, 1.0f, g);
+    }
+
+    float PulseCurveView::drawnGainAt (float phase) const noexcept
+    {
+        const float pos = juce::jlimit (0.0f, 1.0f, phase) * (float) tableSize;
+        const int i = std::min (tableSize - 1, (int) pos);
+        const float f = pos - (float) i;
+        return gainTable[(size_t) i] + (gainTable[(size_t) i + 1] - gainTable[(size_t) i]) * f;
+    }
+
+    juce::Point<float> PulseCurveView::pointPosition (int i) const noexcept
+    {
+        i = juce::jlimit (0, 5, i);
+        return { plot.getX() + plot.getWidth() * settings.x[(size_t) i], yForGain (settings.y[(size_t) i]) };
+    }
+
+    void PulseCurveView::rebuildPaths()
+    {
+        if (settings.shape < 0)
+            return;
+        curvePath.clear();
+        appliedPath.clear();
+        appliedFill.clear();
+        for (int i = 0; i <= tableSize; ++i)
+        {
+            const float ph = (float) i / (float) tableSize;
+            const float evalPhase = std::min (ph, 0.99999f);
+            gainTable[(size_t) i] = dsp::PulseModule::gainAt (settings, evalPhase);
+            const float x = plot.getX() + plot.getWidth() * ph;
+            const float c = yForGain (dsp::PulseModule::evaluateShape (settings, evalPhase));
+            const float a = yForGain (gainTable[(size_t) i]);
+            if (i == 0)
+            {
+                curvePath.startNewSubPath (x, c);
+                appliedPath.startNewSubPath (x, a);
+                appliedFill.startNewSubPath (x, plot.getBottom());
+            }
+            else
+            {
+                curvePath.lineTo (x, c);
+                appliedPath.lineTo (x, a);
+            }
+            appliedFill.lineTo (x, a);
+        }
+        appliedFill.lineTo (plot.getRight(), plot.getBottom());
+        appliedFill.closeSubPath();
+        pathsValid = true;
+    }
+
+    void PulseCurveView::update (const LiveData& d)
+    {
+        const auto& s = d.settings.pulse;
+        if (! pathsValid || ! sameCurve (s, settings))
+        {
+            settings = s;
+            rebuildPaths();
+            repaint();
+        }
+        settings = s;
+        const auto& m = proc.getChain().getPulse();
+        phase = s.enabled ? m.displayPhase.load() : -1.0f;
+        gain.target = s.enabled ? m.displayGain.load() : 1.0f;
+        gain.tick (0.5f);
+        const float newBpm = m.displayBpm.load();
+        const bool newHost = m.displayHostTempo.load();
+        if (readoutText.isEmpty() || newBpm != bpm || newHost != hostTempo || s.rate != shownRate)
+        {
+            shownRate = s.rate;
+            bpm = newBpm;
+            hostTempo = newHost;
+            readoutText = dsp::PulseModule::rateNames()[s.rate] + "   " + juce::String (bpm, 1) + " BPM" + (hostTempo ? "" : " manuell");
+        }
+        if (hovered < 0)
+            hoverText = dsp::PulseModule::shapeNames()[juce::jlimit (0, 4, s.shape)] + "   Amount " + percent (s.amount);
+        if (liveFrame (frameCount) || dragged >= 0)
+            repaint();
+    }
+
+    int PulseCurveView::pointAt (juce::Point<float> p) const noexcept
+    {
+        if (! showsPoints())
+            return -1;
+        int best = -1;
+        float bestD = 12.0f;
+        for (int i = 0; i < 6; ++i)
+        {
+            const float d = pointPosition (i).getDistanceFrom (p);
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+    }
+
+    void PulseCurveView::mouseMove (const juce::MouseEvent& e)
+    {
+        const int h = pointAt (e.position);
+        if (h != hovered)
+        {
+            hovered = h;
+            if (h >= 0)
+                hoverText = percent (settings.x[(size_t) h]) + "   " + percent (settings.y[(size_t) h]);
+            repaint();
+        }
+        setMouseCursor (h >= 0 ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+    }
+
+    void PulseCurveView::mouseExit (const juce::MouseEvent&)
+    {
+        if (hovered >= 0)
+        {
+            hovered = -1;
+            repaint();
+        }
+    }
+
+    void PulseCurveView::resetPoint (int i)
+    {
+        proc.getUndo().perform ("Punkt " + juce::String (i + 1) + de (" zurücksetzen"), [this, i]
+        {
+            for (auto* id : { pid::pulseX[i], pid::pulseY[i] })
+                if (auto* prm = proc.getState().getParameter (id))
+                    gestures::resetToDefault (*prm);
+        });
+    }
+
+    void PulseCurveView::mouseDown (const juce::MouseEvent& e)
+    {
+        const int p = pointAt (e.position);
+        if (e.mods.isPopupMenu())
+        {
+            juce::PopupMenu menu;
+            juce::Component::SafePointer<PulseCurveView> safe (this);
+            if (p >= 0)
+                menu.addItem ("Punkt " + juce::String (p + 1) + de (" zurücksetzen"), [safe, p] { if (safe != nullptr) safe->resetPoint (p); });
+            if (auto* host = findParentComponentOfClass<gestures::PanelMenuHost>())
+            {
+                if (p >= 0)
+                    menu.addSeparator();
+                host->addPanelItems (menu);
+            }
+            if (menu.getNumItems() > 0)
+                menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (200));
+            return;
+        }
+        if (p < 0)
+            return;
+        if (e.mods.isAltDown())
+        {
+            resetPoint (p);
+            return;
+        }
+        dragged = p;
+        dragValue = { settings.x[(size_t) p], settings.y[(size_t) p] };
+        lastPos = e.position;
+        for (auto* id : { pid::pulseX[p], pid::pulseY[p] })
+            if (auto* prm = proc.getState().getParameter (id))
+            {
+                prm->beginChangeGesture();
+                gestureParams.push_back (prm);
+            }
+    }
+
+    void PulseCurveView::mouseDrag (const juce::MouseEvent& e)
+    {
+        if (dragged < 0)
+            return;
+        const float scale = (e.mods.isShiftDown() || e.mods.isCtrlDown() || e.mods.isCommandDown()) ? 0.1f : 1.0f;
+        dragValue.x += (e.position.x - lastPos.x) / std::max (1.0f, plot.getWidth()) * scale;
+        dragValue.y -= (e.position.y - lastPos.y) / std::max (1.0f, plot.getHeight()) * scale;
+        dragValue = { juce::jlimit (0.0f, 1.0f, dragValue.x), juce::jlimit (0.0f, 1.0f, dragValue.y) };
+        lastPos = e.position;
+        setReal (proc.getState().getParameter (pid::pulseX[dragged]), dragValue.x);
+        setReal (proc.getState().getParameter (pid::pulseY[dragged]), dragValue.y);
+        hoverText = percent (dragValue.x) + "   " + percent (dragValue.y);
+    }
+
+    void PulseCurveView::mouseUp (const juce::MouseEvent&)
+    {
+        for (auto* prm : gestureParams)
+            prm->endChangeGesture();
+        gestureParams.clear();
+        dragged = -1;
+    }
+
+    void PulseCurveView::mouseDoubleClick (const juce::MouseEvent& e)
+    {
+        if (const int p = pointAt (e.position); p >= 0)
+        {
+            mouseUp (e);
+            resetPoint (p);
+        }
+    }
+
+    void PulseCurveView::paint (juce::Graphics& g)
+    {
+        const auto hue = moduleColour (ModuleId::pulse);
+        const float alpha = settings.enabled ? 1.0f : 0.45f;
+
+        g.setFont (monoFont (11.5f));
+        g.setColour (colours::text.withAlpha (0.4f + 0.6f * alpha));
+        g.drawText (readoutText, getLocalBounds().toFloat().reduced (16.0f, 12.0f).withHeight (14.0f), juce::Justification::topRight, false);
+
+        // Grid: beats (bright) and sixteenths of the cycle, quarter levels
+        for (int i = 1; i < 16; ++i)
+        {
+            g.setColour (colours::accent.withAlpha (i % 4 == 0 ? 0.06f : 0.025f));
+            g.fillRect (juce::Rectangle<float> (plot.getX() + plot.getWidth() * (float) i / 16.0f, plot.getY(), 1.0f, plot.getHeight()));
+        }
+        for (int i = 0; i <= 4; ++i)
+        {
+            g.setColour (colours::accent.withAlpha (i == 0 || i == 4 ? 0.06f : 0.03f));
+            g.fillRect (juce::Rectangle<float> (plot.getX(), plot.getY() + plot.getHeight() * (float) i / 4.0f, plot.getWidth(), 1.0f));
+        }
+
+        // What is processed: the gain (filled), and the shape itself as a fine line
+        g.setGradientFill (juce::ColourGradient (hue.withAlpha (0.26f * alpha), 0.0f, plot.getY(), hue.withAlpha (0.03f * alpha), 0.0f, plot.getBottom(), false));
+        g.fillPath (appliedFill);
+        g.setColour (colours::textMuted.withAlpha (showsPoints() ? 0.55f : 0.3f));
+        g.strokePath (curvePath, juce::PathStrokeType (1.0f));
+        g.setColour (hue.withAlpha (0.25f * alpha));
+        g.strokePath (appliedPath, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (hue.interpolatedWith (juce::Colours::white, 0.25f).withAlpha (alpha));
+        g.strokePath (appliedPath, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        // Playhead and the gain applied right now
+        if (phase >= 0.0f)
+        {
+            const float x = plot.getX() + plot.getWidth() * phase;
+            const float y = yForGain (gain.current);
+            g.setGradientFill (juce::ColourGradient (hue.withAlpha (0.0f), x - 70.0f, 0.0f, hue.withAlpha (0.12f), x, 0.0f, false));
+            g.fillRect (juce::Rectangle<float> (x - 70.0f, plot.getY(), 70.0f, plot.getHeight()).getIntersection (plot));
+            g.setColour (juce::Colours::white.withAlpha (0.5f));
+            g.fillRect (juce::Rectangle<float> (x, plot.getY(), 1.0f, plot.getHeight()));
+            drawGlow (g, { x, y }, 14.0f, 0.7f, hue);
+            g.setColour (juce::Colours::white);
+            g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre ({ x, y }));
+        }
+
+        // Custom: the six points
+        if (showsPoints())
+            for (int i = 0; i < 6; ++i)
+            {
+                const auto pt = pointPosition (i);
+                const bool active = i == hovered || i == dragged;
+                if (active)
+                    drawGlow (g, pt, 16.0f, 0.5f, hue);
+                g.setColour (colours::panelInset);
+                g.fillEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre (pt));
+                g.setColour ((active ? juce::Colours::white : hue.interpolatedWith (juce::Colours::white, 0.3f)).withAlpha (alpha));
+                g.drawEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre (pt), 1.6f);
+            }
+
+        // Gain meter
+        g.setColour (juce::Colours::black.withAlpha (0.5f));
+        g.fillRoundedRectangle (meter.withTrimmedTop (8.0f).withTrimmedBottom (8.0f), 3.0f);
+        auto fill = meter.withTrimmedTop (8.0f).withTrimmedBottom (8.0f);
+        fill = fill.withTop (fill.getBottom() - fill.getHeight() * juce::jlimit (0.0f, 1.0f, gain.current));
+        g.setColour (hue.withAlpha (alpha));
+        g.fillRoundedRectangle (fill, 3.0f);
+    }
+
+    //==========================================================================
+    // PULSE: shape tiles
+
+    PulseShapeTiles::PulseShapeTiles (VelvoxAudioProcessor& p) : proc (p)
+    {
+        parameter = proc.getState().getParameter (pid::pulseShape);
+        getProperties().set ("paramId", juce::String (pid::pulseShape));
+        custom = proc.readEffectiveSettings().pulse;
+        selected = parameter != nullptr ? juce::roundToInt (parameter->convertFrom0to1 (parameter->getValue())) : 0;
+        juce::String description;
+        if (const auto* spec = findParameterSpec (pid::pulseShape))
+            description = spec->description;
+        info = std::make_unique<HoverInfo> (*this, [] { return juce::String ("Kurve"); },
+                                            [this] { return dsp::PulseModule::shapeNames()[juce::jlimit (0, numTiles - 1, hovered >= 0 ? hovered : selected)]; },
+                                            [description] { return description; });
+    }
+
+    PulseShapeTiles::~PulseShapeTiles() = default;
+
+    void PulseShapeTiles::resized()
+    {
+        auto r = getLocalBounds();
+        const int gap = 8;
+        const int w = (r.getWidth() - gap * (numTiles - 1)) / numTiles;
+        for (int i = 0; i < numTiles; ++i)
+        {
+            tiles[(size_t) i] = r.removeFromLeft (w);
+            r.removeFromLeft (gap);
+            rebuildPath (i);
+        }
+    }
+
+    void PulseShapeTiles::rebuildPath (int i)
+    {
+        auto s = custom;
+        s.shape = i;
+        const auto area = tiles[(size_t) i].toFloat().reduced (12.0f, 8.0f).withTrimmedBottom (14.0f);
+        auto& path = paths[(size_t) i];
+        path.clear();
+        constexpr int n = 64;
+        for (int k = 0; k <= n; ++k)
+        {
+            const float ph = std::min ((float) k / (float) n, 0.99999f);
+            const float x = area.getX() + area.getWidth() * (float) k / (float) n;
+            const float y = area.getBottom() - area.getHeight() * dsp::PulseModule::evaluateShape (s, ph);
+            if (k == 0)
+                path.startNewSubPath (x, y);
+            else
+                path.lineTo (x, y);
+        }
+    }
+
+    void PulseShapeTiles::refresh (const dsp::PulseSettings& s)
+    {
+        const int sel = juce::jlimit (0, numTiles - 1, s.shape);
+        const bool customChanged = s.x != custom.x || s.y != custom.y || s.interpolation != custom.interpolation || s.tension != custom.tension;
+        if (customChanged)
+        {
+            custom = s;
+            rebuildPath (0);
+        }
+        if (sel != selected || customChanged)
+        {
+            selected = sel;
+            repaint();
+        }
+    }
+
+    int PulseShapeTiles::tileAt (juce::Point<int> p) const noexcept
+    {
+        for (int i = 0; i < numTiles; ++i)
+            if (tiles[(size_t) i].contains (p))
+                return i;
+        return -1;
+    }
+
+    void PulseShapeTiles::chooseTile (int i)
+    {
+        if (parameter == nullptr || i < 0 || i >= numTiles)
+            return;
+        gestures::setReal (*parameter, (float) i);
+        selected = i;
+        repaint();
+    }
+
+    void PulseShapeTiles::mouseMove (const juce::MouseEvent& e)
+    {
+        const int h = tileAt (e.getPosition());
+        if (h != hovered)
+        {
+            hovered = h;
+            repaint();
+        }
+    }
+
+    void PulseShapeTiles::mouseExit (const juce::MouseEvent&)
+    {
+        hovered = -1;
+        repaint();
+    }
+
+    void PulseShapeTiles::mouseDown (const juce::MouseEvent& e)
+    {
+        if (parameter == nullptr)
+            return;
+        if (e.mods.isPopupMenu())
+        {
+            gestures::showMenu (*this, *parameter, nullptr);
+            return;
+        }
+        if (e.mods.isAltDown())
+        {
+            gestures::resetToDefault (*parameter);
+            return;
+        }
+        chooseTile (tileAt (e.getPosition()));
+    }
+
+    void PulseShapeTiles::mouseDoubleClick (const juce::MouseEvent&)
+    {
+        if (parameter != nullptr)
+            gestures::resetToDefault (*parameter);
+    }
+
+    void PulseShapeTiles::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
+    {
+        const float d = std::abs (w.deltaX) > std::abs (w.deltaY) ? -w.deltaX : w.deltaY;
+        if (parameter != nullptr && std::abs (d) > 1.0e-4f)
+            gestures::stepBy (*parameter, (d > 0.0f) != w.isReversed ? -1 : 1);   // up = previous (to the left)
+    }
+
+    void PulseShapeTiles::paint (juce::Graphics& g)
+    {
+        static const juce::StringArray upper = []
+        {
+            juce::StringArray a;
+            for (const auto& n : dsp::PulseModule::shapeNames())
+                a.add (n.toUpperCase());
+            return a;
+        }();
+        for (int i = 0; i < numTiles; ++i)
+        {
+            const auto t = tiles[(size_t) i].toFloat();
+            const bool sel = i == selected, hot = i == hovered;
+            g.setColour (sel ? accent.withAlpha (0.16f) : colours::control);
+            g.fillRoundedRectangle (t, 7.0f);
+            g.setColour (sel ? accent.withAlpha (0.9f) : (hot ? colours::border.brighter (0.6f) : colours::border));
+            g.drawRoundedRectangle (t.reduced (0.5f), 7.0f, sel ? 1.2f : 1.0f);
+            g.setColour (sel ? accent.interpolatedWith (juce::Colours::white, 0.35f) : colours::textMuted.withAlpha (hot ? 1.0f : 0.7f));
+            g.strokePath (paths[(size_t) i], juce::PathStrokeType (sel ? 1.8f : 1.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setFont (semiBold (9.0f, 0.12f));
+            g.setColour (sel ? colours::textStrong : colours::knobName);
+            g.drawText (upper[i], t.withTrimmedTop (t.getHeight() - 17.0f), juce::Justification::centred, false);
+        }
+    }
+
+    //==========================================================================
     namespace
     {
         // DELAY: echo map + note value or ms (by Sync), Sync, Feedback, Mix, Ping-Pong; the rest in Mehr
@@ -494,6 +954,61 @@ namespace velvox::ui
             bool shownSynced = false;
             GainReductionMeter gr { colours::accent, "Duck" };
         };
+
+        // PULSE ("like Kickstart"): the big Amount and the shape tiles in the visual next to the curve;
+        // Rate, Smooth, Mix in the main row; depth, timing, the Custom curve's interpolation / tension and
+        // the manual tempo in Mehr
+        class PulsePanel final : public DetailPanel
+        {
+        public:
+            explicit PulsePanel (VelvoxAudioProcessor& p)
+                : DetailPanel (p, "Pulse", help::shortDescription ((int) ModuleId::pulse), pid::pulseOn)
+            {
+                amount = &knob (pid::pulseAmount, "Amount");
+                tiles = &own (std::make_unique<PulseShapeTiles> (p));
+                auto& rate = segments (pid::pulseRate, { "1/1", "1/2", "1/4", "1/8", "1/16" }, true);
+                setCaption (rate, "Rate");
+                auto& smooth = knob (pid::pulseSmooth, "Smooth");
+                auto& mix = knob (pid::pulseMix, "Mix");
+                knob (pid::pulseDepth, "Depth");
+                knob (pid::pulseAttack, "Attack");
+                knob (pid::pulseRelease, "Release");
+                knob (pid::pulseTension, "Tension");
+                segments (pid::pulseInterp);
+                bpm = &knob (pid::pulseBpm, "Manual BPM");
+                setMainControls ({ &rate, &smooth, &mix });
+                placeInVisual ({ amount, tiles });
+                amount->setDialSize (112);
+                tiles->setAccent (moduleColour (ModuleId::pulse));
+            }
+
+            void refresh() override
+            {
+                DetailPanel::refresh();
+                tiles->refresh (live != nullptr ? live->settings.pulse : proc.readEffectiveSettings().pulse);
+                // The manual tempo only matters when the host sends none
+                const bool host = proc.getChain().getPulse().displayHostTempo.load();
+                bpm->setAlpha (host ? 0.4f : (apvts.getRawParameterValue (pid::pulseOn)->load() > 0.5f ? 1.0f : 0.55f));
+            }
+
+        private:
+            void layoutVisual (juce::Rectangle<int> area) override
+            {
+                // Amount column on the left, the tiles under the curve
+                auto r = area.reduced (10);
+                const int column = std::min (180, r.getWidth() / 4);
+                amount->setBounds (r.removeFromLeft (column).withSizeKeepingCentre (column, std::min (r.getHeight(), 176)));
+                r.removeFromLeft (14);
+                // The curve view keeps a 24 px margin around its plot: shift it so plot and tiles line up
+                tiles->setBounds (r.removeFromBottom (std::min (64, r.getHeight() / 3)).withTrimmedRight (6));
+                if (auto* v = getVisual())
+                    v->setBounds (juce::Rectangle<int>::leftTopRightBottom (r.getX() - 24, area.getY() + 1, area.getRight() - 1, r.getBottom() + 4));
+            }
+
+            Knob* amount = nullptr;
+            Knob* bpm = nullptr;
+            PulseShapeTiles* tiles = nullptr;
+        };
     }
 
     //==========================================================================
@@ -502,6 +1017,7 @@ namespace velvox::ui
         switch (id)
         {
             case ModuleId::delay: return std::make_unique<EchoMapView> (p, instance);
+            case ModuleId::pulse: return std::make_unique<PulseCurveView> (p);
             default: break;
         }
         return nullptr;
@@ -512,6 +1028,7 @@ namespace velvox::ui
         switch (id)
         {
             case ModuleId::delay: return std::make_unique<DelayPanel> (p);
+            case ModuleId::pulse: return std::make_unique<PulsePanel> (p);
             default: break;
         }
         return nullptr;

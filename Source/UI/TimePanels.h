@@ -121,6 +121,9 @@ namespace velvox::ui
         juce::Rectangle<float> getPlotArea() const noexcept { return plot; }
         float yForGain (float gain) const noexcept;
         const dsp::PulseSettings& getSettings() const noexcept { return settings; }
+        // The gain the drawing shows at a phase (cached PulseModule::gainAt, interpolated)
+        float drawnGainAt (float phase) const noexcept;
+        static constexpr int tableSize = 512;
 
     private:
         void rebuildPaths();
@@ -133,9 +136,13 @@ namespace velvox::ui
         bool hostTempo = false;
         Smoothed gain { 1.0f, 1.0f };
         juce::Rectangle<float> plot, meter;
-        juce::Path curvePath, appliedPath, appliedFill, appliedDashed;
-        int hovered = -1, dragged = -1, frameCount = 0;
+        juce::Path curvePath, appliedPath, appliedFill;
+        std::array<float, tableSize + 1> gainTable {};
+        bool pathsValid = false;
+        int hovered = -1, dragged = -1, frameCount = 0, shownRate = -1;
         juce::Point<float> dragValue, lastPos;
+        std::vector<juce::RangedAudioParameter*> gestureParams;
+        juce::String hoverText;
         juce::String readoutText;
         std::unique_ptr<HoverInfo> info;
     };

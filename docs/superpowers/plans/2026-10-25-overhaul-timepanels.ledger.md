@@ -28,3 +28,22 @@ fail as expected.)
   waits in Mehr (small). Note segments 1/4, 1/8D, 1/8, 1/16 + "…" (all 14 values). — Spec "note value (sync) / ms". 
   — Cost: with Mehr open and Sync on, "Ping-Pong" is clipped by the frame's main-row shrink (frame layout, shell-owned).
 - Ruling: snapshot overlay "set:<id>=<value>,…[,more]" in Tests/TestMain.cpp to render panels with modules on. — Needed for screenshots.
+
+Task 2: complete (PulseCurveView, PulseShapeTiles, PulsePanel; old PulseView / PulsePanel removed; "Headliner time panels" 341 checks
+green; panel frame: "pulse: reaches pulseShape / pulseAmount" fixed – it failed for pulseShape until the reach detection below, only the
+13 sat reach failures (satpanel track) remain. First run red: the drawn-gain check failed at 100 % amount (0.012 > 0.01, table 240 →
+512 points).)
+
+- Ruling: Pulse layout = big Amount (dial 112) in the visual's left column, the gain curve beside it, the 5 tiles (Custom, Classic,
+  Punch, Swell, Gate) in a row under the curve; main row = Rate (1/1, 1/2, 1/4, 1/8, 1/16 + "…" for triplets/dotted), Smooth, Mix;
+  Mehr = Depth, Attack, Release, Tension, Interpolation, Manual BPM. — Spec: "one big Amount, 4 tiles, rate buttons"; the frame needs
+  3 – 5 main controls, so Smooth (the anti-click control) and Mix (Kickstart has one) came up from the spec's Mehr list; the big
+  Amount sits in the visual like SMASH. — Cost if wrong: two knobs to move back to Mehr.
+- Ruling: Custom reveals the 6-point editor in the visual itself (points drawn and draggable only while Custom is selected), not in
+  Mehr. — The curve is the visual; a second curve in the drawer would duplicate it. Curated shapes ignore points, so dragging them
+  would do nothing audible. — Cost if wrong: none.
+- Ruling: the curve view draws what is processed (PulseModule::gainAt: shape, amount, depth – filled), plus the raw shape as a
+  fine grey line on which the Custom points sit; playhead at displayPhase with a dot at the applied gain (displayGain).
+- Ruling: PanelFrameTests' reach detection also accepts a control's "paramId" component property (PulseShapeTiles sets it). —
+  The tiles are a graph control, not a Knob/Segments/Toggle/Choice; the property names the edited parameter. Nothing excluded,
+  the tile behaviour itself is pinned in TimePanelTests. — Cost if wrong: a control could claim a parameter it does not edit (review).

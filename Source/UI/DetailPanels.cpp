@@ -961,49 +961,6 @@ namespace velvox::ui
             juce::TextButton* monoButton = nullptr;
         };
 
-        //======================================================================
-        // PULSE: Depth, Rate, Curve; shape, timing and manual tempo in Mehr
-        class PulsePanel final : public DetailPanel
-        {
-        public:
-            explicit PulsePanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Pulse", help::shortDescription ((int) ModuleId::pulse), pid::pulseOn)
-            {
-                auto& rate = segments (pid::pulseRate, pulseRateLabels (p), true);
-                auto& interp = segments (pid::pulseInterp);
-                auto& depth = knob (pid::pulseDepth, "Depth");
-                knob (pid::pulseTension, "Shape");
-                knob (pid::pulseSmooth, "Smooth");
-                knob (pid::pulseAttack, "Attack");
-                knob (pid::pulseRelease, "Release");
-                bpm = &knob (pid::pulseBpm, "Manual BPM");
-                knob (pid::pulseMix, "Mix");
-                setMainControls ({ &depth, &rate, &interp });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                // The manual tempo only matters when the host sends none
-                const bool host = proc.getChain().getPulse().displayHostTempo.load();
-                bpm->setAlpha (host ? 0.4f : (apvts.getRawParameterValue (pid::pulseOn)->load() > 0.5f ? 1.0f : 0.55f));
-            }
-
-        private:
-            // The design's five rates, mapped onto the parameter's names where they exist
-            static juce::StringArray pulseRateLabels (VelvoxAudioProcessor& p)
-            {
-                juce::StringArray out;
-                if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p.getState().getParameter (pid::pulseRate)))
-                    for (auto* name : { "1/2", "1/4", "1/8", "1/16", "1/32" })
-                        if (c->choices.contains (name))
-                            out.add (name);
-                return out;
-            }
-
-            Knob* bpm = nullptr;
-        };
-
         // VOCAL SMASH: the big SMASH control in the visual next to the GR meter; Mix, Tone, Output
         class SmashPanel final : public DetailPanel
         {
@@ -1453,7 +1410,7 @@ namespace velvox::ui
                 case ModuleId::chop:    panel = std::make_unique<ChopPanel> (p); break;
                 case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
                 case ModuleId::reverb:  panel = std::make_unique<ReverbPanel> (p); break;
-                case ModuleId::pulse:   panel = std::make_unique<PulsePanel> (p); break;
+                case ModuleId::pulse:   panel = createTimeModulePanel (p, ModuleId::pulse); break;
                 case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;
                 case ModuleId::choir:   panel = std::make_unique<ChoirPanel> (p); break;
                 case ModuleId::smooth:  panel = std::make_unique<SmoothPanel> (p); break;
