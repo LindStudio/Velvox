@@ -992,11 +992,15 @@ namespace velvox::ui
         private:
             void layoutVisual (juce::Rectangle<int> area) override
             {
-                auto r = area.reduced (10).removeFromRight (150);
-                inValue.setBounds (r.removeFromTop (18));
-                procValue.setBounds (r.removeFromTop (18));
-                matchValue.setBounds (r.removeFromTop (18));
-                correlation.setBounds (area.reduced (10).removeFromBottom (16).removeFromRight (150));
+                // Read-outs in their own column right of the picture
+                auto r = area.reduced (10).removeFromRight (140);
+                if (auto* v = getVisual())
+                    v->setBounds (area.withTrimmedRight (156).reduced (1));
+                r.removeFromTop (14);
+                inValue.setBounds (r.removeFromTop (20));
+                procValue.setBounds (r.removeFromTop (20));
+                matchValue.setBounds (r.removeFromTop (20));
+                correlation.setBounds (r.removeFromBottom (18));
             }
 
             CorrelationView correlation;
@@ -1075,9 +1079,13 @@ namespace velvox::ui
         private:
             void layoutVisual (juce::Rectangle<int> area) override
             {
+                // Meter at the edge, the big SMASH control in its own column, the picture gets the rest
                 placeMeter (gr, area);
                 auto big = area.reduced (8).withTrimmedRight (44);
-                amount->setBounds (big.removeFromRight (std::min (190, big.getWidth() / 2)).withSizeKeepingCentre (180, std::min (big.getHeight(), 170)));
+                const int column = std::min (200, big.getWidth() / 3);
+                amount->setBounds (big.removeFromRight (column).withSizeKeepingCentre (column, std::min (big.getHeight(), 180)));
+                if (auto* v = getVisual())
+                    v->setBounds (area.withTrimmedRight (52 + column).reduced (1));
             }
 
             Knob* amount = nullptr;

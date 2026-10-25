@@ -134,3 +134,15 @@ Merge 2: feature/automix with the EQ track (16 bands, LegacyBridge) and refhost 
   one knob drag several steps. Test "Gestures started by code while a gesture is open belong to it" (written after the fix).
 - Ruling: PanelFrameTests treat eqBand{1..16}* and eqLegacyResponse as owned by the coming EQ panel (panels track); the old EQ
   panel keeps editing the legacy bands, which reach the same filters through the bridge.
+
+Task 10: complete (OUTPUT read-outs and the SMASH control get their own columns beside the picture; --snapshot overlays "more"
+and "details"; screenshots in C:\Users\jakob\dev\velvox-wt\shell-shots\: simple-mode.png, advanced-compressor.png,
+advanced-reverb-mehr.png, advanced-vocal-smash.png, advanced-output.png).
+Final: full suite 23467 checks passed, 0 failed (after merging feature/automix with mixlaw + EQ + refhost).
+
+Deferred / for other tracks:
+- EQ panel with 16 user bands (panels/eq track); the current EQ panel edits the legacy bands through the bridge.
+- Per-module visuals and graph-handle gestures (spec 2.6 graph handles, 5.x designs) — later panel tracks build on DetailPanel.
+- Vocal Check tiles + "Anwenden" as one step: use proc.getUndo().perform ("Anwenden", ...) / beginTransaction.
+- EQ DSP: switching hpfSlope while playing steps the filter (~0.16 on a 0.3 sine) — eq track.
+- ParameterLayout tooltip texts for delay/reverb/doubler mix still describe the 0.5 law (the UI overrides them).
