@@ -59,14 +59,18 @@ namespace velvox::eqbands
     void clearLegacyResponse (juce::AudioProcessorValueTreeState& apvts, int instance);
 
     // ---- Bridge: 0.5 fixed-band parameters -> role bands --------------------------------------
-    // While a ScopedBridgeSuspend exists (state loading, presets, snapshots, the automatic mix) the
-    // bridge does nothing. Message thread only.
+    // While a ScopedBridgeSuspend exists for a plugin instance's APVTS (state loading, presets,
+    // snapshots, the automatic mix) that instance's bridge does nothing; other instances in the same
+    // process are not affected. The bridge itself only acts on the message thread; the suspend may
+    // be taken on any thread (a host restoring a state), so the per-instance depth is locked.
     struct ScopedBridgeSuspend
     {
-        ScopedBridgeSuspend();
+        explicit ScopedBridgeSuspend (const juce::AudioProcessorValueTreeState& apvts);
         ~ScopedBridgeSuspend();
-        static bool isActive() noexcept;
+        static bool isActive (const juce::AudioProcessorValueTreeState& apvts);
         JUCE_DECLARE_NON_COPYABLE (ScopedBridgeSuspend)
+    private:
+        const juce::AudioProcessorValueTreeState& state;
     };
 
     // Owned by the processor. A change of a hidden 0.5 fixed-band parameter on the message thread

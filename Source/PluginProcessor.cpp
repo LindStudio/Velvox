@@ -542,7 +542,7 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
         return;
 
     auto tree = juce::ValueTree::fromXml (*xml);
-    eqbands::ScopedBridgeSuspend noEqBridge;   // values are restored as they were saved
+    eqbands::ScopedBridgeSuspend noEqBridge (apvts);   // values are restored as they were saved
 
     if (const auto ab = tree.getChildWithName (abTreeType); ab.isValid())
         tree.removeChild (ab, nullptr);

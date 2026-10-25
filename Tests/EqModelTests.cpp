@@ -262,7 +262,7 @@ public:
             a.set ("eqBand7Type", (float) dsp::EqBandType::notch);
             a.set ("eqBand7Freq", 3150.0f);
             {
-                eqbands::ScopedBridgeSuspend noBridge;
+                eqbands::ScopedBridgeSuspend noBridge (a.proc.getState());
                 a.set (pid::hpfFreq, 300.0f);   // a stale fixed-band value must not come back as a band
             }
             juce::MemoryBlock block;
@@ -430,6 +430,21 @@ public:
             h.set (dsp::instanceParamId (pid::highGain, 1).toRawUTF8(), 3.0f);   // instance 2
             expect (h.proc.readSettings().extra[0].eq.findRole (EqRole::air) >= 0);
             expectEquals (h.proc.readSettings().eq.findRole (EqRole::air), -1);
+        }
+
+        beginTest ("The bridge suspend is per plugin instance (two processors)");
+        {
+            Harness a, b;
+            {
+                eqbands::ScopedBridgeSuspend loadingA (a.proc.getState());   // e.g. A restores its state
+                expect (eqbands::ScopedBridgeSuspend::isActive (a.proc.getState()));
+                expect (! eqbands::ScopedBridgeSuspend::isActive (b.proc.getState()), "B is not suspended by A");
+                b.set (pid::lowGain, 4.0f);   // meanwhile the user edits B
+                a.set (pid::lowGain, 4.0f);
+            }
+            expect (b.proc.readSettings().eq.findRole (EqRole::warmth) >= 0, "B's bridge still works");
+            expectEquals (a.proc.readSettings().eq.findRole (EqRole::warmth), -1, "A's bridge was suspended");
+            expect (! eqbands::ScopedBridgeSuspend::isActive (a.proc.getState()), "released");
         }
     }
 };

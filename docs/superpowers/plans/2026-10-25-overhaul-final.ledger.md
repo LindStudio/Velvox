@@ -52,3 +52,12 @@ Test (CompareTests): "An edit while Vorher is shown ends the compare and keeps t
   Nachher state with Vorher values; rebasing the step onto the Nachher state makes undo land exactly where the user was before
   pressing Vorher, and every older step was recorded on that side. Cost if wrong: after such an edit the auto-mix result is
   only reachable through undo (one step), not through the Nachher button.
+
+Task 5: complete (bridge suspend per instance). `eqbands::ScopedBridgeSuspend (apvts)` / `isActive (apvts)`: depth per APVTS in
+a mutex-guarded registry (the key is erased at depth 0, so a later instance at the same address starts clean); LegacyBridge
+checks the message thread first, then its own APVTS. Call sites: setStateInformation, ParameterSnapshot::applyTo,
+AutoMixController::applyResult, the bridge's own no-recursion guard, EqModelTests. Test (EqModelTests / "Velvox EQ role
+bands"): "The bridge suspend is per plugin instance (two processors)" (failed first with the process-wide counter: B was
+suspended by A and its edit did not reach the role band).
+- Ruling: a mutex, not an atomic map — the suspend can be taken by setStateInformation on a host thread; it is never used on
+  the audio thread (parameterChanged returns before isActive off the message thread).

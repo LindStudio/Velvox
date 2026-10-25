@@ -1,6 +1,7 @@
 #include "EqBands.h"
 #include "ParameterLayout.h"
 #include "../DSP/Instances.h"
+#include <mutex>
 
 namespace velvox::eqbands
 {
@@ -46,7 +47,18 @@ namespace velvox::eqbands
             return s;
         }
 
-        std::atomic<int> suspendDepth { 0 };
+        // Suspend depth per plugin instance (keyed by its APVTS); never touched by the audio thread
+        struct SuspendRegistry
+        {
+            std::mutex lock;
+            std::map<const juce::AudioProcessorValueTreeState*, int> depth;
+        };
+
+        SuspendRegistry& suspendRegistry()
+        {
+            static SuspendRegistry registry;
+            return registry;
+        }
     }
 
     //==========================================================================
@@ -225,9 +237,27 @@ namespace velvox::eqbands
     }
 
     //==========================================================================
-    ScopedBridgeSuspend::ScopedBridgeSuspend()  { suspendDepth.fetch_add (1); }
-    ScopedBridgeSuspend::~ScopedBridgeSuspend() { suspendDepth.fetch_sub (1); }
-    bool ScopedBridgeSuspend::isActive() noexcept { return suspendDepth.load() > 0; }
+    ScopedBridgeSuspend::ScopedBridgeSuspend (const juce::AudioProcessorValueTreeState& s) : state (s)
+    {
+        auto& r = suspendRegistry();
+        const std::lock_guard<std::mutex> g (r.lock);
+        ++r.depth[&state];
+    }
+
+    ScopedBridgeSuspend::~ScopedBridgeSuspend()
+    {
+        auto& r = suspendRegistry();
+        const std::lock_guard<std::mutex> g (r.lock);
+        if (auto it = r.depth.find (&state); it != r.depth.end() && --it->second <= 0)
+            r.depth.erase (it);   // no stale key for a later instance at the same address
+    }
+
+    bool ScopedBridgeSuspend::isActive (const juce::AudioProcessorValueTreeState& s)
+    {
+        auto& r = suspendRegistry();
+        const std::lock_guard<std::mutex> g (r.lock);
+        return r.depth.count (&s) > 0;
+    }
 
     LegacyBridge::LegacyBridge (juce::AudioProcessorValueTreeState& state) : apvts (state)
     {
@@ -253,7 +283,7 @@ namespace velvox::eqbands
         const auto last = lastValues.find (parameterID);
         if (last == lastValues.end() || last->second.exchange (newValue) == newValue)
             return;
-        if (ScopedBridgeSuspend::isActive() || ! juce::MessageManager::existsAndIsCurrentThread())
+        if (! juce::MessageManager::existsAndIsCurrentThread() || ScopedBridgeSuspend::isActive (apvts))
             return;
 
         const auto [base, instance] = dsp::splitInstanceParamId (parameterID);
@@ -279,7 +309,7 @@ namespace velvox::eqbands
                 return;
         }
 
-        ScopedBridgeSuspend noRecursion;
+        ScopedBridgeSuspend noRecursion (apvts);
         writeBand (access, instance, band, desired);
     }
 }

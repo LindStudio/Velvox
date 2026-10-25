@@ -93,7 +93,7 @@ namespace velvox
 
     void ParameterSnapshot::applyTo (juce::AudioProcessorValueTreeState& apvts, bool resetMissingToDefault) const
     {
-        eqbands::ScopedBridgeSuspend noEqBridge;   // the snapshot sets the bands itself
+        eqbands::ScopedBridgeSuspend noEqBridge (apvts);   // the snapshot sets the bands itself
         const auto values = withEqBands (this->values, apvts, resetMissingToDefault);
 
         for (auto* p : apvts.processor.getParameters())
