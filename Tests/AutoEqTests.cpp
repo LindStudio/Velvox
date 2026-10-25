@@ -6,6 +6,8 @@
 #include "SyntheticVocal.h"
 #include "AutoMix/AutoMixEngine.h"
 #include "AutoMix/AutoEq.h"
+#include "Parameters/EqBands.h"
+#include "Parameters/ParameterLayout.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -35,6 +37,121 @@ public:
         analysisTests();
         modelTests();
         moveTests();
+        plannerTests();
+    }
+
+    static std::map<juce::String, float> defaults()
+    {
+        std::map<juce::String, float> v;
+        for (auto& s : getParameterSpecs())
+            v[s.id] = s.defaultValue;
+        return v;
+    }
+
+    static void putBand (std::map<juce::String, float>& v, int band, const dsp::EqBand& b)
+    {
+        auto access = eqbands::accessFor (v);
+        eqbands::writeBand (access, 0, band, b);
+    }
+
+    // Auto-mix bands of EQ 1 in a plan (over `current`)
+    static std::vector<dsp::EqBand> autoBands (const MixPlan& plan, const std::map<juce::String, float>& current)
+    {
+        auto values = plan.values;
+        const auto access = eqbands::accessFor (values, &current);
+        std::vector<dsp::EqBand> out;
+        for (int i = 0; i < dsp::maxEqBands; ++i)
+        {
+            const auto b = eqbands::readBand (access, 0, i);
+            if (b.on && autoeq::ownedRole (b.bandRole()) && (b.isCut() || std::abs (b.gain) > 1.0e-3f))
+                out.push_back (b);
+        }
+        return out;
+    }
+
+    void plannerTests()
+    {
+        const auto planOf = [] (const VocalSpec& s, const std::map<juce::String, float>& current)
+        {
+            return AutoMixPlanner::plan (VocalProfiler::analyse (makeVocal (s)), current);
+        };
+        VocalSpec res; res.seconds = 14.0; res.resonanceHz = 1800.0f; res.resonanceDb = 16.0f;
+
+        beginTest ("Planner: a resonance gets a notch in an auto-mix role band, explained, without SMOOTH");
+        {
+            const auto cur = defaults();
+            const auto plan = planOf (res, cur);
+            const auto notch = roleBand (plan, cur, dsp::EqRole::autoNotch1);
+            expect (notch.has_value() && notch->on, "notch band");
+            if (notch.has_value())
+            {
+                expect (near (notch->freq, 1800.0f, 1.0f / 6.0f) && notch->gain <= -3.0f && notch->q >= 10.0f, "narrow cut at the resonance");
+                expect (autoeq::withinLimits (*notch));
+            }
+            expect (std::any_of (plan.decisions.begin(), plan.decisions.end(), [] (const Decision& d)
+                                 { return d.module == dsp::ModuleId::eq && d.title.startsWith ("Resonanz"); }), "the overview names it");
+            expect (! plan.on (pid::smoothOn), "SMOOTH is not switched on for a resonance the EQ already notches (not harsh)");
+            for (auto& b : autoBands (plan, cur))
+                expect (autoeq::withinLimits (b), "limits: " + autoeq::titleOf (b.bandRole(), b));
+            expect ((int) autoBands (plan, cur).size() <= autoeq::maxBands, "at most 6 auto-mix bands");
+        }
+
+        beginTest ("Planner: a re-run clears the notches of an earlier run");
+        {
+            auto cur = defaults();
+            for (auto& [id, v] : planOf (res, defaults()).values)
+                cur[id] = v;
+            VocalSpec clean; clean.seconds = 14.0;
+            const auto plan = planOf (clean, cur);
+            const auto notch = roleBand (plan, cur, dsp::EqRole::autoNotch1);
+            expect (! notch.has_value() || ! notch->on || std::abs (notch->gain) < 1.0e-3f, "old notch switched off");
+        }
+
+        beginTest ("Planner: Vocal Check and user bands are kept and counted, never written");
+        {
+            // Vocal Check already cut the resonance (presence role bell)
+            auto cur = defaults();
+            dsp::EqBand check = band (dsp::EqBandType::bell, 1800.0f, -8.0f, 6.0f);
+            check.role = (int) dsp::EqRole::presence;
+            putBand (cur, 0, check);
+            dsp::EqBand user = band (dsp::EqBandType::bell, 600.0f, 2.0f, 1.0f);
+            putBand (cur, 1, user);   // role none
+            const auto plan = planOf (res, cur);
+            for (int b : { 0, 1 })
+                for (auto* f : { pid::eqband::on, pid::eqband::type, pid::eqband::freq, pid::eqband::gain, pid::eqband::q, pid::eqband::role })
+                    expect (plan.values.count (eqbands::bandParamId (0, b, f)) == 0, "kept band " + juce::String (b) + " not written: " + f);
+            expect (! roleBand (plan, cur, dsp::EqRole::autoNotch1).has_value() || ! roleBand (plan, cur, dsp::EqRole::autoNotch1)->on,
+                    "no second notch on the Vocal Check cut");
+
+            // All 16 slots are user bands: nothing is written, the plan stays valid
+            auto full = defaults();
+            for (int b = 0; b < dsp::maxEqBands; ++b)
+                putBand (full, b, band (dsp::EqBandType::bell, 200.0f * (float) (b + 1), 0.5f, 1.0f));
+            VocalSpec dark; dark.seconds = 14.0; dark.tiltDb = -5.0f; dark.f0 = 120.0f;
+            const auto pf = planOf (dark, full);
+            for (int b = 0; b < dsp::maxEqBands; ++b)
+                expect (pf.values.count (eqbands::bandParamId (0, b, pid::eqband::gain)) == 0, "user band untouched");
+            expect (pf.routing.isValid());
+        }
+
+        beginTest ("Planner: tone moves stay within the limits on every kind of take");
+        {
+            std::vector<VocalSpec> takes;
+            { VocalSpec s; s.seconds = 14.0; takes.push_back (s); }
+            { VocalSpec s; s.seconds = 14.0; s.tiltDb = -5.0f; s.f0 = 120.0f; takes.push_back (s); }
+            { VocalSpec s; s.seconds = 14.0; s.tiltDb = 4.0f; s.sibilance = 1.6f; s.f0 = 300.0f; takes.push_back (s); }
+            { VocalSpec s = res; s.tiltDb = -3.0f; takes.push_back (s); }
+            { VocalSpec s; s.seconds = 6.0; s.resonanceHz = 900.0f; s.resonanceDb = 18.0f; takes.push_back (s); }
+            const auto cur = defaults();
+            for (auto& s : takes)
+            {
+                const auto plan = planOf (s, cur);
+                const auto bands = autoBands (plan, cur);
+                expect ((int) bands.size() <= autoeq::maxBands, "at most 6 auto-mix bands: " + juce::String ((int) bands.size()));
+                for (auto& b : bands)
+                    expect (autoeq::withinLimits (b), "limits: " + autoeq::titleOf (b.bandRole(), b));
+            }
+        }
     }
 
     static dsp::EqBand band (dsp::EqBandType t, float f, float g, float q)

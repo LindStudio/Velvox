@@ -398,7 +398,8 @@ public:
             VocalSpec bright; bright.tiltDb = 4.0f; bright.seconds = 14.0;
             const auto pd = planFor (dark), pb = planFor (bright);
             expect (airGain (pd) > 1.0f, "dark voice gets more highs");
-            expectEquals (airGain (pb), 0.0f, "bright voice gets no extra highs");
+            // 0.6.1: a very bright take gets a broad shelf cut (at most -4 dB), never a lift
+            expect (airGain (pb) <= 0.0f && airGain (pb) >= -4.0f, "bright voice gets no extra highs: " + juce::String (airGain (pb), 1));
 
             VocalSpec sib; sib.sibilance = 1.6f; sib.seconds = 14.0;
             VocalSpec soft; soft.sibilance = 0.05f; soft.seconds = 14.0;
@@ -426,7 +427,14 @@ public:
             expect (airGain (pn) <= 2.0f, "high boost limited with noise");
 
             VocalSpec res; res.resonanceHz = 3000.0f; res.resonanceDb = 16.0f; res.seconds = 14.0;
-            expect (planFor (res).on (pid::smoothOn), "upper resonance -> SMOOTH");
+            // 0.6.1: a sustained resonance gets a narrow EQ cut; SMOOTH only when it is not notched
+            {
+                const auto pres = planFor (res);
+                const auto notch = roleBand (pres, {}, dsp::EqRole::autoNotch1);
+                const bool notched = notch.has_value() && notch->on && notch->gain < 0.0f && std::abs (std::log2 (notch->freq / 3000.0f)) < 0.17f;
+                expect (notched || pres.on (pid::smoothOn), "upper resonance -> narrow EQ cut (or SMOOTH)");
+                expect (notched, "the sustained 3 kHz resonance is notched");
+            }
 
             VocalSpec shortOne; shortOne.seconds = 6.0;
             const auto ps = planFor (shortOne);

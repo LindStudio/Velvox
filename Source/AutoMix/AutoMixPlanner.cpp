@@ -3,6 +3,7 @@
 #include "../Parameters/SettingsReader.h"
 #include "../Parameters/RoutingMigration.h"
 #include "../Parameters/EqBands.h"
+#include "AutoEq.h"
 
 namespace velvox::automix
 {
@@ -229,89 +230,65 @@ namespace velvox::automix
             decide (M::eq, de ("Low Cut ") + hz (fc) + (rumble ? de (", 24 dB/Okt.") : de (", 12 dB/Okt.")), reason, measured);
         }
 
-        // Low band: body
-        float lowFreq = 180.0f, lowGain = 0.0f;
-        if (p.enoughMaterial && p.bodyDb > -3.0f && ! p.hasIssue ("mud"))
+        // 0.6.1 (spec item 7): narrow notches on sustained resonances and broad tonal moves
+        // towards the target curve (AutoEq), in auto-mix role bands of EQ 1. Bands the auto-mix
+        // does not own (user bands, Vocal Check's presence / mud) stay as they are and count in
+        // the model: a resonance Vocal Check already cut is not cut twice.
+        std::vector<autoeq::Move> eqMoves;
         {
-            const float g = -clamp (1.5f + 0.4f * (p.bodyDb + 3.0f), 1.5f, 3.0f);
-            lowFreq = 200.0f;
-            lowGain = g;
-            decide (M::eq, de ("Tiefen ") + db (g) + de (" (Shelf 200 Hz)"),
-                    de ("Viel Grundton-Energie (100-300 Hz: ") + db (p.bodyDb) + de (") - wirkt im Club-Mix schnell dröhnend."), true);
-        }
-        else if (p.enoughMaterial && p.bodyDb < -16.0f && ! noisy && p.pitchValid && p.f0LowHz < 200.0f)
-        {
-            const float g = clamp (1.0f + 0.15f * (-16.0f - p.bodyDb), 1.0f, 2.0f);
-            lowFreq = 170.0f;
-            lowGain = g;
-            decide (M::eq, de ("Wärme ") + db (g) + de (" (Shelf 170 Hz)"),
-                    de ("Wenig Körper (100-300 Hz: ") + db (p.bodyDb) + de (") - eine kleine Anhebung gibt Wärme."), true);
-        }
-
-        // Mid bell: one clear problem at a time - a low resonance or the low-mid build-up
-        setRoleBand (plan, current, 0, dsp::EqRole::warmth, eqBand (dsp::EqBandType::lowShelf, lowFreq, lowGain, 0.7071f), lowGain != 0.0f);
-
-        float midFreq = 1500.0f, midGain = 0.0f, midQ = 1.0f;
-        const Resonance* lowRes = nullptr;
-        for (auto& r : p.resonances)
-            if (r.hz >= 250.0f && r.hz < 1200.0f && r.strong && p.pitchSpreadSemitones > 3.0f)
+            auto values = plan.values;
+            const auto access = eqbands::accessFor (values, current.empty() ? nullptr : &current);
+            autoeq::Context ctx;
+            ctx.profile = &p;
+            ctx.conservative = plan.conservative;
+            ctx.noisy = noisy;
+            ctx.sibilant = sibilant;
+            ctx.harsh = harsh;
+            ctx.masking = p.maskingHint;
+            int ownedOrFree = 0;
+            for (int i = 0; i < dsp::maxEqBands; ++i)
             {
-                lowRes = &r;
-                break;
+                const auto b = eqbands::readBand (access, 0, i);
+                if (b.bandRole() == dsp::EqRole::lowCut)
+                    ctx.fixed.push_back (b);   // planned above
+                else if (autoeq::ownedRole (b.bandRole()) || b.isFree())
+                    ++ownedOrFree;
+                else if (b.on)
+                    ctx.fixed.push_back (b);
             }
-        if (p.enoughMaterial && lowRes != nullptr)
-        {
-            const float g = -clamp (0.3f * lowRes->excessDb, 2.0f, 4.0f);
-            midFreq = clamp (lowRes->hz, 200.0f, 8000.0f);   // the 0.5 mid band range
-            midQ = 4.0f;
-            midGain = g;
-            decide (M::eq, de ("Resonanz ") + hz (lowRes->hz) + " " + db (g) + de (" (schmal)"),
-                    de ("Schmale Spitze ") + db (lowRes->excessDb) + de (" über der Umgebung. Unter 1,2 kHz statisch mit dem EQ, darüber arbeitet SMOOTH."), true);
+            ctx.budget = std::min (autoeq::maxBands - 1, ownedOrFree);
+            eqMoves = autoeq::planMoves (ctx);
         }
-        else if (p.enoughMaterial && p.hasIssue ("mud"))
+        const auto moveFor = [&eqMoves] (dsp::EqRole role) -> const autoeq::Move*
         {
-            const float g = -clamp (1.5f + 0.6f * (p.lowMidDb + 1.0f), 1.5f, 4.0f) * (plan.conservative ? 0.6f : 1.0f);
-            midFreq = clamp (p.lowMidPeakHz, 200.0f, 500.0f);
-            midQ = 1.2f;
-            midGain = g;
-            decide (M::eq, de ("Tiefmitten ") + db (g) + de (" bei ") + hz (midFreq),
-                    de ("250-500 Hz ist ") + db (p.lowMidDb) + de (" gegenüber dem Kern - leicht mulmig. Ein breiter Schnitt macht Platz für Kick und Bass."), true);
+            for (auto& m : eqMoves)
+                if (m.role == role)
+                    return &m;
+            return nullptr;
+        };
+        for (auto& m : eqMoves)
+            if (setRoleBand (plan, current, 0, m.role, m.band, true) >= 0)
+                decide (M::eq, m.title, m.reason, true);
+        // Roles without a move: flat (0.5 bands keep their place), notches and the tone bell off
+        {
+            const std::pair<dsp::EqRole, dsp::EqBand> flat[] {
+                { dsp::EqRole::warmth, eqBand (dsp::EqBandType::lowShelf, 180.0f, 0.0f, 0.7071f) },
+                { dsp::EqRole::autoMix, eqBand (dsp::EqBandType::bell, 1500.0f, 0.0f, 1.0f) },
+                { dsp::EqRole::air, eqBand (dsp::EqBandType::highShelf, 10000.0f, 0.0f, 0.7071f) } };
+            for (auto& [role, b] : flat)
+                if (moveFor (role) == nullptr)
+                    setRoleBand (plan, current, 0, role, b, false);
+            for (auto role : { dsp::EqRole::autoTone, dsp::EqRole::autoNotch1, dsp::EqRole::autoNotch2, dsp::EqRole::autoNotch3 })
+                if (moveFor (role) == nullptr)
+                    if (auto b = roleBand (plan, current, role); b.has_value() && (b->on || b->gain != 0.0f))
+                    {
+                        b->on = false;
+                        b->gain = 0.0f;
+                        setRoleBand (plan, current, 0, role, *b, false);
+                    }
         }
-        else if (p.maskingHint && ! harsh)
-        {
-            midFreq = 3000.0f;
-            midQ = 0.9f;
-            midGain = 1.0f;
-            decide (M::eq, de ("Präsenz +1,0 dB bei 3 kHz"),
-                    de ("Der Beat ist im Präsenzbereich lauter als die Stimme (Sidechain-Messung, nur ein Hinweis) - daher nur eine kleine Anhebung."), false);
-        }
-
-        // High band: air / brightness, never on top of harshness or strong S sounds
-        setRoleBand (plan, current, 0, dsp::EqRole::autoMix, eqBand (dsp::EqBandType::bell, midFreq, midGain, midQ), midGain != 0.0f);
-
-        float highFreq = 10000.0f, highGain = 0.0f;
-        if (p.enoughMaterial && dull && ! harsh)
-        {
-            float g = clamp (1.5f + 0.4f * (-16.0f - p.topDb), 1.5f, 4.5f);
-            if (noisy || sibilant)
-                g = std::min (g, 2.0f);
-            highFreq = 9000.0f;
-            highGain = g;
-            decide (M::eq, de ("Höhen ") + db (g) + de (" (Shelf 9 kHz)"),
-                    de ("Die Aufnahme ist dunkel (über 2 kHz: ") + db (p.topDb) + ")" + (noisy || sibilant ? de (" - begrenzt wegen Rauschen/S-Lauten.") : juce::String (".")), true);
-        }
-        else if (p.enoughMaterial && p.airDb < -30.0f && ! harsh && ! sibilant && ! noisy)
-        {
-            highFreq = 11000.0f;
-            highGain = 1.5f;
-            decide (M::eq, de ("Luft +1,5 dB (Shelf 11 kHz)"),
-                    de ("Wenig Energie über 10 kHz (") + db (p.airDb) + de (") - etwas Luft hilft der Stimme durch dichte Dance-Mixe."), true);
-        }
-        else if (harsh || p.presenceDb > -4.0f)
-        {
+        if (const auto* air = moveFor (dsp::EqRole::air); (air == nullptr || air->band.gain <= 0.0f) && (harsh || p.presenceDb > -4.0f))
             plan.notes.push_back (de ("Keine Höhenanhebung: Die Aufnahme ist bereits hell genug."));
-        }
-        setRoleBand (plan, current, 0, dsp::EqRole::air, eqBand (dsp::EqBandType::highShelf, highFreq, highGain, 0.7071f), highGain != 0.0f);
 
         // ================= Level Ride: phrase levels =================
         // Also on wet hooks with a small loudness range: in the blind listening test of
@@ -409,9 +386,15 @@ namespace velvox::automix
         }
 
         // ================= Smooth: adaptive resonance control =================
+        // One problem, one tool: a resonance the EQ notches (0.6.1) is no reason for SMOOTH
+        const auto notched = [&eqMoves] (const Resonance& r)
+        {
+            return std::any_of (eqMoves.begin(), eqMoves.end(), [&r] (const autoeq::Move& m)
+                                { return m.narrow && std::abs (std::log2 (m.band.freq / r.hz)) < 1.0f / 12.0f; });
+        };
         const Resonance* highRes = nullptr;
         for (auto& r : p.resonances)
-            if (r.hz >= 1200.0f && r.excessDb > 7.0f)
+            if (r.hz >= 1200.0f && r.excessDb > 7.0f && ! notched (r))
             {
                 highRes = &r;
                 break;
