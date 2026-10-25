@@ -6,6 +6,7 @@
 #include "DSP/DynamicsFeed.h"
 #include "DSP/CompressorModule.h"
 #include "DSP/SmashModule.h"
+#include "DSP/DeEsserModule.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -425,3 +426,155 @@ public:
 };
 
 static DynamicsFeedModuleTests dynamicsFeedModuleTests;
+
+//==============================================================================
+namespace
+{
+    // Phrase material: 250 ms vowel (300 Hz) then 80 ms "S" (7/8/9 kHz partials), repeated
+    struct SibilantPhrase
+    {
+        Buffer buffer;
+        std::vector<std::pair<int, int>> sRegions;
+    };
+
+    SibilantPhrase sibilantPhrase (double fs, float amp, int repeats = 8)
+    {
+        const int vowel = (int) (0.25 * fs), s = (int) (0.08 * fs);
+        SibilantPhrase p { Buffer (2, repeats * (vowel + s)), {} };
+        juce::Random r (11);
+        double ph[3] { r.nextDouble(), r.nextDouble(), r.nextDouble() };
+        for (int k = 0; k < repeats; ++k)
+        {
+            const int v0 = k * (vowel + s), s0 = v0 + vowel;
+            for (int i = 0; i < vowel; ++i)
+                for (int c = 0; c < 2; ++c)
+                    p.buffer.setSample (c, v0 + i, amp * (float) std::sin (twoPi * 300.0 * (v0 + i) / fs));
+            for (int i = 0; i < s; ++i)
+            {
+                float v = 0.0f;
+                for (int h = 0; h < 3; ++h)
+                    v += 0.25f * amp * (float) std::sin (twoPi * ((7000.0 + 1000.0 * h) * (s0 + i) / fs + ph[h]));
+                for (int c = 0; c < 2; ++c)
+                    p.buffer.setSample (c, s0 + i, v);
+            }
+            p.sRegions.push_back ({ s0, s });
+        }
+        return p;
+    }
+
+    double energy (const Buffer& b, int start, int len)
+    {
+        double e = 0.0;
+        for (int i = start; i < start + len; ++i)
+            e += (double) b.getSample (0, i) * b.getSample (0, i);
+        return e;
+    }
+
+    // Mean reduction (dB) of the S regions, skipping the first two repeats
+    double sReduction (const SibilantPhrase& in, const Buffer& out)
+    {
+        double ei = 0.0, eo = 0.0;
+        for (size_t k = 2; k < in.sRegions.size(); ++k)
+        {
+            ei += energy (in.buffer, in.sRegions[k].first, in.sRegions[k].second);
+            eo += energy (out, in.sRegions[k].first, in.sRegions[k].second);
+        }
+        return 10.0 * std::log10 (ei / eo);
+    }
+
+    DeEssSettings deessSettings (bool relative)
+    {
+        DeEssSettings s;
+        s.freq = 6500.0f; s.thresholdDb = -30.0f; s.rangeDb = 12.0f; s.mode = 0; s.relative = relative;
+        return s;
+    }
+}
+
+class DeEsserQualityTests final : public juce::UnitTest
+{
+public:
+    DeEsserQualityTests() : juce::UnitTest ("De-esser quality", "Dynamics") {}
+
+    void runTest() override
+    {
+        const double fs = 48000.0;
+
+        beginTest ("De-esser relative detection: loud and quiet phrases are treated alike");
+        {
+            double red[2][2] {};   // [relative][loud/quiet]
+            for (int rel = 0; rel < 2; ++rel)
+                for (int q = 0; q < 2; ++q)
+                {
+                    DeEsserModule m;
+                    m.prepare (fs, 512);
+                    m.setSettings (deessSettings (rel == 1));
+                    const auto in = sibilantPhrase (fs, q == 0 ? 0.5f : 0.05f);
+                    auto out = in.buffer;
+                    runBlocks (m, out, 512);
+                    red[rel][q] = sReduction (in, out);
+                }
+            logMessage ("S reduction loud / quiet: absolute " + juce::String (red[0][0], 2) + " / " + juce::String (red[0][1], 2)
+                        + " dB, relative " + juce::String (red[1][0], 2) + " / " + juce::String (red[1][1], 2) + " dB");
+            expectGreaterThan (red[0][0] - red[0][1], 3.0, "absolute: level dependent (old behaviour)");
+            expectLessThan (std::abs (red[1][0] - red[1][1]), 1.0, "relative: level independent");
+            expectGreaterThan (red[1][1], 3.0, "relative: quiet phrase de-essed as well");
+        }
+
+        beginTest ("De-esser split band nulls when inactive");
+        {
+            for (int rel = 0; rel < 2; ++rel)
+            {
+                DeEsserModule m;
+                m.prepare (fs, 512);
+                auto s = deessSettings (rel == 1);
+                s.thresholdDb = 0.0f;
+                m.setSettings (s);
+                const auto in = sineBuffer (fs, 1000.0, 0.1f, 1.0);
+                auto out = in;
+                runBlocks (m, out, 512);
+                float d = 0.0f;
+                for (int i = 0; i < in.getNumSamples(); ++i)
+                    d = std::max (d, std::abs (in.getSample (0, i) - out.getSample (0, i)));
+                expectEquals (d, 0.0f);
+            }
+        }
+
+        beginTest ("De-esser: silence stays silent");
+        {
+            DeEsserModule m;
+            m.prepare (fs, 512);
+            m.setSettings (deessSettings (true));
+            Buffer b (2, 9600);
+            b.clear();
+            runBlocks (m, b, 512);
+            expectEquals (b.getMagnitude (0, b.getNumSamples()), 0.0f);
+            expectEquals (m.currentReductionDb.load(), 0.0f);
+        }
+
+        beginTest ("De-esser feed: spectrum, reduction and band range");
+        {
+            DeEsserModule m;
+            m.prepare (fs, 512);
+            m.setSettings (deessSettings (false));
+            const auto in = sibilantPhrase (fs, 0.5f, 3);
+            auto out = in.buffer;
+            float maxRed = 0.0f;
+            runBlocks (m, out, 256, [&] (int) { maxRed = std::max (maxRed, m.currentReductionDb.load()); });
+            expectGreaterThan (maxRed, 6.0f);
+            expectEquals (m.bandLowHz.load(), 6500.0f);
+            expectEquals (m.bandHighHz.load(), 20000.0f);
+            std::vector<float> tap (SampleTap::capacity);
+            const int got = m.spectrumTap.pull (tap.data(), (int) tap.size());
+            expectGreaterThan (got, 8000);
+            expectEquals (tap[0], in.buffer.getSample (0, 0), "the tap carries the input");
+        }
+
+        beginTest ("De-esser detection: parameter exists and defaults to Absolute");
+        {
+            Harness h;
+            expectEquals (h.get (pid::deessDetection), 0.0f);
+        }
+    }
+};
+
+static DeEsserQualityTests deEsserQualityTests;

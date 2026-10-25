@@ -397,6 +397,8 @@ namespace velvox
               "Program-dependent release: short peaks recover quickly, sustained compression recovers slowly and smoothly." },
             { pid::compAutoMakeup,  "Comp Auto Makeup",  "Compressor", T::Bool, 0, 1, 0, 0, "", {},
               "Adds back the gain the compressor takes from a voice at about -18 dBFS, so the level stays similar." },
+            { pid::deessDetection,  "De-Ess Detection",  "De-Esser", T::Choice, 0, 1, 0, 0, "", { "Absolute", "Relative" },
+              "Relative compares the S band with the whole voice, so loud and quiet phrases are de-essed alike." },
         };
             appendEqBandSpecs (table);
             appendInstanceBanks (table);

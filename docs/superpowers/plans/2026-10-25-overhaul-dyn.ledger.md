@@ -34,3 +34,14 @@ Task 4: complete (CompressorModule::history / currentGainReductionDb, SmashModul
 Task 4: Ruling: the comp feed's output is the module output before the Mix/On gate (ModuleGate in VocalChain) — the Pro-C display shows
   the compressor's own action; the chain's IN/OUT meters show the gated result. Smash GR in the feed = compression of the squashed path
   only (same as its existing meter, not the breath expander). Cost if wrong: one line each.
+Task 5: complete (param deessDetection (Choice Absolute|Relative, default Absolute), DeEssSettings::relative, feed spectrumTap /
+  currentReductionDb / bandLowHz / bandHighHz; tests "De-esser quality" red (compile) -> green: S reduction loud / quiet (20 dB apart)
+  absolute 7.69 / 0.23 dB, relative 3.73 / 3.73 dB; split band bit-exact when inactive in both modes; silence stays silent)
+Task 5: Ruling: relative detection is a new option, default Absolute — it changes what the threshold means, i.e. character, so old
+  projects and the current bench case keep absolute. The relative level is band - full-band envelope (instant attack, 250 ms release)
+  + referenceDb -18, so the knob means the same as absolute for a voice peaking at -18 dBFS; the full-band level is floored at -60 dBFS
+  so silence and room noise are never de-essed. Recommendation for the panel/coordinator: fresh instances could start on Relative
+  (spec 5.3 wants it) via the browser's fresh-instance path — not done here (Source/UI is off limits). Cost if wrong: users must pick
+  Relative in Mehr to get Pro-DS "Single Vocal" behaviour.
+Task 5: Ruling: the full-band envelope first used a 5 ms attack; the onset of a tone then read the HP-filter transient ~40 dB "too loud"
+  (floored full level) and the split band no longer nulled bit-exactly (1.5e-5). Instant attack (like the band detector) fixes it.

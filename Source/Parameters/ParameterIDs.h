@@ -242,4 +242,5 @@ namespace velvox::pid
     // ---- added in 0.6: dynamics options (defaults = 0.5 behaviour) ----
     inline constexpr const char* compAutoRelease = "compAutoRelease";
     inline constexpr const char* compAutoMakeup  = "compAutoMakeup";
+    inline constexpr const char* deessDetection  = "deessDetection";
 }
