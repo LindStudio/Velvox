@@ -19,7 +19,7 @@ namespace velvox::assistant
         const GoalLink goalLinks[] {
             { pid::lowGain, Goal::bass, 1 }, { pid::lowGain, Goal::warmth, 1 }, { pid::hpfFreq, Goal::bass, -1 },
             { pid::midGain, Goal::presence, 1 }, { pid::highGain, Goal::brightness, 1 }, { pid::highGain, Goal::harshness, 1 },
-            { pid::reverbMix, Goal::reverb, 1 }, { pid::reverbOn, Goal::reverb, 1 }, { pid::macroSpace, Goal::reverb, 1 },
+            { pid::reverbMix, Goal::reverb, 1 }, { pid::reverbOn, Goal::reverb, 1 },
             { pid::delayMix, Goal::delay, 1 }, { pid::delayOn, Goal::delay, 1 },
             { pid::outputGain, Goal::level, 1 },
             { pid::stereoWidth, Goal::width, 1 }, { pid::doublerWidth, Goal::width, 1 }, { pid::doublerOn, Goal::width, 1 },
@@ -29,7 +29,6 @@ namespace velvox::assistant
             { pid::compRatio, Goal::compression, 1 }, { pid::compThreshold, Goal::compression, -1 },
             { pid::smashBlend, Goal::punch, 1 }, { pid::smashOn, Goal::punch, 1 },
             { pid::satDrive, Goal::warmth, 1 }, { pid::satOn, Goal::warmth, 1 },
-            { pid::macroPresence, Goal::presence, 1 },
         };
 
         class Builder
@@ -222,9 +221,10 @@ namespace velvox::assistant
                     if (! midFree && ! inPresence)
                     {
                         note (Note::Kind::info, de ("Das Mitten-Band des EQ wird bereits bei ") + displayValue (pid::midFreq, midFreq)
-                                                    + de (" genutzt - statt es zu verbiegen, schlägt der Assistant das Presence-Makro vor."));
-                        set (pid::macroPresence, std::min (100.0f, value (pid::macroPresence) + 20.0f * k), de ("Presence-Makro erhöhen"),
-                             why + de (" Das Makro wirkt zusätzlich auf EQ und De-Esser.") + measuredText, false, true, "macro");
+                                                    + de (" genutzt - statt es zu verbiegen, hebt der Assistant die Höhen an."));
+                        ensureOn (pid::eqOn, "EQ", "eq");
+                        set (pid::highGain, std::min (value (pid::highGain) + (noHarsher ? 1.0f : 2.0f) * k, 9.0f), de ("Höhen anheben"),
+                             why + measuredText, false, true, "eq");
                         return;
                     }
 
@@ -294,28 +294,19 @@ namespace velvox::assistant
                     if (in.intensity == Intensity::strong)
                         set (pid::reverbDecay, std::min (value (pid::reverbDecay) + 0.5f, 4.0f), de ("Nachhall verlängern"),
                              de ("Für deutlich mehr Raum klingt der Hall zusätzlich etwas länger nach."), false, true, "reverb");
-                    if (ctx.get (pid::macroSpace) > 0.0f)
-                        note (Note::Kind::info, de ("Das Space-Makro ist aktiv und fügt zusätzlich Hall hinzu."));
                 }
                 else
                 {
-                    const bool macro = value (pid::macroSpace) > 0.0f;
-                    if (! on (pid::reverbOn) && ! macro)
+                    if (! on (pid::reverbOn))
                     {
                         note (Note::Kind::info, de ("Der Reverb ist bereits aus - es gibt keinen Hall zu reduzieren."));
                         return;
                     }
-                    if (on (pid::reverbOn))
-                    {
-                        const float mix = value (pid::reverbMix) - 5.0f * k;
-                        set (pid::reverbMix, std::max (mix, 0.0f), de ("Reverb-Anteil reduzieren"),
-                             de ("Du möchtest weniger Hall: Der Anteil des Reverbs wird verringert."), false, true, "reverb");
-                        if (mix <= 2.0f)
-                            set (pid::reverbOn, 0.0f, de ("Reverb ausschalten"), de ("Bei so wenig Anteil ist es sauberer, den Reverb ganz auszuschalten."), false, true, "reverb");
-                    }
-                    if (macro)
-                        set (pid::macroSpace, std::max (0.0f, value (pid::macroSpace) - 20.0f * k), de ("Space-Makro verringern"),
-                             de ("Das Space-Makro fügt zusätzlich Hall hinzu - es wird mit reduziert, sonst bliebe der Hall hörbar."), false, true, "macro");
+                    const float mix = value (pid::reverbMix) - 5.0f * k;
+                    set (pid::reverbMix, std::max (mix, 0.0f), de ("Reverb-Anteil reduzieren"),
+                         de ("Du möchtest weniger Hall: Der Anteil des Reverbs wird verringert."), false, true, "reverb");
+                    if (mix <= 2.0f)
+                        set (pid::reverbOn, 0.0f, de ("Reverb ausschalten"), de ("Bei so wenig Anteil ist es sauberer, den Reverb ganz auszuschalten."), false, true, "reverb");
                 }
             }
 
@@ -590,10 +581,6 @@ namespace velvox::assistant
                     if (on (pid::smashOn))
                         set (pid::smashBlend, std::max (value (pid::smashBlend) - 10.0f * k, 0.0f), de ("Weniger Smash"),
                              de ("Vocal Smash ist parallele Kompression - auch sie wird reduziert."), false, true, "smash");
-                    for (auto* macroId : { pid::macroDensity, pid::macroAggression })
-                        if (value (macroId) > 0.0f)
-                            set (macroId, std::max (0.0f, value (macroId) - 20.0f * k), de ("Makro verringern"),
-                                 de ("Dieses Makro fügt zusätzliche Kompression hinzu."), false, true, "macro");
                 }
             }
 
@@ -794,9 +781,6 @@ namespace velvox::assistant
             if (! b.plan.hasChanges())
                 b.note (Note::Kind::info, de ("Verstanden: ") + limits.joinIntoString (", ") + de (". Dafür muss aktuell nichts geändert werden."));
         }
-
-        if (context.macrosActive && b.plan.hasChanges())
-            b.note (Note::Kind::info, de ("Beginner-Makros sind aktiv und wirken zusätzlich auf die Module. Die Vorschläge ändern die Modulwerte selbst."));
 
         return b.plan;
     }

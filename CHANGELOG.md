@@ -2,6 +2,35 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [0.6.1] – Branch `feature/automix` (Feedback-Runde, Entwicklungsstand)
+
+### Geändert – Simpel stellt die Module ein
+- **Die SIMPEL-Regler (Presence, Space, Width, Punch, Warmth; Density in den Auto-Mix-Details) stellen die Module direkt
+  ein** statt eine versteckte Schicht auf die Parameter zu legen: SPACE setzt Hall- und Delay-Mix samt Ducking, PUNCH den
+  Kompressor und die Sättigung usw. ADVANCED zeigt damit genau, was zu hören ist, und ein dort ausgeschaltetes Modul bleibt
+  stumm (vorher spielte z. B. der Hall weiter, solange SPACE oben stand). Jede Bewegung ist ein Undo-Schritt, schnelle
+  Mausrad-Rasten werden zusammengefasst; zurück auf den Ausgangswert stellt die Module exakt wieder her. Der Regler zeigt
+  seine zuletzt gesetzte Stellung. Bewegt der Regler einen Mix über 50 % (Doubler, Delay/Reverb als Insert), bleibt das
+  Original wie bisher voll erhalten – das Modul nutzt dann die additive Mix-Kurve.
+- Host-Automation der sechs Makro-Parameter bleibt möglich: eine automatisierte Bewegung stellt die Module relativ zur
+  vorherigen Stellung um (ohne Undo-Schritt), wie ein Regler-Zug.
+- Die Markierung am Regler „wohin ein Makro den Wert schiebt“ und der Ketten-Zustand „nur vom Makro eingeschaltet“
+  entfallen (es gibt keine solche Schicht mehr). Der Assistant schlägt keine Makro-Änderungen mehr vor, sondern die
+  Modulwerte selbst.
+
+### Alte Projekte – was sich hörbar oder in der Latenz ändert
+- **Projekte und Presets mit Makro-Werten über 0 (0.2 – 0.6.0) klingen unverändert:** Beim Laden wird der Makro-Anteil einmal
+  in die Modul-Parameter eingerechnet (genau das, was bisher zusätzlich verarbeitet wurde); die Makro-Regler behalten ihre
+  Stellung. Nulltest gegen die bisherige Verarbeitung: identisch bis auf Rundungsreste (< −100 dBFS). Danach zeigen die
+  Module die eingerechneten Werte (z. B. Hall eingeschaltet, Mix 30 % statt „Hall aus + SPACE“). Auch der gespeicherte
+  Auto-Mix-Zustand „Vorher“ wird so umgerechnet. Hob ein Makro den Mix eines Doublers oder eines Delay/Reverb-Inserts mit
+  neuer Mix-Kurve über 50 %, wechselt diese Instanz auf die alte (additive) Mix-Kurve – so bleibt das Original wie bisher
+  erhalten. Einzige Ausnahme: ein Delay/Reverb-Insert mit neuer Mix-Kurve, dessen eigener Mix schon über 50 % lag, plus
+  SPACE – dort ist das Original nach dem Laden etwas lauter als in 0.6.0 (kommt nur in mit 0.6.0 gespeicherten Projekten vor).
+- Automatisierte Makros in alten Projekten wirken weiter, aber über die Module: die Automation bewegt sie relativ zur
+  gespeicherten Stellung, auf dem Message-Thread (nicht sample-genau; beim Offline-Bounce kann eine schnelle Makro-Fahrt
+  leicht verzögert greifen).
+
 ## [0.6.0] – Branch `feature/automix` („Pro-Overhaul“, Entwicklungsstand, FL-Studio-Test ausstehend)
 
 ### Neu – Oberfläche

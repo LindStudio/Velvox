@@ -96,10 +96,10 @@ Every knob, switch and menu is a real plugin parameter: your DAW can automate it
             p.push_back ({ "modes", "Modes, tabs and the macros", gWork, R"(## SIMPEL
 - The spectrum shows your vocal before (dashed) and after (filled) Headliner.
 - "Vocal analysieren" starts the automatic mix. Afterwards a small Vorher / Nachher switch compares with the state before; Details shows what was set up and why, Density and the fair compare.
-- The six faders: Presence (highs and de-essing), Space (ducked reverb and delay), Width (doubler and stereo width), Punch (faster, firmer compression and drive), Warmth (body, softer highs, saturation), Vocal Level (the final output level). They work on top of the automatic mix and move the real parameters.
+- The six faders: Presence (highs and de-essing), Space (ducked reverb and delay), Width (doubler and stereo width), Punch (faster, firmer compression and drive), Warmth (body, softer highs, saturation), Vocal Level (the final output level). Each one sets the real module parameters (one undo step per move): ADVANCED shows exactly what you hear, and a module you switch off there stays silent.
 
 ## ADVANCED
-The module chain with the panel of the selected module. When a macro moves a parameter, its knob shows a small marker at the value that is actually processed.
+The module chain with the panel of the selected module. What the SIMPEL faders did shows up here as ordinary settings.
 
 ## VOCAL CHECK
 A diagnosis of the recording at the position of the Vocal Check module: a score (0 - 100) and one tile per finding with the suggested fix. "Anwenden" applies it, "Alles anwenden" applies every suggestion at once - each is one step of Undo (Ctrl+Z). "Ignorieren" hides a finding (restorable under "x ignoriert"). The genre (Party, Pop, Akustik) sets the target ranges.

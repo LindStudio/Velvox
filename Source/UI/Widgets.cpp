@@ -909,12 +909,12 @@ namespace velvox::ui
             { pid::reverbMix,      "Auto-Mix: weniger oder kein Hall, wenn die Aufnahme schon Raum hat." },
             { pid::delayMix,       "Auto-Mix: tempo-synchron und geduckt; aus bei verhallten Aufnahmen." },
             { pid::outputGain,     "Auto-Mix: gleicht die Lautheit an das Original an (fairer Vergleich) und hält 1 dB Reserve." },
-            { pid::macroPresence,  "Feinschliff nach dem Auto-Mix: wirkt auf EQ-Höhen und De-Esser." },
-            { pid::macroWarmth,    "Feinschliff nach dem Auto-Mix: wirkt auf Tiefen, Höhen und Sättigung." },
-            { pid::macroAggression,"Feinschliff nach dem Auto-Mix: wirkt auf Kompressor und Sättigung." },
-            { pid::macroWidth,     "Feinschliff nach dem Auto-Mix: wirkt auf Doubler und Stereobreite." },
-            { pid::macroSpace,     "Feinschliff nach dem Auto-Mix: wirkt auf Hall, Delay und deren Ducking." },
-            { pid::macroDensity,   "Feinschliff nach dem Auto-Mix: wirkt auf Kompressor und Sättigung." },
+            { pid::macroPresence,  "Feinschliff nach dem Auto-Mix: stellt EQ-Höhen und De-Esser ein." },
+            { pid::macroWarmth,    "Feinschliff nach dem Auto-Mix: stellt Tiefen, Höhen und Sättigung ein." },
+            { pid::macroAggression,"Feinschliff nach dem Auto-Mix: stellt Kompressor und Sättigung ein." },
+            { pid::macroWidth,     "Feinschliff nach dem Auto-Mix: stellt Doubler und Stereobreite ein." },
+            { pid::macroSpace,     "Feinschliff nach dem Auto-Mix: stellt Hall, Delay und deren Ducking ein." },
+            { pid::macroDensity,   "Feinschliff nach dem Auto-Mix: stellt Kompressor und Sättigung ein." },
         };
         auto it = roles.find (id);
         return it != roles.end() ? juce::String::fromUTF8 (it->second) : juce::String();
