@@ -3,6 +3,7 @@
 #include "../DSP/PulseModule.h"
 #include "../DSP/Instances.h"
 #include "../DSP/EqDesign.h"
+#include "../DSP/SmoothModule.h"
 #include <deque>
 #include <unordered_map>
 
@@ -120,6 +121,22 @@ namespace velvox
             }
             specs.push_back ({ pid::satLink, "Sat Link", "Saturation", T::Bool, 0, 1, 1, 0, "", {},
                                "Moving one band's drive moves all three together (their differences stay)." });
+        }
+
+        // 0.6 SMOOTH weighting curve: 6 draggable points (frequency, dB). All 0 dB = flat = the 0.5 behaviour.
+        void appendSmoothWeightSpecs (std::vector<ParameterSpec>& specs)
+        {
+            static std::deque<std::string> strings;
+            const auto keep = [] (const juce::String& t) { strings.push_back (t.toStdString()); return strings.back().c_str(); };
+            const dsp::SmoothSettings defaults;
+            for (int i = 0; i < dsp::SmoothSettings::numWeights; ++i)
+            {
+                const juce::String point = "Smooth Weight " + juce::String (i + 1) + " ";
+                specs.push_back ({ pid::smoothWFreq[i], keep (point + "Freq"), "Smooth", T::Float, 20.0f, 20000.0f,
+                                   defaults.weightFreq[(size_t) i], 1000.0f, "Hz", {}, "Position of a point of the weighting curve." });
+                specs.push_back ({ pid::smoothWGain[i], keep (point + "Gain"), "Smooth", T::Float, -12.0f, 12.0f, 0.0f, 0.0f, "dB", {},
+                                   "More (+) or less (-) reduction around this point; 0 everywhere = even." });
+            }
         }
 
         // Parameters of instances 2..n, generated from the instance-1 table
@@ -431,6 +448,7 @@ namespace velvox
         };
             appendEqBandSpecs (table);
             appendSatMultibandSpecs (table);
+            appendSmoothWeightSpecs (table);
             appendInstanceBanks (table);
             return table;
         }();
