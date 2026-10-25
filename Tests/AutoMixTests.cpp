@@ -720,10 +720,13 @@ public:
             const auto candsB = AutoMixEngine::candidatesFor (baseB, bright);
             const auto it = softer (candsB);
             expect (bright.topDb > -9.0f, "the test take is bright");
-            expect (it != candsB.end(), "bright take -> softer-highs variant");
-            if (it != candsB.end())
+            // 0.6.1: the base plan itself may already soften the highs (AutoEq); then no variant
+            const bool baseSofter = airGain (baseB) <= -1.0f;
+            expect (baseSofter || it != candsB.end(), "bright take -> softer highs (base plan or variant)");
+            expect (! (baseSofter && it != candsB.end()), "no second softer-highs on top of the base plan's cut");
+            if (it != candsB.end() || baseSofter)
             {
-                const auto& c = it->second;
+                const auto& c = it != candsB.end() ? it->second : baseB;
                 expect (c.on (pid::eqOn) && c.routing.contains (ModuleId::eq), "EQ engaged");
                 const auto air = roleBand (c, {}, dsp::EqRole::air);
                 expect (air.has_value() && air->on && air->bandType() == dsp::EqBandType::highShelf, "shelf");

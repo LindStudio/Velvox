@@ -38,6 +38,46 @@ public:
         modelTests();
         moveTests();
         plannerTests();
+        engineTests();
+    }
+
+    void engineTests()
+    {
+        beginTest ("Engine: the verification moves the tone towards the target curve, within the limits, explained");
+        {
+            const auto cur = defaults();
+            for (auto spec : { [] { VocalSpec s; s.seconds = 12.0; s.tiltDb = -5.0f; s.f0 = 120.0f; return s; }(),
+                               [] { VocalSpec s; s.seconds = 12.0; s.tiltDb = 4.0f; s.sibilance = 1.6f; s.f0 = 300.0f; return s; }(),
+                               [] { VocalSpec s; s.seconds = 12.0; s.resonanceHz = 1800.0f; s.resonanceDb = 16.0f; return s; }() })
+            {
+                const auto audio = makeVocal (spec);
+                const auto r = AutoMixEngine::run (audio, cur);
+                expect (r.ok, r.error);
+                if (! r.ok || r.candidates.empty())
+                    continue;
+
+                // The planner's open-loop plan, rendered and scored the same way
+                const auto open = AutoMixPlanner::plan (r.profile, cur);
+                const auto mo = AutoMixEngine::renderChecked (audio, cur, open, r.profile);
+                const auto target = AutoMixEngine::targetLufs (r.original.lufs);
+                const float tonalOpen = evaluate (mo, r.original, r.profile, target, true, true).tonal;
+                const float tonalBase = r.candidates.front().score.tonal;
+                logMessage ("    tilt " + juce::String (spec.tiltDb, 0) + ": tonal open loop " + juce::String (tonalOpen, 2)
+                            + " -> verified " + juce::String (tonalBase, 2));
+                expect (tonalBase <= tonalOpen + 0.05f, "the verified plan is not further from the target curve");
+
+                const auto bands = autoBands (r.plan, cur);
+                expect ((int) bands.size() <= autoeq::maxBands, "at most 6 auto-mix bands");
+                for (auto& b : bands)
+                {
+                    expect (autoeq::withinLimits (b), "limits: " + autoeq::titleOf (b.bandRole(), b));
+                    if (b.bandRole() != dsp::EqRole::lowCut)
+                        expect (std::any_of (r.plan.decisions.begin(), r.plan.decisions.end(), [&] (const Decision& d)
+                                             { return d.module == dsp::ModuleId::eq && d.title == autoeq::titleOf (b.bandRole(), b); }),
+                                "the overview shows " + autoeq::titleOf (b.bandRole(), b));
+                }
+            }
+        }
     }
 
     static std::map<juce::String, float> defaults()

@@ -3,6 +3,7 @@
 #include "VocalProfile.h"
 #include "../DSP/Routing.h"
 #include "../DSP/EqDesign.h"
+#include "AutoEq.h"
 #include <optional>
 #include <map>
 #include <set>
@@ -48,6 +49,17 @@ namespace velvox::automix
     // only when `createIfMissing`. Returns the band, -1 when it was not written.
     int setRoleBand (MixPlan& plan, const std::map<juce::String, float>& current, int instance, dsp::EqRole role,
                      const dsp::EqBand& value, bool createIfMissing);
+
+    // 0.6.1: the auto-mix EQ of a plan (EQ 1, over `current`) for AutoEq: the kept bands (user, Vocal
+    // Check, the low cut) and flags in `context`, the broad / narrow auto-mix bands that are on in
+    // `owned`, and in context.budget how many more bands it may create (6 in all, free slots)
+    struct AutoEqState
+    {
+        autoeq::Context context;
+        std::vector<autoeq::Move> owned;
+    };
+    // `fresh`: plan from scratch - auto-mix bands already there (an earlier run) are free to reuse
+    AutoEqState autoEqState (const MixPlan& plan, const std::map<juce::String, float>& current, const VocalProfile& profile, bool fresh = false);
 
     // Rule-based mixing decisions for party / EDM / hypertechno lead vocals.
     // Pure function: profile + current values in, plan out (any thread).

@@ -119,6 +119,54 @@ namespace velvox::automix
         return i;
     }
 
+    AutoEqState autoEqState (const MixPlan& plan, const std::map<juce::String, float>& current, const VocalProfile& p, bool fresh)
+    {
+        AutoEqState s;
+        auto values = plan.values;
+        const auto access = eqbands::accessFor (values, current.empty() ? nullptr : &current);
+        auto& ctx = s.context;
+        ctx.profile = &p;
+        ctx.conservative = plan.conservative;
+        ctx.noisy = p.snrValid && p.snrDb < 28.0f;
+        ctx.sibilant = p.hasIssue ("sibilance");
+        ctx.harsh = p.hasIssue ("harsh");
+        ctx.masking = p.maskingHint;
+        int inUse = 0, available = 0;
+        for (int i = 0; i < dsp::maxEqBands; ++i)
+        {
+            const auto b = eqbands::readBand (access, 0, i);
+            const auto role = b.bandRole();
+            if (role == dsp::EqRole::lowCut || role == dsp::EqRole::highCut)
+            {
+                if (b.on)
+                {
+                    ctx.fixed.push_back (b);
+                    ++inUse;
+                }
+                else
+                    ++available;
+            }
+            else if (autoeq::ownedRole (role))
+            {
+                const bool active = b.on && std::abs (b.gain) > 1.0e-3f;
+                if (active && ! fresh)
+                {
+                    const bool narrow = b.q >= autoeq::minNarrowQ - 1.0e-3f;
+                    s.owned.push_back ({ role, b, autoeq::titleOf (role, b), {}, narrow });
+                    ++inUse;
+                }
+                else
+                    ++available;
+            }
+            else if (b.isFree())
+                ++available;
+            else if (b.on)
+                ctx.fixed.push_back (b);
+        }
+        ctx.budget = juce::jlimit (0, available, autoeq::maxBands - inUse);
+        return s;
+    }
+
     void AutoMixPlanner::configureDeEsser (MixPlan& plan, const VocalProfile& p, float inGain, float range)
     {
         // Threshold between the detector level on vowels (90th percentile) and on
@@ -234,31 +282,7 @@ namespace velvox::automix
         // towards the target curve (AutoEq), in auto-mix role bands of EQ 1. Bands the auto-mix
         // does not own (user bands, Vocal Check's presence / mud) stay as they are and count in
         // the model: a resonance Vocal Check already cut is not cut twice.
-        std::vector<autoeq::Move> eqMoves;
-        {
-            auto values = plan.values;
-            const auto access = eqbands::accessFor (values, current.empty() ? nullptr : &current);
-            autoeq::Context ctx;
-            ctx.profile = &p;
-            ctx.conservative = plan.conservative;
-            ctx.noisy = noisy;
-            ctx.sibilant = sibilant;
-            ctx.harsh = harsh;
-            ctx.masking = p.maskingHint;
-            int ownedOrFree = 0;
-            for (int i = 0; i < dsp::maxEqBands; ++i)
-            {
-                const auto b = eqbands::readBand (access, 0, i);
-                if (b.bandRole() == dsp::EqRole::lowCut)
-                    ctx.fixed.push_back (b);   // planned above
-                else if (autoeq::ownedRole (b.bandRole()) || b.isFree())
-                    ++ownedOrFree;
-                else if (b.on)
-                    ctx.fixed.push_back (b);
-            }
-            ctx.budget = std::min (autoeq::maxBands - 1, ownedOrFree);
-            eqMoves = autoeq::planMoves (ctx);
-        }
+        const auto eqMoves = autoeq::planMoves (autoEqState (plan, current, p, true).context);
         const auto moveFor = [&eqMoves] (dsp::EqRole role) -> const autoeq::Move*
         {
             for (auto& m : eqMoves)

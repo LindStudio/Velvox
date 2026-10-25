@@ -8,6 +8,36 @@ namespace velvox::automix
         juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
         juce::String db (float v) { return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB"; }
 
+        // Keeps the overview true to an EQ role band the verification changed: the decision that
+        // shows `before` gets the new title, a new band gets a decision, a flattened one loses it
+        void updateEqDecision (MixPlan& plan, dsp::EqRole role, const dsp::EqBand& before, const dsp::EqBand& after, const juce::String& reason)
+        {
+            const bool wasAudible = before.on && std::abs (before.gain) > 1.0e-3f;
+            const auto oldTitle = autoeq::titleOf (role, before);
+            auto it = std::find_if (plan.decisions.begin(), plan.decisions.end(), [&] (const Decision& d)
+                                    { return ! d.outputStage && d.module == dsp::ModuleId::eq && wasAudible && d.title == oldTitle; });
+            const bool audible = after.on && std::abs (after.gain) > 1.0e-3f;
+            if (! audible)
+            {
+                if (it != plan.decisions.end())
+                    plan.decisions.erase (it);
+                return;
+            }
+            if (it != plan.decisions.end())
+            {
+                it->title = autoeq::titleOf (role, after);
+                it->reason = reason;
+                it->measured = true;
+                return;
+            }
+            // New EQ decisions go after the other EQ steps (the overview groups by module order)
+            auto pos = plan.decisions.begin();
+            for (auto i = plan.decisions.begin(); i != plan.decisions.end(); ++i)
+                if (! i->outputStage && i->module == dsp::ModuleId::eq)
+                    pos = i + 1;
+            plan.decisions.insert (pos, { dsp::ModuleId::eq, false, autoeq::titleOf (role, after), reason, true });
+        }
+
         float percentile (std::vector<float> v, float p)
         {
             if (v.empty())
@@ -297,7 +327,9 @@ namespace velvox::automix
         // 5 kHz takes the edge off; the render decides whether that is worth it.
         add (de ("Höhen sanfter"), [&] (MixPlan& c)
         {
-            if (profile.topDb <= -7.0f || roleGain (c, current, EqRole::air) > 0.2f || ! c.routing.contains (M::eq))
+            // 0.6.1: not when the base plan already cuts the highs (AutoEq)
+            const float air = roleGain (c, current, EqRole::air);
+            if (profile.topDb <= -7.0f || air > 0.2f || air < -0.9f || ! c.routing.contains (M::eq))
                 return false;
             c.set (pid::eqOn, 1.0f);
             return setRoleBand (c, current, 0, EqRole::air,
@@ -310,9 +342,13 @@ namespace velvox::automix
         add (de ("Höhen nach der Dynamik (EQ 2)"), [&] (MixPlan& c)
         {
             const auto air = roleBand (c, current, EqRole::air);
-            const auto mid = roleBand (c, current, EqRole::autoMix);
             const float high = air.has_value() && air->on ? air->gain : 0.0f;
-            const bool presenceBoost = mid.has_value() && mid->on && mid->gain > 0.2f && mid->freq >= 1800.0f;
+            // A presence lift: the 0.6.0 mid bell or the 0.6.1 tone bell (AutoEq)
+            std::vector<std::pair<EqRole, dsp::EqBand>> presence;
+            for (auto role : { EqRole::autoMix, EqRole::autoTone })
+                if (auto b = roleBand (c, current, role); b.has_value() && b->on && b->gain > 0.2f && b->freq >= 1800.0f)
+                    presence.push_back ({ role, *b });
+            const bool presenceBoost = ! presence.empty();
             if (high <= 0.2f && ! presenceBoost)
                 return false;
             c.set (k2 (pid::eqOn), 1.0f);
@@ -324,7 +360,7 @@ namespace velvox::automix
                     b->on = false;
                     setRoleBand (c, current, 1, role, *b, false);
                 }
-            for (auto role : { EqRole::warmth, EqRole::autoMix, EqRole::air })
+            for (auto role : { EqRole::warmth, EqRole::autoMix, EqRole::air, EqRole::autoTone })
                 if (auto b = roleBand (c, current, role, 1); b.has_value() && b->gain != 0.0f)
                 {
                     b->gain = 0.0f;
@@ -337,12 +373,12 @@ namespace velvox::automix
                 flat.gain = 0.0f;
                 setRoleBand (c, current, 0, EqRole::air, flat, false);
             }
-            if (presenceBoost)
+            for (auto& [role, b] : presence)
             {
-                setRoleBand (c, current, 1, EqRole::autoMix, *mid, true);
-                auto flat = *mid;
+                setRoleBand (c, current, 1, role, b, true);
+                auto flat = b;
                 flat.gain = 0.0f;
-                setRoleBand (c, current, 0, EqRole::autoMix, flat, false);
+                setRoleBand (c, current, 0, role, flat, false);
             }
             int after = -1;
             for (auto m : { M::comp, M::smash, M::deess, M::smooth })
@@ -535,12 +571,35 @@ namespace velvox::automix
             }
 
             // Brightness: the chain must not make an already bright voice brighter
+            bool airAdjusted = false;
             if (auto air = roleBand (plan, current, dsp::EqRole::air); m.topDb > r.original.topDb + 5.0f && air.has_value() && air->on && air->gain > 0.0f)
             {
+                const auto before = *air;
                 air->gain = std::max (0.0f, air->gain - 1.5f);
                 setRoleBand (plan, current, 0, dsp::EqRole::air, *air, false);
+                updateEqDecision (plan, dsp::EqRole::air, before, *air, de ("Höhenanhebung verringert: die Kette hob die Höhen schon an."));
                 r.adjustments.push_back (de ("Höhenanhebung verringert (Kette wurde zu hell)."));
                 changed = true;
+                airAdjusted = true;
+            }
+
+            // Tone (0.6.1): the broad auto-mix bands follow the levels of the real render into the
+            // target curve - compression, saturation and effects move the balance as well
+            if (plan.on (pid::eqOn) && plan.routing.contains (dsp::ModuleId::eq))
+            {
+                const auto state = autoEqState (plan, current, r.profile);
+                const autoeq::Levels rendered { m.bodyDb, m.lowMidDb, m.presenceDb, m.topDb, m.airDb };
+                for (const auto& c : autoeq::correct (rendered, state.context, state.owned))
+                {
+                    if (c.role == dsp::EqRole::air && airAdjusted)
+                        continue;
+                    const auto before = roleBand (plan, current, c.role);
+                    if (setRoleBand (plan, current, 0, c.role, c.band, true) < 0)
+                        continue;
+                    updateEqDecision (plan, c.role, before.has_value() ? *before : dsp::EqBand {}, c.band, c.reason);
+                    r.adjustments.push_back (de ("Klang nachgeregelt: ") + c.title + ".");
+                    changed = true;
+                }
             }
             // ... and must not dull it either
             if (m.topDb < r.original.topDb - 5.0f && plan.on (pid::smoothOn) && plan.get (pid::smoothAmount) > 20.0f)
