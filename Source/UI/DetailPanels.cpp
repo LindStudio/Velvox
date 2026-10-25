@@ -1,4 +1,6 @@
 #include "DetailPanels.h"
+#include "EqPanel.h"
+#include "ReverbPanel.h"
 #include "ChainView.h"
 #include "../PluginProcessor.h"
 #include "../Presets/ModulePresets.h"
@@ -670,36 +672,6 @@ namespace velvox::ui
         float grFrom (const LiveData* live, const LiveData::History LiveData::* h) { return live != nullptr ? (live->*h).ago (0) : 0.0f; }
 
 
-        // EQ (the eq track replaces the band model and this panel): curve with draggable bands
-        class EqPanel final : public DetailPanel
-        {
-        public:
-            explicit EqPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Equalizer", help::shortDescription ((int) ModuleId::eq), pid::eqOn)
-            {
-                auto& lcOn = toggle (pid::hpfOn, "Low Cut");
-                auto& hcOn = toggle (pid::lpfOn, "High Cut");
-                juce::ignoreUnused (lcOn, hcOn);
-                segments (pid::hpfSlope);
-                segments (pid::lowType);
-                segments (pid::lpfSlope);
-                segments (pid::highType);
-                auto& lcFreq = knob (pid::hpfFreq, "Low Cut");
-                knob (pid::lowFreq, "Low Freq");
-                auto& lowGain = knob (pid::lowGain, "Low Gain");
-                knob (pid::lowQ, "Low Q");
-                auto& midFreq = knob (pid::midFreq, "Mid Freq");
-                auto& midGain = knob (pid::midGain, "Mid Gain");
-                knob (pid::midQ, "Mid Q");
-                knob (pid::highFreq, "High Freq");
-                auto& highGain = knob (pid::highGain, "High Gain");
-                knob (pid::highQ, "High Q");
-                knob (pid::lpfFreq, "High Cut");
-                knob (pid::eqMix, "Mix");
-                setMainControls ({ &lcFreq, &lowGain, &midFreq, &midGain, &highGain });
-            }
-        };
-
         // COMPRESSOR: history + transfer curve, GR meter; Threshold, Ratio, Attack, Release
         class CompPanel final : public DetailPanel
         {
@@ -828,49 +800,6 @@ namespace velvox::ui
         private:
             Knob* semis = nullptr;
             int frame = 0;
-        };
-
-        // REVERB: Room, Size, Decay, Mix; everything else in Mehr
-        class ReverbPanel final : public DetailPanel
-        {
-        public:
-            explicit ReverbPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Reverb", help::shortDescription ((int) ModuleId::reverb), pid::reverbOn)
-            {
-                auto& type = segments (pid::reverbType);
-                setCaption (type, "Room");
-                segments (pid::duckSource, { "Vocal", "Sidechain" });
-                auto& size = knob (pid::reverbSize, "Size");
-                auto& decay = knob (pid::reverbDecay, "Decay");
-                knob (pid::reverbPreDelay, "Pre-Delay");
-                knob (pid::reverbDamping, "Damping");
-                knob (pid::reverbWidth, "Width");
-                knob (pid::reverbLowCut, "Low Cut");
-                knob (pid::reverbHighCut, "High Cut");
-                knob (pid::reverbMod, "Modulation");
-                knob (pid::reverbEarly, "Early");
-                knob (pid::reverbDiffusion, "Diffusion");
-                knob (pid::reverbBass, "Bass Decay");
-                auto& mix = knob (pid::reverbMix, "Mix");
-                knob (pid::reverbDuckAmount, "Ducking");
-                knob (pid::reverbDuckThreshold, "Duck Thresh");
-                knob (pid::reverbDuckAttack, "Duck Attack");
-                knob (pid::reverbDuckRelease, "Duck Release");
-                setMainControls ({ &type, &size, &decay, &mix });
-                setMixKnob (&mix);
-                gr.setTooltip ("Ducking (dB)");
-                placeInVisual ({ &gr });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                gr.push (grFrom (live, &LiveData::reverbDuck));
-            }
-
-        private:
-            void layoutVisual (juce::Rectangle<int> area) override { placeMeter (gr, area); }
-            GainReductionMeter gr { colours::accent, "Duck" };
         };
 
         // OUTPUT: stereo image + loudness; Input Gain, Vocal Level, Width, Level Match;
@@ -1385,7 +1314,7 @@ namespace velvox::ui
         {
             switch (dsp::selectionModule (id))
             {
-                case ModuleId::eq:      panel = std::make_unique<EqPanel> (p); break;
+                case ModuleId::eq:      panel = createEqPanel (p); break;
                 case ModuleId::comp:    panel = std::make_unique<CompPanel> (p); break;
                 case ModuleId::deess:   panel = std::make_unique<DeEssPanel> (p); break;
                 case ModuleId::sat:     panel = std::make_unique<SatPanel> (p); break;
@@ -1393,7 +1322,7 @@ namespace velvox::ui
                 case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
                 case ModuleId::chop:    panel = createTimeModulePanel (p, ModuleId::chop); break;
                 case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
-                case ModuleId::reverb:  panel = std::make_unique<ReverbPanel> (p); break;
+                case ModuleId::reverb:  panel = createReverbPanel (p); break;
                 case ModuleId::pulse:   panel = createTimeModulePanel (p, ModuleId::pulse); break;
                 case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;
                 case ModuleId::choir:   panel = std::make_unique<ChoirPanel> (p); break;

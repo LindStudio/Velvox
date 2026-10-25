@@ -109,6 +109,11 @@ namespace velvox
     bind (raw.smoothHigh, pid::smoothHigh);     bind (raw.smoothAttack, pid::smoothAttack);
     bind (raw.smoothRelease, pid::smoothRelease); bind (raw.smoothMode, pid::smoothMode);
     bind (raw.smoothOutput, pid::smoothOutput); bind (raw.smoothDelta, pid::smoothDelta);
+    for (size_t i = 0; i < raw.smoothWFreq.size(); ++i)
+    {
+        bind (raw.smoothWFreq[i], pid::smoothWFreq[i]);
+        bind (raw.smoothWGain[i], pid::smoothWGain[i]);
+    }
     bind (raw.checkOn, pid::checkOn);           bind (raw.checkMode, pid::checkMode);
     bind (raw.rideOn, pid::rideOn);             bind (raw.rideTarget, pid::rideTarget);
     bind (raw.rideAmount, pid::rideAmount);     bind (raw.rideMaxBoost, pid::rideMaxBoost);
@@ -321,6 +326,11 @@ namespace velvox
     s.smooth.mode = raw.smoothMode.index();
     s.smooth.outputDb = raw.smoothOutput.get();
     s.smooth.delta = raw.smoothDelta.on();
+    for (size_t i = 0; i < raw.smoothWFreq.size(); ++i)
+    {
+        s.smooth.weightFreq[i] = raw.smoothWFreq[i].get();
+        s.smooth.weightGain[i] = raw.smoothWGain[i].get();
+    }
 
     s.checkOn = raw.checkOn.on();
 

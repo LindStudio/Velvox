@@ -3,6 +3,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "PluginEditor.h"
 #include "UI/UserSettings.h"
+#include "UI/EqPanel.h"
 #include "AutoMix/AutoMixEngine.h"
 #include "SyntheticVocal.h"
 #include "PopScan.h"
@@ -316,7 +317,9 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 // overlay: "help:<page>", "welcome", "tutorial:<step>", "bypass", "hide:<key,key>", "focus:<moduleId>", "edit",
 //          "intro" (analysis popup), "listening", "capturing", "analysing", "mixed" (overview after a synthetic auto mix),
 //          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report),
-//          "set:<id>=<value>,...[,more]" (parameter values before rendering)
+//          "eq" (EQ panel with user bands, a macro band and a selection), "eqmore" (+ Mehr, migrated legacy curve),
+//          "eqcard" (+ a point being dragged: its value card)
+//          "set:<id>=<value>,...[,more]" (parameters in real units, then ~1.4 s of audio so live views fill; ",more" opens Mehr)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
                            const juce::String& mode, int selection, const juce::String& overlay)
 {
@@ -395,15 +398,38 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
         proc.refreshAnalysis();
         proc.getState().state.setProperty ("uiSelection", (int) velvox::dsp::ModuleId::check, nullptr);
     }
+    if (overlay.startsWith ("eq"))
+    {
+        // A typical vocal EQ: low cut, a mud cut, a presence bell, an air shelf from the Presence macro, a notch
+        using velvox::dsp::EqBandType;
+        auto& pr = proc;
+        const auto cut = ui::eqedit::addBand (pr, 0, 90.0f, 0.0f);
+        ui::eqedit::setType (pr, 0, cut, EqBandType::lowCut);
+        ui::eqedit::addBand (pr, 0, 320.0f, -3.5f);
+        const auto presence = ui::eqedit::addBand (pr, 0, 3200.0f, 2.5f);
+        pr.getState().getParameter (ui::eqedit::paramId (0, presence, velvox::pid::eqband::q))->setValueNotifyingHost (
+            pr.getState().getParameter (ui::eqedit::paramId (0, presence, velvox::pid::eqband::q))->convertTo0to1 (0.8f));
+        const auto notch = ui::eqedit::addBand (pr, 0, 6500.0f, 0.0f);
+        ui::eqedit::setType (pr, 0, notch, EqBandType::notch);
+        pr.getState().getParameter ("macroPresence")->setValueNotifyingHost (0.5f);
+        pr.getState().getParameter ("eqOn")->setValueNotifyingHost (1.0f);
+        if (overlay == "eqmore")
+            pr.getState().getParameter ("eqLegacyResponse")->setValueNotifyingHost (1.0f);
+        proc.getState().state.setProperty ("uiSelection", (int) velvox::dsp::ModuleId::eq, nullptr);
+        proc.getState().state.setProperty ("uiMode", "pro", nullptr);
+    }
     if (overlay == "bypass")
         proc.getState().getParameter ("bypass")->setValueNotifyingHost (1.0f);
     if (overlay.startsWith ("hide:"))
         proc.getState().state.setProperty ("uiHiddenModules", overlay.fromFirstOccurrenceOf (":", false, false), nullptr);
     // "set:<id>=<value>,<id>=<value>[,more]": parameter values in real units (e.g. "set:delayOn=1,delayFeedback=55")
     if (overlay.startsWith ("set:"))
+    {
         for (const auto& token : juce::StringArray::fromTokens (overlay.fromFirstOccurrenceOf (":", false, false), ",", ""))
             if (auto* prm = proc.getState().getParameter (token.upToFirstOccurrenceOf ("=", false, false).trim()))
                 prm->setValueNotifyingHost (prm->convertTo0to1 (token.fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
+        pump (128);   // live views (stutter waveform, echo lights) fill up
+    }
     if (overlay == "edit")
         proc.getState().getParameter ("compRatio")->setValueNotifyingHost (0.6f);
     if (overlay == "listening" || overlay == "capturing" || overlay == "analysing")
@@ -426,6 +452,20 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
             ed->getChainView().onSelect (overlay.fromFirstOccurrenceOf (":", false, false).getIntValue());
         if ((overlay == "more" || (overlay.startsWith ("set:") && overlay.endsWith (",more"))) && ed->getDetail() != nullptr)
             ed->getDetail()->setMoreOpen (true);
+        if (auto* eqp = dynamic_cast<ui::EqPanel*> (ed->getDetail()))
+        {
+            eqp->selectBand (2);
+            if (overlay == "eqmore")
+                eqp->setMoreOpen (true);
+            if (overlay == "eqcard")
+                if (auto* g = eqp->getGraph())
+                {
+                    const auto at = g->pointFor (2);
+                    const auto now = juce::Time::getCurrentTime();
+                    g->mouseDown (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, {}, 1.0f, 0, 0, 0, 0,
+                                                    g, g, now, at, now, 1, false));
+                }
+        }
         if (overlay == "details")
             ed->showMixDetails();
         if (overlay == "mixed+done")

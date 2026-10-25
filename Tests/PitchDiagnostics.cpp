@@ -2,6 +2,9 @@
 // Signalsmith Stretch engine versus block size, used to choose the quality modes.
 
 #include "TestHelpers.h"
+#include "DSP/FormantCorrector.h"
+#include "DSP/PitchTracker.h"
+#include "DSP/SpliceShifter.h"
 #include <juce_dsp/juce_dsp.h>
 
 #if defined (_MSC_VER)
@@ -48,6 +51,67 @@ public:
 
         constexpr double fs = 48000.0;
         const int n = (int) (3.0 * fs);
+
+        // CPU per component of the 0.6 engine (10 s stereo harmonic tone, +7 st, preserve on)
+        {
+            using namespace velvox::dsp;
+            PitchTracker tr; SpliceShifter sh; FormantCorrector fc;
+            tr.prepare (fs); sh.prepare (fs, 512); fc.prepare (fs, sh.getLatency(), 512);
+            sh.setRatio (1.4983f); fc.setWarp (1.4983f, 1.0f);
+            std::vector<float> l (512), r (512), mono (512), per (512);
+            double tT = 0, tS = 0, tF = 0;
+            for (int b = 0; b < (int) (10.0 * fs / 512); ++b)
+            {
+                for (int i = 0; i < 512; ++i)
+                {
+                    const double t = (b * 512 + i) / fs;
+                    l[(size_t) i] = r[(size_t) i] = mono[(size_t) i] = (float) (0.2 * std::sin (2 * pi * 180 * t) + 0.1 * std::sin (2 * pi * 360 * t) + 0.05 * std::sin (2 * pi * 540 * t));
+                }
+                auto t0 = juce::Time::getHighResolutionTicks();
+                for (int i = 0; i < 512; ++i) { tr.push (mono[(size_t) i]); per[(size_t) i] = tr.getPeriod(); }
+                auto t1 = juce::Time::getHighResolutionTicks();
+                float* io[2] { l.data(), r.data() };
+                sh.process (io, 2, 512, per.data());
+                auto t2 = juce::Time::getHighResolutionTicks();
+                fc.process (mono.data(), io, 2, 512, per.data());
+                auto t3 = juce::Time::getHighResolutionTicks();
+                tT += (double) (t1 - t0); tS += (double) (t2 - t1); tF += (double) (t3 - t2);
+            }
+            const double tick = 1.0 / (double) juce::Time::getHighResolutionTicksPerSecond();
+            logMessage ("CPU share of real time: tracker " + juce::String (tT * tick * 10.0, 2) + " %, shifter " + juce::String (tS * tick * 10.0, 2)
+                        + " %, corrector " + juce::String (tF * tick * 10.0, 2) + " %");
+        }
+
+        // Root-cause scan of the 0.5 configuration (120 ms / 15 ms): error per input frequency,
+        // shift and formant setting, pure sine (one spectral peak)
+        for (bool compensate : { false, true })
+            for (double f0 : { 220.0, 233.0, 440.0, 311.1 })
+            {
+                juce::String detail;
+                for (double st : { 12.0, 7.0, 1.0, -5.0, -12.0 })
+                {
+                    signalsmith::stretch::SignalsmithStretch<float> s (0x5eed);
+                    s.configure (1, (int) (0.120 * fs), (int) (0.015 * fs));
+                    s.setTransposeSemitones ((float) st);
+                    s.setFormantSemitones (0.0f, compensate);
+                    s.setFormantBase ((float) (220.0 / fs));
+                    std::vector<float> in ((size_t) n), out ((size_t) n);
+                    for (int i = 0; i < n; ++i)
+                        in[(size_t) i] = 0.25f * (float) std::sin (2.0 * pi * f0 * i / fs);
+                    for (int pos = 0; pos < n; pos += 512)
+                    {
+                        const int len = std::min (512, n - pos);
+                        const float* ip[1] { in.data() + pos };
+                        float* op[1] { out.data() + pos };
+                        s.process (ip, len, op, len);
+                    }
+                    const double expected = f0 * std::pow (2.0, st / 12.0);
+                    const double f = peakFreq (out, (int) fs, fs, expected * 0.8);
+                    detail << juce::String (st, 0) << ":" << juce::String (1200.0 * std::log2 (f / expected), 2) << "ct ";
+                }
+                logMessage ("sine " + juce::String (f0, 1) + " Hz" + (compensate ? " formant comp" : " no comp") + "  " + detail);
+            }
+
         for (double blockMs : { 40.0, 60.0, 80.0, 120.0 })
             for (double ratio : { 4.0, 8.0 })
                 for (bool compensate : { false, true })

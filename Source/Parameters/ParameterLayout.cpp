@@ -3,6 +3,7 @@
 #include "../DSP/PulseModule.h"
 #include "../DSP/Instances.h"
 #include "../DSP/EqDesign.h"
+#include "../DSP/SmoothModule.h"
 #include <deque>
 #include <unordered_map>
 
@@ -122,6 +123,22 @@ namespace velvox
                                "Moving one band's drive moves all three together (their differences stay)." });
         }
 
+        // 0.6 SMOOTH weighting curve: 6 draggable points (frequency, dB). All 0 dB = flat = the 0.5 behaviour.
+        void appendSmoothWeightSpecs (std::vector<ParameterSpec>& specs)
+        {
+            static std::deque<std::string> strings;
+            const auto keep = [] (const juce::String& t) { strings.push_back (t.toStdString()); return strings.back().c_str(); };
+            const dsp::SmoothSettings defaults;
+            for (int i = 0; i < dsp::SmoothSettings::numWeights; ++i)
+            {
+                const juce::String point = "Smooth Weight " + juce::String (i + 1) + " ";
+                specs.push_back ({ pid::smoothWFreq[i], keep (point + "Freq"), "Smooth", T::Float, 20.0f, 20000.0f,
+                                   defaults.weightFreq[(size_t) i], 1000.0f, "Hz", {}, "Position of a point of the weighting curve." });
+                specs.push_back ({ pid::smoothWGain[i], keep (point + "Gain"), "Smooth", T::Float, -12.0f, 12.0f, 0.0f, 0.0f, "dB", {},
+                                   "More (+) or less (-) reduction around this point; 0 everywhere = even." });
+            }
+        }
+
         // Parameters of instances 2..n, generated from the instance-1 table
         void appendInstanceBanks (std::vector<ParameterSpec>& specs)
         {
@@ -223,7 +240,7 @@ namespace velvox
               "Character of the space: Room = natural and close, Plate = dense and bright, Hall / Large Hall = concert spaces, "
               "Ambience = short studio air, Atmosphere = huge lush EDM space, Cinematic = dark and deep, Ethereal = bright, wide and floating." },
             { pid::reverbMix,      "Reverb Mix",       "Reverb", T::Float, 0.0f, 100.0f, 18.0f, 0.0f, "%", {}, "Level of the reverb return added to the dry signal." },
-            { pid::reverbDecay,    "Reverb Decay",     "Reverb", T::Float, 0.2f, 20.0f, 1.8f, 2.5f, "s", {}, "Reverb time (RT60) in the mid range." },
+            { pid::reverbDecay,    "Reverb Decay",     "Reverb", T::Float, 0.2f, 20.0f, 1.8f, 2.5f, "s", {}, "Reverb time (T30 of the whole tail, all frequencies)." },
             { pid::reverbPreDelay, "Reverb Pre-Delay", "Reverb", T::Float, 0.0f, 250.0f, 20.0f, 60.0f, "ms", {}, "Gap before the reverb starts." },
             { pid::reverbSize,     "Reverb Size",      "Reverb", T::Float, 0.0f, 100.0f, 60.0f, 0.0f, "%", {}, "Virtual room / plate size." },
             { pid::reverbDamping,  "Reverb Tone",      "Reverb", T::Float, 1000.0f, 20000.0f, 7000.0f, 6000.0f, "Hz", {}, "High-frequency damping inside the tail." },
@@ -271,7 +288,7 @@ namespace velvox
 
             // ---------------- Pitch (0.2) ----------------
             { pid::pitchOn,        "Pitch On",       "Pitch", T::Bool, 0, 1, 0, 0, "", {},
-              "Enables the creative pitch shifter. Adds about 120 ms latency while on (compensated by the DAW)." },
+              "Enables the creative pitch shifter. Adds about 15 ms latency while on (compensated by the DAW)." },
             { pid::pitchSemitones, "Pitch",          "Pitch", T::Float, -24.0f, 24.0f, 0.0f, 0.0f, "st", {}, "Transposition in semitones.", 1.0f },
             { pid::pitchCents,     "Pitch Fine",     "Pitch", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "ct", {}, "Fine tuning in cents." },
             { pid::pitchPreserveFormants, "Pitch Keep Formants", "Pitch", T::Bool, 0, 1, 1, 0, "", {},
@@ -431,6 +448,7 @@ namespace velvox
         };
             appendEqBandSpecs (table);
             appendSatMultibandSpecs (table);
+            appendSmoothWeightSpecs (table);
             appendInstanceBanks (table);
             return table;
         }();

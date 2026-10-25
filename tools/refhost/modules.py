@@ -29,6 +29,7 @@ class Calib:
     values: list
     probe: str          # see bench.PROBES
     also: list = field(default_factory=list)        # further parameters that get the same value (e.g. every band's drive)
+    step: float = 0.0   # > 0: the bisection stays on this grid (plugins that reject other values)
 
 
 @dataclass
@@ -147,13 +148,22 @@ _add(Module(
 # ---------------------------------------------------------------------------------------------
 # Smooth vs soothe2, depth calibrated to the same removed energy
 # ---------------------------------------------------------------------------------------------
+_SMOOTH = {"smoothAmount": 75, "smoothSensitivity": 50, "smoothLow": 800, "smoothHigh": 12000,
+           "smoothAttack": 5, "smoothRelease": 80, "smoothMode": 0, "smoothOutput": 0, "smoothDelta": 0}
+_SOOTHE_DEPTH = Calib("depth", [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10], "delta_energy", step=0.1)
 _add(Module(
     key="smooth", title="Smooth",
     refs=[Ref("soothe2", "oeksound/soothe2_x64.vst3", params=[("mode", "soft"), ("mix", "100"), ("delta", "off")])],
-    cases=[Case("vocal", headliner={"smoothAmount": 75, "smoothSensitivity": 50, "smoothLow": 800, "smoothHigh": 12000,
-                                    "smoothAttack": 5, "smoothRelease": 80, "smoothMode": 0, "smoothOutput": 0, "smoothDelta": 0},
+    cases=[Case("vocal", headliner=_SMOOTH,
                 procedures=["resonance_vocal", "nulls", "cpu"],
-                calibrate={"soothe2": Calib("depth", [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10], "delta_energy")})],
+                calibrate={"soothe2": _SOOTHE_DEPTH}),
+           # more settings (0.6 smooth track): lighter, more selective, hard mode - each calibrated to equal removed energy
+           Case("light", headliner=dict(_SMOOTH, smoothAmount=35), procedures=["resonance_vocal"],
+                calibrate={"soothe2": _SOOTHE_DEPTH}),
+           Case("sharp", headliner=dict(_SMOOTH, smoothSensitivity=85), procedures=["resonance_vocal"],
+                calibrate={"soothe2": _SOOTHE_DEPTH}),
+           Case("hard", headliner=dict(_SMOOTH, smoothAmount=60, smoothMode=1), refs={"soothe2": [("mode", "hard")]},
+                procedures=["resonance_vocal"], calibrate={"soothe2": _SOOTHE_DEPTH})],
     # delta_db is the calibration match (soothe2 depth 0 already removes ~15 dB below the dry level on f7_row, so
     # Headliner runs at Amount 75 to act comparably); informative only.
     tolerances={"delta_db": ("info", 0.0), "pte_reduction_db": ("higher", 0.3), "ltas_reduction_db": ("higher", 0.5), "flatness_gain_db": ("higher", 0.2),
@@ -203,14 +213,19 @@ _add(Module(
     key="pitch", title="Pitch", mix_param="pitchMix",
     refs=[Ref("Graillon 3", "Auburn Sounds Graillon 3.vst3", params=_GRAILLON)],
     cases=[Case("up12", headliner={"pitchSemitones": 12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
-                refs={"Graillon 3": [("Pitch Shift", "12")]}, procedures=["pitch_tones", "pitch_vocal", "nulls", "cpu"],
+                refs={"Graillon 3": [("Pitch Shift", "12")]}, procedures=["pitch_tones", "pitch_vocal", "pitch_formant", "nulls", "cpu"],
                 info={"semitones": 12}),
            Case("down5", headliner={"pitchSemitones": -5, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
                 refs={"Graillon 3": [("Pitch Shift", "-5")]}, procedures=["pitch_tones", "pitch_vocal"],
-                info={"semitones": -5})],
+                info={"semitones": -5}),
+           Case("down12", headliner={"pitchSemitones": -12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
+                refs={"Graillon 3": [("Pitch Shift", "-12")]}, procedures=["pitch_tones", "pitch_vocal", "pitch_formant"],
+                info={"semitones": -12})],
     # Graillon tracks a pure sine 36 ct flat (its tracker wants a voice), so the tone tests use absolute limits.
+    # 0.6 (pitch track): formants within 1/3 octave (absolute), held-note roughness <= Graillon + 0.5 dB.
     tolerances={"pitch_err_cents": ("lower", 0.0, 2.0), "pitch_jitter_cents": ("lower", 0.0, 1.0), "spurious_db": ("lower", 0.0, -60.0),
                 "vocal_pitch_err_cents": ("lower", 1.0), "latency_ms": ("lower", 10.0),
+                "formant_shift_oct": ("lower", 0.0, 1.0 / 3.0), "sustain_roughness_db": ("lower", 0.5),
                 "cpu_pct": ("lower", 2.0)}))
 
 # ---------------------------------------------------------------------------------------------

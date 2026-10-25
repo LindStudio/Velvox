@@ -91,9 +91,16 @@ public:
                         const bool isOnSwitch = pid == ui::ChainView::onParamFor ((ModuleId) id);
                         // The six Pulse curve points are the handles of the curve editor in the visual
                         const bool curveHandle = pid.startsWith ("pulseX") || pid.startsWith ("pulseY");
-                        // The 16 user bands of the 0.6 EQ belong to the EQ panel of the panels track (the legacy
-                        // bands reach the same filters through the bridge until then)
+                        // EQ: the 16 bands are reached one at a time through the graph and the selected-band row,
+                        // eqLegacyResponse through its Mehr button while it is set (both: "Headliner EQ panel");
+                        // the hidden 0.5 fixed bands are not shown at all (they stay registered)
                         const bool eqBand = pid.startsWith ("eqBand") || pid == "eqLegacyResponse";
+                        const auto* spec = findParameterSpec (pid);
+                        if (id == (int) ModuleId::eq && ! eqBand && spec != nullptr && spec->hidden)
+                        {
+                            expect (! reached.contains (pid), name + ": hidden 0.5 band not shown: " + pid);
+                            continue;
+                        }
                         expect (isOnSwitch || curveHandle || eqBand || reached.contains (pid), name + ": reaches " + pid);
                     }
                 expect (panel->getMoreButton().isVisible() == ! panel->getMoreControls().empty(), name + ": Mehr only when there is more");
