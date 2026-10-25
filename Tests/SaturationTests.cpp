@@ -5,7 +5,9 @@
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
 #include "DSP/SaturationModule.h"
+#include "Parameters/SettingsReader.h"
 #include <juce_dsp/juce_dsp.h>
+#include <complex>
 
 using namespace velvox;
 using namespace velvox::test;
@@ -392,6 +394,196 @@ public:
             logMessage ("meters: in " + juce::String (in, 1) + " dB, out " + juce::String (out, 1) + " dB");
             expectWithinAbsoluteError (in, -15.0f, 0.5f);   // RMS of a -12 dBFS sine
             expectWithinAbsoluteError (out, -15.0f, 1.0f);  // compensated
+        }
+
+        runMultibandTests();
+    }
+
+    // Complex gain of a tone (steady state), output / input
+    static std::complex<double> complexGain (const SatSettings& s, double f)
+    {
+        const auto in = sineVec (fs48, f, -40.0, 1.0);
+        const auto out = renderWith (s, in);
+        std::complex<double> x {}, y {};
+        for (size_t i = 24000; i < 48000; ++i)
+        {
+            const auto e = std::polar (1.0, -2.0 * pi * f * (double) i / fs48);
+            x += (double) in[i] * e;
+            y += (double) out[i] * e;
+        }
+        return y / x;
+    }
+
+    // The digital (TPT, bilinear with prewarp) 2nd-order Butterworth all-pass at the 4x rate
+    static std::complex<double> allpassAt (double fc, double f)
+    {
+        const double fsH = 4.0 * fs48, k = std::sqrt (2.0);
+        const double g = std::tan (pi * fc / fsH);
+        const std::complex<double> s (0.0, std::tan (pi * f / fsH) / g);
+        return (s * s - k * s + 1.0) / (s * s + k * s + 1.0);
+    }
+
+    static SatSettings multi (bool allOn, float drive = 12.0f, int character = 1)
+    {
+        SatSettings s = single (character, drive);
+        s.multiband = true;
+        for (auto& b : s.bands)
+            b = { allOn, drive, character };
+        return s;
+    }
+
+    void runMultibandTests()
+    {
+        beginTest ("Multiband parameters exist with defaults that keep the old behaviour");
+        {
+            Harness h;
+            expectEquals ((int) h.get (pid::satMultiband), 0);
+            expectWithinAbsoluteError (h.get (pid::satXoverLow), 250.0f, 0.01f);
+            expectWithinAbsoluteError (h.get (pid::satXoverHigh), 4000.0f, 0.01f);
+            for (auto* id : { pid::satLowOn, pid::satMidOn, pid::satHighOn, pid::satLink })
+                expectEquals ((int) h.get (id), 1);
+            for (auto* id : { pid::satLowDrive, pid::satMidDrive, pid::satHighDrive })
+                expectWithinAbsoluteError (h.get (id), 6.0f, 0.01f);
+            expectEquals ((int) h.get (pid::satLowChar), 0);
+            expectEquals ((int) h.get (pid::satMidChar), 1);
+            expectEquals ((int) h.get (pid::satHighChar), 1);
+            expect (h.proc.getState().getParameter ("satLowDrive_2") != nullptr, "instance bank");
+            expect (h.proc.getState().getParameter ("satMultiband_3") != nullptr, "instance bank");
+        }
+
+        beginTest ("Multiband off: band parameters change nothing (bit-exact single band)");
+        {
+            const auto runIt = [] (bool touchBands)
+            {
+                Harness h;
+                h.neutral();
+                h.set (pid::satOn, 1.0f);
+                h.set (pid::satDrive, 15.0f);
+                h.set (pid::satCharacter, 2.0f);
+                if (touchBands)
+                {
+                    h.set (pid::satLowDrive, 24.0f);
+                    h.set (pid::satHighChar, 3.0f);
+                    h.set (pid::satMidOn, 0.0f);
+                    h.set (pid::satXoverLow, 900.0f);
+                }
+                return h.run (h.sine (300.0, 0.3f, 1.0));
+            };
+            const auto a = runIt (false), b = runIt (true);
+            float maxDiff = 0.0f;
+            for (int i = 0; i < a.getNumSamples(); ++i)
+                maxDiff = std::max (maxDiff, std::abs (a.getSample (0, i) - b.getSample (0, i)));
+            expectEquals (maxDiff, 0.0f);
+        }
+
+        beginTest ("Bands off: the sum is a flat, phase-compensated LR4 all-pass (null against the analytic all-pass)");
+        {
+            auto s1 = multi (false);
+            auto s2 = multi (false);
+            s2.xoverLowHz = 1000.0f;
+            s2.xoverHighHz = 1500.0f;
+            for (double f : { 60.0, 150.0, 250.0, 700.0, 2000.0, 4000.0, 7000.0, 12000.0, 17000.0 })
+            {
+                const auto g1 = complexGain (s1, f), g2 = complexGain (s2, f);
+                const auto expected = allpassAt (250.0, f) * allpassAt (4000.0, f) / (allpassAt (1000.0, f) * allpassAt (1500.0, f));
+                const double err = 20.0 * std::log10 (std::abs (g1 / g2 - expected) + 1.0e-12);
+                const double magDb = 20.0 * std::log10 (std::abs (g1));
+                logMessage (juce::String (f, 0) + " Hz: |sum| " + juce::String (magDb, 3) + " dB, null vs all-pass " + juce::String (err, 1) + " dB");
+                expectLessThan (err, -60.0);
+                expectWithinAbsoluteError (magDb, 0.0, 0.05);
+            }
+        }
+
+        beginTest ("Bands act separately");
+        {
+            // Only the high band drives hard: a low tone stays clean, a high tone distorts
+            auto s = multi (false, 24.0f, 2);
+            s.bands[2].on = true;
+            const double lowThd = thdDb (renderWith (s, sineVec (fs48, 200.0, -12.0, 2.0)), fs48, 200.0);
+            const double highThd = thdDb (renderWith (s, sineVec (fs48, 7000.0, -12.0, 2.0)), fs48, 7000.0);
+            logMessage ("high band only: 200 Hz THD " + juce::String (lowThd, 1) + " dB, 7 kHz THD " + juce::String (highThd, 1) + " dB");
+            expectLessThan (lowThd, -60.0);
+            expectGreaterThan (highThd, -30.0);
+
+            s = multi (false, 24.0f, 2);
+            s.bands[0].on = true;
+            const double lowThd2 = thdDb (renderWith (s, sineVec (fs48, 100.0, -12.0, 2.0)), fs48, 100.0);
+            const double highThd2 = thdDb (renderWith (s, sineVec (fs48, 7000.0, -12.0, 2.0)), fs48, 7000.0);
+            logMessage ("low band only: 100 Hz THD " + juce::String (lowThd2, 1) + " dB, 7 kHz THD " + juce::String (highThd2, 1) + " dB");
+            expectGreaterThan (lowThd2, -30.0);
+            expectLessThan (highThd2, -60.0);
+        }
+
+        beginTest ("Multiband aliasing at equal settings");
+        {
+            const auto tone = sineVec (fs48, 4987.0, -6.0, 2.0);
+            for (int c = 0; c < 4; ++c)
+            {
+                const double a = aliasingDb (renderWith (multi (true, 12.0f, c), tone), fs48, 4987.0);
+                logMessage ("multiband, character " + juce::String (c) + ": aliasing " + juce::String (a, 1) + " dB");
+                expectLessThan (a, -67.0);
+            }
+        }
+
+        beginTest ("Crossovers in the wrong order stay stable and flat");
+        {
+            auto s = multi (false);
+            s.xoverLowHz = 1000.0f;
+            s.xoverHighHz = 1000.0f;   // <= low: kept at 1.5 x low
+            for (double f : { 100.0, 1000.0, 1500.0, 8000.0 })
+                expectWithinAbsoluteError (20.0 * std::log10 (std::abs (complexGain (s, f))), 0.0, 0.05);
+        }
+
+        beginTest ("No click when switching between single band and multiband");
+        {
+            const auto in = sineVec (fs48, 200.0, -30.0, 2.0);
+            SaturationModule sat;
+            auto s = single (1, 0.0f);
+            sat.setSettings (s);
+            sat.prepare (fs48, 512);
+            std::vector<float> l (in), r (in);
+            int step = 0;
+            for (size_t start = 0; start < in.size(); start += 512, ++step)
+            {
+                if (step % 15 == 7)
+                {
+                    s.multiband = ! s.multiband;
+                    for (auto& b : s.bands)
+                        b = { true, 0.0f, 1 };
+                    sat.setSettings (s);
+                }
+                const int n = (int) std::min ((size_t) 512, in.size() - start);
+                float* ch[] { l.data() + start, r.data() + start };
+                sat.process (ch, 2, n);
+            }
+            const double sp = splatterDb (l, fs48, 4800);
+            logMessage ("HF splatter while switching modes: " + juce::String (sp, 1) + " dB");
+            expectLessThan (sp, -60.0);
+        }
+
+        beginTest ("Macros move all band drives together; Link helper keeps the differences");
+        {
+            OfflineParameters p;
+            p.set (pid::satOn, 1.0f);
+            p.set (pid::satMultiband, 1.0f);
+            p.set (pid::satLowDrive, 3.0f);
+            p.set (pid::satMidDrive, 6.0f);
+            p.set (pid::satHighDrive, 9.0f);
+            p.set (pid::macroWarmth, 100.0f);
+            const auto cs = p.read (dsp::Routing::defaults());
+            const auto& b = cs.sat.bands;
+            expect (cs.sat.multiband);
+            expectWithinAbsoluteError (b[1].driveDb - b[0].driveDb, 3.0f, 0.01f);
+            expectWithinAbsoluteError (b[2].driveDb - b[1].driveDb, 3.0f, 0.01f);
+            expectGreaterThan (b[0].driveDb, 3.5f, "the macro adds drive to every band");
+
+            using dsp::linkedBandDrives;
+            auto r = linkedBandDrives ({ 3.0f, 6.0f, 9.0f }, 1, 10.0f);
+            expectEquals (r[0], 7.0f); expectEquals (r[1], 10.0f); expectEquals (r[2], 13.0f);
+            r = linkedBandDrives ({ 3.0f, 6.0f, 20.0f }, 0, 10.0f);   // +7 would push High past 24: all move +4
+            expectEquals (r[0], 7.0f); expectEquals (r[1], 10.0f); expectEquals (r[2], 24.0f);
+            r = linkedBandDrives ({ 3.0f, 6.0f, 9.0f }, 2, 0.0f);     // -9 would push Low below 0: all move -3
+            expectEquals (r[0], 0.0f); expectEquals (r[1], 3.0f); expectEquals (r[2], 6.0f);
         }
     }
 };

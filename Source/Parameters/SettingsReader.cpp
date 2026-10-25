@@ -119,6 +119,11 @@ namespace velvox
     bind (raw.reverbHighCut, pid::reverbHighCut);
     bind (raw.delaySpread, pid::delaySpread);   bind (raw.delayDrive, pid::delayDrive);
     bind (raw.delayDiffusion, pid::delayDiffusion); bind (raw.delayMod, pid::delayMod);
+    bind (raw.satMultiband, pid::satMultiband);
+    bind (raw.satXoverLow, pid::satXoverLow);   bind (raw.satXoverHigh, pid::satXoverHigh);
+    bind (raw.satBandOn[0], pid::satLowOn);     bind (raw.satBandDrive[0], pid::satLowDrive);   bind (raw.satBandChar[0], pid::satLowChar);
+    bind (raw.satBandOn[1], pid::satMidOn);     bind (raw.satBandDrive[1], pid::satMidDrive);   bind (raw.satBandChar[1], pid::satMidChar);
+    bind (raw.satBandOn[2], pid::satHighOn);    bind (raw.satBandDrive[2], pid::satHighDrive);  bind (raw.satBandChar[2], pid::satHighChar);
     for (int n = 0; n < dsp::maxEqBands; ++n)
     {
         auto& b = raw.eqBands[(size_t) n];
@@ -261,6 +266,11 @@ namespace velvox
     }
     s.eq.legacyResponse = raw.eqLegacyResponse.on();
     s.sat.character = raw.satCharacter.index();
+    s.sat.multiband = raw.satMultiband.on();
+    s.sat.xoverLowHz = raw.satXoverLow.get();
+    s.sat.xoverHighHz = raw.satXoverHigh.get();
+    for (size_t b = 0; b < s.sat.bands.size(); ++b)
+        s.sat.bands[b] = { raw.satBandOn[b].on(), raw.satBandDrive[b].get(), raw.satBandChar[b].index() };
     s.deess.mode = raw.deessMode.index();
     s.comp.detector = raw.compDetector.index();
     s.comp.sidechainHpfHz = raw.compScHpf.get();

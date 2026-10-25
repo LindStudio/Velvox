@@ -6,6 +6,14 @@ namespace velvox::dsp
     {
         float clamp (float v, float lo, float hi) noexcept { return juce::jlimit (lo, hi, v); }
 
+        // Saturation drive: the single-band drive and (0.6) every multiband band move together
+        void addSatDrive (SatSettings& sat, float db) noexcept
+        {
+            sat.driveDb += db;
+            for (auto& b : sat.bands)
+                b.driveDb += db;
+        }
+
         // A module with a mix control: off in the base -> only the macro's share counts
         void addMix (bool& on, float& mix, float macroMix) noexcept
         {
@@ -112,7 +120,7 @@ namespace velvox::dsp
                 air = roleBand (s.eq, EqRole::air);
             air.add (-1.5f * m.warmth);
             addMix (s.sat.enabled, s.sat.mix, 0.5f * m.warmth);
-            s.sat.driveDb += 6.0f * m.warmth;
+            addSatDrive (s.sat, 6.0f * m.warmth);
         }
 
         // ---- Aggression: harder, faster compression and more drive
@@ -124,7 +132,7 @@ namespace velvox::dsp
             s.comp.attackMs *= 1.0f - 0.6f * m.aggression;
             s.comp.makeupDb += 5.0f * m.aggression;
             addMix (s.sat.enabled, s.sat.mix, 0.4f * m.aggression);
-            s.sat.driveDb += 8.0f * m.aggression;
+            addSatDrive (s.sat, 8.0f * m.aggression);
         }
 
         // ---- Density: more compression for a thicker, steadier voice
@@ -158,6 +166,8 @@ namespace velvox::dsp
         warmth.clampGain();
         s.deess.rangeDb      = clamp (s.deess.rangeDb, 0.0f, 24.0f);
         s.sat.driveDb        = clamp (s.sat.driveDb, 0.0f, 24.0f);
+        for (auto& b : s.sat.bands)
+            b.driveDb = clamp (b.driveDb, 0.0f, 24.0f);
         s.comp.thresholdDb   = clamp (s.comp.thresholdDb, -60.0f, 0.0f);
         s.comp.ratio         = clamp (s.comp.ratio, 1.0f, 20.0f);
         s.comp.attackMs      = clamp (s.comp.attackMs, 0.1f, 100.0f);

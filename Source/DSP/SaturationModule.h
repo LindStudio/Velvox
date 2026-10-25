@@ -32,6 +32,19 @@ namespace velvox::dsp
         std::array<SatBand, 3> bands { SatBand { true, 6.0f, 0 }, SatBand { true, 6.0f, 1 }, SatBand { true, 6.0f, 1 } };
     };
 
+    // "Link" (satLink) for the panel: the user sets `band` to `newDb`; every band moves by the same
+    // amount, limited so that none leaves [minDb, maxDb] (the differences between the bands stay).
+    inline std::array<float, 3> linkedBandDrives (std::array<float, 3> current, int band, float newDb,
+                                                  float minDb = 0.0f, float maxDb = 24.0f) noexcept
+    {
+        float delta = newDb - current[(size_t) juce::jlimit (0, 2, band)];
+        for (float v : current)
+            delta = juce::jlimit (minDb - v, maxDb - v, delta);
+        for (auto& v : current)
+            v += delta;
+        return current;
+    }
+
     // Level meters for the UI (written by the audio thread, relaxed atomics): per band input and
     // output RMS in dBFS over the last block (single band: index 0)
     struct SatMeters

@@ -236,6 +236,21 @@ namespace velvox::pid
     }
     inline juce::String eqBandId (int band1to16, const char* field) { return "eqBand" + juce::String (band1to16) + field; }
 
+    // ---- added in 0.6: Saturation multiband (off = the single-band module) ----
+    inline constexpr const char* satMultiband = "satMultiband";
+    inline constexpr const char* satXoverLow  = "satXoverLow";
+    inline constexpr const char* satXoverHigh = "satXoverHigh";
+    inline constexpr const char* satLowOn     = "satLowOn";
+    inline constexpr const char* satLowDrive  = "satLowDrive";
+    inline constexpr const char* satLowChar   = "satLowChar";
+    inline constexpr const char* satMidOn     = "satMidOn";
+    inline constexpr const char* satMidDrive  = "satMidDrive";
+    inline constexpr const char* satMidChar   = "satMidChar";
+    inline constexpr const char* satHighOn    = "satHighOn";
+    inline constexpr const char* satHighDrive = "satHighDrive";
+    inline constexpr const char* satHighChar  = "satHighChar";
+    inline constexpr const char* satLink      = "satLink";   // UI behaviour only (dsp::linkedBandDrives)
+
     // Hidden per EQ instance: 1 = bands use the 0.5 bilinear designs (set only by the migration)
     inline constexpr const char* eqLegacyResponse = "eqLegacyResponse";
 }

@@ -178,6 +178,14 @@ namespace velvox::dsp
         xoverLow.reset (sampleRate, 0.05);
         xoverHigh.reset (sampleRate, 0.05);
         activeMultiband = requestedMultiband;
+        setSettings (pending);
+        for (auto& p : bandParams)
+        {
+            p.driveDb.setCurrentAndTargetValue (p.driveDb.getTargetValue());
+            p.onAmount.setCurrentAndTargetValue (p.onAmount.getTargetValue());
+        }
+        xoverLow.setCurrentAndTargetValue (xoverLow.getTargetValue());
+        xoverHigh.setCurrentAndTargetValue (xoverHigh.getTargetValue());
 
         dcR = 1.0 - 2.0 * juce::MathConstants<double>::pi * 10.0 / highRate;
         warmupLength = (int) std::lround (0.005 * sampleRate);
