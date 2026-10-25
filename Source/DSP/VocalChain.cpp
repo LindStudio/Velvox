@@ -579,7 +579,15 @@ namespace velvox::dsp
         const auto k = (size_t) slot.instance;
         switch (slot.id)
         {
-            case ModuleId::eq:      runGated (eqGate[k], eq[k], io, numChannels, n); break;
+            case ModuleId::eq:
+            {
+                // Band solo (0.6.1): after the gate, from the EQ's input - also at Mix < 100 % or while
+                // the EQ is off (then the input is still in io)
+                const bool ran = ! eqGate[k].isFullyBypassed();
+                runGated (eqGate[k], eq[k], io, numChannels, n);
+                eq[k].processAudition (ran ? eqGate[k].dryChannels() : io, io, numChannels, n);
+                break;
+            }
             case ModuleId::comp:    runGated (compGate[k], comp[k], io, numChannels, n); break;
             case ModuleId::deess:   runGated (deessGate[k], deess[k], io, numChannels, n); break;
             case ModuleId::sat:     saturation[k].process (io, numChannels, n); break; // own on/off + mix, constant latency

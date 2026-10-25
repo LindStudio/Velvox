@@ -37,6 +37,8 @@ namespace velvox::dsp
             b.gain.reset (sampleRate, 0.05);
             b.amount.reset (sampleRate, 0.03);
         }
+        audition.prepare (sampleRate);
+        auditionActive = -1;
         reset();
     }
 
@@ -45,7 +47,50 @@ namespace velvox::dsp
         for (auto& b : bands)
             for (auto& f : b.filters)
                 f.reset();
+        audition.reset();
         snapNext = true;
+    }
+
+    void EqualizerModule::processAudition (const float* const* moduleInput, float* const* io, int numChannels, int numSamples) noexcept
+    {
+        int want = auditionRequest.load (std::memory_order_relaxed);
+        if (want < 0 || want >= maxEqBands || bands[(size_t) want].target.isFree())
+            want = -1;
+
+        if (want != auditionActive)
+        {
+            if (audition.isSilent())
+            {
+                // Switch while nothing of the old region is heard
+                auditionActive = want;
+                if (want >= 0)
+                {
+                    audition.start (auditionRegionFor (bands[(size_t) want].target));
+                    audition.setOn (true);
+                }
+            }
+            else
+            {
+                audition.setOn (false);   // fade out first (off, or on the way to another band)
+            }
+        }
+        else if (want >= 0)
+        {
+            const auto region = auditionRegionFor (bands[(size_t) want].target);
+            if (region.shape != audition.getShape())
+            {
+                auditionActive = -2;      // type change: fade out, restart with the new shape
+                audition.setOn (false);
+            }
+            else
+            {
+                audition.follow (region);
+            }
+        }
+
+        if (audition.isSilent())
+            return;
+        audition.process (moduleInput, io, numChannels, numSamples);
     }
 
     void EqualizerModule::setSettings (const EqSettings& s)

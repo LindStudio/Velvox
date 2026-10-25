@@ -257,3 +257,8 @@ if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Source/UI/DynPanels.cpp Tests/DynPanelTests.cpp)
     target_sources(HeadlinerRefHost PRIVATE Source/UI/DynPanels.cpp)
 endif()
+
+# Audition (0.6.1: EQ band solo, Saturation band solo; monitoring states, not parameters)
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/AuditionTests.cpp)
+endif()
