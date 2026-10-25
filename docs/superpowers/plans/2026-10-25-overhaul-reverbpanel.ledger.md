@@ -46,3 +46,9 @@ errors), then passed on the first run)
   shows "Depth", one description line and the three values.
 - Added: TestMain --snapshot overlay "set:<id>=<value>,..." (parameters in real units) for the screenshots.
 - Help page "reverb" rewritten for the 8 rooms, the depth dot and the main row / Mehr split (it still described Room / Plate only).
+
+Task 3: complete (snapshots in C:\Users\jakob\dev\velvox-wt\shots-reverbpanel\: reverb-1000.png, reverb-889.png (min scale),
+reverb-mehr.png, type-room.png, type-hall-889.png, type-largehall.png, type-atmosphere.png, init-off.png, init-on-889.png; reviewed
+and iterated: subtler decay profile, taller Plate, meter only with ducking)
+Final: full suite 27386 checks passed, 15 failed — all 15 are the base's PanelFrameTests "sat: reaches satMultiband/…" and
+"pulse: reaches pulseShape/pulseAmount" (present before this track, owned by satpanel / timepanels). Reverb panel suite 234/234.
