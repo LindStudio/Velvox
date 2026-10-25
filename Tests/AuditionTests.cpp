@@ -285,3 +285,133 @@ public:
 };
 
 static AuditionEqTests auditionEqTests;
+
+//==============================================================================
+namespace
+{
+    dsp::SatSettings multiband (bool mb = true, float mix = 1.0f)
+    {
+        dsp::SatSettings s;
+        s.enabled = true;
+        s.multiband = mb;
+        s.mix = mix;
+        s.driveDb = 9.0f;
+        s.character = 2;
+        s.xoverLowHz = 250.0f;
+        s.xoverHighHz = 4000.0f;
+        s.bands = { dsp::SatBand { true, 9.0f, 0 }, dsp::SatBand { true, 12.0f, 2 }, dsp::SatBand { true, 6.0f, 1 } };
+        return s;
+    }
+
+    juce::AudioBuffer<float> renderSat (const dsp::SatSettings& s, const juce::AudioBuffer<float>& input, int solo,
+                                        std::function<void (dsp::SaturationModule&, int)> before = {})
+    {
+        auto sat = std::make_unique<dsp::SaturationModule>();
+        sat->setSettings (s);
+        sat->prepare (fsA, 512);
+        if (solo != -100)
+            sat->setSoloBand (solo);
+        auto buf = input;
+        for (int start = 0; start < buf.getNumSamples(); start += 512)
+        {
+            if (before)
+                before (*sat, start);
+            const int n = std::min (512, buf.getNumSamples() - start);
+            std::array<float*, 2> p { buf.getWritePointer (0, start), buf.getWritePointer (1, start) };
+            sat->process (p.data(), 2, n);
+        }
+        return buf;
+    }
+}
+
+class AuditionSatTests final : public juce::UnitTest
+{
+public:
+    AuditionSatTests() : juce::UnitTest ("Velvox audition: Saturation band solo", "Velvox") {}
+
+    void runTest() override
+    {
+        const int n = (int) (fsA * 1.0), from = (int) (fsA * 0.3), len = (int) (fsA * 0.5);
+        const auto in = sines ({ 60.0, 1000.0, 15500.0 }, -20.0, n);   // two octaves inside the bands, no tone a harmonic of another
+
+        beginTest ("Solo low / mid / high: only that band is heard");
+        {
+            const double freqs[3] { 60.0, 1000.0, 15500.0 };
+            for (int b = 0; b < 3; ++b)
+            {
+                const auto out = renderSat (multiband(), in, b);
+                const double own = toneLevel (out, from, len, freqs[b], fsA);
+                for (int o = 0; o < 3; ++o)
+                    if (o != b)
+                        expect (dbOf (own / toneLevel (out, from, len, freqs[o], fsA)) > 30.0,
+                                "band " + juce::String (b) + " vs tone of band " + juce::String (o));
+                // the band's own level is what the normal output has there (processed, not raw)
+                const auto normal = renderSat (multiband(), in, -100);
+                expect (std::abs (dbOf (own / toneLevel (normal, from, len, freqs[b], fsA))) < 1.0, "same level as in the mix");
+            }
+        }
+
+        beginTest ("The three solos add up to the normal output (only that band's processed output)");
+        {
+            for (float mix : { 1.0f, 0.4f })
+            {
+                const auto normal = renderSat (multiband (true, mix), in, -100);
+                auto sum = renderSat (multiband (true, mix), in, 0);
+                const auto mid = renderSat (multiband (true, mix), in, 1);
+                const auto high = renderSat (multiband (true, mix), in, 2);
+                for (int ch = 0; ch < 2; ++ch)
+                {
+                    sum.addFrom (ch, 0, mid, ch, 0, n);
+                    sum.addFrom (ch, 0, high, ch, 0, n);
+                }
+                const double d = diffDb (normal, sum, (int) (fsA * 0.05));
+                logMessage ("sum of solos vs normal, mix " + juce::String (mix) + ": " + juce::String (d, 1) + " dB");
+                expect (d < -70.0, juce::String (d, 1) + " dB");
+            }
+        }
+
+        beginTest ("Multiband off: a solo request has no effect (bit-identical)");
+        {
+            const auto a = renderSat (multiband (false), in, -100);
+            const auto b = renderSat (multiband (false), in, 1);
+            expectEquals (maxAbsDiff (a, b), 0.0);
+        }
+
+        beginTest ("Released: bit-identical to the normal output after the fade");
+        {
+            const auto a = renderSat (multiband(), in, -100);
+            const auto b = renderSat (multiband(), in, -100, [] (dsp::SaturationModule& s, int start)
+            {
+                if (start == 4096) s.setSoloBand (2);
+                if (start == 4096 * 3) s.setSoloBand (-1);
+            });
+            expect (maxAbsDiff (a, b, 4096 * 3 + 512 + (int) (fsA * 0.03)) == 0.0, "identical after the release");
+            expect (maxAbsDiff (a, b, 4096) > 1.0e-3, "the solo was audible");
+            expectEquals (dsp::SaturationModule().getSoloBand(), -1);
+        }
+
+        beginTest ("Click-free: on, to another band, multiband off, off");
+        {
+            const int total = (int) fsA * 2;
+            const auto tones = sines ({ 180.0, 1200.0 }, -14.0, total);
+            const auto out = renderSat (multiband(), tones, -100, [] (dsp::SaturationModule& s, int start)
+            {
+                const int t = start / 512;
+                if (t == 20) s.setSoloBand (0);
+                if (t == 60) s.setSoloBand (1);
+                if (t == 100) s.setSoloBand (0);
+                if (t == 140) { auto x = multiband (false); s.setSettings (x); }
+                if (t == 160) s.setSoloBand (-1);
+            });
+            const double peak = out.getMagnitude (0, total);
+            // Saturated tones carry harmonics: the steady reference is the normal render's own worst
+            const auto ref = renderSat (multiband(), tones, -100);
+            const double steady = std::max (secondDiff (ref, 4096, total), peak * std::pow (2.0 * pi * 1200.0 / fsA, 2.0));
+            const double worst = secondDiff (out, 4096, total);
+            logMessage ("sat solo switching: worst " + juce::String (worst / steady, 2) + " x steady");
+            expect (worst < 1.5 * steady, juce::String (worst / steady, 2) + " x steady");
+        }
+    }
+};
+
+static AuditionSatTests auditionSatTests;

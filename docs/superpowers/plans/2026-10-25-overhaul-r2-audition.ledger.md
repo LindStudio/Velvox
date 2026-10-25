@@ -23,3 +23,16 @@ wrong: soloed narrow regions of near-silent bands are lifted up to +24 dB (that 
 Ruling: switching between bands or to a band of another shape fades the solo out (15 ms) and the new one in (15 ms);
 frequency / Q of the soloed band glide (20 ms) while dragged. — Cost if wrong: a ~30 ms dip when hopping bands.
 Ruling: the solo of an off band is allowed (you hear its region); a free slot is no solo. — Cost if wrong: none.
+
+Task 2: complete (SaturationModule::setSoloBand / getSoloBand / isSoloAudible; the soloed band's dry share + output
+through the same Mix / Output law with its own DC blocker; 15 ms fades; "Velvox audition: Saturation band solo" 16 checks.
+The three solos sum to the normal output at -147 dB (Mix 100 % and 40 %); switching 0.57 x steady second difference.
+Note: the test file was written before the implementation, its first build failed on the missing API (no separate run).
+First test tones (100 Hz / 1 kHz / 8 kHz) were wrong: 8 kHz is a harmonic of the driven 1 kHz and the crossover slopes
+leak 6.5 kHz into Mid; tones now sit two octaves inside each band: 60 Hz / 1 kHz / 15.5 kHz.)
+
+Ruling: "only that band's processed output" = the band's dry share plus its saturation at the module's Mix and Output
+(not the raw saturator, not level-matched) — what the band contributes to the normal sound; the solos add up to it.
+— Cost if wrong: a level-match stage like the EQ's would be ~20 lines.
+Ruling: the Saturation solo works only in multiband mode (single band: the request is ignored, bit-identical); switching
+multiband off fades the solo out; switching the module off ends it. — Cost if wrong: none (single band = whole signal).
