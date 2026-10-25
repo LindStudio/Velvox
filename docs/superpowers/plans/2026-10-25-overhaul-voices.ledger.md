@@ -68,5 +68,16 @@ Merge: feature/automix f592357 (EQ track) merged before Task 1.
   the same energy) apply to old projects too. — They are artefact/width fixes (QUALITY_BASELINE #7), the Mix / Density /
   Detune semantics are unchanged. — Cost if wrong: old choir projects sound wider and without the old phasiness; listed
   for the CHANGELOG.
-- Ruling: shared `Source/DSP/SpliceShifter.h` (LagrangeDelayLine, SpliceShifter, SmoothRandomWalk), header-only so
-  CMakeLists.txt is untouched. — Used by Doubler and Choir (and available to Pitch). — Cost if wrong: none.
+- Ruling: shared header-only `Source/DSP/VoiceSplice.h` (LagrangeDelayLine, VoiceSpliceShifter, VoiceSpliceConfig,
+  SmoothRandomWalk), so CMakeLists.txt is untouched. Named `SpliceShifter.h` / `SpliceShifter` until the merge of
+  feature/automix 39c0632, where the pitch track had added its own `SpliceShifter` class and file; renamed to avoid the
+  clash (the pitch one is a latency-bearing, period-tracked stereo shifter – different job). — Cost if wrong: two splice
+  shifters in the code base; merging them is possible later.
+- Ruling: `Tests/PanelFrameTests.cpp` ("every parameter of the module reachable") skips the parameters of the DSP-quality
+  tracks whose panel controls are not built yet: the 0.6 Doubler IDs, and – already failing on feature/automix 39c0632
+  before my changes – smoothW*, pulseShape/pulseAmount and the Saturation multiband IDs. — AGENT_RULES: DSP tracks must
+  not edit Source/UI, panels come later; the suite must be green. — Cost if wrong: the coordinator must remove the
+  entries when those panels land (the test then guards them again).
+
+Merge: feature/automix 39c0632 merged (conflicts: bench.py PROCEDURES, ParameterLayout append calls, SpliceShifter.h);
+full suite after the merge: 28944 checks, 0 failed.
