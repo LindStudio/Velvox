@@ -223,7 +223,7 @@ namespace velvox
               "Character of the space: Room = natural and close, Plate = dense and bright, Hall / Large Hall = concert spaces, "
               "Ambience = short studio air, Atmosphere = huge lush EDM space, Cinematic = dark and deep, Ethereal = bright, wide and floating." },
             { pid::reverbMix,      "Reverb Mix",       "Reverb", T::Float, 0.0f, 100.0f, 18.0f, 0.0f, "%", {}, "Level of the reverb return added to the dry signal." },
-            { pid::reverbDecay,    "Reverb Decay",     "Reverb", T::Float, 0.2f, 20.0f, 1.8f, 2.5f, "s", {}, "Reverb time (RT60) in the mid range." },
+            { pid::reverbDecay,    "Reverb Decay",     "Reverb", T::Float, 0.2f, 20.0f, 1.8f, 2.5f, "s", {}, "Reverb time (T30 of the whole tail, all frequencies)." },
             { pid::reverbPreDelay, "Reverb Pre-Delay", "Reverb", T::Float, 0.0f, 250.0f, 20.0f, 60.0f, "ms", {}, "Gap before the reverb starts." },
             { pid::reverbSize,     "Reverb Size",      "Reverb", T::Float, 0.0f, 100.0f, 60.0f, 0.0f, "%", {}, "Virtual room / plate size." },
             { pid::reverbDamping,  "Reverb Tone",      "Reverb", T::Float, 1000.0f, 20000.0f, 7000.0f, 6000.0f, "Hz", {}, "High-frequency damping inside the tail." },
