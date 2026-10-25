@@ -386,7 +386,13 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     pump (40);
 
     // "check": VOCAL CHECK in the chain after a problematic take (rumble, resonance, noise, big level range)
-    if (overlay == "check")
+    // "checktab" (+ "+ignored", "+empty", "+off"): the same on the VOCAL CHECK tab
+    const bool checkTab = overlay.startsWith ("checktab");
+    if (checkTab)
+        proc.getState().state.setProperty ("uiTab", "check", nullptr);
+    if (overlay == "checktab+empty")
+        proc.getState().getParameter ("checkOn")->setValueNotifyingHost (1.0f);
+    if (overlay == "check" || (checkTab && overlay != "checktab+empty" && overlay != "checktab+off"))
     {
         proc.getState().getParameter ("checkOn")->setValueNotifyingHost (1.0f);
         test::VocalSpec s;
@@ -477,6 +483,14 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
             ed->showMixDetails();
         if (overlay == "mixed+done")
             ed->getAnalysisOverlay().showProgress();
+        if (overlay == "checktab+ignored")
+        {
+            auto& vc = proc.getVocalCheck();
+            const auto visible = vc.visibleFindings();
+            for (size_t i = 0; i < std::min<size_t> (2, visible.size()); ++i)
+                vc.ignore (visible[visible.size() - 1 - i]->id);
+            ed->getCheckView().setIgnoredExpanded (true);
+        }
     }
 
     // Let the editor timer run a few frames (and the capture fill up for "capturing")

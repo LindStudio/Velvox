@@ -68,18 +68,27 @@ namespace velvox::check
         if (f == nullptr || isIgnored (id) || f->action.empty())
             return false;
         // Applied on this very measurement already: wait for a fresh one (no double cuts)
-        const auto it = appliedInGeneration.find (id);
-        if (it != appliedInGeneration.end() && it->second == host.latest().generation)
+        if (wasApplied (id))
             return false;
         return ! preview (id).empty();
+    }
+
+    bool VocalCheckController::wasApplied (const juce::String& id) const
+    {
+        const auto it = applied.find (id);
+        if (it == applied.end() || it->second.generation != host.latest().generation)
+            return false;
+        for (const auto& [paramId, normalised] : it->second.values)
+            if (auto* p = apvts.getParameter (paramId); p != nullptr && std::abs (p->getValue() - normalised) > 1.0e-6f)
+                return false;
+        return it->second.routing.isEmpty() || apvts.state.getProperty (statekeys::routing).toString() == it->second.routing;
     }
 
     bool VocalCheckController::apply (const juce::String& id)
     {
         if (! canApply (id))
             return false;
-        applyResolvedFix (apvts, preview (id));
-        afterApply ({ id });
+        write (preview (id), { id });
         return true;
     }
 
@@ -98,16 +107,24 @@ namespace velvox::check
         const auto fix = planFixes (fixes, context(), juce::String::fromUTF8 ("Vocal Check: Alles anwenden"));
         if (fix.empty())
             return 0;
-        applyResolvedFix (apvts, fix);
-        afterApply (ids);
+        write (fix, ids);
         return (int) ids.size();
     }
 
-    void VocalCheckController::afterApply (const std::vector<juce::String>& ids)
+    void VocalCheckController::write (const ResolvedFix& fix, const std::vector<juce::String>& ids)
     {
-        const auto generation = host.latest().generation;
+        applyResolvedFix (apvts, fix, host.history);
+
+        Applied record;
+        record.generation = host.latest().generation;
+        for (auto& p : fix.params)
+            if (auto* param = apvts.getParameter (p.paramId))
+                record.values.emplace_back (p.paramId, param->getValue());
+        if (fix.routing.has_value())
+            record.routing = apvts.state.getProperty (statekeys::routing).toString();
         for (auto& id : ids)
-            appliedInGeneration[id] = generation;
+            applied[id] = record;
+
         // The chain changed: in continuous mode measure afresh (the old frames do not contain
         // the fix). A finished capture keeps its measurement; the generation guard above
         // stops a second apply on it.

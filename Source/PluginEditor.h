@@ -13,6 +13,7 @@
 #include "UI/TutorialOverlay.h"
 #include "UI/ModuleBrowser.h"
 #include "UI/SimpleView.h"
+#include "UI/VocalCheckView.h"
 #include "UI/PresetBrowser.h"
 
 // The whole UI is laid out on a fixed design canvas (ui::baseWidth x ui::baseHeight = 1000 x 600)
@@ -22,7 +23,7 @@
 //   header      logo, presets ‹ name ▾ ›, SIMPEL | ADVANCED, AUTO MIX | VOCAL CHECK, bypass, help
 //   AUTO MIX    Simple:   spectrum + "Vocal analysieren" | six macro faders, IN/OUT at the bottom
 //               Advanced: chain row (+ IN/OUT) on top, the selected module's panel below
-//   VOCAL CHECK the check panel over the whole body (both modes)
+//   VOCAL CHECK score ring + finding tiles (VocalCheckView) over the whole body (both modes)
 //   overlays    analysis, auto-mix details, module browser, preset list, dialogs, help, tutorial, hover info
 // View state (mode, tab, selection) is stored with the project and never affects the audio.
 class VelvoxAudioProcessorEditor final : public juce::AudioProcessorEditor,
@@ -66,6 +67,7 @@ public:
     velvox::ui::ChainView& getChainView() noexcept { return chainView; }
     velvox::ui::TopBar& getTopBar() noexcept { return topBar; }
     velvox::ui::SimpleView& getSimpleView() noexcept { return simpleView; }
+    velvox::ui::VocalCheckView& getCheckView() noexcept { return checkView; }
     velvox::ui::AutoMixView& getAutoMixView() noexcept { return mixView; }
     bool isMixDetailsOpen() const noexcept { return detailsOverlay.isVisible(); }
     velvox::ui::ModuleBrowser& getBrowser() noexcept { return browser; }
@@ -143,6 +145,7 @@ private:
     velvox::ui::TopBar topBar;
     velvox::ui::ChainView chainView;
     velvox::ui::SimpleView simpleView;
+    velvox::ui::VocalCheckView checkView;   // the VOCAL CHECK tab (both modes)
     velvox::ui::AutoMixView mixView;
     DetailsOverlay detailsOverlay { mixView };
     velvox::ui::AnalysisOverlay analysis;

@@ -102,7 +102,7 @@ Every knob, switch and menu is a real plugin parameter: your DAW can automate it
 The module chain with the panel of the selected module. When a macro moves a parameter, its knob shows a small marker at the value that is actually processed.
 
 ## VOCAL CHECK
-A diagnosis of the recording at the position of the Vocal Check module, with suggestions.
+A diagnosis of the recording at the position of the Vocal Check module: a score (0 - 100) and one tile per finding with the suggested fix. "Anwenden" applies it, "Alles anwenden" applies every suggestion at once - each is one step of Undo (Ctrl+Z). "Ignorieren" hides a finding (restorable under "x ignoriert"). The genre (Party, Pop, Akustik) sets the target ranges.
 
 ## Switching
 All views show the same settings. Switching never changes the sound or resets anything.)" });
@@ -187,7 +187,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
 - Too dry or too far back: Reverb and Delay with ducking (Mehr), so the words stay clear.
 - Too narrow: Doubler or Choir, then check Mono in the OUTPUT panel.
 - Clipping output: lower Vocal Level and keep Clip guard on.
-- Not sure where to start: open VOCAL CHECK and play the vocal for a while. A finding opens the module it recommends.)" });
+- Not sure where to start: open VOCAL CHECK and play the vocal for a while, then use "Anwenden" on the findings.)" });
 
             //==================================================================
             p.push_back (modulePage ("eq", "Equalizer",

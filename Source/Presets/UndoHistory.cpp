@@ -5,6 +5,9 @@ namespace velvox
     namespace
     {
         const juce::Identifier presetNameProperty { "presetName" };   // PresetManager::presetNameProperty
+
+        // A parameter (normalised) a snapshot does not hold, changed inside a transaction
+        struct RawChange { int index; float before, after; };
     }
 
     // Whole-state step: values and routing before and after
@@ -16,6 +19,9 @@ namespace velvox
 
         // The preset field follows the step (a preset load undone shows the old name again)
         juce::var presetBefore, presetAfter;
+        // Parameters snapshots leave alone (input gain, bypass, level match) that the transaction
+        // changed itself, e.g. a Vocal Check fix of the input level
+        std::vector<RawChange> extras;
 
         bool perform() override
         {
@@ -24,18 +30,27 @@ namespace velvox
                 first = false;
                 return true;
             }
-            return apply (after, presetAfter);
+            return apply (after, presetAfter, false);
         }
 
-        bool undo() override { return apply (before, presetBefore); }
+        bool undo() override { return apply (before, presetBefore, true); }
         int getSizeInUnits() override { return 1; }
 
     private:
-        bool apply (const ParameterSnapshot& s, const juce::var& presetName)
+        bool apply (const ParameterSnapshot& s, const juce::var& presetName, bool undoing)
         {
             const juce::ScopedValueSetter<bool> guard (owner.restoring, true);
             s.applyTo (owner.apvts, false);
             owner.apvts.state.setProperty (presetNameProperty, presetName, nullptr);
+            const auto& params = owner.apvts.processor.getParameters();
+            for (const auto& c : extras)
+                if (juce::isPositiveAndBelow (c.index, params.size()))
+                {
+                    auto* p = params[c.index];
+                    p->beginChangeGesture();
+                    p->setValueNotifyingHost (undoing ? c.before : c.after);
+                    p->endChangeGesture();
+                }
             return true;
         }
 
@@ -107,6 +122,9 @@ namespace velvox
         transactionName = name;
         transactionBefore = ParameterSnapshot::capture (apvts, name);
         transactionPreset = apvts.state.getProperty (presetNameProperty);
+        transactionRaw.clear();
+        for (auto* p : apvts.processor.getParameters())
+            transactionRaw.push_back (p->getValue());
         gestureBefore.clear();   // gestures inside belong to the transaction
         gestureOrder.clear();
         openGestures = 0;
@@ -125,11 +143,23 @@ namespace velvox
             return;
 
         auto after = ParameterSnapshot::capture (apvts, transactionName);
-        // Excluded parameters (bypass, input gain, level match) are compared through values only:
-        // an unchanged state records nothing
-        if (after.values == transactionBefore.values && after.routing == transactionBefore.routing)
+        // Parameters the snapshot leaves out (bypass, input gain, level match) that changed inside
+        // the transaction travel with the step as raw values
+        std::vector<RawChange> extras;
+        const auto& params = apvts.processor.getParameters();
+        for (int i = 0; i < params.size() && i < (int) transactionRaw.size(); ++i)
+        {
+            const float now = params[i]->getValue();
+            if (std::abs (now - transactionRaw[(size_t) i]) < 1.0e-7f)
+                continue;
+            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (params[i]); rp != nullptr && after.values.count (rp->getParameterID()) == 0)
+                extras.push_back ({ i, transactionRaw[(size_t) i], now });
+        }
+        // An unchanged state records nothing
+        if (after.values == transactionBefore.values && after.routing == transactionBefore.routing && extras.empty())
             return;
         auto action = std::make_unique<SnapshotAction> (*this, std::move (transactionBefore), std::move (after));
+        action->extras = std::move (extras);
         action->presetBefore = transactionPreset;
         action->presetAfter = apvts.state.getProperty (presetNameProperty);
         addStep (std::move (action), transactionName);
