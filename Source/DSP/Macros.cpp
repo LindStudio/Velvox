@@ -82,6 +82,160 @@ namespace velvox::dsp
             b.role = (int) role;
             return { &b, 0.0f };
         }
+
+        // A role band a down move may reduce: only one that exists and is on
+        RoleBand existingRoleBand (EqSettings& eq, EqRole role) noexcept
+        {
+            const int i = eq.findRole (role);
+            if (i < 0 || ! eq.bands[(size_t) i].on)
+                return {};
+            auto& b = eq.bands[(size_t) i];
+            return { &b, b.gain };
+        }
+
+        // Down move on a mix module: only when it is on; at 0 it switches off
+        void reduceMix (bool& on, float& mix, float delta) noexcept
+        {
+            if (! on)
+                return;
+            mix = clamp (mix + delta, 0.0f, 1.0f);
+            if (mix <= 0.0f)
+                on = false;
+        }
+
+        // The clamps of applyMacros (parameter ranges)
+        void clampMacroFields (ChainSettings& s, RoleBand& air, RoleBand& warmth) noexcept
+        {
+            air.clampGain();
+            warmth.clampGain();
+            s.deess.rangeDb      = clamp (s.deess.rangeDb, 0.0f, 24.0f);
+            s.sat.driveDb        = clamp (s.sat.driveDb, 0.0f, 24.0f);
+            for (auto& b : s.sat.bands)
+                b.driveDb = clamp (b.driveDb, 0.0f, 24.0f);
+            s.comp.thresholdDb   = clamp (s.comp.thresholdDb, -60.0f, 0.0f);
+            s.comp.ratio         = clamp (s.comp.ratio, 1.0f, 20.0f);
+            s.comp.attackMs      = clamp (s.comp.attackMs, 0.1f, 100.0f);
+            s.comp.makeupDb      = clamp (s.comp.makeupDb, -12.0f, 24.0f);
+            s.stereo.width       = clamp (s.stereo.width, 0.0f, StereoStage::maxWidth);
+            s.reverbDuck.amountDb = clamp (s.reverbDuck.amountDb, 0.0f, 24.0f);
+            s.delayDuck.amountDb  = clamp (s.delayDuck.amountDb, 0.0f, 24.0f);
+        }
+    }
+
+    ChainSettings applyMacroMove (const ChainSettings& base, MacroId id, float fromRaw, float toRaw) noexcept
+    {
+        const float from = clamp (fromRaw, 0.0f, 1.0f), to = clamp (toRaw, 0.0f, 1.0f);
+        const float d = to - from;
+        if (d == 0.0f)
+            return base;
+
+        ChainSettings s = base;
+        RoleBand air, warmth;
+        const bool up = d > 0.0f;
+
+        // The amounts are those of applyMacros (keep both in step)
+        switch (id)
+        {
+            case MacroId::presence:
+                if (up)
+                {
+                    s.eqOn = true;
+                    air = roleBand (s.eq, EqRole::air);
+                    s.deessOn = true;
+                }
+                else if (s.eqOn)
+                {
+                    air = existingRoleBand (s.eq, EqRole::air);
+                }
+                air.add (5.0f * d);
+                if (s.deessOn)
+                    s.deess.rangeDb += 3.0f * d;
+                break;
+
+            case MacroId::warmth:
+                if (up)
+                {
+                    s.eqOn = true;
+                    warmth = roleBand (s.eq, EqRole::warmth);
+                    air = roleBand (s.eq, EqRole::air);
+                    addMix (s.sat.enabled, s.sat.mix, 0.5f * d);
+                    addSatDrive (s.sat, 6.0f * d);
+                }
+                else
+                {
+                    if (s.eqOn)
+                    {
+                        warmth = existingRoleBand (s.eq, EqRole::warmth);
+                        air = existingRoleBand (s.eq, EqRole::air);
+                    }
+                    if (s.sat.enabled)
+                        addSatDrive (s.sat, 6.0f * d);
+                    reduceMix (s.sat.enabled, s.sat.mix, 0.5f * d);
+                }
+                warmth.add (3.0f * d);
+                air.add (-1.5f * d);
+                break;
+
+            case MacroId::aggression:
+            case MacroId::density:
+            {
+                const bool punch = id == MacroId::aggression;
+                if (up)
+                    s.compOn = true;
+                if (s.compOn)
+                {
+                    s.comp.thresholdDb -= (punch ? 10.0f : 6.0f) * d;
+                    s.comp.ratio += (punch ? 4.0f : 2.0f) * d;
+                    if (punch)
+                        s.comp.attackMs *= (1.0f - 0.6f * to) / (1.0f - 0.6f * from);
+                    s.comp.makeupDb += (punch ? 5.0f : 3.0f) * d;
+                }
+                const float satShare = punch ? 0.4f : 0.25f;
+                if (up)
+                {
+                    addMix (s.sat.enabled, s.sat.mix, satShare * d);
+                    if (punch)
+                        addSatDrive (s.sat, 8.0f * d);
+                }
+                else
+                {
+                    if (punch && s.sat.enabled)
+                        addSatDrive (s.sat, 8.0f * d);
+                    reduceMix (s.sat.enabled, s.sat.mix, satShare * d);
+                }
+                break;
+            }
+
+            case MacroId::width:
+                if (up)
+                    addMix (s.doubler.enabled, s.doubler.mix, 0.6f * d);
+                else
+                    reduceMix (s.doubler.enabled, s.doubler.mix, 0.6f * d);
+                s.stereo.width += 0.5f * d;
+                break;
+
+            case MacroId::space:
+                if (up)
+                {
+                    addMix (s.reverbOn, s.reverbMix, 0.3f * d);
+                    addMix (s.delayOn, s.delayMix, 0.15f * d);
+                    s.reverbDuck.amountDb += 6.0f * d;
+                    s.delayDuck.amountDb += 6.0f * d;
+                }
+                else
+                {
+                    if (s.reverbOn)
+                        s.reverbDuck.amountDb += 6.0f * d;
+                    if (s.delayOn)
+                        s.delayDuck.amountDb += 6.0f * d;
+                    reduceMix (s.reverbOn, s.reverbMix, 0.3f * d);
+                    reduceMix (s.delayOn, s.delayMix, 0.15f * d);
+                }
+                break;
+        }
+
+        clampMacroFields (s, air, warmth);
+        return s;
     }
 
     ChainSettings applyMacros (const ChainSettings& base, const MacroValues& raw) noexcept

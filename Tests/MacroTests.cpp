@@ -2,6 +2,7 @@
 // overwriting of base parameters, view mode never changes the sound.
 
 #include "TestHelpers.h"
+#include "MacroTestHelpers.h"
 #include "StateKeys.h"
 
 using namespace velvox;
@@ -11,9 +12,12 @@ class MacroTests final : public juce::UnitTest
 {
 public:
     MacroTests() : juce::UnitTest ("Velvox macros", "Velvox") {}
+    void moveTests();
 
     void runTest() override
     {
+        moveTests();
+
         beginTest ("All macros at 0: effective settings equal the base settings");
         {
             Harness h;
@@ -211,5 +215,105 @@ public:
         }
     }
 };
+
+void MacroTests::moveTests()
+{
+    using dsp::MacroId;
+    const MacroId all[] { MacroId::presence, MacroId::warmth, MacroId::aggression, MacroId::width, MacroId::space, MacroId::density };
+
+    // Module states to start from: a fresh plugin, two factory presets, every module off
+    std::vector<std::pair<juce::String, dsp::ChainSettings>> bases;
+    {
+        Harness h;
+        bases.push_back ({ "fresh", h.proc.readSettings() });
+        for (auto* name : { "Hypertechno Lead", "Aggressive Vocal" })
+        {
+            Harness p;
+            for (auto& preset : getFactoryPresets())
+                if (preset.name == name)
+                    preset.applyTo (p.proc.getState());
+            bases.push_back ({ name, p.proc.readSettings() });
+        }
+        Harness n;
+        n.neutral();
+        bases.push_back ({ "neutral", n.proc.readSettings() });
+    }
+
+    beginTest ("Simple move from 0 = the 0.6.0 macro mapping of that macro alone");
+    for (const auto& [name, base] : bases)
+        for (auto id : all)
+            for (float to : { 0.25f, 0.6f, 1.0f })
+            {
+                dsp::MacroValues m;
+                m.set (id, to);
+                const auto diff = macroFieldDifference (dsp::applyMacroMove (base, id, 0.0f, to), dsp::applyMacros (base, m));
+                expect (diff.isEmpty(), name + ", macro " + juce::String ((int) id) + " -> " + juce::String (to) + ": " + diff);
+            }
+
+    beginTest ("Simple move back to its start restores the module state exactly");
+    for (const auto& [name, base] : bases)
+        for (auto id : all)
+            for (float at : { 0.0f, 0.4f, 1.0f })
+            {
+                const auto diff = macroFieldDifference (dsp::applyMacroMove (base, id, at, at), base);
+                expect (diff.isEmpty(), name + ", macro " + juce::String ((int) id) + " at " + juce::String (at) + ": " + diff);
+            }
+
+    beginTest ("Simple move down: less of the effect, a mix module at 0 switches off, nothing is created");
+    {
+        const auto neutral = bases.back().second;
+        const auto up = dsp::applyMacroMove (neutral, MacroId::space, 0.0f, 0.5f);
+        expect (up.reverbOn && up.delayOn);
+        expectWithinAbsoluteError (up.reverbMix, 0.15f, 1.0e-6f);
+        expectWithinAbsoluteError (up.reverbDuck.amountDb, 3.0f, 1.0e-5f);
+
+        const auto half = dsp::applyMacroMove (up, MacroId::space, 0.5f, 0.25f);
+        expect (half.reverbOn);
+        expectWithinAbsoluteError (half.reverbMix, 0.075f, 1.0e-6f);
+        expectWithinAbsoluteError (half.reverbDuck.amountDb, 1.5f, 1.0e-5f);
+
+        const auto down = dsp::applyMacroMove (up, MacroId::space, 0.5f, 0.0f);
+        expect (! down.reverbOn && ! down.delayOn, "a mix brought to 0 switches its module off");
+        expectWithinAbsoluteError (down.reverbMix, 0.0f, 1.0e-7f);
+        expectWithinAbsoluteError (down.reverbDuck.amountDb, 0.0f, 1.0e-6f);
+
+        // Off modules stay off and untouched when a slider goes down; no role band is created
+        const auto offDown = dsp::applyMacroMove (neutral, MacroId::space, 0.8f, 0.2f);
+        expect (! offDown.reverbOn && ! offDown.delayOn);
+        expectEquals (offDown.reverbMix, neutral.reverbMix);
+        auto noRoles = neutral;
+        for (auto& b : noRoles.eq.bands)
+            b = {};
+        const auto presDown = dsp::applyMacroMove (noRoles, MacroId::presence, 0.7f, 0.1f);
+        expect (macroFieldDifference (presDown, noRoles).isEmpty(), "switched-off modules are left alone by a down move");
+        for (const auto& b : presDown.eq.bands)
+            expect (! b.on && b.role == 0, "no role band created by a down move");
+
+        // Lower PUNCH: threshold up, ratio down, attack longer, clamped to the ranges
+        auto comp = neutral;
+        comp.compOn = true;
+        comp.comp.thresholdDb = -5.0f;
+        comp.comp.ratio = 2.0f;
+        comp.comp.attackMs = 10.0f;
+        const auto softer = dsp::applyMacroMove (comp, MacroId::aggression, 1.0f, 0.0f);
+        expectEquals (softer.comp.thresholdDb, 0.0f, "clamped at 0 dB");
+        expectEquals (softer.comp.ratio, 1.0f, "clamped at 1:1");
+        expectWithinAbsoluteError (softer.comp.attackMs, 25.0f, 1.0e-3f, "attack / (1 - 0.6)");
+    }
+
+    beginTest ("Simple move never touches user EQ bands");
+    {
+        auto base = bases.back().second;
+        for (auto& b : base.eq.bands)
+            b = {};
+        base.eq.bands[0] = { true, (int) dsp::EqBandType::highShelf, 9000.0f, 3.0f, 0.7f, 1, 0 };   // the user's own shelf
+        const auto t = dsp::applyMacroMove (base, MacroId::presence, 0.0f, 1.0f);
+        expectEquals (t.eq.bands[0].gain, 3.0f, "user band unchanged");
+        const int air = t.eq.findRole (dsp::EqRole::air);
+        expect (air > 0, "a role band in a free slot");
+        if (air > 0)
+            expectWithinAbsoluteError (t.eq.bands[(size_t) air].gain, 5.0f, 1.0e-5f);
+    }
+}
 
 static MacroTests macroTests;
