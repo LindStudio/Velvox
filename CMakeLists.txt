@@ -35,6 +35,7 @@ set(VELVOX_SOURCES
     Source/Parameters/ParameterLayout.cpp
     Source/DSP/Filters.cpp
     Source/DSP/EqualizerModule.cpp
+    Source/DSP/EqDesign.cpp
     Source/DSP/CompressorModule.cpp
     Source/DSP/DeEsserModule.cpp
     Source/DSP/SaturationModule.cpp
@@ -62,12 +63,15 @@ set(VELVOX_SOURCES
     Source/Presets/FactoryPresets.cpp
     Source/Presets/PresetManager.cpp
     Source/Presets/ModulePresets.cpp
+    Source/Presets/UndoHistory.cpp
     Source/Mixing/ProposalSession.cpp
     Source/UI/Theme.cpp
     Source/UI/VelvoxLookAndFeel.cpp
     Source/UI/Widgets.cpp
     Source/UI/Segments.cpp
-    Source/UI/VocalControlBar.cpp
+    Source/UI/ValueText.cpp
+    Source/UI/SimpleView.cpp
+    Source/UI/PresetBrowser.cpp
     Source/UI/Spectrum.cpp
     Source/UI/ModuleViews.cpp
     Source/UI/ChainView.cpp
@@ -77,6 +81,7 @@ set(VELVOX_SOURCES
     Source/UI/AnalysisOverlay.cpp
     Source/UI/TopBar.cpp
     Source/Parameters/SettingsReader.cpp
+    Source/Parameters/EqBands.cpp
     Source/Parameters/RoutingMigration.cpp
     Source/AutoMix/CaptureBuffer.cpp
     Source/AutoMix/VocalProfiler.cpp
@@ -168,7 +173,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/AbCompareTests.cpp Tests/VocalCheckTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/MixLawTests.cpp Tests/ReverbQualityTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/ReverbQualityTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)

@@ -8,12 +8,12 @@ class VelvoxAudioProcessor;
 
 namespace velvox::ui
 {
-    // Main view of the automatic mix:
+    // Details of the automatic mix (opened from Simple mode with "Details", shown in a card):
     //  A  Vocal status    analysis, material, edited modules, live input level, beat sidechain, output
     //  B  Automatic mix   the processing that was actually set up, with reasons (click = open module)
-    //  C  compare         previous state / mix (real parameter switch) and the level-matched original
-    //  D  fine-tuning     density and the fair compare (the other macros: VOCAL CONTROL)
-    //  E  re-analyse      always available
+    //  D  fine-tuning     Density and the fair compare (the six other macros are the Simple-mode faders)
+    //  E  re-analyse and restore the state before
+    // Vorher / Nachher lives next to "Vocal analysieren" in Simple mode; bypass is in the header.
     class AutoMixView final : public juce::Component, private juce::ChangeListener
     {
     public:
@@ -31,10 +31,9 @@ namespace velvox::ui
 
         // For tests
         juce::TextButton& getAnalyseButton() noexcept { return analyse; }
-        juce::TextButton& getPreviousButton() noexcept { return previous; }
-        juce::TextButton& getMixButton() noexcept { return mix; }
-        juce::TextButton& getOriginalButton() noexcept { return original; }
         juce::TextButton& getRestoreButton() noexcept { return restore; }
+        Knob& getDensityKnob() noexcept { return *density; }
+        Segments& getLevelMatch() noexcept { return *levelMatch; }
         int getNumStepRows() const noexcept;
 
     private:
@@ -47,10 +46,10 @@ namespace velvox::ui
         VelvoxAudioProcessor& proc;
         automix::AutoMixController& autoMix;
 
-        juce::TextButton analyse, previous { "Vorher" }, mix { "Headliner Mix" }, original { "Original" }, restore;
+        juce::TextButton analyse, restore;
         std::unique_ptr<StepList> steps;
         juce::Viewport stepView;
-        std::unique_ptr<Knob> density;          // the five other macros live in VOCAL CONTROL
+        std::unique_ptr<Knob> density;          // the six other macros are the Simple-mode faders
         std::unique_ptr<Segments> levelMatch;
 
         juce::Rectangle<int> statusArea, stepsArea, macroArea, headerArea;

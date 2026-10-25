@@ -8,9 +8,9 @@ using namespace velvox;
 
 namespace
 {
+    // A/B slots of 0.5 (removed in 0.6): read and dropped. The saved top-level state is the
+    // slot that was active, so such a project loads exactly what was last heard.
     const juce::Identifier abTreeType { "ABSlots" };
-    const juce::Identifier activeSlotAttr { "active" };
-    const juce::Identifier slotIndexAttr { "slot" };
 }
 
 VelvoxAudioProcessor::VelvoxAudioProcessor()
@@ -41,23 +41,29 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
         apvts.addParameterListener (id, this);
     analyzerTimer.startTimerHz (15);
 
-    // The automatic mix compares through the A/B slots: A = before, B = the mix
-    autoMix.onMixApplied = [this] (const ParameterSnapshot& before, const ParameterSnapshot& mix)
+    // Undo: the plugin's own gestures, preset loads and the automatic mix (one step each)
+    addListener (&gestureListener);
+    presetManager.setUndoHistory (&undoHistory);
+    autoMix.onApplying = [this] (bool starting, bool asStep)
     {
-        slots = { before, mix };
-        slots[0].name = "A";
-        slots[1].name = "B";
-        slotValid = { true, true };
-        activeSlot = 1;
+        if (asStep)
+        {
+            if (starting) undoHistory.beginTransaction (juce::String::fromUTF8 ("Auto-Mix"));
+            else          undoHistory.endTransaction();
+        }
+        else
+        {
+            if (starting) undoHistory.beginSuppress();
+            else          undoHistory.endSuppress();
+        }
     };
-    autoMix.selectCompare = [this] (bool previous) { selectSlot (previous ? 0 : 1); };
-    autoMix.isComparePrevious = [this] { return activeSlot == 0; };
 }
 
 VelvoxAudioProcessor::~VelvoxAudioProcessor()
 {
     analyzerTimer.stopTimer();
     cancelPendingUpdate();
+    removeListener (&gestureListener);
     for (auto& id : structureParams)
         apvts.removeParameterListener (id, this);
     apvts.state.removeListener (this);
@@ -506,22 +512,9 @@ void VelvoxAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
 
-    // Persist the A/B slots alongside the parameters
-    juce::ValueTree ab (abTreeType);
-    ab.setProperty (activeSlotAttr, activeSlot, nullptr);
-    for (int i = 0; i < 2; ++i)
-    {
-        if (! slotValid[(size_t) i])
-            continue;
-        auto t = slots[(size_t) i].toValueTree();
-        t.setProperty (slotIndexAttr, i, nullptr);
-        ab.appendChild (t, nullptr);
-    }
-
-    auto existing = state.getChildWithName (abTreeType);
-    if (existing.isValid())
+    // Never write the 0.5 A/B slots again
+    if (auto existing = state.getChildWithName (abTreeType); existing.isValid())
         state.removeChild (existing, nullptr);
-    state.appendChild (ab, nullptr);
 
     autoMix.writeState (state);
     state.setProperty (statekeys::stateVersion, statekeys::currentStateVersion, nullptr);
@@ -537,25 +530,10 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
         return;
 
     auto tree = juce::ValueTree::fromXml (*xml);
+    eqbands::ScopedBridgeSuspend noEqBridge;   // values are restored as they were saved
 
-    slotValid = { false, false };
-    activeSlot = 0;
-
-    const auto ab = tree.getChildWithName (abTreeType);
-    if (ab.isValid())
-    {
-        activeSlot = juce::jlimit (0, 1, (int) ab.getProperty (activeSlotAttr, 0));
-        for (const auto& child : ab)
-        {
-            const int idx = (int) child.getProperty (slotIndexAttr, -1);
-            if (idx == 0 || idx == 1)
-            {
-                slots[(size_t) idx] = ParameterSnapshot::fromValueTree (child);
-                slotValid[(size_t) idx] = true;
-            }
-        }
+    if (const auto ab = tree.getChildWithName (abTreeType); ab.isValid())
         tree.removeChild (ab, nullptr);
-    }
 
     // Automatic mix (report, previous state, first-open prompt). Projects from
     // versions without it count as "already mixed": no analysis prompt there.
@@ -591,6 +569,10 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
             if (! savedIds.contains (rp->getParameterID()))
                 rp->setValueNotifyingHost (rp->getDefaultValue());
 
+    // 0.1-0.5 projects have no EQ bands: the fixed bands become bands 1-5, sound-identical
+    if (! eqbands::containsBandValues (savedIds))
+        eqbands::migrateState (eqbands::accessFor (apvts), true);
+
     // 0.1 - 0.3 routings list every module: keep only what can be heard (sound unchanged)
     apvts.state.setProperty (statekeys::routing, migrateRoutingString (savedRouting, apvts), nullptr);
 
@@ -598,42 +580,9 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
     syncMixLawFromState();
     macroEngaged = dsp::modulesEngagedByMacros (readSettings(), readMacros());   // a loaded chain is taken as it is
     autoMix.readState (autoMixHolder, savedVersion < 3);
-}
 
-//==============================================================================
-void VelvoxAudioProcessor::selectSlot (int slot)
-{
-    slot = juce::jlimit (0, 1, slot);
-    if (slot == activeSlot)
-        return;
-
-    // Store what we are leaving, then recall the target. An empty target starts as an
-    // explicit copy of the current state.
-    slots[(size_t) activeSlot] = ParameterSnapshot::capture (apvts, "AB");
-    slotValid[(size_t) activeSlot] = true;
-
-    if (slotValid[(size_t) slot])
-        slots[(size_t) slot].applyTo (apvts, true);
-    else
-    {
-        slots[(size_t) slot] = slots[(size_t) activeSlot];
-        slotValid[(size_t) slot] = true;
-    }
-
-    activeSlot = slot;
-}
-
-bool VelvoxAudioProcessor::slotsAreEqual()
-{
-    const int other = 1 - activeSlot;
-    return ! slotValid[(size_t) other] || ! slots[(size_t) other].differsFrom (apvts);
-}
-
-void VelvoxAudioProcessor::copyActiveSlotToOther()
-{
-    const int other = 1 - activeSlot;
-    slots[(size_t) other] = ParameterSnapshot::capture (apvts, "AB");
-    slotValid[(size_t) other] = true;
+    // Another project (or the host restoring one): the history of the old state means nothing
+    undoHistory.clear();
 }
 
 //==============================================================================

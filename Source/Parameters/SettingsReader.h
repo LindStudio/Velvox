@@ -67,6 +67,9 @@ namespace velvox
         Raw rideOn, rideTarget, rideAmount, rideMaxBoost, rideMaxCut, rideResponse, ridePhrase, rideTransient, rideSilence;
         Raw reverbEarly, reverbDiffusion, reverbMod, reverbBass, reverbHighCut;
         Raw delaySpread, delayDrive, delayDiffusion, delayMod;
+        struct EqBandRaw { Raw on, type, freq, gain, q, slope, role; };
+        std::array<EqBandRaw, dsp::maxEqBands> eqBands;
+        Raw eqLegacyResponse;
     };
     Params raw;                                                  // instance 1 (and all global parameters)
     std::array<Params, dsp::maxExtraInstances> extraRaw;         // instances 2..n: module fields bound to "<id>_<k>"

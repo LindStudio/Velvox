@@ -3,6 +3,8 @@
 // Central list of every parameter ID. These strings are persisted in DAW
 // projects and preset files - never rename an existing ID, only add new ones.
 
+#include <juce_core/juce_core.h>
+
 namespace velvox::pid
 {
     // Global / IO
@@ -217,4 +219,23 @@ namespace velvox::pid
     inline constexpr const char* delayDrive     = "delayDrive";
     inline constexpr const char* delayDiffusion = "delayDiffusion";
     inline constexpr const char* delayMod       = "delayMod";
+
+    // ---- added in 0.6: EQ bands (all off by default; 0.5 states are migrated, see Parameters/EqBands.h) ----
+    // Per band n = 1..16: "eqBand<n><Field>", e.g. "eqBand3Gain"; instance k >= 1 appends "_<k+1>" like every
+    // EQ parameter ("eqBand3Gain_2"). The fixed bands above (hpf*, low*, mid*, high*, lpf*) stay registered
+    // but are hidden and not automatable.
+    namespace eqband
+    {
+        inline constexpr const char* on    = "On";      // bool
+        inline constexpr const char* type  = "Type";    // choice, dsp::EqBandType
+        inline constexpr const char* freq  = "Freq";    // Hz
+        inline constexpr const char* gain  = "Gain";    // dB
+        inline constexpr const char* q     = "Q";
+        inline constexpr const char* slope = "Slope";   // choice, 6/12/18/24/36/48 dB/oct
+        inline constexpr const char* role  = "Role";    // choice, dsp::EqRole (hidden, not automatable)
+    }
+    inline juce::String eqBandId (int band1to16, const char* field) { return "eqBand" + juce::String (band1to16) + field; }
+
+    // Hidden per EQ instance: 1 = bands use the 0.5 bilinear designs (set only by the migration)
+    inline constexpr const char* eqLegacyResponse = "eqLegacyResponse";
 }

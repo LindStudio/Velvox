@@ -433,7 +433,7 @@ public:
         {
             struct Case { const char* name; const char* routing; std::function<void (dsp::ChainSettings&, float)> set; };
             const std::vector<Case> cases {
-                { "eq",      "v2,eq",      [] (auto& s, float m) { s.eqOn = true; s.eqMix = m; s.eq.midGain = 9.0f; } },
+                { "eq",      "v2,eq",      [] (auto& s, float m) { s.eqOn = true; s.eqMix = m; s.eq.bands[0].on = true; s.eq.bands[0].gain = 9.0f; } },
                 { "comp",    "v2,comp",    [] (auto& s, float m) { s.compOn = true; s.compMix = m; s.comp.thresholdDb = -40.0f; s.comp.ratio = 8.0f; } },
                 { "sat",     "v2,sat",     [] (auto& s, float m) { s.sat.enabled = true; s.sat.mix = m; s.sat.driveDb = 18.0f; } },
                 { "pitch",   "v2,pitch",   [] (auto& s, float m) { s.pitch.enabled = true; s.pitch.mix = m; s.pitch.semitones = 5.0f; } },

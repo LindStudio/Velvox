@@ -42,6 +42,7 @@ namespace velvox::ui
         float effectiveDelayMs = 375.0f;
         int chopStep = -1;
         bool hasSignal = false;
+        bool clipped = false;          // the output went over 0 dBFS in this frame
 
         float level() const noexcept   // 0..1 output energy, drives the ambient light
         {

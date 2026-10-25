@@ -8,7 +8,6 @@ using namespace velvox::ui;
 
 namespace
 {
-    // Window width in pixels (key of the 1440 x 900 layout)
     // Window size as a scale of the design canvas (0.4 stored a pixel width under "uiWindowWidth")
     const juce::Identifier uiScaleProperty { "uiScale" };
     const juce::Identifier uiSelectionProperty { "uiSelection" };
@@ -16,27 +15,17 @@ namespace
     // "Remind me later" hides the welcome card until the plugin is loaded again
     bool tutorialPostponedThisSession = false;
 
-    // Canvas layout of the design (1384 x 1040): header 56, module chain 330, detail area
-    // 460 (module panel 1180 wide, IN/OUT meters to its right), Vocal Control below
+    // Canvas layout (1000 x 600): header 44, body below with an 8 px margin
     constexpr int topBarH = TopBar::height;
-    constexpr int margin = 12;
-    constexpr int gap = 8;
-    constexpr int chainTop = topBarH + gap;
-    constexpr int chainH = 330;
-    constexpr int bodyTop = chainTop + chainH + gap;
-    constexpr int bodyH = 460;
-    constexpr int panelW = 1180;
-    constexpr int controlTop = bodyTop + bodyH + gap;
+    constexpr int margin = 8;
+    constexpr int gap = 6;
+    constexpr int chainH = ChainView::preferredHeight;
+    constexpr int meterW = 92;
     constexpr int frameRate = 60;
 
-    // Window size limits relative to the design canvas
-    constexpr double minScale = 0.8, maxScale = 1.4;   // below 0.8 the 9 px knob names of the design drop under 7 px
-
-    juce::Rectangle<int> chainArea()   { return { margin, chainTop, baseWidth - 2 * margin, chainH }; }
-    juce::Rectangle<int> bodyArea()    { return { margin, bodyTop, panelW, bodyH }; }
-    juce::Rectangle<int> meterArea()   { return { margin + panelW + gap, bodyTop, baseWidth - 2 * margin - panelW - gap, bodyH }; }
-    juce::Rectangle<int> controlArea() { return { margin, controlTop, baseWidth - 2 * margin, baseHeight - controlTop - margin }; }
-    juce::Rectangle<int> wideArea()    { return chainArea().getUnion (bodyArea()).getUnion (meterArea()); }   // AUTO MIX, VOCAL CHECK
+    // Window size limits relative to the design canvas: the smallest text of the design is 9 px,
+    // which must stay at least 8 px on screen (spec 8)
+    constexpr double minScale = 8.0 / 9.0, maxScale = 2.0;
 
     void drawDesignPanel (juce::Graphics& g, juce::Rectangle<float> r)
     {
@@ -50,10 +39,15 @@ namespace
     void reveal (juce::Component& c, juce::Rectangle<int> finalBounds)
     {
         c.setAlpha (0.0f);
-        c.setBounds (finalBounds.translated (0, 14));
+        c.setBounds (finalBounds.translated (0, 10));
         juce::Desktop::getInstance().getAnimator().animateComponent (&c, finalBounds, 1.0f, motion::revealMs, false, 0.0, 0.0);
     }
 }
+
+juce::Rectangle<int> VelvoxAudioProcessorEditor::bodyArea()  { return { margin, topBarH + gap, baseWidth - 2 * margin, baseHeight - topBarH - gap - margin }; }
+juce::Rectangle<int> VelvoxAudioProcessorEditor::chainArea() { return bodyArea().withHeight (chainH).withTrimmedRight (meterW + gap); }
+juce::Rectangle<int> VelvoxAudioProcessorEditor::meterArea() { return bodyArea().withHeight (chainH).withTrimmedLeft (bodyArea().getWidth() - meterW); }
+juce::Rectangle<int> VelvoxAudioProcessorEditor::panelArea() { return bodyArea().withTrimmedTop (chainH + gap); }
 
 //==============================================================================
 VelvoxAudioProcessorEditor::Canvas::Canvas()
@@ -64,8 +58,7 @@ VelvoxAudioProcessorEditor::Canvas::Canvas()
 
 void VelvoxAudioProcessorEditor::Canvas::paint (juce::Graphics& g)
 {
-    // The atmosphere is static: coloured light behind the glass panels, rendered
-    // once per physical size and then only blitted (no idle redraws, no CPU load)
+    // The atmosphere is static: rendered once per physical size and then only blitted
     const float scale = juce::jlimit (0.5f, 4.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
     if (backdrop.isNull() || std::abs (scale - backdropScale) > 0.01f)
     {
@@ -74,12 +67,9 @@ void VelvoxAudioProcessorEditor::Canvas::paint (juce::Graphics& g)
         juce::Graphics b (backdrop);
         b.addTransform (juce::AffineTransform::scale (scale));
         b.fillAll (colours::windowBg);
-        drawGlow (b, { 690.0f, -120.0f }, 640.0f, 0.07f, colours::blue);
-        drawDesignPanel (b, controlArea().toFloat());
+        drawGlow (b, { 500.0f, -90.0f }, 460.0f, 0.07f, colours::blue);
     }
     g.drawImage (backdrop, juce::Rectangle<float> ((float) baseWidth, (float) baseHeight));
-    if (showMeterPanel)
-        drawDesignPanel (g, meterArea().toFloat());
 }
 
 void VelvoxAudioProcessorEditor::Canvas::paintOverChildren (juce::Graphics& g)
@@ -92,16 +82,16 @@ void VelvoxAudioProcessorEditor::Canvas::paintOverChildren (juce::Graphics& g)
     g.setColour (colours::bypass.withAlpha (0.8f));
     g.drawRoundedRectangle (border, 6.0f, 2.0f);
 
-    const juce::String text ("Bypassed  -  you hear the original vocal");
-    const float w = (float) juce::GlyphArrangement::getStringWidthInt (caps (captionSize (9.5f)), text) + 40.0f;
-    const auto pill = juce::Rectangle<float> (w, 24.0f).withCentre ({ baseWidth * 0.5f, (float) chainTop - 4.0f });
+    const auto text = juce::String::fromUTF8 ("Bypass - du hörst die unbearbeitete Vocal");
+    const float w = (float) juce::GlyphArrangement::getStringWidthInt (caps (captionSize (9.0f)), text) + 36.0f;
+    const auto pill = juce::Rectangle<float> (w, 22.0f).withCentre ({ baseWidth * 0.5f, (float) baseHeight - 18.0f });
     g.setColour (colours::background);
-    g.fillRoundedRectangle (pill, 12.0f);
+    g.fillRoundedRectangle (pill, 11.0f);
     g.setColour (colours::bypass.withAlpha (0.18f));
-    g.fillRoundedRectangle (pill, 12.0f);
+    g.fillRoundedRectangle (pill, 11.0f);
     g.setColour (colours::bypass.withAlpha (0.8f));
-    g.drawRoundedRectangle (pill.reduced (0.5f), 12.0f, 1.0f);
-    drawCaption (g, text, pill, juce::Justification::centred, colours::bypass, 9.5f);
+    g.drawRoundedRectangle (pill.reduced (0.5f), 11.0f, 1.0f);
+    drawCaption (g, text, pill, juce::Justification::centred, colours::bypass, 9.0f);
 }
 
 void VelvoxAudioProcessorEditor::Canvas::showInfo (juce::Component& anchor, const juce::String& title, const juce::String& value, const juce::String& text)
@@ -123,62 +113,102 @@ void VelvoxAudioProcessorEditor::Canvas::hideInfoIfAnchorGone()
 }
 
 //==============================================================================
+VelvoxAudioProcessorEditor::DetailsOverlay::DetailsOverlay (AutoMixView& v) : view (v)
+{
+    setWantsKeyboardFocus (true);
+    addAndMakeVisible (view);
+    close.setTooltip (juce::String::fromUTF8 ("Schließen"));
+    close.onClick = [this] { setVisible (false); };
+    addAndMakeVisible (close);
+    setVisible (false);
+}
+
+juce::Rectangle<int> VelvoxAudioProcessorEditor::DetailsOverlay::cardBounds() const
+{
+    return getLocalBounds().reduced (40, 34);
+}
+
+void VelvoxAudioProcessorEditor::DetailsOverlay::paint (juce::Graphics& g)
+{
+    g.fillAll (colours::scrim);
+    const auto card = cardBounds().toFloat();
+    g.setColour (colours::background);
+    g.fillRoundedRectangle (card, radius::panel);
+    drawGlass (g, card, radius::panel, 0.02f);
+}
+
+void VelvoxAudioProcessorEditor::DetailsOverlay::resized()
+{
+    auto card = cardBounds();
+    close.setBounds (card.getRight() - 40, card.getY() + 10, 28, 28);
+    view.setBounds (card.reduced (16, 14).withTrimmedRight (36));
+}
+
+void VelvoxAudioProcessorEditor::DetailsOverlay::mouseDown (const juce::MouseEvent& e)
+{
+    if (! cardBounds().contains (e.getPosition()))
+        setVisible (false);
+}
+
+bool VelvoxAudioProcessorEditor::DetailsOverlay::keyPressed (const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress::escapeKey)
+    {
+        setVisible (false);
+        return true;
+    }
+    return false;
+}
+
+//==============================================================================
 VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     : AudioProcessorEditor (&p),
       proc (p),
       spectrum (p.getChain().meters.inputTap, p.getChain().meters.outputTap),
       scopeL ((size_t) dsp::StereoTap::capacity), scopeR ((size_t) dsp::StereoTap::capacity),
-      topBar (p, dialog),
       browser (p),
+      presetBrowser (p.getPresetManager(), dialog),
+      topBar (p, dialog),
       chainView (p),
+      simpleView (p, &spectrum),
       mixView (p),
-      analysis (p.getAutoMix()),
-      vocalControl (p, live),
-      safetyClip (p.getState(), pid::safetyClip, "Clip guard")
+      analysis (p.getAutoMix())
 {
     setLookAndFeel (&lookAndFeel);
+    setWantsKeyboardFocus (true);
 
     addAndMakeVisible (canvas);
     canvas.setBounds (0, 0, baseWidth, baseHeight);
 
-    for (auto* c : std::initializer_list<juce::Component*> { &topBar, &chainView, &mixView, &inputMeter, &outputMeter,
-                                                              &vocalControl, &safetyClip, &monoCheck, &correlation })
+    for (auto* c : std::initializer_list<juce::Component*> { &topBar, &chainView, &simpleView, &meters })
         canvas.addAndMakeVisible (c);
-    canvas.addChildComponent (analysis);
-    canvas.addChildComponent (dialog);
-    canvas.addChildComponent (help);
-    canvas.addChildComponent (tutorial);
-    canvas.addChildComponent (browser);
+    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser })
+        canvas.addChildComponent (c);
 
     chainView.setLiveData (&live);
 
-    inputMeter.setTooltip ("Level entering the chain (after input gain), loudness in LUFS");
-    outputMeter.setTooltip ("Level leaving the plugin. The red lamp shows overs above 0 dBFS - click it to reset.");
-    outputMeter.setScaleOnLeft (false);
-    safetyClip.setTooltip ("Soft clipper from -1 dBFS that keeps the output below 0 dBFS");
-    correlation.setTooltip ("Phase correlation: +1 = mono-safe, below 0 = parts cancel in mono");
-    monoCheck.setClickingTogglesState (true);
-    monoCheck.setTooltip ("Listen in mono (not saved with the project)");
-    monoCheck.onClick = [this] { proc.setMonoMonitor (monoCheck.getToggleState()); };
-    monoCheck.setToggleState (proc.isMonoMonitor(), juce::dontSendNotification);
+    meters.setTooltip (juce::String::fromUTF8 ("Pegel und Lautheit (LUFS) am Eingang und Ausgang. Die rote Lampe zeigt Übersteuerungen - Klick setzt sie zurück."));
+    meters.setStacked (true);
 
-    topBar.onViewChange = [this] (TopBar::View v) { setView (v); };
+    topBar.onModeChange = [this] (Mode m) { setMode (m); };
+    topBar.onTabChange = [this] (Tab t) { setTab (t); };
+    topBar.onPresetList = [this]
+    {
+        help.close();
+        presetBrowser.open();
+        raiseOverlays();
+    };
     topBar.onHelp = [this]
     {
-        showHelp (detail != nullptr && proMode ? help::keyForModule (selected < 0 ? selected : (int) dsp::selectionModule (selected)) : juce::String ("start"));
+        showHelp (detail != nullptr && isModulePanelShown() ? help::keyForModule (selected < 0 ? selected : (int) dsp::selectionModule (selected))
+                                                            : juce::String ("start"));
     };
-    mixView.onAnalyse = [this] { startAnalysis(); };
-    mixView.onOpenModule = [this] (int id) { openModule (id); };
-    analysis.onFinished = [this] { setView (TopBar::View::autoMix); };
+    simpleView.onAnalyse = [this] { startAnalysis(); };
+    simpleView.onShowDetails = [this] { showMixDetails(); };
+    mixView.onAnalyse = [this] { detailsOverlay.setVisible (false); startAnalysis(); };
+    mixView.onOpenModule = [this] (int id) { detailsOverlay.setVisible (false); openModule (id); };
 
-    chainView.onSelect = [this] (int id)
-    {
-        // A module card always opens that module with all its controls
-        if (! proMode)
-            openModule (id);
-        else
-            select (id);
-    };
+    chainView.onSelect = [this] (int id) { select (id); };
     chainView.onHelp = [this] (int code) { showHelp (help::keyForModule (code < 0 ? code : (int) dsp::selectionModule (code))); };
     chainView.onAddModule = [this] (int insertIndex, bool atEnd)
     {
@@ -204,52 +234,42 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     // ---- Layout on the design canvas
     topBar.setBounds (0, 0, baseWidth, topBarH);
     chainView.setBounds (chainArea());
-
-    // IN / OUT meters next to the module panel; clip guard, mono and correlation below.
-    // The levels themselves: input gain in the OUTPUT panel, output = VOCAL LEVEL.
-    auto meters = meterArea().reduced (10, 14);
-    correlation.setBounds (meters.removeFromBottom (24));
-    meters.removeFromBottom (8);
-    auto switches = meters.removeFromBottom (26);
-    safetyClip.setBounds (switches.removeFromLeft (switches.getWidth() / 2 + 14));
-    monoCheck.setBounds (switches.reduced (4, 0));
-    meters.removeFromBottom (12);
-    inputMeter.setBounds (meters.removeFromLeft (meters.getWidth() / 2).reduced (4, 0));
-    outputMeter.setBounds (meters.reduced (4, 0));
-    vocalControl.setBounds (controlArea());
-
-    for (auto* overlay : std::initializer_list<juce::Component*> { &analysis, &dialog, &help, &tutorial, &browser })
+    simpleView.setBounds (bodyArea());
+    meters.setBounds (meterArea().reduced (6, 4));
+    for (auto* overlay : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser })
         overlay->setBounds (0, 0, baseWidth, baseHeight);
 
     // ---- View state (stored with the project, never affects audio)
-    // uiMode: "beginner" (stored by 0.3 / 0.4) = AUTO MIX, "pro" = CHAIN, "check" = VOCAL CHECK
-    const auto mode = proc.getState().state.getProperty (statekeys::uiMode, "beginner").toString();
-    selected = (int) proc.getState().state.getProperty (uiSelectionProperty, 0);
+    // uiMode: "beginner" (0.3 - 0.5 AUTO MIX) = Simple, "pro" = Advanced, "check" (0.5) = Advanced + VOCAL CHECK.
+    // uiTab (0.6): "automix" / "check".
+    const auto& state = proc.getState().state;
+    const auto storedMode = state.getProperty (statekeys::uiMode, "beginner").toString();
+    const auto storedTab = state.getProperty (statekeys::uiTab, juce::String()).toString();
+    mode = storedMode == "pro" || storedMode == "check" ? Mode::advanced : Mode::simple;
+    tab = storedTab == "check" || (storedTab.isEmpty() && storedMode == "check") ? Tab::vocalCheck : Tab::autoMix;
+    selected = (int) state.getProperty (uiSelectionProperty, 0);
     chainView.setSelected (selected);
-    setView (mode == "pro" ? TopBar::View::chain : (mode == "check" ? TopBar::View::vocalCheck : TopBar::View::autoMix));
+    applyView (false);
     constructed = true;
 
-    // ---- Window: resizable, fixed aspect ratio, remembered per project.
-    // The default is the full design size when the screen has room for it,
-    // otherwise the largest size that fits (Windows display scaling included:
-    // the display area is in logical pixels).
-    const int minW = juce::roundToInt (baseWidth * minScale), maxW = juce::roundToInt (baseWidth * maxScale);
+    // ---- Window: resizable, fixed aspect ratio, remembered per project ("uiScale", a scale of
+    // the design canvas). Never larger than the work area of the screen.
+    const int minW = (int) std::ceil (baseWidth * minScale), maxW = juce::roundToInt (baseWidth * maxScale);
+    // Read before the limits are set: constraining the initial 0 x 0 size calls resized(), which stores a scale
+    const juce::var storedScale = state.getProperty (uiScaleProperty);
     setResizable (true, true);
-    setResizeLimits (minW, juce::roundToInt (baseHeight * minScale), maxW, juce::roundToInt (baseHeight * maxScale));
+    setResizeLimits (minW, (int) std::ceil (baseHeight * minScale), maxW, juce::roundToInt (baseHeight * maxScale));
     if (auto* c = getConstrainer())
         c->setFixedAspectRatio ((double) baseWidth / (double) baseHeight);
 
-    // Stored as a scale of the design canvas ("uiScale"): a pixel width saved by an older
-    // layout (uiWindowWidth, 1440 x 900) would open the new, taller window off the screen.
-    // Never larger than the work area of the screen.
-    int fitW = baseWidth;
+    int fitW = maxW;
     if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
     {
         const auto area = display->userArea;
         fitW = (int) std::min (area.getWidth() * 0.94, area.getHeight() * 0.94 * baseWidth / (double) baseHeight);
     }
-    const int defaultW = juce::jlimit (minW, baseWidth, fitW);
-    const double savedScale = (double) proc.getState().state.getProperty (uiScaleProperty, defaultW / (double) baseWidth);
+    const int defaultW = juce::jlimit (minW, std::max (minW, fitW), baseWidth);
+    const double savedScale = storedScale.isVoid() ? defaultW / (double) baseWidth : (double) storedScale;
     const int w = juce::jlimit (minW, std::max (minW, std::min (maxW, fitW)), juce::roundToInt (savedScale * baseWidth));
     setSize (w, juce::roundToInt (w * (double) baseHeight / baseWidth));
 
@@ -277,7 +297,7 @@ VelvoxAudioProcessorEditor::~VelvoxAudioProcessorEditor()
     stopTimer();
     proc.getAutoMix().removeChangeListener (this);
     auto& animator = juce::Desktop::getInstance().getAnimator();
-    animator.cancelAnimation (&mixView, false);
+    animator.cancelAnimation (&simpleView, false);
     if (detail != nullptr)
         animator.cancelAnimation (detail.get(), false);
     setLookAndFeel (nullptr);
@@ -292,6 +312,23 @@ void VelvoxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster
         detail->refresh();
 }
 
+bool VelvoxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
+{
+    // Global undo (spec 8 Q8): Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z (Cmd on macOS)
+    const auto mods = key.getModifiers();
+    if (! mods.isCommandDown())
+        return false;
+    const auto c = juce::CharacterFunctions::toLowerCase (key.getTextCharacter() != 0 ? key.getTextCharacter() : (juce::juce_wchar) key.getKeyCode());
+    const int code = key.getKeyCode();
+    const bool z = c == 'z' || code == 'Z' || code == 'z';
+    const bool y = c == 'y' || code == 'Y' || code == 'y';
+    if (z && ! mods.isShiftDown())
+        return chainView.undo() || true;
+    if (y || (z && mods.isShiftDown()))
+        return chainView.redo() || true;
+    return false;
+}
+
 void VelvoxAudioProcessorEditor::startAnalysis()
 {
     help.close();
@@ -302,34 +339,65 @@ void VelvoxAudioProcessorEditor::startAnalysis()
     raiseOverlays();
 }
 
+void VelvoxAudioProcessorEditor::showMixDetails()
+{
+    help.close();
+    detailsOverlay.setVisible (true);
+    mixView.refresh();
+    raiseOverlays();
+    detailsOverlay.grabKeyboardFocus();
+}
+
 void VelvoxAudioProcessorEditor::openModule (int id)
 {
     selected = id;
-    setView (TopBar::View::chain);
+    mode = Mode::advanced;
+    tab = Tab::autoMix;
+    applyView (true);
 }
 
-void VelvoxAudioProcessorEditor::setView (TopBar::View v)
+void VelvoxAudioProcessorEditor::setMode (Mode m)
 {
-    const bool changed = v != view;
-    view = v;
-    proMode = v == TopBar::View::chain;
-    topBar.setView (v);
-    proc.getState().state.setProperty (statekeys::uiMode,
-                                       v == TopBar::View::chain ? "pro" : (v == TopBar::View::vocalCheck ? "check" : "beginner"), nullptr);
+    if (m == mode)
+        return;
+    mode = m;
+    applyView (true);
+}
 
-    // CHAIN: module columns, module panel, meters. AUTO MIX and VOCAL CHECK use the whole area.
-    for (auto* c : std::initializer_list<juce::Component*> { &chainView, &inputMeter, &outputMeter,
-                                                              &safetyClip, &monoCheck, &correlation })
-        c->setVisible (proMode);
-    canvas.showMeterPanel = proMode;
-    canvas.repaint();
+void VelvoxAudioProcessorEditor::setTab (Tab t)
+{
+    if (t == tab)
+        return;
+    tab = t;
+    applyView (true);
+}
 
-    mixView.setVisible (v == TopBar::View::autoMix);
-    mixView.setBounds (wideArea());
-    if (v == TopBar::View::autoMix && changed && constructed)
-        reveal (mixView, wideArea());
-    chainView.setSelected (proMode ? selected : -2);
+void VelvoxAudioProcessorEditor::storeView()
+{
+    auto& state = proc.getState().state;
+    state.setProperty (statekeys::uiMode, mode == Mode::advanced ? "pro" : "beginner", nullptr);
+    state.setProperty (statekeys::uiTab, tab == Tab::vocalCheck ? "check" : "automix", nullptr);
+}
+
+void VelvoxAudioProcessorEditor::applyView (bool animate)
+{
+    topBar.setMode (mode);
+    topBar.setTab (tab);
+    storeView();
+
+    const bool simple = tab == Tab::autoMix && mode == Mode::simple;
+    const bool advanced = tab == Tab::autoMix && mode == Mode::advanced;
+    simpleView.setVisible (simple);
+    for (auto* c : std::initializer_list<juce::Component*> { &chainView, &meters })
+        c->setVisible (advanced);
+    if (simple && animate && constructed)
+        reveal (simpleView, bodyArea());
+    else
+        simpleView.setBounds (bodyArea());
+
+    chainView.setSelected (advanced ? selected : -2);
     select (selected);
+    canvas.repaint();
 }
 
 void VelvoxAudioProcessorEditor::select (int id)
@@ -340,7 +408,7 @@ void VelvoxAudioProcessorEditor::select (int id)
     const bool changed = id != selected || detail == nullptr;
     selected = id;
     proc.getState().state.setProperty (uiSelectionProperty, id, nullptr);
-    if (proMode)
+    if (isModulePanelShown())
         chainView.setSelected (id);
 
     if (detail != nullptr)
@@ -350,34 +418,37 @@ void VelvoxAudioProcessorEditor::select (int id)
     }
     detail.reset();
 
-    // VOCAL CHECK shows the check panel over the whole area
-    if (view == TopBar::View::vocalCheck)
+    const auto openFromPanel = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)] (int moduleId)
+    {
+        // After the current click has finished
+        juce::MessageManager::callAsync ([safe, moduleId] { if (safe != nullptr) safe->openModule (moduleId); });
+    };
+
+    // VOCAL CHECK: the check panel over the whole body (both modes)
+    if (tab == Tab::vocalCheck)
     {
         detail = createDetailPanel (proc, (int) dsp::ModuleId::check, &spectrum, &live);
-        detail->onOpenModule = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)] (int moduleId)
-        {
-            juce::MessageManager::callAsync ([safe, moduleId] { if (safe != nullptr) safe->openModule (moduleId); });
-        };
+        detail->onOpenModule = openFromPanel;
         detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };
-        canvas.addAndMakeVisible (*detail);
-        detail->setBounds (wideArea());
-        detail->refresh();
-    }
-
-    if (proMode)
-    {
-        detail = createDetailPanel (proc, id, &spectrum, id >= 0 && dsp::selectionInstance (id) > 0 ? &panelLive : &live);
-        // Open another module (e.g. from a VOCAL CHECK finding) after the current click has finished
-        detail->onOpenModule = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)] (int moduleId)
-        {
-            juce::MessageManager::callAsync ([safe, moduleId] { if (safe != nullptr) safe->select (moduleId); });
-        };
-        detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };   // module number (help is per module)
         canvas.addAndMakeVisible (*detail);
         detail->setBounds (bodyArea());
         detail->refresh();
+    }
+    else if (isModulePanelShown())
+    {
+        detail = createDetailPanel (proc, id, &spectrum, id >= 0 && dsp::selectionInstance (id) > 0 ? &panelLive : &live);
+        detail->onOpenModule = openFromPanel;
+        detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };
+        detail->askForName = [this] (const juce::String& title, std::function<void (const juce::String&)> onName)
+        {
+            dialog.show (title, juce::String::fromUTF8 ("Gilt für dieses Modul in allen Projekten."), true, {}, "Speichern", std::move (onName));
+            raiseOverlays();
+        };
+        canvas.addAndMakeVisible (*detail);
+        detail->setBounds (panelArea());
+        detail->refresh();
         if (constructed && changed)
-            reveal (*detail, bodyArea());
+            reveal (*detail, panelArea());
     }
 
     raiseOverlays();
@@ -386,11 +457,8 @@ void VelvoxAudioProcessorEditor::select (int id)
 void VelvoxAudioProcessorEditor::raiseOverlays()
 {
     canvas.info.toFront (false);
-    browser.toFront (false);
-    analysis.toFront (false);
-    dialog.toFront (false);
-    help.toFront (false);
-    tutorial.toFront (false);
+    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &browser, &presetBrowser, &analysis, &dialog, &help, &tutorial })
+        c->toFront (false);
     if (analysis.isVisible())
         analysis.toFront (true);
 }
@@ -412,12 +480,14 @@ juce::Rectangle<int> VelvoxAudioProcessorEditor::tutorialTarget (const juce::Str
 {
     // Top bar sits at the canvas origin, so its child bounds are canvas coordinates
     if (key == "presets") return topBar.getPresetArea();
-    if (key == "global")  return topBar.getCompareArea().getUnion (topBar.getBypassArea());
-    if (key == "compare") return topBar.getCompareArea().getUnion (topBar.getBypassArea());
     if (key == "modes")   return topBar.getModeArea();
+    if (key == "tabs")    return topBar.getTabArea();
+    if (key == "global")  return topBar.getBypassArea();
     if (key == "help")    return topBar.getHelpButton().getBounds();
-    if (key == "body")    return proMode ? bodyArea() : wideArea();
-    return chainView.getBounds();   // "chain", "chainAndModules"
+    if (key == "macros")  return simpleView.getMacroArea() + bodyArea().getPosition();
+    if (key == "analyse") return simpleView.getSpectrumArea() + bodyArea().getPosition();
+    if (key == "body")    return isModulePanelShown() ? panelArea() : bodyArea();
+    return chainArea();   // "chain", "chainAndModules"
 }
 
 void VelvoxAudioProcessorEditor::paint (juce::Graphics& g)
@@ -440,10 +510,6 @@ void VelvoxAudioProcessorEditor::updateLiveData()
 
     const float inL = m.input[0].pull(), inR = m.input[1].pull();
     const float outL = m.output[0].pull(), outR = m.output[1].pull();
-    inputMeter.push (inL, inR, false);
-    outputMeter.push (outL, outR, m.clipped.exchange (false));
-    inputMeter.setLoudness (m.inputLufs.load());
-    outputMeter.setLoudness (m.outputLufs.load());
 
     live.inputDb.push (juce::Decibels::gainToDecibels (std::max (inL, inR), -100.0f));
     live.outputDb.push (juce::Decibels::gainToDecibels (std::max (outL, outR), -100.0f));
@@ -495,6 +561,8 @@ void VelvoxAudioProcessorEditor::updateLiveData()
     }
     live.inputLufs.push (m.inputLufs.load());
     live.outputLufs.push (m.outputLufs.load());
+    live.clipped = m.clipped.exchange (false);
+    meters.setLevels (live.inputDb.ago (0), live.outputDb.ago (0), live.inputLufs.ago (0), live.outputLufs.ago (0), live.clipped);
 
     // Goniometer: keep the newest samples
     const int n = m.scopeTap.pull (scopeL.data(), scopeR.data(), (int) scopeL.size());
@@ -535,7 +603,6 @@ void VelvoxAudioProcessorEditor::updateLiveData()
     }
 
     spectrum.update (live.sampleRate);
-    correlation.push (m.correlation.load());
 }
 
 void VelvoxAudioProcessorEditor::timerCallback()
@@ -545,12 +612,14 @@ void VelvoxAudioProcessorEditor::timerCallback()
     canvas.hideInfoIfAnchorGone();
 
     topBar.refresh();
-    chainView.refresh();
-    vocalControl.refresh();
+    if (chainView.isVisible())
+        chainView.refresh();
+    if (simpleView.isVisible())
+        simpleView.refresh (live);
 
     if (detail != nullptr)
         detail->refresh();
-    if (mixView.isVisible() && frame % 6 == 0)
+    if (detailsOverlay.isVisible() && frame % 6 == 0)
         mixView.refresh();
     if (analysis.isVisible() && frame % 2 == 0)
         analysis.update();
@@ -561,7 +630,4 @@ void VelvoxAudioProcessorEditor::timerCallback()
         canvas.bypassed = bypassed;
         canvas.repaint();
     }
-
-    if (monoCheck.getToggleState() != proc.isMonoMonitor())
-        monoCheck.setToggleState (proc.isMonoMonitor(), juce::dontSendNotification);
 }

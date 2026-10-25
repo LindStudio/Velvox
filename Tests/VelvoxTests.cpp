@@ -474,27 +474,6 @@ public:
             expectWithinAbsoluteError (h2.get (pid::midGain), 7.5f, 0.01f);
         }
 
-        beginTest ("A/B comparison");
-        {
-            Harness h;
-            h.set (pid::compRatio, 2.0f);
-            h.proc.selectSlot (1);              // B starts as a copy of A
-            expectWithinAbsoluteError (h.get (pid::compRatio), 2.0f, 0.01f);
-            h.set (pid::compRatio, 10.0f);      // edit B
-            h.proc.selectSlot (0);
-            expectWithinAbsoluteError (h.get (pid::compRatio), 2.0f, 0.01f);
-            h.proc.selectSlot (1);
-            expectWithinAbsoluteError (h.get (pid::compRatio), 10.0f, 0.01f);
-
-            juce::MemoryBlock block;
-            h.proc.getStateInformation (block);
-            Harness h2;
-            h2.proc.setStateInformation (block.getData(), (int) block.getSize());
-            expectEquals (h2.proc.getActiveSlot(), 1);
-            h2.proc.selectSlot (0);
-            expectWithinAbsoluteError (h2.get (pid::compRatio), 2.0f, 0.01f);
-        }
-
         beginTest ("Parameter schema for future mixing engine is valid JSON");
         {
             const auto json = juce::JSON::toString (createParameterSchema());
@@ -503,15 +482,16 @@ public:
             expectEquals (parsed.size(), (int) getParameterSpecs().size());
         }
 
-        beginTest ("All parameters are automatable and have unique IDs");
+        beginTest ("Parameters are automatable (except internal / hidden 0.5 EQ IDs) and have unique IDs");
         {
             Harness h;
             juce::StringArray ids;
             for (auto* p : h.proc.getParameters())
             {
-                expect (p->isAutomatable());
                 if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
                 {
+                    const auto* spec = findParameterSpec (rp->getParameterID());
+                    expect (spec != nullptr && p->isAutomatable() == spec->automatable, rp->getParameterID());
                     expect (! ids.contains (rp->getParameterID()), "duplicate " + rp->getParameterID());
                     ids.add (rp->getParameterID());
                 }

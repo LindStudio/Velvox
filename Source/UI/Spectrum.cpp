@@ -126,8 +126,11 @@ namespace velvox::ui
 
         // Input: faint outline for reference
         const auto inPath = makePath (spectrum->getInput(), r);
-        g.setColour (colours::accent.withAlpha (0.16f * intensity));
-        g.strokePath (inPath, juce::PathStrokeType (1.0f));
+        if (! inputDashed)
+        {
+            g.setColour (colours::accent.withAlpha (0.16f * intensity));
+            g.strokePath (inPath, juce::PathStrokeType (1.0f));
+        }
 
         // Output: lit fill with a soft glow along the edge
         const auto outPath = makePath (spectrum->getOutput(), r);
@@ -148,5 +151,15 @@ namespace velvox::ui
         core.addColour (0.45, colours::teal.interpolatedWith (juce::Colours::white, 0.35f).withAlpha (0.95f * intensity));
         g.setGradientFill (core);
         g.strokePath (outPath, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        // Before (dashed) on top, so it stays visible over the filled after-curve
+        if (inputDashed)
+        {
+            juce::Path dashed;
+            const float dashes[] { 4.0f, 3.0f };
+            juce::PathStrokeType (1.2f).createDashedStroke (dashed, inPath, dashes, 2);
+            g.setColour (colours::textSoft.withAlpha (0.6f * intensity));
+            g.fillPath (dashed);
+        }
     }
 }

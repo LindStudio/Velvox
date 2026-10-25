@@ -1,4 +1,6 @@
 #include "Segments.h"
+#include "ValueText.h"
+#include "../Parameters/ParameterLayout.h"
 
 namespace velvox::ui
 {
@@ -7,12 +9,64 @@ namespace velvox::ui
         const juce::String overflowLabel = juce::String::fromUTF8 ("\xe2\x80\xa6");   // …
     }
 
+    // A segment: a click chooses it; the other gestures belong to the whole group
+    class Segments::SegmentButton final : public juce::TextButton
+    {
+    public:
+        SegmentButton (Segments& o, const juce::String& text) : juce::TextButton (text), owner (o) {}
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            gestureClick = e.mods.isPopupMenu() || e.mods.isAltDown();
+            if (e.mods.isPopupMenu())
+            {
+                owner.showMenu (*this);
+                return;
+            }
+            if (e.mods.isAltDown())
+            {
+                owner.resetToDefault();
+                return;
+            }
+            juce::TextButton::mouseDown (e);
+        }
+
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            if (gestureClick)
+            {
+                gestureClick = false;
+                return;
+            }
+            juce::TextButton::mouseUp (e);
+        }
+
+        void mouseDrag (const juce::MouseEvent& e) override
+        {
+            if (! gestureClick)
+                juce::TextButton::mouseDrag (e);
+        }
+
+        void mouseDoubleClick (const juce::MouseEvent&) override { owner.resetToDefault(); }
+
+        void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& wheel) override
+        {
+            const float d = std::abs (wheel.deltaX) > std::abs (wheel.deltaY) ? -wheel.deltaX : wheel.deltaY;
+            if (std::abs (d) > 1.0e-4f)
+                owner.step ((d > 0.0f) != wheel.isReversed ? -1 : 1);   // up = previous (to the left)
+        }
+
+    private:
+        Segments& owner;
+        bool gestureClick = false;
+    };
+
     Segments::Segments (APVTS& state, const char* id, juce::StringArray labels, juce::Colour accent, bool withOverflow)
         : paramId (id)
     {
-        auto* param = state.getParameter (paramId);
-        jassert (param != nullptr);
-        const auto* choice = dynamic_cast<juce::AudioParameterChoice*> (param);
+        parameter = state.getParameter (paramId);
+        jassert (parameter != nullptr);
+        const auto* choice = dynamic_cast<juce::AudioParameterChoice*> (parameter);
         if (choice != nullptr)
             allChoices = choice->choices;
 
@@ -21,13 +75,12 @@ namespace velvox::ui
             const int byName = allChoices.indexOf (labels[i]);
             choiceIndex.push_back (byName >= 0 ? byName : i);
 
-            auto* b = buttons.add (new juce::TextButton (labels[i]));
+            auto* b = buttons.add (new SegmentButton (*this, labels[i]));
             b->onClick = [this, i] { clickSegment (i); };
         }
         if (withOverflow && allChoices.size() > labels.size())
         {
-            overflow = buttons.add (new juce::TextButton (overflowLabel));
-            overflow->setTooltip ("All values");
+            overflow = buttons.add (new SegmentButton (*this, overflowLabel));
             overflow->onClick = [this] { showOverflowMenu(); };
         }
         for (auto* b : buttons)
@@ -38,10 +91,16 @@ namespace velvox::ui
             addAndMakeVisible (b);
         }
 
-        if (param != nullptr)
+        if (parameter != nullptr)
         {
-            attachment = std::make_unique<juce::ParameterAttachment> (*param, [this] (float v) { showValue (v); }, nullptr);
+            attachment = std::make_unique<juce::ParameterAttachment> (*parameter, [this] (float v) { showValue (v); }, nullptr);
             attachment->sendInitialUpdate();
+
+            const auto* spec = findParameterSpec (paramId);
+            const juce::String description = spec != nullptr ? juce::String (spec->description) : juce::String();
+            info = std::make_unique<HoverInfo> (*this, [this] { return parameter->getName (48); },
+                                                [this] { return parameter->getCurrentValueAsText(); },
+                                                [description] { return description; });
         }
     }
 
@@ -67,6 +126,34 @@ namespace velvox::ui
             return;
         attachment->setValueAsCompleteGesture ((float) choice);
         showValue ((float) choice);
+    }
+
+    void Segments::resetToDefault()
+    {
+        if (parameter == nullptr || ! isEnabled())
+            return;
+        gestures::resetToDefault (*parameter);
+        showValue (parameter->convertFrom0to1 (parameter->getValue()));
+    }
+
+    void Segments::step (int direction)
+    {
+        if (parameter == nullptr || ! isEnabled() || choiceIndex.empty())
+            return;
+        // Along the visible segments; from a value without a segment, the nearest end
+        int next = selectedSegment >= 0 && selectedSegment < (int) choiceIndex.size()
+                     ? selectedSegment + direction
+                     : (direction > 0 ? 0 : (int) choiceIndex.size() - 1);
+        next = juce::jlimit (0, (int) choiceIndex.size() - 1, next);
+        if (next != selectedSegment)
+            clickSegment (next);
+    }
+
+    void Segments::showMenu (juce::Component& target)
+    {
+        if (parameter == nullptr || ! isEnabled())
+            return;
+        gestures::showMenu (target, *parameter, nullptr);
     }
 
     void Segments::showOverflowMenu()

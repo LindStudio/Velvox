@@ -2,6 +2,7 @@
 #include "../DSP/ChopModule.h"
 #include "../DSP/PulseModule.h"
 #include "../DSP/Instances.h"
+#include "../DSP/EqDesign.h"
 #include <deque>
 #include <unordered_map>
 
@@ -38,6 +39,58 @@ namespace velvox
 
     namespace
     {
+        // 0.6 EQ bands (instance 1; the banks of instances 2..4 follow from appendInstanceBanks) and the
+        // 0.5 fixed-band IDs, which stay registered for old projects but are hidden and not automatable
+        void appendEqBandSpecs (std::vector<ParameterSpec>& specs)
+        {
+            static std::deque<std::string> strings;
+            const auto keep = [] (const juce::String& t) { strings.push_back (t.toStdString()); return strings.back().c_str(); };
+
+            static const juce::StringArray types { "Bell", "Low Shelf", "High Shelf", "Low Cut", "High Cut", "Notch", "Band Pass", "Tilt" };
+            static const juce::StringArray slopes { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct", "36 dB/oct", "48 dB/oct" };
+            static const juce::StringArray roles { "None", "Presence", "Warmth", "Air", "Low Cut", "Mud", "Auto", "High Cut" };
+
+            for (int n = 1; n <= dsp::maxEqBands; ++n)
+            {
+                const juce::String band = "EQ Band " + juce::String (n) + " ";
+                const auto id = [&] (const char* field) { return keep (pid::eqBandId (n, field)); };
+                specs.push_back ({ id (pid::eqband::on), keep (band + "On"), "EQ", T::Bool, 0, 1, 0, 0, "", {}, "Switches the band on." });
+                specs.push_back ({ id (pid::eqband::type), keep (band + "Type"), "EQ", T::Choice, 0, (float) types.size() - 1, 0, 0, "", types,
+                                   "Bell, shelves, cuts, notch, band pass or tilt." });
+                specs.push_back ({ id (pid::eqband::freq), keep (band + "Freq"), "EQ", T::Float, dsp::eqdesign::minFreq, dsp::eqdesign::maxFreq, 1000.0f, 1000.0f, "Hz", {},
+                                   "Centre / corner frequency of the band." });
+                specs.push_back ({ id (pid::eqband::gain), keep (band + "Gain"), "EQ", T::Float, -dsp::eqdesign::maxGainDb, dsp::eqdesign::maxGainDb, 0.0f, 0.0f, "dB", {},
+                                   "Boost or cut of the band (tilt: from the lows to the highs)." });
+                specs.push_back ({ id (pid::eqband::q), keep (band + "Q"), "EQ", T::Float, dsp::eqdesign::minQ, dsp::eqdesign::maxQ, 1.0f, 1.0f, "", {},
+                                   "Bandwidth; higher = narrower." });
+                specs.push_back ({ id (pid::eqband::slope), keep (band + "Slope"), "EQ", T::Choice, 0, (float) slopes.size() - 1, 3, 0, "", slopes,
+                                   "Steepness of a low or high cut." });
+                ParameterSpec role { id (pid::eqband::role), keep (band + "Role"), "EQ", T::Choice, 0, (float) roles.size() - 1, 0, 0, "", roles,
+                                     "Internal: which feature owns the band (macros, automatic mix, Vocal Check); user bands have none." };
+                role.automatable = false;
+                role.hidden = true;
+                specs.push_back (role);
+            }
+
+            ParameterSpec legacyFlag { pid::eqLegacyResponse, "EQ Legacy Response", "EQ", T::Bool, 0, 1, 0, 0, "", {},
+                                       "Internal: the bands use the response of the 0.5 EQ (set when an older project is loaded)." };
+            legacyFlag.automatable = false;
+            legacyFlag.hidden = true;
+            specs.push_back (legacyFlag);
+
+            for (auto& s : specs)
+            {
+                const juce::String sid (s.id);
+                for (auto* legacyId : { pid::hpfOn, pid::hpfFreq, pid::hpfSlope, pid::lowFreq, pid::lowGain, pid::midFreq, pid::midGain, pid::midQ,
+                                        pid::highFreq, pid::highGain, pid::lowType, pid::lowQ, pid::highType, pid::highQ, pid::lpfOn, pid::lpfFreq, pid::lpfSlope })
+                    if (sid == legacyId)
+                    {
+                        s.automatable = false;
+                        s.hidden = true;
+                    }
+            }
+        }
+
         // Parameters of instances 2..n, generated from the instance-1 table
         void appendInstanceBanks (std::vector<ParameterSpec>& specs)
         {
@@ -339,6 +392,7 @@ namespace velvox
             { pid::delayMod,       "Delay Modulation","Delay", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Slow wow and flutter on the repeats, like a tape echo." },
         };
+            appendEqBandSpecs (table);
             appendInstanceBanks (table);
             return table;
         }();
@@ -438,6 +492,7 @@ namespace velvox
                 {
                     const auto* specPtr = &s;
                     auto attributes = juce::AudioParameterFloatAttributes()
+                                          .withAutomatable (s.automatable)
                                           .withLabel (s.unit)
                                           .withStringFromValueFunction ([specPtr] (float v, int) { return formatValue (*specPtr, v); })
                                           .withValueFromStringFunction ([] (const juce::String& t) { return t.retainCharacters ("-0123456789.").getFloatValue()
@@ -447,13 +502,15 @@ namespace velvox
                 }
 
                 case T::Bool:
-                    layout.add (std::make_unique<juce::AudioParameterBool> (id, s.name, s.defaultValue > 0.5f));
+                    layout.add (std::make_unique<juce::AudioParameterBool> (id, s.name, s.defaultValue > 0.5f,
+                                                                            juce::AudioParameterBoolAttributes().withAutomatable (s.automatable)));
                     break;
 
                 case T::Choice:
                 {
                     const auto choices = dsp::splitInstanceParamId (s.id).first == pid::delayDivision ? delaydiv::names() : s.choices;
-                    layout.add (std::make_unique<juce::AudioParameterChoice> (id, s.name, choices, (int) s.defaultValue));
+                    layout.add (std::make_unique<juce::AudioParameterChoice> (id, s.name, choices, (int) s.defaultValue,
+                                                                              juce::AudioParameterChoiceAttributes().withAutomatable (s.automatable)));
                     break;
                 }
             }
@@ -492,6 +549,10 @@ namespace velvox
             }
 
             obj->setProperty ("default", s.defaultValue);
+            if (s.hidden)
+                obj->setProperty ("hidden", true);
+            if (! s.automatable)
+                obj->setProperty ("automatable", false);
             list.add (juce::var (obj));
         }
 
