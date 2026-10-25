@@ -50,3 +50,8 @@ first build after the implementation.)
 
 Snapshots: C:\Users\jakob\dev\velvox-wt\shots-satpanel\ sat-single.png, sat-multiband.png, sat-multiband-more.png,
 sat-multiband-min.png (889 px = min scale).
+
+Merge: feature/automix (eq + reverb panels, pitch, …) merged at 466e348; conflicts only in DetailPanels.cpp includes and the
+TestMain.cpp snapshot comment (the merged branch has its own plain "set:" overlay; mine strips "set:…[|overlay]" first, so theirs
+stays as a no-op fallback). Final full suite: 28697 checks passed, 14 failed — all 14 are "pulse: reaches pulse…" (2) and
+"smooth: reaches smoothW…" (12), owned by other panel tracks; every sat check is green, SatPanelTests 103 / 103.
