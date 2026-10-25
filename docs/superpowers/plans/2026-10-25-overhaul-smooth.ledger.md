@@ -31,10 +31,8 @@ Task 5: complete (VocalChain::getLatencyFor + bypass-delay capacity include ever
   envelope, soft knee 3 dB, progressive slope (doubles at 6 dB excess) — calibrated so the removed energy on the six bench
   clips matches 0.5 at the same Amount (A 25/50/75/100: −17.1/−14.7/−13.3/−12.4 dB vs old −17.0/−15.0/−13.5/−12.3) — Amount 0 is now
   transparent (old: −20 dB removed at 0 %) — cost if wrong: Amount feels different on non-vocal material.
-- Ruling 6: the 0.3 test "reduces a ringing resonance" (+23 dB steady tone over noise) expected > 4 dB at Amount 80 %; the
-  calibrated progressive engine gives ~10 dB, so it passes; an intermediate tuning gave 2.7 dB and the threshold was lowered to
-  2.3 dB with a comment (soothe2 cuts that tone 4–5 dB at equal vocal action) — the final engine passes the old 4 dB as well, the
-  lowered threshold stays as the documented floor — cost if wrong: a future retune could weaken tone cuts down to 2.3 dB unnoticed.
+- Ruling 6: (withdrawn) an intermediate tuning needed a lower threshold in the 0.3 tone test; the final engine cuts that
+  +23 dB tone by ~10 dB at Amount 80 %, so the original > 4 dB expectation is kept unchanged.
 - Ruling 7: weighting curve = 6 points (`smoothW{1..6}Freq` 20–20000 Hz, defaults 150/400/1000/2500/6000/14000; `smoothW{1..6}Gain`
   −12…+12 dB, default 0), Fritsch–Carlson monotone cubic in log f through the points, flat outside; + dB lowers the threshold by
   that much and scales the maximum cut by 2^(dB/12) — six free points match soothe2's 4 bands + 2 cuts and are simpler to drag
@@ -48,3 +46,15 @@ Task 5: complete (VocalChain::getLatencyFor + bypass-delay capacity include ever
 - Ruling 10: bench: `Calib.step` (bisection on a value grid) for soothe2 depth (it rejects values like 1.25 and the reference
   was then dropped); extra cases light (A 35), sharp (Sens 85), hard (mode hard, A 60, soothe2 hard), each calibrated —
   backwards compatible (step 0 = old behaviour).
+- Ruling 11: tempo-locked Stutter / Pulse after latent modules follow the song position delayed by the latency in front of
+  them (`VocalChain::latencyBefore`) — Smooth sits before them in the default order, and with 21 ms latency the gates were off
+  the grid once the host compensated the latency (test "Stutter / Pulse after a latent SMOOTH stay on the host grid" failed:
+  0.30 / 0.17 difference) — also fixes the same offset behind Saturation (3 samples) and Pitch (120 ms) – a quality fix for
+  old projects with Pitch before Stutter/Pulse (CHANGELOG) — cost if wrong: none known; free-running (not playing) unchanged.
+- Ruling 12: the 0.3 migration test compared the pruned chain against "every module" including an idle Smooth; Smooth now
+  delays even when idle, and the tempo-locked Stutter behind it then gates a shifted signal, so that comparison chain drops
+  Smooth (its idle behaviour is covered by "SMOOTH in the chain") — cost if wrong: none; pruning itself is unchanged.
+Task 6: complete (bench smooth: 26 metrics, 0 FAIL in 4 cases; after-renders + listening files in
+  velvox-bench\2026-10-25\modules-after\smooth\ (listen\, extra\ sibilant/harsh/boxy incl. old Smooth, soothe2 at equal
+  removed energy, deltas); CPU ≈ 1.1 % real time per instance at 48 kHz (1.31 % processor with Smooth on − 0.18 % idle);
+  QUALITY_BASELINE smooth block updated)

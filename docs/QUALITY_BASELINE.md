@@ -147,18 +147,36 @@ Calibrated: vocal: Pro-DS Threshold=-50.1562
 <!-- BEGIN smooth -->
 #### Smooth (`smooth`)
 
-Calibrated: vocal: soothe2 depth=0
+Calibrated: vocal: soothe2 depth=1.4; light: soothe2 depth=0; sharp: soothe2 depth=1.8; hard: soothe2 depth=1
 
 | case | metric | Headliner | soothe2 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| vocal | delta_db (dB) | -13.5 | -16.6 | 3.07 | ref − 0.00 | info |
-| vocal | pte_reduction_db (dB) | 0.05 | 0.20 | -0.15 | ref − 0.30 | pass |
-| vocal | ltas_reduction_db (dB) | 0.26 | 0.98 | -0.72 | ref − 0.50 | FAIL |
-| vocal | flatness_gain_db (dB) | 1.03 | 0.79 | 0.24 | ref − 0.20 | pass |
-| vocal | transient_change_db (dB) | 0.42 | 0.26 | 0.16 | 0.00 ± 0.50 | pass |
-| vocal | musical_noise_db (dB) | 0.11 | 0.06 | 0.05 | ref + 0.20 | pass |
+| vocal | delta_db (dB) | -13.3 | -14.0 | 0.66 | ref − 0.00 | info |
+| vocal | pte_reduction_db (dB) | 0.20 | 0.27 | -0.07 | ref − 0.30 | pass |
+| vocal | ltas_reduction_db (dB) | 1.60 | 1.27 | 0.33 | ref − 0.50 | pass |
+| vocal | flatness_gain_db (dB) | 1.24 | 1.12 | 0.12 | ref − 0.20 | pass |
+| vocal | transient_change_db (dB) | 0.27 | 0.38 | -0.12 | 0.00 ± 0.50 | pass |
+| vocal | musical_noise_db (dB) | 0.06 | 0.09 | -0.02 | ref + 0.20 | pass |
 | vocal | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| vocal | cpu_pct (%) – median over this module's renders | 1.44 | 1.24 | 0.19 | ref + 1.00 | pass |
+| vocal | cpu_pct (%) – median over this module's renders | 1.31 | 1.25 | 0.06 | ref + 1.00 | pass |
+| light | delta_db (dB) | -15.9 | -16.6 | 0.61 | ref − 0.00 | info |
+| light | pte_reduction_db (dB) | 0.15 | 0.20 | -0.05 | ref − 0.30 | pass |
+| light | ltas_reduction_db (dB) | 1.11 | 0.98 | 0.13 | ref − 0.50 | pass |
+| light | flatness_gain_db (dB) | 0.88 | 0.79 | 0.09 | ref − 0.20 | pass |
+| light | transient_change_db (dB) | 0.20 | 0.26 | -0.06 | 0.00 ± 0.50 | pass |
+| light | musical_noise_db (dB) | 0.04 | 0.06 | -0.02 | ref + 0.20 | pass |
+| sharp | delta_db (dB) | -12.6 | -13.4 | 0.81 | ref − 0.00 | info |
+| sharp | pte_reduction_db (dB) | 0.22 | 0.30 | -0.08 | ref − 0.30 | pass |
+| sharp | ltas_reduction_db (dB) | 1.78 | 1.35 | 0.43 | ref − 0.50 | pass |
+| sharp | flatness_gain_db (dB) | 1.37 | 1.22 | 0.15 | ref − 0.20 | pass |
+| sharp | transient_change_db (dB) | 0.31 | 0.42 | -0.12 | 0.00 ± 0.50 | pass |
+| sharp | musical_noise_db (dB) | 0.07 | 0.10 | -0.02 | ref + 0.20 | pass |
+| hard | delta_db (dB) | -11.7 | -11.4 | -0.33 | ref − 0.00 | info |
+| hard | pte_reduction_db (dB) | 0.30 | 0.48 | -0.19 | ref − 0.30 | pass |
+| hard | ltas_reduction_db (dB) | 2.57 | 2.00 | 0.57 | ref − 0.50 | pass |
+| hard | flatness_gain_db (dB) | 1.60 | 1.66 | -0.07 | ref − 0.20 | pass |
+| hard | transient_change_db (dB) | 0.31 | 0.44 | -0.13 | 0.00 ± 0.50 | pass |
+| hard | musical_noise_db (dB) | 0.10 | 0.13 | -0.03 | ref + 0.20 | pass |
 <!-- END smooth -->
 
 <!-- BEGIN sat -->
@@ -376,6 +394,12 @@ Stutter, Pulse and Vocal Check pass at baseline.
    1/3-oct (or cepstral) smoothing, gain only where |X| exceeds the envelope by > sensitivity, per-bin attack/release and
    ±2-bin frequency smoothing of the gain mask, phase-coherent overlap-add, depth scaled by excess (soothe-like). Re-check
    `musical_noise_db` and `transient_change_db` – those are where STFT designs usually regress.
+   **Closed (overhaul/smooth, 0.6):** STFT engine 1024/256 (latency 1024 @ 48 kHz, constant). At the calibrated equal removed
+   energy it passes all four cases (vocal A 75, light A 35, sharp Sens 85, hard): stationary peak 1.60 vs 1.27 dB (soothe2),
+   peak-to-envelope 0.20 vs 0.27 dB (within − 0.3), flatness 1.24 vs 1.12, musical noise 0.06 vs 0.09, transients 0.27 vs
+   0.38 dB; table above = after-state (`modules-after\smooth`). Remaining character difference (not gated): soothe2 lowers
+   single harmonic peaks more (pte on f7_row 0.64 vs 0.32 dB) – Headliner detects on the harmonic-peak contour so the ripple
+   between partials of high voices is not taken for resonances (ledger Ruling 4).
 6. **Compressor – ballistics distortion at 100 Hz: −48 dB vs −57 dB (Pro-C 2 Vocal)**; static curve 1.13 dB off the
    ideal soft knee (limit 1.0). Audible as grit on low male notes with 10/120 ms. *Do:* move the smoothing into the log
    domain (Giannoulis et al. 2012, branching smooth detector) with a short peak-hold (~ one 50 Hz period) or an RMS

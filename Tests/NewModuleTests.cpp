@@ -4,6 +4,7 @@
 
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
+#include "PopScan.h"
 #include <juce_dsp/juce_dsp.h>
 #include <complex>
 #include <thread>
@@ -847,9 +848,7 @@ public:
             const double reduction = 20.0 * std::log10 (toneIn / toneOut);
             logMessage ("3 kHz resonance reduced by " + juce::String (reduction, 1) + " dB; strongest band "
                         + juce::String (SmoothModule::bandFrequency (maxBand), 0) + " Hz at " + juce::String (maxCut, 1) + " dB");
-            // 0.6 STFT engine, calibrated to the old removed energy on vocals: a +23 dB steady tone over
-            // noise loses ~2.7 dB (soothe2 at the same vocal action: ~4 dB; hard mode below goes deeper)
-            expectGreaterThan (reduction, 2.3);
+            expectGreaterThan (reduction, 4.0);
             expect (maxBand >= 0 && std::abs (std::log2 (SmoothModule::bandFrequency (maxBand) / 3000.0f)) < 0.35f,
                     "the display shows the cut where the resonance is");
         }
@@ -1145,6 +1144,48 @@ public:
             expectWithinAbsoluteError (s.smooth.weightGain[3], -7.0f, 1.0e-3f);
             expectWithinAbsoluteError (s.smooth.weightFreq[3], 3300.0f, 1.0f);
             expectWithinAbsoluteError (s.extra[0].smooth.weightGain[1], 5.0f, 1.0e-3f, "second instance has its own curve");
+        }
+
+        beginTest ("Stutter / Pulse after a latent SMOOTH stay on the host grid");
+        {
+            // The host shifts the output back by the reported latency, so a tempo-locked gate after
+            // SMOOTH must gate the delayed signal at the delayed song position: "smooth, chop" has to
+            // sound like "chop, smooth"
+            const auto render = [&] (const char* routing, const char* gateOn)
+            {
+                Harness h;
+                h.neutral();
+                velvox::test::ScanPlayHead head;
+                head.playing = true;
+                head.bpm = 120.0;
+                h.proc.setPlayHead (&head);
+                h.set (pid::smoothOn, 1.0f);
+                h.set (pid::smoothAmount, 0.0f);
+                h.set (gateOn, 1.0f);
+                h.proc.setRouting (Routing::fromString (routing));
+                const auto in = h.sine (300.0, 0.3f, 2.0);
+                juce::AudioBuffer<float> out (in);
+                juce::MidiBuffer midi;
+                for (int start = 0; start < out.getNumSamples(); start += 512)
+                {
+                    head.ppq = start / h.fs * head.bpm / 60.0;
+                    juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), 2, start, std::min (512, out.getNumSamples() - start));
+                    h.proc.processBlock (view, midi);
+                }
+                h.proc.setPlayHead (nullptr);
+                return out;
+            };
+            for (auto* gate : { pid::chopOn, pid::pulseOn })
+            {
+                const bool chop = juce::String (gate) == pid::chopOn;
+                const auto before = render (chop ? "smooth,chop" : "smooth,pulse", gate);
+                const auto after = render (chop ? "chop,smooth" : "pulse,smooth", gate);
+                double d = 0.0;
+                for (int i = 2048; i < before.getNumSamples(); ++i)
+                    d = std::max (d, (double) std::abs (before.getSample (0, i) - after.getSample (0, i)));
+                logMessage (juce::String (gate) + ": max difference smooth-first vs gate-first " + juce::String (d, 6));
+                expectLessThan (d, 1.0e-3, gate);
+            }
         }
 
         beginTest ("SMOOTH in the chain: constant latency reported, output and bypass aligned");

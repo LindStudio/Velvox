@@ -72,7 +72,7 @@ namespace velvox::dsp
 
         void prepare (double sampleRate, int maxBlockSize);
         // Clears the state while playing: silent until the delay line is refilled, then fades in
-        void reset();
+        void reset (bool fadeIn = true);
         void setSettings (const SmoothSettings& s) noexcept;
         void process (float* const* channels, int numChannels, int numSamples) noexcept;
 

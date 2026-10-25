@@ -174,13 +174,14 @@ namespace velvox::dsp
         snapNext = true;
     }
 
-    void SmoothModule::reset()
+    void SmoothModule::reset (bool fadeIn)
     {
         // Mid-stream (e.g. the instance joins the chain): the delay line holds no valid audio
-        // yet - stay silent until it is filled, then fade in (no click after the gap)
+        // yet - stay silent until it is filled, then fade in (no click after the gap).
+        // At the start of a stream the zeros are real silence: no fade.
         clearState();
-        primeRemaining = fftSize;
-        primeGain = 0.0f;
+        primeRemaining = fadeIn ? fftSize : 0;
+        primeGain = fadeIn ? 0.0f : 1.0f;
     }
 
     void SmoothModule::clearState() noexcept
