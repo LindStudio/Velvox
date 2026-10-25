@@ -2,6 +2,7 @@
 #include "../PluginProcessor.h"
 #include "../DSP/SaturationModule.h"
 #include "../DSP/ChopModule.h"
+#include "TimePanels.h"
 
 namespace velvox::ui
 {
@@ -987,111 +988,6 @@ namespace velvox::ui
         };
 
         //======================================================================
-        // Delay: the echoes on a time line (ping-pong alternates left / right),
-        // lit as a scan passes and pushed down live by ducking
-        class DelayView final : public ModuleView
-        {
-        public:
-            void update (const LiveData& d) override
-            {
-                const auto& cs = d.settings;
-                s = cs.delay;
-                on = cs.delayOn;
-                mix = cs.delayMix;
-                ms = cs.delaySync ? d.effectiveDelayMs : cs.delayTimeMs;
-                duck.target = juce::Decibels::decibelsToGain (-d.delayDuck.ago (0));
-                duck.tick (0.25f);
-                time = d.time;
-                level = d.level();
-                repaint();
-            }
-
-            void paint (juce::Graphics& g) override
-            {
-                auto r = getLocalBounds().toFloat().reduced (20.0f, 14.0f);
-                const float alpha = on ? 1.0f : 0.4f;
-                label (g, "Echoes", r.withHeight (12.0f));
-                label (g, juce::String (juce::roundToInt (ms)) + " ms" + (s.pingPong ? "   ping-pong" : ""), r.withHeight (12.0f),
-                       juce::Justification::topRight, colours::text);
-                auto plot = r.withTrimmedTop (18.0f).withTrimmedBottom (16.0f);
-                const float cy = plot.getCentreY();
-                const float windowMs = juce::jlimit (800.0f, 8000.0f, ms * 7.0f);
-                const auto xFor = [&] (float t) { return plot.getX() + plot.getWidth() * t / windowMs; };
-
-                g.setColour (colours::accent.withAlpha (0.06f));
-                g.fillRect (juce::Rectangle<float> (plot.getX(), cy - 0.5f, plot.getWidth(), 1.0f));
-
-                // Time axis
-                const float stepMs = windowMs > 4000.0f ? 1000.0f : (windowMs > 1600.0f ? 500.0f : 250.0f);
-                g.setFont (medium (10.5f));
-                for (float t = stepMs; t < windowMs; t += stepMs)
-                {
-                    const float x = xFor (t);
-                    g.setColour (colours::accent.withAlpha (0.03f));
-                    g.fillRect (juce::Rectangle<float> (x, plot.getY(), 1.0f, plot.getHeight()));
-                    g.setColour (colours::textFaint);
-                    g.drawText (juce::String ((int) t) + " ms", juce::Rectangle<float> (x - 30.0f, plot.getBottom() + 3.0f, 60.0f, 11.0f),
-                                juce::Justification::centred, false);
-                }
-
-                // Scan line loops through the window, with a soft trail
-                const float scan = (float) std::fmod (time * 1000.0, (double) windowMs);
-                const float sx = xFor (scan);
-                g.setGradientFill (juce::ColourGradient (colours::teal.withAlpha (0.0f), sx - 140.0f, 0.0f,
-                                                         colours::teal.withAlpha (0.035f * alpha), sx, 0.0f, false));
-                g.fillRect (juce::Rectangle<float> (sx - 140.0f, plot.getY(), 140.0f, plot.getHeight()).getIntersection (plot));
-                g.setColour (colours::teal.withAlpha (0.25f * alpha));
-                g.fillRect (juce::Rectangle<float> (sx, plot.getY(), 1.0f, plot.getHeight()));
-
-                const float half = plot.getHeight() * 0.46f;
-
-                // Dry voice
-                drawGlow (g, { xFor (0.0f), cy }, 20.0f, 0.3f);
-                g.setColour (juce::Colours::white.withAlpha (0.85f));
-                g.fillRoundedRectangle (juce::Rectangle<float> (3.0f, half * 2.0f).withCentre ({ xFor (0.0f) + 2.0f, cy }), 1.5f);
-
-                // Echo taps
-                // Height = level of each repeat (feedback, live ducking); brightness = mix
-                float amp = 0.9f * duck.current;
-                const float strength = 0.45f + 0.55f * juce::jlimit (0.0f, 1.0f, mix * 2.5f);
-                for (int k = 1; k < 64 && amp > 0.02f; ++k)
-                {
-                    const float t = ms * (float) k;
-                    if (t > windowMs)
-                        break;
-                    const float x = xFor (t);
-                    const float near = std::exp (-std::pow ((scan - t) / 70.0f, 2.0f));
-                    const auto c = aurora (t / windowMs);
-                    const float h = half * amp;
-                    const bool up = ! s.pingPong || (k % 2 == 1);
-                    const bool down = ! s.pingPong || (k % 2 == 0);
-                    const auto bar = juce::Rectangle<float> (x - 2.0f, up ? cy - h : cy, 4.0f, (up && down) ? h * 2.0f : h);
-
-                    drawGlow (g, bar.getCentre(), 14.0f + h * 0.5f, (0.18f + 0.45f * near) * strength * alpha, c);
-                    g.setGradientFill (juce::ColourGradient (c.interpolatedWith (juce::Colours::white, 0.2f + 0.5f * near).withAlpha (strength * alpha),
-                                                             0.0f, up ? bar.getY() : bar.getBottom(), c.withAlpha (0.35f * strength * alpha), 0.0f, cy, false));
-                    g.fillRoundedRectangle (bar, 2.0f);
-                    amp *= s.feedback;
-                }
-
-                if (s.pingPong)
-                {
-                    label (g, "L", plot.withWidth (14.0f).withHeight (12.0f).translated (-12.0f, 4.0f));
-                    label (g, "R", plot.withWidth (14.0f).withY (plot.getBottom() - 12.0f).translated (-12.0f, 0.0f));
-                }
-                label (g, hz (s.lowCutHz) + "  -  " + hz (s.highCutHz), plot.withY (plot.getY() + 2.0f).withHeight (12.0f),
-                       juce::Justification::topRight, colours::textFaint);
-            }
-
-        private:
-            dsp::DelaySettings s;
-            bool on = false;
-            float mix = 0.2f, ms = 375.0f, level = 0.0f;
-            double time = 0.0;
-            Smoothed duck { 1.0f, 1.0f };
-        };
-
-        //======================================================================
         // Reverb: the tail - pre-delay gap, early reflections, diffuse decay
         class ReverbView final : public ModuleView
         {
@@ -1912,7 +1808,7 @@ namespace velvox::ui
             case ModuleId::doubler: return std::make_unique<DoublerView>();
             case ModuleId::pitch:   return std::make_unique<PitchView>();
             case ModuleId::chop:    return std::make_unique<ChopView>();
-            case ModuleId::delay:   return std::make_unique<DelayView>();
+            case ModuleId::delay:   return createTimeModuleView (p, ModuleId::delay, instance);
             case ModuleId::reverb:  return std::make_unique<ReverbView>();
             case ModuleId::pulse:   return std::make_unique<PulseView> (p);
             case ModuleId::smash:   return std::make_unique<SmashView> (p, instance);

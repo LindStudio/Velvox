@@ -5,6 +5,7 @@
 #include "Icons.h"
 #include "HelpContent.h"
 #include "UserSettings.h"
+#include "TimePanels.h"
 
 namespace velvox::ui
 {
@@ -845,54 +846,6 @@ namespace velvox::ui
             }
         };
 
-        // DELAY: Note value, Sync, Feedback, Mix, Ping-Pong; everything else in Mehr
-        class DelayPanel final : public DetailPanel
-        {
-        public:
-            explicit DelayPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Delay", help::shortDescription ((int) ModuleId::delay), pid::delayOn)
-            {
-                division = &segments (pid::delayDivision, { "1/4", "1/4D", "1/8", "1/8D", "1/8T", "1/16" }, true);
-                auto& sync = toggle (pid::delaySync, "Sync");
-                auto& pingPong = toggle (pid::delayPingPong, "Ping-Pong");
-                segments (pid::duckSource, { "Vocal", "Sidechain" });
-                time = &knob (pid::delayTime, "Time");
-                auto& feedback = knob (pid::delayFeedback, "Feedback");
-                knob (pid::delaySpread, "Offset");
-                knob (pid::delayLowCut, "Low Cut");
-                knob (pid::delayHighCut, "High Cut");
-                knob (pid::delayMod, "Wobble");
-                knob (pid::delayDrive, "Drive");
-                knob (pid::delayDiffusion, "Diffusion");
-                knob (pid::delayToReverb, "Into Reverb");
-                auto& mix = knob (pid::delayMix, "Mix");
-                knob (pid::delayDuckAmount, "Ducking");
-                knob (pid::delayDuckThreshold, "Duck Thresh");
-                knob (pid::delayDuckAttack, "Duck Attack");
-                knob (pid::delayDuckRelease, "Duck Release");
-                setCaption (*division, "Time");
-                setMainControls ({ division, &sync, &feedback, &mix, &pingPong });
-                setMixKnob (&mix);
-                gr.setTooltip ("Ducking (dB)");
-                placeInVisual ({ &gr });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                gr.push (grFrom (live, &LiveData::delayDuck));
-                const bool synced = apvts.getRawParameterValue (pidFor (pid::delaySync))->load() > 0.5f;
-                time->setEnabled (! synced);
-                division->setEnabled (synced);
-            }
-
-        private:
-            void layoutVisual (juce::Rectangle<int> area) override { placeMeter (gr, area); }
-            Segments* division = nullptr;
-            Knob* time = nullptr;
-            GainReductionMeter gr { colours::accent, "Duck" };
-        };
-
         // REVERB: Room, Size, Decay, Mix; everything else in Mehr
         class ReverbPanel final : public DetailPanel
         {
@@ -1498,7 +1451,7 @@ namespace velvox::ui
                 case ModuleId::doubler: panel = std::make_unique<DoublerPanel> (p); break;
                 case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
                 case ModuleId::chop:    panel = std::make_unique<ChopPanel> (p); break;
-                case ModuleId::delay:   panel = std::make_unique<DelayPanel> (p); break;
+                case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
                 case ModuleId::reverb:  panel = std::make_unique<ReverbPanel> (p); break;
                 case ModuleId::pulse:   panel = std::make_unique<PulsePanel> (p); break;
                 case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;

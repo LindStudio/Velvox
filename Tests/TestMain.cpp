@@ -315,7 +315,8 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //   VelvoxTests --snapshot out.png [presetName] [width] [beginner|pro] [moduleId|-1] [overlay]
 // overlay: "help:<page>", "welcome", "tutorial:<step>", "bypass", "hide:<key,key>", "focus:<moduleId>", "edit",
 //          "intro" (analysis popup), "listening", "capturing", "analysing", "mixed" (overview after a synthetic auto mix),
-//          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report)
+//          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report),
+//          "set:<id>=<value>,...[,more]" (parameter values before rendering)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
                            const juce::String& mode, int selection, const juce::String& overlay)
 {
@@ -398,6 +399,11 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
         proc.getState().getParameter ("bypass")->setValueNotifyingHost (1.0f);
     if (overlay.startsWith ("hide:"))
         proc.getState().state.setProperty ("uiHiddenModules", overlay.fromFirstOccurrenceOf (":", false, false), nullptr);
+    // "set:<id>=<value>,<id>=<value>[,more]": parameter values in real units (e.g. "set:delayOn=1,delayFeedback=55")
+    if (overlay.startsWith ("set:"))
+        for (const auto& token : juce::StringArray::fromTokens (overlay.fromFirstOccurrenceOf (":", false, false), ",", ""))
+            if (auto* prm = proc.getState().getParameter (token.upToFirstOccurrenceOf ("=", false, false).trim()))
+                prm->setValueNotifyingHost (prm->convertTo0to1 (token.fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
     if (overlay == "edit")
         proc.getState().getParameter ("compRatio")->setValueNotifyingHost (0.6f);
     if (overlay == "listening" || overlay == "capturing" || overlay == "analysing")
@@ -418,7 +424,7 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
         }
         if (overlay.startsWith ("focus:"))
             ed->getChainView().onSelect (overlay.fromFirstOccurrenceOf (":", false, false).getIntValue());
-        if (overlay == "more" && ed->getDetail() != nullptr)
+        if ((overlay == "more" || (overlay.startsWith ("set:") && overlay.endsWith (",more"))) && ed->getDetail() != nullptr)
             ed->getDetail()->setMoreOpen (true);
         if (overlay == "details")
             ed->showMixDetails();
