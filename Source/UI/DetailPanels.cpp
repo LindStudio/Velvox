@@ -1,6 +1,7 @@
 #include "DetailPanels.h"
 #include "EqPanel.h"
 #include "ReverbPanel.h"
+#include "SmoothPanel.h"
 #include "ChainView.h"
 #include "../PluginProcessor.h"
 #include "../Presets/ModulePresets.h"
@@ -1040,26 +1041,6 @@ namespace velvox::ui
             }
         };
 
-        // SMOOTH: Amount (Depth), Sharpness, Speed, Delta; the rest in Mehr
-        class SmoothPanel final : public DetailPanel
-        {
-        public:
-            explicit SmoothPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Smooth", help::shortDescription ((int) ModuleId::smooth), pid::smoothOn)
-            {
-                segments (pid::smoothMode);
-                auto& delta = toggle (pid::smoothDelta, "Delta");
-                auto& amount = knob (pid::smoothAmount, "Depth");
-                auto& sensitivity = knob (pid::smoothSensitivity, "Sharpness");
-                knob (pid::smoothLow, "Focus Low");
-                knob (pid::smoothHigh, "Focus High");
-                auto& attack = knob (pid::smoothAttack, "Speed");
-                knob (pid::smoothRelease, "Release");
-                knob (pid::smoothOutput, "Output");
-                setMainControls ({ &amount, &sensitivity, &attack, &delta });
-            }
-        };
-
         // LEVEL RIDE: Ausgleich (Amount), Target, Speed; limits and detection in Mehr
         class RidePanel final : public DetailPanel
         {
@@ -1432,7 +1413,7 @@ namespace velvox::ui
                 case ModuleId::pulse:   panel = std::make_unique<PulsePanel> (p); break;
                 case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;
                 case ModuleId::choir:   panel = std::make_unique<ChoirPanel> (p); break;
-                case ModuleId::smooth:  panel = std::make_unique<SmoothPanel> (p); break;
+                case ModuleId::smooth:  panel = createSmoothPanel (p); break;
                 case ModuleId::check:   panel = std::make_unique<CheckPanel> (p); break;
                 case ModuleId::ride:    panel = std::make_unique<RidePanel> (p); break;
             }

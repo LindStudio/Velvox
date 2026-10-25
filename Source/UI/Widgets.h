@@ -95,6 +95,9 @@ namespace velvox::ui
     {
     public:
         Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent = colours::accent);
+        // Unbound knob (no parameter of its own, e.g. a linked control): the owner sets the slider's range,
+        // value, texts and default and handles its drag notifications
+        explicit Knob (const juce::String& label, juce::Colour accent = colours::accent);
         ~Knob() override;
         void resized() override;
         void paintOverChildren (juce::Graphics&) override;
@@ -133,6 +136,7 @@ namespace velvox::ui
 
     private:
         juce::Rectangle<float> dialBounds() const;
+        void setUp (const juce::String& label, juce::Colour accent);
         void applyLabelStyle();
         void tick();
 

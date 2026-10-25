@@ -261,6 +261,28 @@ namespace velvox::ui
     //==========================================================================
     Knob::Knob (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent)
     {
+        setUp (label, accent);
+        attachment = std::make_unique<APVTS::SliderAttachment> (state, paramId, slider);
+        this->paramId = paramId;
+        slider.bindParameter (state.getParameter (paramId));
+
+        // Hover card: name, short description, value with unit (the gestures are in the help)
+        if (const auto* spec = findParameterSpec (paramId))
+            description = spec->description;
+
+        shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
+        slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
+    }
+
+    Knob::Knob (const juce::String& label, juce::Colour accent)
+    {
+        setUp (label, accent);
+        shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
+        slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
+    }
+
+    void Knob::setUp (const juce::String& label, juce::Colour accent)
+    {
         // White (the old default) means "no module colour given": the design cyan
         slider.setColour (juce::Slider::rotarySliderFillColourId, accent == colours::accent ? colours::teal : accent);
         slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
@@ -274,19 +296,9 @@ namespace velvox::ui
         addAndMakeVisible (name);
         applyLabelStyle();
 
-        attachment = std::make_unique<APVTS::SliderAttachment> (state, paramId, slider);
-        this->paramId = paramId;
-        slider.bindParameter (state.getParameter (paramId));
-
-        // Hover card: name, short description, value with unit (the gestures are in the help)
-        if (const auto* spec = findParameterSpec (paramId))
-            description = spec->description;
         info = std::make_unique<HoverInfo> (*this, [this] { return name.getText(); },
                                             [this] { return slider.getTextFromValue (slider.getValue()); },
                                             [this] { return description; });
-
-        shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
-        slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
     }
 
     Knob::~Knob() = default;

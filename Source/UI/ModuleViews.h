@@ -16,6 +16,9 @@ namespace velvox::ui
     public:
         // Once per frame while the panel is visible
         virtual void update (const LiveData&) = 0;
+        // Parameters the visual edits directly through its own handles (graph points, edges), so they
+        // count as reachable in the panel without a knob of their own
+        virtual juce::StringArray getEditedParameters() const { return {}; }
     };
 
     // `selection` = dsp::selectionCode (module, instance), or < 0 for the output stage
