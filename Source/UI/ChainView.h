@@ -13,13 +13,15 @@ namespace velvox::ui
     // each showing ONLY its name, then its icon, then its on/off switch (top to bottom). No knobs or
     // values in the chain.
     //   - click = select (the panel below shows it), drag = reorder, power = on/off
+    //   - "S" (shows on hover, lit while soloed) or Alt+click = solo: only this module heard (0.6.1)
     //   - right-click = menu: on/off, duplicate, remove, move left/right, reset, "Als Send" / "Als Insert"
     //     (delay, reverb), undo / redo, help
     //   - the "+" tile at the end (and a "+" on the gap between two tiles) opens the module browser
     //   - delay / reverb running as parallel sends sit behind a divider and carry a "SEND" badge;
     //     dragging one there makes it a send
     //   - the OUTPUT tile at the right end opens the output stage
-    //   - more tiles than fit: the row scrolls (wheel, drag near the edges)
+    //   - more tiles than fit: the row scrolls (wheel / trackpad, thumb, edge arrows, dragging empty strip space or
+    //     a middle-button drag, a dragged tile near the edges); the selected tile always slides into view
     // Every edit goes through the processor's routing (lock-free to the audio thread, switched under
     // a short fade) and is one step of the global undo history.
     class ChainView final : public juce::Component, public juce::SettableTooltipClient
@@ -82,7 +84,7 @@ namespace velvox::ui
         static std::vector<std::pair<juce::String, float>> freshInstanceValues (dsp::ModuleId id);
 
         // The tile menu's actions (right-click), callable directly
-        enum class TileAction { toggle, duplicate, remove, moveLeft, moveRight, reset, asSend, asInsert, undo, redo, help };
+        enum class TileAction { toggle, duplicate, remove, moveLeft, moveRight, reset, asSend, asInsert, undo, redo, help, solo };
         bool performTileAction (int selectionCode, TileAction action);
         juce::PopupMenu buildTileMenu (int selectionCode);
 
@@ -91,18 +93,26 @@ namespace velvox::ui
         juce::Rectangle<float> getNameBounds (dsp::ModuleId id, int instance = 0);
         juce::Rectangle<float> getIconBounds (dsp::ModuleId id, int instance = 0);
         juce::Rectangle<float> getPowerBounds (dsp::ModuleId id, int instance = 0);    // on/off of a tile
+        juce::Rectangle<float> getSoloBounds (dsp::ModuleId id, int instance = 0);     // "S" of a tile (empty: no solo)
         juce::Rectangle<float> getAddCardBounds();
         juce::Rectangle<float> getOutputBounds() const { return outputArea(); }
         juce::Rectangle<float> getLaneBounds() { layoutTiles(); return laneArea(); }
         juce::Rectangle<float> getRowViewport() const { return rowArea(); }
         juce::String getHint() const { return hint; }
 
-        // Horizontal scrolling of the row
+        // Horizontal scrolling of the row (0.6.1): wheel / shift-wheel / tilt / trackpad, the thumb along the bottom
+        // edge, dragging empty strip space (or a middle-button drag anywhere), the edge arrows (a page each), and
+        // every selected or clicked tile slides fully into view
         float getScroll() const noexcept { return scroll.target; }
         float getMaxScroll();
         void scrollTo (float x, bool animate = true);
         void scrollToShow (dsp::ModuleId id, int instance = 0, bool animate = true);
         bool isTileFullyVisible (dsp::ModuleId id, int instance = 0);
+        float scrollStep() const noexcept;                       // one tile
+        juce::Rectangle<float> getScrollTrackBounds();           // empty while everything fits
+        juce::Rectangle<float> getScrollThumbBounds();
+        juce::Rectangle<float> getScrollArrowBounds (bool right); // empty when there is nothing more that way
+        int getTileAt (juce::Point<float> p) { layoutTiles(); return tileAt (p); }   // < 0: no tile
 
         void restoreDefaultChain();          // the usual order (settings stay)
         void saveLayoutAsDefault();           // personal default chain (user settings, all projects)
@@ -133,6 +143,8 @@ namespace velvox::ui
         juce::Rectangle<float> nameBounds (const Tile& t) const;
         juce::Rectangle<float> iconBounds (const Tile& t) const;
         juce::Rectangle<float> powerBounds (const Tile& t) const;
+        juce::Rectangle<float> soloBounds (const Tile& t) const;
+        void updateHoverInfo (int tile, int gap, bool overSolo);
         bool moveBy (dsp::ModuleId id, int instance, int steps);
         void drawIcon (juce::Graphics&, dsp::ModuleId id, juce::Rectangle<float> area, float alpha) const;
         juce::Rectangle<float> addCardArea() const;
@@ -156,19 +168,33 @@ namespace velvox::ui
         int numSerial = 0;
         int numSends = 0;
         float serialW = tileW;
+        float tileHeight = (float) preferredHeight;   // a little lower while the row scrolls: room for the thumb
 
         // Per selection code (module + 256 * instance)
         std::map<int, float> activity;
         std::map<int, bool> onState;
-        std::array<bool, dsp::numModules> macroEngaged {};
         int selected = 0;
         int hovered = -2;
         int hoveredGap = -1;
+        bool hoveredSolo = false;   // the mouse is over the hovered tile's S
+        int shownSolo = -1;         // processor solo at the last refresh
 
         // dragging a tile
         int dragTile = -1;
         juce::Point<float> dragOffset, dragPos;
         bool dragging = false;
+
+        // panning the row: the strip itself (empty space, middle button) or the thumb
+        enum class Pan { none, strip, thumb };
+        Pan pan = Pan::none;
+        float panStartScroll = 0.0f, panStartX = 0.0f;
+        int hoveredArrow = 0;        // -1 left, 1 right
+        bool hoveredBar = false;     // over the scroll track
+        juce::Rectangle<float> trackArea() const;
+        juce::Rectangle<float> thumbArea() const;
+        juce::Rectangle<float> arrowArea (bool right) const;
+        float maxScrollNow() const;
+        void drawScrollParts (juce::Graphics&) const;
 
         juce::String hint;
         juce::uint32 hintUntil = 0;
@@ -179,7 +205,7 @@ namespace velvox::ui
         Smoothed scroll;
         bool pendingReveal = true;   // show the selected tile once the view has a size
         std::map<int, Smoothed> hoverGlow;
-        Smoothed gapGlow;
+        Smoothed gapGlow, barGlow;
         juce::VBlankAttachment vblank { this, [this] { tick(); } };
         juce::StringArray autoKeys;
         bool globalBypass = false;

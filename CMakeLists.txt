@@ -96,6 +96,8 @@ set(VELVOX_SOURCES
     Source/Parameters/SettingsReader.cpp
     Source/Parameters/EqBands.cpp
     Source/Parameters/RoutingMigration.cpp
+    Source/Parameters/MacroBake.cpp
+    Source/Parameters/MacroMapper.cpp
     Source/AutoMix/CaptureBuffer.cpp
     Source/AutoMix/VocalProfiler.cpp
     Source/AutoMix/AutoMixPlanner.cpp
@@ -189,7 +191,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/VocalCheckRealDataTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/SaturationTests.cpp Tests/ReverbQualityTests.cpp Tests/EqPanelTests.cpp Tests/ReverbPanelTests.cpp Tests/CheckPanelTests.cpp Tests/SmoothPanelTests.cpp Tests/PitchPanelTests.cpp Tests/DynamicsQualityTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/MacroBakeTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/VocalCheckRealDataTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/SaturationTests.cpp Tests/ReverbQualityTests.cpp Tests/EqPanelTests.cpp Tests/ReverbPanelTests.cpp Tests/CheckPanelTests.cpp Tests/SmoothPanelTests.cpp Tests/PitchPanelTests.cpp Tests/DynamicsQualityTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)
@@ -235,6 +237,11 @@ endif()
 # Saturation panel tests (0.6)
 if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Tests/SatPanelTests.cpp)
+endif()
+
+# Chain solo + scrolling tests (0.6.1)
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/ChainSoloTests.cpp)
 endif()
 
 # Time module panels (0.6: Delay echo map, Pulse like Kickstart, Stutter cuts on the waveform)

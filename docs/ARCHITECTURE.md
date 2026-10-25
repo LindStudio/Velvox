@@ -7,7 +7,7 @@ Entscheidungen vom 14.10.2026 (mit dem Produktinhaber abgestimmt).
 ```
 UI (Beginner / Pro)  ──>  Parameter (APVTS, stabile IDs)  +  Routing-State (kein Parameter)
                                    │
-                   MacroMapper: Basiswerte + Makros  ->  effektive ChainSettings (pro Block)
+                   MacroMapper (0.6.1): Simpel-Regler -> schreibt Modul-Parameter (Message-Thread)
                                    │
 DSP: VocalChain ── Routing (Slots) ── Module (EQ, Comp, De-Ess, Sat, Doubler, Pitch, Delay, Reverb)
                 └─ Output-Stufe: Stereo-Width/Mono-Check -> Output-Gain -> Level-Matcher -> Clip Guard -> Bypass
@@ -18,10 +18,16 @@ Mixing (später): SuggestionProvider -> ParameterSnapshot (nicht implementiert)
 ## Makros (Beginner-Modus)
 
 - Makros (Presence, Warmth, Aggression, Width, Space, Density) sind eigene, automatisierbare Parameter.
-- Sie wirken als **Offset** auf die Basiswerte der Modulparameter. Die Basiswerte (Pro-Modus) werden nie überschrieben.
-- Die Abbildung steckt in einer reinen Funktion `applyMacros (base, macros) -> effective`, die getestet und später auch von einer Mixing-Engine nutzbar ist.
-- Ein Makro darf ein ausgeschaltetes Modul anteilig zuschalten (z. B. Space → Reverb-Send). Die Pro-Ansicht zeigt das an.
-- Der Moduswechsel Beginner/Pro ändert **nur die Ansicht**, nie den Klang.
+- **Ab 0.6.1 halten sie nur die Stellung der Simpel-Regler** und erreichen den Audio-Pfad nicht. `MacroMapper`
+  (`Parameters/MacroMapper.*`, Message-Thread) schreibt jede Bewegung direkt in die Modul-Parameter: relativ
+  (`dsp::applyMacroMove (base, macro, from, to)`, aus 0 identisch mit der alten Abbildung), verankert am Modulzustand beim
+  Start der Bewegung (zurück auf den Startwert = exakt der alte Zustand). UI-Gesten schreiben Host-Gesten (ein Undo-Schritt
+  pro Geste, Mausrad-Rasten zusammengefasst), Host-Automation schreibt ohne Gesten (kein Undo). Laden, Undo/Redo,
+  Transaktionen und Snapshots setzen nur Stellungen. SPACE macht ein frisches, unbenutztes Delay/Reverb-Insert zum Send;
+  ein Mix über 50 % bei additiven Inserts behält das Original (`macrobake::keepDry`: alte Mix-Kurve, beim Doubler + Dry).
+- Bis 0.6.0 waren die Makros eine **Offset-Schicht** (`dsp::applyMacros`, unverändert erhalten): States mit
+  `stateVersion` < 4 und Snapshots mit Format < 3 werden beim Laden einmal eingerechnet (`macrobake::bake`), Stellungen bleiben.
+- Der Moduswechsel Simpel/Advanced ändert **nur die Ansicht**, nie den Klang.
 
 ## EQ-Bänder (0.6)
 

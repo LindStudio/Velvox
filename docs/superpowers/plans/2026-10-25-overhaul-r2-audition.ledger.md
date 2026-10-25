@@ -84,3 +84,13 @@ Ruling: no level match for the Saturation solo (it plays what the band contribut
 a dark voice -12 to -34 dB). Spec says "only that band's processed output". — Cost if wrong: add BandAudition-style gain.
 Ruling: CHANGELOG gets a [0.6.1] section (other 0.6.1 tracks add to it).
 Full suite on the branch (before merging feature/automix): 30636 checks passed, 0 failed.
+
+Merge of feature/automix (ec3a8d5, chain + macros tracks): conflicts in CHANGELOG.md (my 0.6.1 sections appended under the
+merged [0.6.1] heading) and Tests/TestMain.cpp (the chain track's "solo:<selection code>" snapshot token kept; my band
+solo token renamed "bandsolo:<band>"). Full suite on the merged tree: 32253 checks passed, 0 failed. Snapshots re-rendered.
+Ruling: band-solo headphones keep the band's own colour (EQ band colour / Sat character colour), not the module-solo
+yellow (SoloButton soloColour) - per-band identity, and the two solos stay distinguishable. — Cost if wrong: one accent call.
+Ruling: the EQ band solo still plays while the EQ is switched off - also when module solo (Solo.h applySolo) switches the
+EQ off because another module is soloed; both are explicit listening requests and the panel shows the band solo. — Cost if
+wrong: in VocalChain's eq case, skip processAudition while the gate target is 0 (one condition).
+Not done (optional per coordinator): removing the now-dead `macroOnly` code in EqPanel.cpp (left untouched, avoids churn).

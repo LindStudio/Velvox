@@ -10,6 +10,8 @@
 #include "Parameters/ParameterLayout.h"
 #include "Parameters/SettingsReader.h"
 #include "Parameters/EqBands.h"
+#include "Parameters/MacroMapper.h"
+#include "StateKeys.h"
 #include "Presets/PresetManager.h"
 #include "Presets/UndoHistory.h"
 #include "AutoMix/AutoMixController.h"
@@ -88,6 +90,16 @@ public:
     bool isMonoMonitor() const noexcept { return monoMonitor.load(); }
     void setMonoMonitor (bool shouldBeMono) noexcept { monoMonitor.store (shouldBeMono); }
 
+    // Module solo (0.6.1): every other module instance bypassed, only this one heard (DSP/Solo.h).
+    // A listening aid like mono: not a parameter, not saved, never an undo step. One solo at a time
+    // (selection code, -1 = none). It ends when the instance leaves the chain, a state is loaded or the
+    // editor closes. Message thread for the setters.
+    int getSolo() const noexcept { return soloCode.load (std::memory_order_relaxed); }
+    bool isSoloed (int selectionCode) const noexcept { return selectionCode >= 0 && getSolo() == selectionCode; }
+    bool isSoloActive() const noexcept { return getSolo() >= 0; }
+    void setSolo (int selectionCode);          // -1 ends it; ignored for Check and instances not in the chain
+    bool toggleSolo (int selectionCode);       // returns true when that instance is soloed afterwards
+
     // Beat sidechain status (written by the audio thread, lock-free).
     // Levels are short-term RMS in dBFS (~300 ms), measured before any processing.
     struct SidechainStatus
@@ -135,7 +147,6 @@ private:
     // Instances that joined the chain while switched off are fresh: true law
     void markFreshInstances (const velvox::dsp::Routing& before, const velvox::dsp::Routing& after);
     bool loadingState = false;
-    std::array<bool, velvox::dsp::numModules> macroEngaged {};   // modules the macros switched on (last check)
 
     // Latency follows the pitch module (on/off, quality); reported on the message thread
     void parameterChanged (const juce::String& parameterID, float newValue) override;
@@ -143,21 +154,20 @@ private:
     // A module instance switched on (automation, macro, preset) that is not in the chain
     // joins it at its usual place - removing a module must never silence automation
     void insertEngagedInstances();
-    juce::StringArray structureParams;   // on-switches and macros watched for that
+    juce::StringArray structureParams;   // on-switches and macros watched for that (macros: MacroMapper)
 public:
     // Recomputes the latency for the current parameters and reports it to the host
     void updateHostLatency();
 private:
     void cacheParameterPointers();
 public:
-    // Thread-safe reads (atomics): base = Pro parameters, effective = with macros
+    // Thread-safe reads (atomics): the settings the DSP processes. Since 0.6.1 nothing is layered on
+    // the parameters (the Simple sliders write the modules, Parameters/MacroMapper.h), so the
+    // "effective" settings ARE the parameters; the name stays for the panels that read it.
     velvox::dsp::ChainSettings readSettings() const noexcept;
+    velvox::dsp::ChainSettings readEffectiveSettings() const noexcept { return readSettings(); }
+    // Positions of the six Simple sliders (0..1); they carry no sound of their own
     velvox::dsp::MacroValues readMacros() const noexcept;
-    velvox::dsp::ChainSettings readEffectiveSettings() const noexcept { return velvox::dsp::applyMacros (readSettings(), readMacros()); }
-
-    // Processed value of a parameter (in parameter units) when macros move it;
-    // nullopt for parameters that macros never touch. Used for the UI markers.
-    std::optional<float> effectiveValueOf (const juce::String& paramId) const;
 private:
 
     juce::AudioProcessorValueTreeState apvts;
@@ -170,6 +180,7 @@ private:
     velvox::SettingsReader reader;
 
     std::atomic<bool> monoMonitor { false };
+    std::atomic<int> soloCode { -1 };
     CallbackLoad callbackLoad;
 
     // Sidechain / vocal level (audio thread state + published values)
@@ -199,16 +210,39 @@ private:
     velvox::dsp::SeqLockValue<velvox::dsp::MixLaws> mixLawShared { velvox::dsp::MixLaws::allTrue() };
     velvox::dsp::MixLaws audioMixLaws = velvox::dsp::MixLaws::allTrue();   // audio thread's last good copy
 
-    // Feeds the undo history with the plugin's own gestures (message thread)
+    // Simple sliders -> module parameters (message thread)
+    velvox::MacroMapper macroMapper { apvts, {
+        [this] { return readSettings(); },
+        [this] { return getRouting(); },
+        [this] (const velvox::dsp::Routing& r) { setRouting (r); },
+        [this] { return getMixLaws(); },
+        [this] (const velvox::dsp::MixLaws& l) { apvts.state.setProperty (velvox::statekeys::mixLaw, l.toString(), nullptr); },
+        // Values restored as saved (load, undo / redo, presets and snapshots, the auto-mix) are positions only
+        [this] { return loadingState || undoHistory.isApplyingHistory() || undoHistory.isInTransaction()
+                        || velvox::eqbands::ScopedBridgeSuspend::isActive (apvts); } } };
+
+    // Feeds the undo history (and the macro mapper) with the plugin's own gestures (message thread).
+    // The mapper hears a gesture begin first, so the module writes of that move carry gestures.
     struct GestureListener final : juce::AudioProcessorListener
     {
-        explicit GestureListener (velvox::UndoHistory& h) : history (h) {}
+        GestureListener (velvox::UndoHistory& h, velvox::MacroMapper& m) : history (h), mapper (m) {}
         void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
         void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
-        void audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int index) override { history.gestureBegan (index); }
-        void audioProcessorParameterChangeGestureEnd (juce::AudioProcessor*, int index) override { history.gestureEnded (index); }
+        void audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int index) override
+        {
+            if (juce::MessageManager::existsAndIsCurrentThread())
+                mapper.gestureBegan (index);
+            history.gestureBegan (index);
+        }
+        void audioProcessorParameterChangeGestureEnd (juce::AudioProcessor*, int index) override
+        {
+            history.gestureEnded (index);
+            if (juce::MessageManager::existsAndIsCurrentThread())
+                mapper.gestureEnded (index);
+        }
         velvox::UndoHistory& history;
-    } gestureListener { undoHistory };
+        velvox::MacroMapper& mapper;
+    } gestureListener { undoHistory, macroMapper };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VelvoxAudioProcessor)
 };

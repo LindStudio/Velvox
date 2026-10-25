@@ -12,7 +12,7 @@ namespace velvox::ui
 {
     // The common module panel frame of Headliner 0.6 (spec 2.4, style A "Grafik zuerst"):
     //
-    //   header     power · icon · NAME n · [SEND] ·················· Presets ▾ · Mehr · ?
+    //   header     power · S · icon · NAME n · [SEND] ·················· Presets ▾ · Mehr · ?
     //   visual     the module's live picture, as large as possible (+ meters / big controls a panel
     //              places there with placeInVisual)
     //   main row   3 - 5 main controls (large knobs, segments, switches), centred in one row
@@ -62,6 +62,8 @@ namespace velvox::ui
         juce::TextButton& getHelpButton() noexcept { return helpButton; }
         juce::TextButton& getPresetsButton() noexcept { return presetsButton; }
         juce::TextButton& getMoreButton() noexcept { return moreButton; }
+        // Module solo (0.6.1) next to the power switch; nullptr for the Output stage and Check
+        juce::Button* getSoloButton() noexcept { return solo.get(); }
 
         // ---- Frame state (also for tests)
         bool isMoreOpen() const noexcept { return moreOpen; }
@@ -132,6 +134,7 @@ namespace velvox::ui
         juce::String onParamId;   // empty: no power switch
 
         std::unique_ptr<PowerButton> power;
+        std::unique_ptr<juce::Button> solo;
         std::unique_ptr<ModuleView> visual;
         int moduleId = -2;
         juce::TextButton presetsButton { "Presets" }, moreButton { "Mehr" }, helpButton { "?" };

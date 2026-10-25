@@ -47,7 +47,7 @@ namespace velvox
 
         SettingsReader reader;
         reader.bind ([&apvts] (const char* id) { return apvts.getRawParameterValue (id); });
-        const auto effective = dsp::applyMacros (reader.read (full, false), reader.readMacros());
-        return pruneInaudible (full, effective).toString();
+        // An old project's macros are baked into its parameters before this runs (Parameters/MacroBake.h)
+        return pruneInaudible (full, reader.read (full, false)).toString();
     }
 }
