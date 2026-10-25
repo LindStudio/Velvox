@@ -422,6 +422,12 @@ namespace velvox
               "Smears the repeats into a soft wash - from clear echoes to ambient clouds." },
             { pid::delayMod,       "Delay Modulation","Delay", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Slow wow and flutter on the repeats, like a tape echo." },
+
+            // ---------------- Pulse (0.6, "like Kickstart") ----------------
+            { pid::pulseShape,  "Pulse Curve",  "Pulse", T::Choice, 0, (float) (dsp::PulseModule::shapeNames().size() - 1), 0, 0, "",
+              dsp::PulseModule::shapeNames(), "Pump shape: Custom uses the drawn curve; Classic, Punch, Swell and Gate are ready-made pumps." },
+            { pid::pulseAmount, "Pulse Amount", "Pulse", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {},
+              "How hard the vocal pumps: 0 = untouched, 50 = the Depth setting, 100 = ducked fully at the beat." },
         };
             appendEqBandSpecs (table);
             appendSatMultibandSpecs (table);

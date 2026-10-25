@@ -165,6 +165,8 @@ namespace velvox::dsp
         Ducker& getDelayDucker (int instance = 0) noexcept { return delayDucker[(size_t) clampInstance (ModuleId::delay, instance)]; }
         Ducker& getReverbDucker (int instance = 0) noexcept { return reverbDucker[(size_t) clampInstance (ModuleId::reverb, instance)]; }
         int getChopStep() const noexcept { return chop.getDisplayStep(); }
+        const ChopModule& getChop() const noexcept { return chop; }   // UI: readDisplay() (lock-free)
+        const DelayModule& getDelay (int instance = 0) const noexcept { return delay[(size_t) clampInstance (ModuleId::delay, instance)]; }   // UI: displayTimeMs
         PulseModule& getPulse() noexcept { return pulse; }
         SmashModule& getSmash (int instance = 0) noexcept { return smash[(size_t) clampInstance (ModuleId::smash, instance)]; }
         ChoirModule& getChoir (int instance = 0) noexcept { return choir[(size_t) clampInstance (ModuleId::choir, instance)]; }

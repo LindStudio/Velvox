@@ -60,6 +60,7 @@ namespace velvox
         Raw macroPresence, macroWarmth, macroAggression, macroWidth, macroSpace, macroDensity;
         Raw pulseOn, pulseRate, pulseDepth, pulseAttack, pulseRelease, pulseSmooth, pulseInterp, pulseTension, pulseMix, pulseBpm;
         std::array<Raw, 6> pulseX, pulseY;
+        Raw pulseShape, pulseAmount;   // 0.6
         Raw smashOn, smashAmount, smashBlend, smashAttack, smashRelease, smashTone, smashOutput;
         Raw choirOn, choirVoices, choirDetune, choirTiming, choirHumanize, choirWidth, choirDensity, choirMix;
         Raw smoothOn, smoothAmount, smoothSensitivity, smoothLow, smoothHigh, smoothAttack, smoothRelease, smoothMode, smoothOutput, smoothDelta;

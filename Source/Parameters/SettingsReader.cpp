@@ -95,7 +95,8 @@ namespace velvox
         bind (raw.pulseX[i], pid::pulseX[i]);
         bind (raw.pulseY[i], pid::pulseY[i]);
     }
-    bind (raw.smashOn, pid::smashOn);           bind (raw.smashAmount, pid::smashAmount);
+    bind (raw.pulseShape, pid::pulseShape);     bind (raw.pulseAmount, pid::pulseAmount);
+    bind (raw.smashOn, pid::smashOn);          bind (raw.smashAmount, pid::smashAmount);
     bind (raw.smashBlend, pid::smashBlend);     bind (raw.smashAttack, pid::smashAttack);
     bind (raw.smashRelease, pid::smashRelease); bind (raw.smashTone, pid::smashTone);
     bind (raw.smashOutput, pid::smashOutput);
@@ -285,6 +286,8 @@ namespace velvox
     s.pulse.tension = raw.pulseTension.get() * 0.01f;
     s.pulse.mix = raw.pulseMix.get() * 0.01f;
     s.pulse.manualBpm = raw.pulseBpm.get();
+    s.pulse.shape = raw.pulseShape.index();
+    s.pulse.amount = raw.pulseAmount.get() * 0.01f;
     for (size_t i = 0; i < raw.pulseX.size(); ++i)
     {
         s.pulse.x[i] = raw.pulseX[i].get();

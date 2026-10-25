@@ -256,7 +256,12 @@ _add(Module(
                                     "delayHighCut": 6000, "delayPingPong": 0, "delaySpread": 0, "delayDrive": 0, "delayDiffusion": 0,
                                     "delayMod": 0, "delayDuckAmount": 0},
                 procedures=["delay_ir", "dry_leak", "vocal_listen", "nulls", "cpu"],
-                info={"time_ms": 375, "feedback": 0.30})],
+                info={"time_ms": 375, "feedback": 0.30}),
+           # 0.6 characters for listening (drive 2x oversampled, modulation, ping-pong); timing must stay exact
+           Case("tape", headliner={"delaySync": 0, "delayTime": 375, "delayFeedback": 45, "delayMix": 100, "delayLowCut": 300,
+                                   "delayHighCut": 6000, "delayPingPong": 1, "delaySpread": 0, "delayDrive": 60, "delayDiffusion": 30,
+                                   "delayMod": 40, "delayDuckAmount": 0},
+                procedures=["vocal_listen", "cpu"])],
     tolerances={"echo_time_err_ms": ("lower", 0.5), "feedback_db_per_repeat": ("match", 1.0), "echo_smear_ms": ("lower", 1.0),
                 "inter_echo_floor_db": ("lower", 3.0), "dry_leak_db": ("lower", 0.0, -60.0), "cpu_pct": ("lower", 1.0)}))
 
@@ -323,13 +328,18 @@ _add(Module(
 _add(Module(
     key="chop", title="Stutter", refs=[],
     cases=[Case("gate", headliner={"chopPattern": 0, "chopRate": 1, "chopDepth": 100, "chopSmooth": 3},
-                procedures=["gate_tone", "nulls", "cpu"])],
+                procedures=["gate_tone", "vocal_listen", "nulls", "cpu"])],
     tolerances={"edge_splatter_db": ("lower", 0.0, -60.0), "gate_depth_db": ("lower", 0.0, -40.0), "cpu_pct": ("lower", 0.0, 1.0)}))
 
 _add(Module(
     key="pulse", title="Pulse", refs=[], mix_param="pulseMix",
     cases=[Case("default", headliner={"pulseRate": 2, "pulseDepth": 100, "pulseMix": 100},
-                procedures=["gate_tone", "nulls", "cpu"])],
+                procedures=["gate_tone", "vocal_listen", "nulls", "cpu"]),
+           # 0.6 pump shapes (pulseShape 1 = Classic, 4 = Gate), driven by the Amount macro
+           Case("classic", headliner={"pulseRate": 2, "pulseShape": 1, "pulseDepth": 60, "pulseAmount": 100, "pulseMix": 100},
+                procedures=["gate_tone", "vocal_listen", "cpu"]),
+           Case("gate16", headliner={"pulseRate": 4, "pulseShape": 4, "pulseDepth": 60, "pulseAmount": 100, "pulseMix": 100},
+                procedures=["gate_tone", "cpu"])],
     tolerances={"edge_splatter_db": ("lower", 0.0, -60.0), "gate_depth_db": ("lower", 0.0, -30.0), "cpu_pct": ("lower", 0.0, 1.0)}))
 
 _add(Module(

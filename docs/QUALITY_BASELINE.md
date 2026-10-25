@@ -253,11 +253,12 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 | plain | echo_time_err_ms (ms) | 0.08 | 0.17 | -0.09 | ref + 0.50 | pass |
 | plain | feedback_db_per_repeat (dB) – set feedback 30% | -11.6 | -11.8 | 0.15 | ref ± 1.00 | pass |
 | plain | echo_smear_ms (ms) | 0.17 | 0.19 | -0.02 | ref + 1.00 | pass |
-| plain | inter_echo_floor_db (dB) | -288 | -103 | -184 | ref + 3.00 | pass |
+| plain | inter_echo_floor_db (dB) | -288 | -103 | -185 | ref + 3.00 | pass |
 | plain | dry_leak_db (dB) – burst, 100 % wet | -300 | -300 | 0.00 | ≤ -60.0 | pass |
 | plain | mix0_null_db (dB) – latency 0 | -152 | – | – | ≤ -60.0 | pass |
 | plain | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| plain | cpu_pct (%) – median over this module's renders | 0.34 | 0.63 | -0.29 | ref + 1.00 | pass |
+| plain | cpu_pct (%) – median over this module's renders | 0.33 | 0.62 | -0.29 | ref + 1.00 | pass |
+| tape | cpu_pct (%) – median over this module's renders | 0.33 | 0.62 | -0.29 | ref + 1.00 | pass |
 <!-- END delay -->
 
 <!-- BEGIN reverb -->
@@ -326,7 +327,7 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 | gate | edge_splatter_db (dB) | -88.5 | – | ≤ -60.0 | pass |
 | gate | gate_depth_db (dB) | -185 | – | ≤ -40.0 | pass |
 | gate | off_null_db (dB) | -152 | – | ≤ -100 | pass |
-| gate | cpu_pct (%) – median over this module's renders | 0.18 | – | ≤ 1.00 | pass |
+| gate | cpu_pct (%) – median over this module's renders | 0.22 | – | ≤ 1.00 | pass |
 <!-- END chop -->
 
 <!-- BEGIN pulse -->
@@ -338,7 +339,13 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 | default | gate_depth_db (dB) | -36.5 | – | ≤ -30.0 | pass |
 | default | mix0_null_db (dB) – latency 0 | -152 | – | ≤ -60.0 | pass |
 | default | off_null_db (dB) | -152 | – | ≤ -100 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.16 | – | ≤ 1.00 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.19 | – | ≤ 1.00 | pass |
+| classic | edge_splatter_db (dB) | -150 | – | ≤ -60.0 | pass |
+| classic | gate_depth_db (dB) | -48.1 | – | ≤ -30.0 | pass |
+| classic | cpu_pct (%) – median over this module's renders | 0.19 | – | ≤ 1.00 | pass |
+| gate16 | edge_splatter_db (dB) | -151 | – | ≤ -60.0 | pass |
+| gate16 | gate_depth_db (dB) | -108 | – | ≤ -30.0 | pass |
+| gate16 | cpu_pct (%) – median over this module's renders | 0.19 | – | ≤ 1.00 | pass |
 <!-- END pulse -->
 
 <!-- BEGIN check -->
