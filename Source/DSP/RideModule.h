@@ -1,9 +1,21 @@
 #pragma once
 
 #include "DspUtilities.h"
+#include "DynamicsFeed.h"
 
 namespace velvox::dsp
 {
+    // One word / phrase as the "word bars" view shows it. Output-domain sample positions
+    // (the running count since prepare / reset, like RideModule::samplePosition); levels are
+    // the mean power of the voice band (100 Hz .. 8 kHz) before and after the ride gain.
+    struct RideSegment
+    {
+        std::int64_t startSample = 0;
+        int lengthSamples = 0;
+        float levelBeforeDb = -120.0f;
+        float levelAfterDb = -120.0f;
+    };
+
     struct RideSettings
     {
         bool enabled = false;
@@ -58,6 +70,14 @@ namespace velvox::dsp
             return 1.0f - (1.0f - a) * (1.0f - a);
         }
 
+        // Word segmentation for the UI feed: a segment opens when the voice gets active, ends when it
+        // falls silent, when the level stays segmentGapDb under the segment's peak for segmentGapMs
+        // (gap between words; the next one starts once the level rises segmentRiseDb again), or
+        // after segmentMaxMs (sustained notes).
+        static constexpr float segmentGapDb = 9.0f, segmentGapMs = 40.0f, segmentRiseDb = 6.0f, segmentMaxMs = 2000.0f;
+        FrameFifo<RideSegment, 128> segments;
+        std::atomic<std::int64_t> samplePosition { 0 };   // output samples processed (end of the last block)
+
         // UI / test read-outs
         std::atomic<float> currentGainDb { 0.0f };
         std::atomic<float> detectedLevelDb { -100.0f };
@@ -74,6 +94,19 @@ namespace velvox::dsp
         int warmupSamples = 0, fadeInPos = 0, fadeInLength = 480;
         void applyWarmup (float* const* channels, int numChannels, int numSamples) noexcept;
         std::array<float, chunkSize> gains {};
+        std::array<float, chunkSize> powers {};
+
+        // Segmenter (output domain: band power delayed by the lookahead, times the applied gain)
+        void segmentSample (float power, float gain) noexcept;
+        void closeSegment() noexcept;
+        std::vector<float> powerDelay { 0.0f };
+        int powerPos = 0;
+        float segPower = 0.0f, segCoeff = 0.0f;
+        bool segOpen = false, waitRise = false;
+        std::int64_t outPos = 0, segStart = 0;
+        int segLen = 0, segLoudLen = 0, dipSamples = 0, segTick = 0;
+        double sumBefore = 0.0, sumAfter = 0.0, loudBefore = 0.0, loudAfter = 0.0;
+        float segPeakDb = -120.0f, dipMinDb = 0.0f;
 
         double fs = 48000.0;
         RideSettings settings;
@@ -89,7 +122,8 @@ namespace velvox::dsp
         float rampFrom = 1.0f, rampTo = 1.0f;
         int rampPos = 0;
         bool voiced = false;
-        int voicedSamples = 0, pauseSamples = 0;
+        int voicedSamples = 0, pauseSamples = 0, gapRecentSamples = 0, phraseWarmup = 0, dipRun = 0;
+        static constexpr float wordGapDb = 9.0f;   // fast level this far under the syllable level = gap
         int controlCounter = 0;
 
         juce::SmoothedValue<float> enabled { 0.0f };

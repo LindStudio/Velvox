@@ -663,6 +663,33 @@ public:
             expectLessThan (stdOf (lo), 0.7 * stdOf (li));
         }
 
+        beginTest ("LEVEL RIDE: breaths in the gaps between words are not lifted");
+        {
+            // quiet words (boosted) with 200 ms breath noise at -40 dBFS (above Ignore below) in between
+            const auto in = wordSequence (fs, { -26.0f }, 6, 400.0, 200.0, -40.0f);
+            RideModule m;
+            m.prepare (fs, 256);
+            RideSettings s;
+            s.enabled = true;
+            m.setSettings (s);
+            auto out = in.buffer;
+            float worstRise = 0.0f, endOfWord = 0.0f;
+            size_t k = 0;
+            runBlocks (m, out, 32, [&] (int start)
+            {
+                while (k < in.words.size() && start >= in.words[k].first + in.words[k].second)
+                {
+                    endOfWord = m.currentGainDb.load();
+                    ++k;
+                }
+                const bool inGap = k > 1 && k < in.words.size() && start < in.words[k].first - 32;
+                if (inGap)
+                    worstRise = std::max (worstRise, m.currentGainDb.load() - endOfWord);
+            });
+            logMessage ("Largest gain rise in a breath gap: " + juce::String (worstRise, 2) + " dB");
+            expectLessThan (worstRise, 0.5f);
+        }
+
         beginTest ("LEVEL RIDE: constant lookahead latency while in the chain, on or off");
         {
             Harness h;
@@ -682,3 +709,102 @@ public:
 };
 
 static RideQualityTests rideQualityTests;
+
+//==============================================================================
+namespace
+{
+    std::vector<RideSegment> rideSegments (const Buffer& input, int block, RideSettings s = {})
+    {
+        RideModule m;
+        m.prepare (48000.0, 512);
+        s.enabled = true;
+        m.setSettings (s);
+        auto out = input;
+        std::vector<RideSegment> segs;
+        RideSegment tmp[16];
+        runBlocks (m, out, block, [&] (int) { for (int k = m.segments.pull (tmp, 16); k > 0; k = m.segments.pull (tmp, 16)) segs.insert (segs.end(), tmp, tmp + k); });
+        Buffer tail (2, 48000);
+        tail.clear();
+        runBlocks (m, tail, block);
+        for (int k = m.segments.pull (tmp, 16); k > 0; k = m.segments.pull (tmp, 16))
+            segs.insert (segs.end(), tmp, tmp + k);
+        return segs;
+    }
+}
+
+class RideFeedTests final : public juce::UnitTest
+{
+public:
+    RideFeedTests() : juce::UnitTest ("Level Ride feed", "Dynamics") {}
+
+    void runTest() override
+    {
+        const double fs = 48000.0;
+        const int L = (int) std::lround (RideModule::lookaheadMs * 0.001 * fs);
+
+        beginTest ("LEVEL RIDE feed: one segment per word");
+        {
+            const auto in = wordSequence (fs, { -20.0f, -12.0f, -16.0f, -24.0f, -14.0f }, 1, 300.0, 150.0);
+            const auto segs = rideSegments (in.buffer, 256);
+            expectEquals ((int) segs.size(), 5);
+            if (segs.size() == 5)
+            {
+                RideModule m;   // the rendered gain, for "after"
+                m.prepare (fs, 512);
+                RideSettings s;
+                s.enabled = true;
+                m.setSettings (s);
+                auto out = in.buffer;
+                runBlocks (m, out, 256);
+                const float set[5] { -20.0f, -12.0f, -16.0f, -24.0f, -14.0f };
+                for (int k = 0; k < 5; ++k)
+                {
+                    const auto& g = segs[(size_t) k];
+                    const int ws = in.words[(size_t) k].first, wl = in.words[(size_t) k].second;
+                    logMessage ("Segment " + juce::String (k) + ": start " + juce::String ((g.startSample - L - ws) / fs * 1000.0, 1)
+                                + " ms off, length " + juce::String (g.lengthSamples / fs * 1000.0, 0) + " ms, before "
+                                + juce::String (g.levelBeforeDb, 2) + " after " + juce::String (g.levelAfterDb, 2));
+                    expectWithinAbsoluteError ((double) (g.startSample - L - ws), 0.0, 0.03 * fs, "start");
+                    expectWithinAbsoluteError ((double) g.lengthSamples, (double) wl, 0.06 * fs, "length");
+                    expectWithinAbsoluteError (g.levelBeforeDb - segs[0].levelBeforeDb, set[k] - set[0], 0.7f, "before levels follow the input");
+                    const double applied = rmsDbOf (out, ws + L, wl) - rmsDbOf (in.buffer, ws, wl);
+                    expectWithinAbsoluteError ((double) (g.levelAfterDb - g.levelBeforeDb), applied, 1.0, "after - before = applied gain");
+                }
+            }
+        }
+
+        beginTest ("LEVEL RIDE feed: a dip between words splits them");
+        {
+            auto in = wordSequence (fs, { -14.0f, -30.0f, -14.0f }, 1, 400.0, 0.0, -14.0f);   // 400 / 100 dip / 400
+            // shorten the middle "word" to a 100 ms dip 16 dB down
+            const auto& w = in.words;
+            in.buffer.applyGain (w[1].first + (int) (0.1 * fs), w[1].second - (int) (0.1 * fs), 0.0f);
+            Buffer b (2, w[1].first + (int) (0.1 * fs) + w[2].second);
+            b.clear();
+            for (int c = 0; c < 2; ++c)
+            {
+                b.copyFrom (c, 0, in.buffer, c, 0, w[1].first + (int) (0.1 * fs));
+                b.copyFrom (c, w[1].first + (int) (0.1 * fs), in.buffer, c, w[2].first, w[2].second);
+            }
+            const auto segs = rideSegments (b, 256);
+            logMessage ("Segments with a 100 ms dip: " + juce::String ((int) segs.size()));
+            expectEquals ((int) segs.size(), 2);
+        }
+
+        beginTest ("LEVEL RIDE feed: sustained notes are split every 2 s, block size does not matter");
+        {
+            const auto in = wordSequence (fs, { -16.0f }, 1, 5000.0, 100.0);
+            const auto a = rideSegments (in.buffer, 256), b = rideSegments (in.buffer, 1);
+            expectEquals ((int) a.size(), 3);
+            expect (a.size() == b.size());
+            for (size_t k = 0; k < std::min (a.size(), b.size()); ++k)
+            {
+                expectEquals ((double) a[k].startSample, (double) b[k].startSample);
+                expectEquals (a[k].lengthSamples, b[k].lengthSamples);
+                expectWithinAbsoluteError (a[k].levelAfterDb, b[k].levelAfterDb, 1.0e-3f);
+            }
+        }
+    }
+};
+
+static RideFeedTests rideFeedTests;

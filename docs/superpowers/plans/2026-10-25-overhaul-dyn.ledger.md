@@ -63,3 +63,19 @@ Task 6: Ruling: the lookahead is fixed (not an option) and present whenever Ride
 Task 6: Ruling: NewModuleTests "LEVEL RIDE: ... amount 0 is transparent" re-pointed to "amount 0 = the input delayed by the latency"
   (after the 10 ms fade-in); not weakened (still bit-exact). The 0.3 toggle-click test first failed (0.26 step: an emptied delay line
   released silence, then the voice with a hard edge) — fixed in the module (warm-up fade), test unchanged.
+Task 7: complete (RideSegment, RideModule::segments (FrameFifo<RideSegment, 128>), RideModule::samplePosition; segmenter in the output
+  domain (band power delayed by the lookahead x applied gain); tests "Level Ride feed" red (compile) -> green: 5 words -> 5 segments,
+  start 0.0 ms off (output position = input + latency), length = word +- 20 ms, before levels follow the set levels, after - before =
+  rendered gain +- 1 dB; 100 ms dip 16 dB down splits two words; 5 s note -> 3 segments (2 s split); block size 1 == 256)
+Task 7: Ruling: segment levels are the mean voice-band power (100 Hz-8 kHz, the rider's own detector band) before / after the ride gain,
+  in dB; positions are output-domain sample counts (RideModule::samplePosition is the count at the end of the last block), so the UI can
+  place bars against its scrolling time axis. Bars end where the word was last at its level (the decay into a gap is not drawn).
+Task 7: the segment feed exposed two ride defects, fixed here (not a new metric round): (1) the phrase level started at the onset's
+  threshold crossing (-42 dB) and the 150 ms gaps between words (still "voiced", the 80 ms syllable level decays slowly) dragged it
+  down, so loud words were lifted by +7 dB; now it starts at the first word's level (100 ms warm-up) and ignores short dips; (2) in
+  those gaps the gain rose towards Max boost (breaths lifted; trace: +6.8 -> +7.9 dB per gap). Now a dip 9 dB under the phrase level
+  that is shorter than 250 ms holds the gain (longer = a quieter passage, ridden normally). New test "breaths in the gaps between words
+  are not lifted" (0.00 dB). Bench ride --no-ref after: st_loudness 2.35 LU (Vocal Rider 2.92), jitter 0.09 dB (limit 0.10),
+  transients -0.33 dB. Tried for jitter margin: fast speeds 15 ms (2.38 / 0.09 / -0.40), syllable 100 ms (2.40 / 0.09 / -0.44): kept 10 / 80.
+Task 7: Ruling: a word onset right after a gap restarts the 60 ms onset grace (no transient freeze), so the rider follows word onsets
+  and keeps freezing on consonant peaks inside words.

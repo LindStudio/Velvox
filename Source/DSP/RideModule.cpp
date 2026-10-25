@@ -20,6 +20,8 @@ namespace velvox::dsp
         enabled.setCurrentAndTargetValue (enabled.getTargetValue());
         latency = (int) std::lround (lookaheadMs * 0.001 * sampleRate);
         fadeInLength = std::max (1, (int) std::lround (0.01 * sampleRate));
+        powerDelay.assign ((size_t) std::max (1, latency), 0.0f);
+        segCoeff = timeConstantCoeff (10.0f, fs);
         lookahead.prepare (std::max (1, latency));
         lookahead.setDelay (latency);
         reset();
@@ -33,6 +35,10 @@ namespace velvox::dsp
         // follows fades in, so joining the chain never starts with a hard edge
         warmupSamples = latency;
         fadeInPos = latency > 0 ? 0 : fadeInLength;
+        std::fill (powerDelay.begin(), powerDelay.end(), 0.0f);
+        powerPos = 0;
+        outPos = 0;
+        samplePosition.store (0, std::memory_order_relaxed);
         resetControl();
     }
 
@@ -62,8 +68,12 @@ namespace velvox::dsp
         rampFrom = rampTo = 1.0f;
         rampPos = controlInterval;
         voiced = false;
-        voicedSamples = pauseSamples = 0;
+        voicedSamples = pauseSamples = gapRecentSamples = dipRun = 0;
+        phraseWarmup = (int) (0.1 * fs);
         controlCounter = 0;
+        segPower = 0.0f;
+        segOpen = waitRise = false;
+        segLen = segLoudLen = dipSamples = segTick = 0;
         currentGainDb.store (0.0f, std::memory_order_relaxed);
     }
 
@@ -100,28 +110,55 @@ namespace velvox::dsp
             voiced = true;
             voicedSamples = 0;
         }
-        if (voiced)
+        // A rise out of a gap between words (fast level well under the syllable level shortly
+        // before) is a word onset: the onset grace below restarts, so it is followed, not frozen
+        if (fastDb < syllableDb - wordGapDb)
+            gapRecentSamples = (int) (0.15 * fs);
+        else if (gapRecentSamples > 0)
         {
-            voicedSamples += controlInterval;
-            pauseSamples = 0;
+            gapRecentSamples -= controlInterval;
+            if (fastDb > syllableDb + transientStartDb)
+            {
+                voicedSamples = 0;
+                gapRecentSamples = 0;
+            }
         }
-        else
-            pauseSamples += controlInterval;
+        if (voiced)
+            voicedSamples += controlInterval;
+        pauseSamples += controlInterval;   // reset below while singing
 
         const float response = juce::jlimit (0.0f, 1.0f, s.response);
         const float phrase = juce::jlimit (0.0f, 1.0f, s.phrase);
 
-        // Phrase level: slow average that only moves while singing
-        if (voiced)
+        // Short dips well under the phrase level (gaps and breaths between words, < pauseHoldMs)
+        // are not singing: the gain holds and the phrase level ignores them. A dip that lasts
+        // longer is a quieter passage and is ridden normally.
+        const bool dip = phraseDb > -90.0f && fastDb < phraseDb - wordGapDb;
+        dipRun = dip ? dipRun + controlInterval : 0;
+        const bool singing = voiced && ! (dip && dipRun < (int) (pauseHoldMs * 0.001 * fs));
+        if (singing)
+            pauseSamples = 0;
+
+        // Phrase level: slow average that only moves while singing. It starts at the level of
+        // the first word (not at the threshold crossing of its onset).
+        if (singing)
         {
             const float phraseMs = 150.0f + 2350.0f * phrase;
             const float c = timeConstantCoeff (phraseMs, controlRate);
-            phraseDb = phraseDb < -90.0f ? syllableDb : syllableDb + c * (phraseDb - syllableDb);
+            if (phraseDb < -90.0f || phraseWarmup > 0)
+            {
+                phraseDb = std::max (phraseDb, syllableDb);
+                phraseWarmup = std::max (0, phraseWarmup - controlInterval);
+            }
+            else
+                phraseDb = syllableDb + c * (phraseDb - syllableDb);
             phrasePower = std::pow (10.0f, phraseDb * 0.1f);
         }
+        else if (! voiced)
+            phraseWarmup = (int) (0.1 * fs);
 
         float target;
-        if (voiced)
+        if (singing)
         {
             const float level = syllableDb + phrase * (phraseDb - syllableDb);
             target = juce::jlimit (-std::max (0.0f, s.maxCutDb), std::max (0.0f, s.maxBoostDb),
@@ -176,6 +213,8 @@ namespace velvox::dsp
             wasActive = false;
             lookahead.process (ch, numChannels, n);   // constant latency, on or off
             applyWarmup (ch, numChannels, n);
+            outPos += n;
+            samplePosition.store (outPos, std::memory_order_relaxed);
             return;
         }
         if (! wasActive)
@@ -197,7 +236,99 @@ namespace velvox::dsp
             applyWarmup (part, numChannels, len);
             for (int c = 0; c < numChannels; ++c)
                 juce::FloatVectorOperations::multiply (part[c], gains.data(), len);
+
+            // Word bars: the band power that reaches the output now (delayed like the audio)
+            for (int i = 0; i < len; ++i)
+            {
+                float delayed = powers[(size_t) i];
+                if (latency > 0)
+                {
+                    std::swap (delayed, powerDelay[(size_t) powerPos]);
+                    if (++powerPos == latency)
+                        powerPos = 0;
+                }
+                segmentSample (delayed, gains[(size_t) i]);
+            }
         }
+        samplePosition.store (outPos, std::memory_order_relaxed);
+    }
+
+    void RideModule::segmentSample (float p, float g) noexcept
+    {
+        segPower = p + segCoeff * (segPower - p);
+        if (segOpen)
+        {
+            sumBefore += p;
+            sumAfter += (double) p * g * g;
+            ++segLen;
+        }
+        ++outPos;
+        if (++segTick < controlInterval)
+            return;
+        segTick = 0;
+
+        const float level = 10.0f * std::log10 (std::max (segPower, 1.0e-12f));
+        const float silence = settings.silenceDb;
+
+        if (! segOpen)
+        {
+            if (level < silence - hysteresisDb)
+                waitRise = false;
+            dipMinDb = std::min (dipMinDb, level);
+            if (level > silence && (! waitRise || level > dipMinDb + segmentRiseDb))
+            {
+                segOpen = true;
+                waitRise = false;
+                segStart = outPos - controlInterval;
+                segLen = segLoudLen = dipSamples = 0;
+                sumBefore = sumAfter = loudBefore = loudAfter = 0.0;
+                segPeakDb = level;
+            }
+            return;
+        }
+
+        segPeakDb = std::max (segPeakDb, level);
+        if (level < silence - hysteresisDb)
+        {
+            closeSegment();
+            waitRise = false;
+            return;
+        }
+        if (level < segPeakDb - segmentGapDb)
+        {
+            dipSamples += controlInterval;
+            if (dipSamples >= (int) (segmentGapMs * 0.001 * fs))
+            {
+                closeSegment();
+                waitRise = true;
+                dipMinDb = level;
+            }
+            return;
+        }
+
+        dipSamples = 0;
+        segLoudLen = segLen;
+        loudBefore = sumBefore;
+        loudAfter = sumAfter;
+        if (segLen >= (int) (segmentMaxMs * 0.001 * fs))
+        {
+            closeSegment();   // sustained note: the next bar continues seamlessly
+            segOpen = true;
+            segStart = outPos;
+            segLen = segLoudLen = 0;
+            sumBefore = sumAfter = loudBefore = loudAfter = 0.0;
+            segPeakDb = level;
+        }
+    }
+
+    void RideModule::closeSegment() noexcept
+    {
+        segOpen = false;
+        if (segLoudLen <= 0)
+            return;
+        // The bar ends where the word was last at its level (not after the decay into the gap)
+        const auto toDb = [] (double sum, int n) { return (float) (10.0 * std::log10 (std::max (sum / n, 1.0e-12))); };
+        segments.push ({ segStart, segLoudLen, toDb (loudBefore, segLoudLen), toDb (loudAfter, segLoudLen) });
     }
 
     void RideModule::analyse (float* const* ch, int numChannels, int n) noexcept
@@ -210,6 +341,7 @@ namespace velvox::dsp
             mid /= (float) numChannels;
             const float v = bandLpf.process (bandHpf.process (mid, 0), 0);
             const float p = v * v;
+            powers[(size_t) i] = p;
             fastPower = p + fastCoeff * (fastPower - p);
 
             // Spikes far above the usual singing level do not count for the syllable level
