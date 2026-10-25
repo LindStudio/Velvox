@@ -5,6 +5,8 @@
 #include "TestHelpers.h"
 #include "DSP/DelayModule.h"
 #include "DSP/PulseModule.h"
+#include "DSP/ChopModule.h"
+#include <thread>
 
 using namespace velvox;
 using namespace velvox::dsp;
@@ -190,9 +192,139 @@ public:
         delayEchoMap();
         pulseLegacy();
         pulseShapes();
+        stutter();
     }
 
 private:
+    static int chopPattern (const char* name)
+    {
+        const auto& p = ChopModule::patterns();
+        for (size_t i = 0; i < p.size(); ++i)
+            if (juce::String (p[i].name) == name)
+                return (int) i;
+        return 0;
+    }
+
+    static juce::AudioBuffer<float> runChop (ChopModule& m, const ChopSettings& s, const juce::AudioBuffer<float>& in, double bpm)
+    {
+        m.setSettings (s);
+        m.prepare (fs, 256);
+        m.setTransport (bpm, -1.0, false);
+        juce::AudioBuffer<float> out (in);
+        for (int start = 0; start < out.getNumSamples(); start += 256)
+        {
+            const int n = std::min (256, out.getNumSamples() - start);
+            float* p[2] { out.getWritePointer (0, start), out.getWritePointer (1, start) };
+            m.process (p, 2, n);
+        }
+        return out;
+    }
+
+    void stutter()
+    {
+        beginTest ("Stutter: display frames show the input and the muted slices (lock-free)");
+        {
+            ChopSettings s;
+            s.enabled = true;
+            s.pattern = chopPattern ("Gate 1/2");
+            s.rate = 1;   // 1/16 at 120 BPM = 6000 samples per step
+            s.smoothMs = 0.5f;
+            auto m = std::make_unique<ChopModule>();
+            std::atomic<bool> running { true };
+            std::atomic<int> bad { 0 }, seen { 0 };
+            std::thread reader ([&]
+            {
+                std::vector<ChopModule::DisplayFrame> f (512);
+                while (running.load())
+                {
+                    const int n = m->readDisplay (f.data(), (int) f.size());
+                    for (int i = 0; i < n; ++i)
+                        if (! (f[(size_t) i].peak >= 0.0f && f[(size_t) i].peak <= 1.0f && f[(size_t) i].gain >= 0.0f && f[(size_t) i].gain <= 1.0f
+                               && f[(size_t) i].step >= 0 && f[(size_t) i].step < 16 && juce::String (".xr").containsChar (f[(size_t) i].type)))
+                            ++bad;
+                    seen += n;
+                }
+            });
+            const auto out = runChop (*m, s, sine (2.0, 440.0, 0.5f), 120.0);
+            running = false;
+            reader.join();
+            expectEquals (bad.load(), 0, "every frame read concurrently is valid");
+            expectGreaterThan (seen.load(), 0);
+
+            const int frameLen = (int) std::lround (ChopModule::displayFrameSeconds * fs);
+            std::vector<ChopModule::DisplayFrame> f (2048);
+            const int n = m->readDisplay (f.data(), (int) f.size());
+            expectEquals (n, (int) (2.0 * fs) / frameLen, "one frame per 2.5 ms");
+            int checked = 0;
+            for (int i = 0; i < n; ++i)
+            {
+                const int centre = i * frameLen + frameLen / 2, posInStep = centre % 6000;
+                if (centre < (int) (0.06 * fs) || posInStep < 400 || posInStep > 5600)
+                    continue;   // fade-in of the test tone and the smoothed edges
+                const int step = centre / 6000;
+                expectEquals (f[(size_t) i].step, step % 16);
+                if (step % 2 == 0)
+                {
+                    expect (f[(size_t) i].gain > 0.95f && f[(size_t) i].type == 'x', "played step " + juce::String (step));
+                }
+                else
+                {
+                    expect (f[(size_t) i].gain < 0.05f && f[(size_t) i].type == '.', "muted step " + juce::String (step));
+                }
+                expectWithinAbsoluteError (f[(size_t) i].peak, 0.5f, 0.01f, "input peak");
+                ++checked;
+            }
+            expectGreaterThan (checked, 500);
+            ignoreUnused (out);
+
+            const auto packed = ChopModule::pack ({ 0.123f, 0.5f, 7, 'r' });
+            const auto back = ChopModule::unpack (packed);
+            expect (back.peak == 0.123f && std::abs (back.gain - 0.5f) < 1.0e-4f && back.step == 7 && back.type == 'r', "pack/unpack");
+        }
+
+        beginTest ("Stutter: long repeat runs at slow tempo replay the slice");
+        {
+            ChopSettings s;
+            s.enabled = true;
+            s.pattern = chopPattern ("Stutter end");   // xxxxxxxxxxxxrrrr
+            s.rate = 0;                                // 1/8 at 40 BPM = 0.75 s per step
+            s.smoothMs = 0.5f;
+            juce::Random r (9);
+            juce::AudioBuffer<float> in (2, (int) (12.0 * fs));
+            for (int i = 0; i < in.getNumSamples(); ++i)
+            {
+                const float v = r.nextFloat() - 0.5f;
+                in.setSample (0, i, v);
+                in.setSample (1, i, v);
+            }
+            ChopModule m;
+            const auto out = runChop (m, s, in, 40.0);
+            const int step = 36000;
+            for (int k = 12; k < 16; ++k)
+            {
+                double err = 0.0;
+                for (int i = k * step + 200; i < (k + 1) * step - 200; ++i)
+                    err = std::max (err, (double) std::abs (out.getSample (0, i) - in.getSample (0, i - (k - 11) * step)));
+                expectLessThan (err, 1.0e-6, "repeat " + juce::String (k - 11) + " = slice 11");
+            }
+        }
+
+        beginTest ("Stutter: repeat edges are click-free");
+        for (const char* name : { "Stutter end", "Stutter 8ths", "Build-up", "Chop & repeat" })
+        {
+            ChopSettings s;
+            s.enabled = true;
+            s.pattern = chopPattern (name);
+            s.rate = 1;
+            s.smoothMs = 3.0f;
+            ChopModule m;
+            const auto out = runChop (m, s, sine (8.0, 1000.0, 0.25f), 128.0);
+            const double spl = energyAboveDb (out, 0, (int) (0.5 * fs), out.getNumSamples(), 5000.0);
+            logMessage ("  " + juce::String (name) + ": energy above 5 kHz " + juce::String (spl, 1) + " dB");
+            expectLessThan (spl, -80.0, name);   // linear 1.5 ms crossfade (0.5): -74 dB
+        }
+    }
+
     void pulseLegacy()
     {
         beginTest ("Pulse: a pre-0.6 curve renders bit-identically (golden from the 0.5 code)");
