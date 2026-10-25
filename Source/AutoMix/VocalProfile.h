@@ -26,6 +26,11 @@ namespace velvox::automix
         float hz = 0.0f;
         float excessDb = 0.0f;     // above the local spectrum (1/2 octave either side)
         bool strong = false;
+        // 0.6.1: share of 4 consecutive parts of the take whose own spectrum shows the peak; a
+        // resonance of the room / microphone is there all the time, a held note's partial is not
+        float persistence = 0.0f;
+        bool sustained = false;    // persistence >= 0.75 and narrow (clearly above the bands 1/6 octave away)
+        float q = 12.0f;           // estimated width for a notch, 10 (two bands wide) .. 16 (one band)
     };
 
     // Everything the analysis derived from the captured section. Measurements

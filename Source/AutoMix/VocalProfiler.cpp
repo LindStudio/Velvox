@@ -596,24 +596,54 @@ namespace velvox::automix
 
         // ---- Resonances: narrow peaks over their surroundings, 250 Hz .. 8 kHz
         {
-            for (int b = 0; b < nb; ++b)
+            // Peak over the mean of the bands 1/6 .. 1/2 octave away (-200 = not measurable)
+            const auto excessAt = [&binsPerBand] (const std::vector<float>& spec, int b)
             {
-                const float c = bandCentre (b);
-                if (c < 250.0f || c > 8000.0f || binsPerBand[(size_t) b] < 2 || b < 1 || b >= nb - 1)
-                    continue;
                 float sum = 0.0f;
                 int count = 0;
                 for (int j = b - 6; j <= b + 6; ++j)
-                    if (std::abs (j - b) >= 2 && j >= 0 && j < nb && binsPerBand[(size_t) j] > 0)
+                    if (std::abs (j - b) >= 2 && j >= 0 && j < nb && binsPerBand[(size_t) j] > 0 && spec[(size_t) j] > -190.0f)
                     {
-                        sum += p.spectrumDb[(size_t) j];
+                        sum += spec[(size_t) j];
                         ++count;
                     }
-                if (count < 6)
+                return count < 6 || spec[(size_t) b] < -190.0f ? -200.0f : spec[(size_t) b] - sum / (float) count;
+            };
+
+            // The same spectrum for 4 consecutive parts of the voiced frames (sustained = in most of them)
+            constexpr int numParts = 4;
+            std::vector<std::vector<float>> parts;
+            if (voicedCount >= numParts * 12)
+            {
+                std::vector<std::array<double, nb>> acc ((size_t) numParts);
+                std::array<int, numParts> counts {};
+                int k = 0;
+                for (size_t i = 0; i < frames.size(); ++i)
+                    if (voiced[i])
+                    {
+                        const int part = std::min (numParts - 1, k++ * numParts / voicedCount);
+                        for (int b = 0; b < nb; ++b)
+                            acc[(size_t) part][(size_t) b] += frames[i].bands[(size_t) b];
+                        ++counts[(size_t) part];
+                    }
+                for (int part = 0; part < numParts; ++part)
+                {
+                    std::vector<float> spec ((size_t) nb, -200.0f);
+                    for (int b = 0; b < nb; ++b)
+                        if (binsPerBand[(size_t) b] > 0 && counts[(size_t) part] > 0)
+                            spec[(size_t) b] = toDb (acc[(size_t) part][(size_t) b] / counts[(size_t) part] / binsPerBand[(size_t) b]);
+                    parts.push_back (std::move (spec));
+                }
+            }
+
+            for (int b = 0; b < nb; ++b)
+            {
+                const float c = bandCentre (b);
+                if (c < 250.0f || c > 8000.0f || binsPerBand[(size_t) b] < 2 || b < 2 || b >= nb - 2)
                     continue;
                 const float s = p.spectrumDb[(size_t) b];
                 const bool localMax = s >= p.spectrumDb[(size_t) b - 1] && s >= p.spectrumDb[(size_t) b + 1];
-                const float excess = s - sum / (float) count;
+                const float excess = excessAt (p.spectrumDb, b);
                 if (! localMax || excess <= 7.0f)
                     continue;
 
@@ -624,10 +654,32 @@ namespace velvox::automix
                     for (float f0 : p.sungNotesHz)
                         for (int k = 1; k <= 4 && ! harmonic; ++k)
                             harmonic = std::abs (std::log2 (c / (f0 * (float) k))) < 0.06f;   // +-70 cents
-                if (! harmonic)
-                    p.resonances.push_back ({ c, excess, excess > 10.0f });
+                if (harmonic)
+                    continue;
+
+                Resonance r { c, excess, excess > 10.0f };
+                int present = 0;
+                for (auto& spec : parts)
+                {
+                    float best = -200.0f;
+                    for (int j = b - 1; j <= b + 1; ++j)
+                        best = std::max (best, excessAt (spec, j));
+                    present += best > 3.5f ? 1 : 0;
+                }
+                r.persistence = parts.empty() ? 0.0f : (float) present / (float) parts.size();
+                // Narrow: clearly above the bands 1/6 octave away (a singer's formant or a broad
+                // presence bump is wide and belongs to the broad tonal moves, not to a notch)
+                const bool narrow = s - std::max (p.spectrumDb[(size_t) b - 2], p.spectrumDb[(size_t) b + 2]) >= 3.0f;
+                r.sustained = narrow && r.persistence >= 0.75f;
+                const int wide = (p.spectrumDb[(size_t) b - 1] > s - 4.0f ? 1 : 0) + (p.spectrumDb[(size_t) b + 1] > s - 4.0f ? 1 : 0);
+                r.q = wide == 0 ? 16.0f : (wide == 1 ? 12.0f : 10.0f);
+                p.resonances.push_back (r);
             }
-            std::sort (p.resonances.begin(), p.resonances.end(), [] (const Resonance& a, const Resonance& b) { return a.excessDb > b.excessDb; });
+            // Sustained ones first (they are what the EQ notches), then by size
+            std::sort (p.resonances.begin(), p.resonances.end(), [] (const Resonance& a, const Resonance& b)
+            {
+                return a.sustained != b.sustained ? a.sustained : a.excessDb > b.excessDb;
+            });
             if (p.resonances.size() > 3)
                 p.resonances.resize (3);
         }

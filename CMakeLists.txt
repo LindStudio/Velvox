@@ -99,6 +99,7 @@ set(VELVOX_SOURCES
     Source/AutoMix/CaptureBuffer.cpp
     Source/AutoMix/VocalProfiler.cpp
     Source/AutoMix/AutoMixPlanner.cpp
+    Source/AutoMix/AutoEq.cpp
     Source/AutoMix/AutoMixEngine.cpp
     Source/AutoMix/AutoMixObjective.cpp
     Source/AutoMix/AutoMixController.cpp
@@ -256,4 +257,9 @@ target_sources(Velvox PRIVATE Source/UI/DynPanels.cpp)
 if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Source/UI/DynPanels.cpp Tests/DynPanelTests.cpp)
     target_sources(HeadlinerRefHost PRIVATE Source/UI/DynPanels.cpp)
+endif()
+
+# 0.6.1 auto-mix EQ (notches and broad tonal moves)
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/AutoEqTests.cpp)
 endif()

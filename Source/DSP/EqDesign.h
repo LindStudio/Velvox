@@ -22,9 +22,10 @@ namespace velvox::dsp
     // Hidden owner of a band. User bands are `none` and are never changed by macros, the automatic
     // mix or Vocal Check. Migrated 0.5 bands: lowCut, warmth (low band), autoMix (mid bell), air (high
     // band), highCut (LPF). Macros: presence -> air, warmth -> warmth (+ air). Vocal Check is free to
-    // use presence and mud.
-    enum class EqRole { none = 0, presence, warmth, air, lowCut, mud, autoMix, highCut };
-    inline constexpr int numEqRoles = 8;
+    // use presence and mud. 0.6.1: the automatic mix also owns autoTone (a broad 2-5 kHz bell) and
+    // autoNotch1..3 (narrow resonance cuts); roles are only ever appended (saved indices keep their meaning).
+    enum class EqRole { none = 0, presence, warmth, air, lowCut, mud, autoMix, highCut, autoTone, autoNotch1, autoNotch2, autoNotch3 };
+    inline constexpr int numEqRoles = 12;
 
     // Cut slopes: index 0..5 = 6, 12, 18, 24, 36, 48 dB/oct (Butterworth of order 1, 2, 3, 4, 6, 8)
     inline constexpr int numEqSlopes = 6;

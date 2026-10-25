@@ -166,6 +166,10 @@ namespace velvox::ui
                 case dsp::EqRole::mud:      return "MUD";
                 case dsp::EqRole::autoMix:  return "AUTO";
                 case dsp::EqRole::highCut:  return "HC";
+                case dsp::EqRole::autoTone:
+                case dsp::EqRole::autoNotch1:
+                case dsp::EqRole::autoNotch2:
+                case dsp::EqRole::autoNotch3: return "AUTO";
             }
             return {};
         }

@@ -49,7 +49,8 @@ namespace velvox
 
             static const juce::StringArray types { "Bell", "Low Shelf", "High Shelf", "Low Cut", "High Cut", "Notch", "Band Pass", "Tilt" };
             static const juce::StringArray slopes { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct", "36 dB/oct", "48 dB/oct" };
-            static const juce::StringArray roles { "None", "Presence", "Warmth", "Air", "Low Cut", "Mud", "Auto", "High Cut" };
+            static const juce::StringArray roles { "None", "Presence", "Warmth", "Air", "Low Cut", "Mud", "Auto", "High Cut",
+                                                    "Auto Tone", "Auto Notch 1", "Auto Notch 2", "Auto Notch 3" };   // 0.6.1: appended only
 
             for (int n = 1; n <= dsp::maxEqBands; ++n)
             {
