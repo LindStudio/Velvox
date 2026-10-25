@@ -26,8 +26,9 @@ namespace velvox
         // every other one the true law - the preset sounds exactly as it was made.
         juce::String mixLaw;
 
-        // File format: 1 = v0.1 (values only), 2 = v0.2 (+ routing)
-        static constexpr int formatVersion = 2;
+        // File format: 1 = v0.1 (values only), 2 = v0.2 (+ routing), 3 = v0.6.1 (the macro values are the
+        // Simple sliders' positions; before, they were an offset layer and are baked when applied)
+        static constexpr int formatVersion = 3;
 
         static ParameterSnapshot capture (juce::AudioProcessorValueTreeState& apvts, const juce::String& name = {});
 

@@ -98,9 +98,6 @@ namespace velvox::assistant
         float sidechainRmsDb = -100.0f;         // short-term level of the sidechain
         float vocalRmsDb = -100.0f;             // short-term level of the vocal input
 
-        // Macros: offsets on top of the module parameters (plan works on the base values)
-        bool macrosActive = false;
-
         float get (const juce::String& id, float fallback = 0.0f) const
         {
             auto it = values.find (id);

@@ -450,12 +450,13 @@ public:
         beginTest ("Design: an old project shows the same values in the new panels");
         {
             Harness h;
-            const std::vector<std::pair<const char*, float>> values {
+            // 0.6.1: a Simple slider writes its modules - set first, so the module values below are the saved ones
+            const std::vector<std::pair<const char*, float>> values { { pid::macroAggression, 30.0f },
                 { pid::rideTarget, -22.0f }, { pid::rideMaxBoost, 5.0f }, { pid::compRatio, 4.5f }, { pid::compThreshold, -24.0f },
                 { pid::deessFreq, 7200.0f }, { pid::delayDivision, 7.0f }, { pid::delayFeedback, 42.0f }, { pid::delayMix, 23.0f },
                 { pid::reverbType, 3.0f }, { pid::reverbDecay, 2.4f }, { pid::reverbMix, 16.0f }, { pid::pulseRate, 4.0f },
                 { pid::choirVoices, 2.0f }, { pid::smoothMode, 1.0f }, { pid::smashAmount, 64.0f }, { pid::chopRate, 2.0f },
-                { pid::satDrive, 9.0f }, { pid::hpfFreq, 140.0f }, { pid::outputGain, -2.5f }, { pid::macroAggression, 30.0f } };
+                { pid::satDrive, 9.0f }, { pid::hpfFreq, 140.0f }, { pid::outputGain, -2.5f } };
             for (auto& [id, v] : values)
                 h.set (id, v);
             juce::MemoryBlock state;

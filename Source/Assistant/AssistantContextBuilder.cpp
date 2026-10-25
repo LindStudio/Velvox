@@ -31,7 +31,6 @@ namespace velvox::assistant
         c.sidechainRmsDb = sc.beatRmsDb;
         c.vocalRmsDb = sc.vocalRmsDb;
 
-        c.macrosActive = p.readMacros().anyActive();
         return c;
     }
 }

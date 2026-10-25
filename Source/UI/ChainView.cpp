@@ -3,6 +3,8 @@
 #include "../StateKeys.h"
 #include "UserSettings.h"
 #include "Icons.h"
+#include "SoloButton.h"
+#include "../DSP/Solo.h"
 
 namespace velvox::ui
 {
@@ -16,6 +18,10 @@ namespace velvox::ui
         constexpr float plusR = 9.0f;
         constexpr float tileGap = 4.0f;
         constexpr int hitAddCard = -5, hitOutput = -100, hitNothing = -2;
+        constexpr float scrollBarH = 8.0f;   // strip under the tiles for the thumb while the row scrolls
+
+        // Vertical layout of a tile (designed for the full 88 px row), scaled to a lower tile
+        float tileScale (juce::Rectangle<float> tile) { return tile.getHeight() / (float) ChainView::preferredHeight; }
 
         bool canBeSend (ModuleId id) { return dsp::Routing::canBeSend (id); }
 
@@ -135,7 +141,7 @@ namespace velvox::ui
     juce::Rectangle<float> ChainView::addCardArea() const
     {
         const auto row = rowArea();
-        return { row.getX() + (float) numSerial * (serialW + tileGap) - scroll.current, row.getY(), addTileW, row.getHeight() };
+        return { row.getX() + (float) numSerial * (serialW + tileGap) - scroll.current, row.getY(), addTileW, tileHeight };
     }
 
     // Send zone behind the add tile and a divider; at least one tile wide, so a tile can always be dropped there
@@ -184,16 +190,18 @@ namespace velvox::ui
             scroll.target = std::min (scroll.target, maxScroll);
             scroll.current = std::min (scroll.current, maxScroll);
         }
+        // While the row scrolls, the tiles leave a strip at the bottom for the scroll thumb
+        tileHeight = row.getHeight() - (maxScroll > 0.0f ? scrollBarH : 0.0f);
 
         for (int i = 0; i < numSerial; ++i)
             tiles.push_back ({ serial[(size_t) i]->id, serial[(size_t) i]->instance,
-                               { row.getX() + (float) i * (serialW + tileGap) - scroll.current, row.getY(), serialW, row.getHeight() },
+                               { row.getX() + (float) i * (serialW + tileGap) - scroll.current, row.getY(), serialW, tileHeight },
                                false, i + 1 });
 
         float x = laneArea().getX() + sendGap;
         for (auto* s : sends)
         {
-            tiles.push_back ({ s->id, s->instance, { x, row.getY(), serialW, row.getHeight() }, true, 0 });
+            tiles.push_back ({ s->id, s->instance, { x, row.getY(), serialW, tileHeight }, true, 0 });
             x += serialW + tileGap;
         }
     }
@@ -209,17 +217,37 @@ namespace velvox::ui
     // Tile: name (top), icon (middle), on/off (bottom) - in this order
     juce::Rectangle<float> ChainView::nameBounds (const Tile& t) const
     {
-        return t.bounds.withHeight (nameH).reduced (6.0f, 0.0f).translated (0.0f, 4.0f);
+        const float k = tileScale (t.bounds);
+        return t.bounds.withHeight (nameH * k).reduced (6.0f, 0.0f).translated (0.0f, 4.0f * k);
     }
 
     juce::Rectangle<float> ChainView::iconBounds (const Tile& t) const
     {
-        return juce::Rectangle<float> (iconH - 6.0f, iconH - 6.0f).withCentre ({ t.bounds.getCentreX(), t.bounds.getY() + 4.0f + nameH + iconH * 0.5f });
+        const float k = tileScale (t.bounds);
+        const float size = (iconH - 6.0f) * k;
+        return juce::Rectangle<float> (size, size).withCentre ({ t.bounds.getCentreX(), t.bounds.getY() + (4.0f + nameH + iconH * 0.5f) * k });
     }
 
     juce::Rectangle<float> ChainView::powerBounds (const Tile& t) const
     {
-        return juce::Rectangle<float> (18.0f, 18.0f).withCentre ({ t.bounds.getCentreX(), t.bounds.getY() + 4.0f + nameH + iconH + powerH * 0.5f });
+        const float k = tileScale (t.bounds);
+        return juce::Rectangle<float> (18.0f, 18.0f).withCentre ({ t.bounds.getCentreX(), t.bounds.getY() + (4.0f + nameH + iconH + powerH * 0.5f) * k });
+    }
+
+    // Solo "S": bottom right, on the line of the power switch
+    juce::Rectangle<float> ChainView::soloBounds (const Tile& t) const
+    {
+        if (! dsp::canSolo (t.id))
+            return {};
+        return juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ t.bounds.getRight() - 15.0f, powerBounds (t).getCentreY() });
+    }
+
+    juce::Rectangle<float> ChainView::getSoloBounds (ModuleId id, int instance)
+    {
+        layoutTiles();
+        if (auto* t = findTile (id, instance))
+            return soloBounds (*t);
+        return {};
     }
 
     juce::Rectangle<float> ChainView::getTileBounds (ModuleId id, int instance)
@@ -342,11 +370,14 @@ namespace velvox::ui
             return;
         const auto row = rowArea();
         const float x = t->bounds.getX() + scroll.current - row.getX();
+        // Clear of the edge arrows (they stay where more tiles follow; at the very ends they vanish)
+        constexpr float pad = 28.0f;
         float target = scroll.target;
-        if (x < target)
-            target = x;
-        else if (x + serialW > target + row.getWidth())
-            target = x + serialW - row.getWidth();
+        if (x - pad < target)
+            target = x - pad;
+        else if (x + serialW + pad > target + row.getWidth())
+            target = x + serialW + pad - row.getWidth();
+        target = juce::jlimit (0.0f, maxScrollNow(), target);
         if (std::abs (target - scroll.target) > 0.5f)
             scrollTo (target, animate);
     }
@@ -354,7 +385,13 @@ namespace velvox::ui
     bool ChainView::isTileFullyVisible (ModuleId id, int instance)
     {
         const auto b = getTileBounds (id, instance);
-        return ! b.isEmpty() && rowArea().expanded (0.5f).contains (b);
+        // The edge arrows count as covering
+        auto visible = rowArea().expanded (0.5f);
+        if (const auto left = arrowArea (false); ! left.isEmpty())
+            visible.setLeft (left.getRight());
+        if (const auto right = arrowArea (true); ! right.isEmpty())
+            visible.setRight (right.getX());
+        return ! b.isEmpty() && visible.contains (b);
     }
 
     void ChainView::setSelected (int code)
@@ -377,8 +414,99 @@ namespace velvox::ui
             Component::mouseWheelMove (e, wheel);
             return;
         }
-        const float delta = std::abs (wheel.deltaX) > std::abs (wheel.deltaY) ? wheel.deltaX : wheel.deltaY;
-        scrollTo (scroll.target - delta * 360.0f * (wheel.isReversed ? -1.0f : 1.0f));
+        // Vertical wheel, Shift + wheel, tilt wheel (WM_MOUSEHWHEEL) and two-finger swipes all move the row;
+        // the larger axis wins
+        const float delta = (std::abs (wheel.deltaX) > std::abs (wheel.deltaY) ? wheel.deltaX : wheel.deltaY)
+                            * (wheel.isReversed ? -1.0f : 1.0f);
+        if (wheel.isSmooth)
+        {
+            // Trackpad / Magic Mouse: JUCE gives 0.5 / 256 per pixel - follow the fingers 1:1, no glide lag
+            scrollTo (scroll.target - delta * 512.0f, false);
+            return;
+        }
+       #if JUCE_MAC
+        constexpr float pixelsPerUnit = 2400.0f;   // a mouse notch on macOS is ~0.04
+       #else
+        constexpr float pixelsPerUnit = 200.0f;    // a notch on Windows is 120 / 256: about one tile
+       #endif
+        // Small steps (precision touchpads send many) follow directly, wheel notches glide
+        scrollTo (scroll.target - delta * pixelsPerUnit, std::abs (delta) >= 0.2f);
+    }
+
+    float ChainView::scrollStep() const noexcept { return serialW + tileGap; }
+
+    float ChainView::maxScrollNow() const
+    {
+        return std::max (0.0f, contentWidth() - rowArea().getWidth());
+    }
+
+    // Thumb track: a thin line along the bottom edge of the row (over the tiles' lower rim)
+    juce::Rectangle<float> ChainView::trackArea() const
+    {
+        if (maxScrollNow() <= 0.0f)
+            return {};
+        const auto row = rowArea();
+        return { row.getX() + 6.0f, row.getBottom() - 5.0f, row.getWidth() - 12.0f, 3.0f };
+    }
+
+    juce::Rectangle<float> ChainView::thumbArea() const
+    {
+        const auto track = trackArea();
+        if (track.isEmpty())
+            return {};
+        const float content = contentWidth();
+        const float w = juce::jlimit (32.0f, track.getWidth(), track.getWidth() * rowArea().getWidth() / std::max (1.0f, content));
+        const float maxScroll = maxScrollNow();
+        const float x = track.getX() + (track.getWidth() - w) * juce::jlimit (0.0f, 1.0f, scroll.current / std::max (1.0f, maxScroll));
+        return { x, track.getY(), w, track.getHeight() };
+    }
+
+    // Edge arrows at the icon line (name and power of the tile below stay clickable)
+    juce::Rectangle<float> ChainView::arrowArea (bool right) const
+    {
+        const float maxScroll = maxScrollNow();
+        if (maxScroll <= 0.0f || (right ? scroll.target >= maxScroll - 0.5f : scroll.target <= 0.5f))
+            return {};
+        const auto row = rowArea();
+        const float cy = row.getY() + 4.0f + nameH + iconH * 0.5f;
+        return juce::Rectangle<float> (22.0f, 30.0f).withCentre ({ right ? row.getRight() - 13.0f : row.getX() + 13.0f, cy });
+    }
+
+    juce::Rectangle<float> ChainView::getScrollTrackBounds()  { layoutTiles(); return trackArea(); }
+    juce::Rectangle<float> ChainView::getScrollThumbBounds()  { layoutTiles(); return thumbArea(); }
+    juce::Rectangle<float> ChainView::getScrollArrowBounds (bool right) { layoutTiles(); return arrowArea (right); }
+
+    void ChainView::drawScrollParts (juce::Graphics& g) const
+    {
+        const auto track = trackArea();
+        if (track.isEmpty())
+            return;
+        // Thumb: always faintly there when the row scrolls, clearer on hover / while dragging
+        const float glow = juce::jmax (barGlow.current, pan == Pan::thumb ? 1.0f : 0.0f);
+        g.setColour (colours::border.brighter (0.2f).withAlpha (0.5f + 0.4f * glow));
+        g.fillRoundedRectangle (track, 1.5f);
+        g.setColour (colours::textMuted.withAlpha (0.45f + 0.5f * glow));
+        g.fillRoundedRectangle (thumbArea(), 1.5f);
+
+        for (bool right : { false, true })
+        {
+            const auto a = arrowArea (right);
+            if (a.isEmpty())
+                continue;
+            const bool hov = hoveredArrow == (right ? 1 : -1);
+            g.setColour (colours::raisedHi.withAlpha (hov ? 0.98f : 0.85f));
+            g.fillRoundedRectangle (a, 7.0f);
+            g.setColour (hov ? colours::teal.withAlpha (0.7f) : colours::border.brighter (0.4f));
+            g.drawRoundedRectangle (a.reduced (0.5f), 7.0f, 1.0f);
+            const auto c = a.getCentre();
+            const float d = right ? 1.0f : -1.0f;
+            juce::Path chevron;
+            chevron.startNewSubPath (c.x - 2.5f * d, c.y - 5.0f);
+            chevron.lineTo (c.x + 2.5f * d, c.y);
+            chevron.lineTo (c.x - 2.5f * d, c.y + 5.0f);
+            g.setColour (hov ? colours::textStrong : colours::textSoft);
+            g.strokePath (chevron, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
     }
 
     void ChainView::showHint (const juce::String& text)
@@ -399,20 +527,17 @@ namespace velvox::ui
         const bool bypassedNow = proc.getState().getRawParameterValue (pid::bypass)->load() > 0.5f;
         bool changed = bypassedNow != globalBypass;
         globalBypass = bypassedNow;
+        if (proc.getSolo() != shownSolo)
+        {
+            shownSolo = proc.getSolo();
+            changed = true;
+        }
 
         const auto r = proc.getRouting();
         if (r != routing)
         {
             routing = r;
             changed = true;
-        }
-
-        const auto engaged = dsp::modulesEngagedByMacros (proc.readSettings(), proc.readMacros());
-        for (int i = 0; i < dsp::numModules; ++i)
-        {
-            if (engaged[(size_t) i] != macroEngaged[(size_t) i])
-                changed = true;
-            macroEngaged[(size_t) i] = engaged[(size_t) i];
         }
 
         for (const auto& slot : routing)
@@ -482,6 +607,8 @@ namespace velvox::ui
         moved = addGlow.tick (0.18f) || moved;
         gapGlow.target = hoveredGap >= 0 ? 1.0f : 0.0f;
         moved = gapGlow.tick (0.22f) || moved;
+        barGlow.target = hoveredBar || pan == Pan::thumb ? 1.0f : (isMouseOver() ? 0.35f : 0.0f);
+        moved = barGlow.tick (0.2f) || moved;
 
         if (moved)
             repaint();
@@ -510,8 +637,7 @@ namespace velvox::ui
         const auto code = t.code();
         const auto onIt = onState.find (code);
         const bool switchedOn = onIt != onState.end() ? onIt->second : isOn (t.id, t.instance);
-        const bool engagedOnly = t.instance == 0 && macroEngaged[(size_t) t.id] && ! switchedOn;
-        const bool on = switchedOn || engagedOnly;
+        const bool on = switchedOn;   // 0.6.1: the Simple sliders switch modules on for real - no "engaged only" state
         const bool isSelected = code == selected && ! ghost;
         const auto glowIt = hoverGlow.find (code);
         const float hov = ghost ? 0.0f : (glowIt != hoverGlow.end() ? glowIt->second.current : 0.0f);
@@ -572,6 +698,26 @@ namespace velvox::ui
             g.setColour (colours::bypass.withAlpha (0.6f));
             g.drawRoundedRectangle (r.reduced (2.0f), corner - 2.0f, 1.0f);
         }
+
+        // Solo: the soloed tile framed in solo yellow, every other module dimmed (it is bypassed now)
+        const int solo = proc.getSolo();
+        const bool soloed = solo >= 0 && solo == code;
+        if (solo >= 0 && ! soloed && dsp::canSolo (t.id) && ! ghost)
+        {
+            g.setColour (colours::windowBg.withAlpha (0.62f));
+            g.fillRoundedRectangle (r, corner);
+        }
+        if (soloed)
+        {
+            g.setColour (soloColour.withAlpha (0.85f));
+            g.drawRoundedRectangle (r.reduced (0.7f), corner, 1.4f);
+        }
+        // The S: on hover (fades with it) and always while soloed
+        const auto s = soloBounds (shifted);
+        if (! s.isEmpty() && (soloed || hov > 0.01f))
+            drawSoloGlyph (g, s, soloed, hoveredSolo && hovered >= 0 && hovered < (int) tiles.size()
+                                                 && tiles[(size_t) hovered].code() == code ? 1.0f : 0.0f,
+                           soloed ? 1.0f : hov);
     }
 
     void ChainView::drawAddCard (juce::Graphics& g, juce::Rectangle<float> r) const
@@ -612,6 +758,17 @@ namespace velvox::ui
         arrow.lineTo (c.x + 2.0f, c.y + 5.0f);
         g.setColour (isSel ? colours::teal : colours::textDim);
         g.strokePath (arrow, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        // What leaves the plugin while a module is soloed: a SOLO tag
+        if (proc.isSoloActive())
+        {
+            const auto tag = juce::Rectangle<float> (40.0f, 14.0f).withCentre ({ r.getCentreX(), r.getY() + 4.0f + nameH + iconH + powerH * 0.5f });
+            g.setColour (soloColour);
+            g.fillRoundedRectangle (tag, 7.0f);
+            g.setColour (colours::windowBg);
+            g.setFont (semiBold (8.0f, 0.15f));
+            g.drawText ("SOLO", tag, juce::Justification::centred, false);
+        }
     }
 
     void ChainView::paint (juce::Graphics& g)
@@ -696,6 +853,10 @@ namespace velvox::ui
                 g.setGradientFill (juce::ColourGradient (colours::windowBg.withAlpha (0.0f), row.getRight() - 28.0f, 0.0f, colours::windowBg, row.getRight(), 0.0f, false));
                 g.fillRect (row.withLeft (row.getRight() - 28.0f));
             }
+
+            // Thumb and edge arrows (only while the row does not fit)
+            if (! dragging)
+                drawScrollParts (g);
         }
 
         // Dragged tile follows the mouse
@@ -744,6 +905,40 @@ namespace velvox::ui
             return;
         }
 
+        // Scrolling: edge arrows (a page), the thumb / its track, a drag of the strip itself
+        pan = Pan::none;
+        for (bool right : { false, true })
+            if (arrowArea (right).contains (e.position))
+            {
+                const float page = std::max (scrollStep(), rowArea().getWidth() - scrollStep());
+                scrollTo (scroll.target + (right ? page : -page));
+                return;
+            }
+        if (const auto track = trackArea(); ! track.isEmpty() && e.position.y >= rowArea().getY() + tileHeight
+                                            && e.position.x >= track.getX() - 4.0f && e.position.x <= track.getRight() + 4.0f)
+        {
+            const auto thumb = thumbArea();
+            if (e.position.x < thumb.getX() - 4.0f || e.position.x > thumb.getRight() + 4.0f)
+            {
+                // On the track: the thumb jumps there (centred under the mouse), then follows the drag
+                const float travel = std::max (1.0f, track.getWidth() - thumb.getWidth());
+                scrollTo ((e.position.x - thumb.getWidth() * 0.5f - track.getX()) / travel * maxScrollNow(), false);
+            }
+            pan = Pan::thumb;
+            panStartScroll = scroll.target;
+            panStartX = e.position.x;
+            repaint();
+            return;
+        }
+        if (e.mods.isMiddleButtonDown() || e.mods.isShiftDown() || (i == hitNothing && rowArea().contains (e.position) && gapAt (e.position) < 0))
+        {
+            pan = Pan::strip;
+            panStartScroll = scroll.target;
+            panStartX = e.position.x;
+            setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+            return;
+        }
+
         if (const int g = gapAt (e.position); g >= 0)
         {
             if (onAddModule)
@@ -758,6 +953,15 @@ namespace velvox::ui
         }
         if (i == hitOutput)
         {
+            // The SOLO tag on OUTPUT ends the solo
+            const auto out = outputArea();
+            if (proc.isSoloActive() && e.position.y > out.getY() + 4.0f + nameH + iconH)
+            {
+                proc.setSolo (-1);
+                shownSolo = -1;
+                repaint();
+                return;
+            }
             selected = outputTile;
             if (onSelect)
                 onSelect (outputTile);
@@ -768,6 +972,13 @@ namespace velvox::ui
             return;
 
         const auto t = tiles[(size_t) i];
+        if (dsp::canSolo (t.id) && (soloBounds (t).expanded (3.0f).contains (e.position) || e.mods.isAltDown()))
+        {
+            proc.toggleSolo (t.code());
+            shownSolo = proc.getSolo();
+            repaint();
+            return;
+        }
         if (powerBounds (t).expanded (4.0f).contains (e.position))
         {
             toggleOn (t.id, t.instance);
@@ -785,6 +996,18 @@ namespace velvox::ui
 
     void ChainView::mouseDrag (const juce::MouseEvent& e)
     {
+        if (pan == Pan::strip)
+        {
+            scrollTo (panStartScroll - (e.position.x - panStartX), false);
+            return;
+        }
+        if (pan == Pan::thumb)
+        {
+            const auto track = trackArea();
+            const float travel = std::max (1.0f, track.getWidth() - thumbArea().getWidth());
+            scrollTo (panStartScroll + (e.position.x - panStartX) / travel * maxScrollNow(), false);
+            return;
+        }
         if (dragTile < 0)
             return;
         if (! dragging && e.getDistanceFromDragStart() < 6)
@@ -799,8 +1022,17 @@ namespace velvox::ui
     void ChainView::mouseUp (const juce::MouseEvent& e)
     {
         setMouseCursor (juce::MouseCursor::NormalCursor);
+        if (pan != Pan::none)
+        {
+            pan = Pan::none;
+            repaint();
+            return;
+        }
         if (! dragging || dragTile < 0)
         {
+            // A click on a tile: it slides fully into view (a half-hidden one at an edge)
+            if (dragTile >= 0 && dragTile < (int) tiles.size())
+                scrollToShow (tiles[(size_t) dragTile].id, tiles[(size_t) dragTile].instance);
             dragTile = -1;
             dragging = false;
             return;
@@ -844,28 +1076,65 @@ namespace velvox::ui
         layoutTiles();
         const int i = tileAt (e.position);
         const int g = gapAt (e.position);
-        if (i != hovered || g != hoveredGap)
+        const bool overSolo = i >= 0 && soloBounds (tiles[(size_t) i]).expanded (3.0f).contains (e.position);
+        const int arrow = arrowArea (false).contains (e.position) ? -1 : (arrowArea (true).contains (e.position) ? 1 : 0);
+        const auto track = trackArea();
+        const bool bar = ! track.isEmpty() && e.position.y >= rowArea().getY() + tileHeight && e.position.x >= track.getX() - 4.0f
+                         && e.position.x <= track.getRight() + 4.0f;
+        if (arrow != hoveredArrow || bar != hoveredBar)
         {
-            hovered = i;
-            hoveredGap = g;
-            const bool clickable = g >= 0 || i >= 0 || i == hitOutput || i == hitAddCard;
-            setMouseCursor (clickable ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
-            if (i >= 0)
-                setTooltip (juce::String (dsp::moduleDisplayName (tiles[(size_t) i].id)) + de (" - Klick öffnet, Ziehen ordnet um, Rechtsklick: Menü"));
-            else if (i == hitAddCard || g >= 0)
-                setTooltip (de ("Modul hinzufügen"));
-            else if (i == hitOutput)
-                setTooltip (de ("Ausgang: Eingangs-Gain, Stereo, Level Match, Clip Guard"));
-            else
-                setTooltip ({});
-            repaint();
+            hoveredArrow = arrow;
+            hoveredBar = bar;
+            hovered = -99;   // forces the info below to refresh
         }
+        if (arrow != 0 || bar)
+        {
+            if (hovered != hitNothing || hoveredGap >= 0 || hoveredSolo)
+            {
+                hovered = hitNothing;
+                hoveredGap = -1;
+                hoveredSolo = false;
+                setMouseCursor (juce::MouseCursor::PointingHandCursor);
+                setTooltip (arrow != 0 ? de ("Weitere Module - Kette scrollen (auch Mausrad, Shift+Ziehen)")
+                                       : de ("Kette scrollen: ziehen"));
+                repaint();
+            }
+            return;
+        }
+        if (i != hovered || g != hoveredGap || overSolo != hoveredSolo)
+            updateHoverInfo (i, g, overSolo);
+    }
+
+    void ChainView::updateHoverInfo (int i, int g, bool overSolo)
+    {
+        hovered = i;
+        hoveredGap = g;
+        hoveredSolo = overSolo;
+        const bool clickable = g >= 0 || i >= 0 || i == hitOutput || i == hitAddCard;
+        setMouseCursor (clickable ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+        if (overSolo)
+            setTooltip (de ("Solo: nur dieses Modul hören, alle anderen umgangen (nochmal klicken: aus)"));
+        else if (i >= 0)
+            setTooltip (juce::String (dsp::moduleDisplayName (tiles[(size_t) i].id))
+                        + (dsp::canSolo (tiles[(size_t) i].id) ? de (" - Klick öffnet, Ziehen ordnet um, S oder Alt+Klick: Solo, Rechtsklick: Menü")
+                                                               : de (" - Klick öffnet, Ziehen ordnet um, Rechtsklick: Menü")));
+        else if (i == hitAddCard || g >= 0)
+            setTooltip (de ("Modul hinzufügen"));
+        else if (i == hitOutput)
+            setTooltip (proc.isSoloActive() ? de ("Ausgang - SOLO aktiv: Klick auf SOLO hebt es auf")
+                                            : de ("Ausgang: Eingangs-Gain, Stereo, Level Match, Clip Guard"));
+        else
+            setTooltip ({});
+        repaint();
     }
 
     void ChainView::mouseExit (const juce::MouseEvent&)
     {
         hovered = hitNothing;
         hoveredGap = -1;
+        hoveredSolo = false;
+        hoveredArrow = 0;
+        hoveredBar = false;
         setMouseCursor (juce::MouseCursor::NormalCursor);
         repaint();
     }
@@ -1148,6 +1417,13 @@ namespace velvox::ui
             case TileAction::undo:      return undo();
             case TileAction::redo:      return redo();
             case TileAction::help:      if (onHelp) onHelp (code); return true;
+            case TileAction::solo:
+                if (! dsp::canSolo (id))
+                    return false;
+                proc.toggleSolo (code);
+                shownSolo = proc.getSolo();
+                repaint();
+                return true;
         }
         return false;
     }
@@ -1174,6 +1450,8 @@ namespace velvox::ui
         juce::PopupMenu menu;
         menu.addSectionHeader (cardName (routing, id, k));
         menu.addItem (on ? "Bypass" : "Einschalten", act (TileAction::toggle));
+        if (dsp::canSolo (id))
+            menu.addItem (de ("Solo (Alt+Klick)"), true, proc.isSoloed (code), act (TileAction::solo));
         menu.addItem (de ("Duplizieren"), routing.nextFreeInstance (id) >= 0, false, act (TileAction::duplicate));
         menu.addItem (de ("Entfernen"), act (TileAction::remove));
         menu.addSeparator();

@@ -329,18 +329,26 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //          tokens joined with ';' (any order, combinable with all of the above): "reso" (the live vocal gets a 3.15 kHz
 //          resonance), "more" (Mehr open), "route:<routing string, ',' or '|'>", "set:..." as above;
 //          e.g. "reso;more;route:v2|eq|smooth;set:smoothOn=1,smoothAmount=70"
+//          0.6.1 chain tokens: "solo:<selection code>" (module solo), "scroll:<px>|end" (chain row scrolled),
+//          "hover:<selection code>" (mouse over that tile; "hover:<code>:s" over its S)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
                            const juce::String& mode, int selection, const juce::String& rawOverlay)
 {
     using namespace velvox;
     // One parser for every overlay form: ';' tokens, each a flag, a route, a set: list or the overlay itself
     bool reso = false, moreOpen = false, hasSet = false;
-    juce::String overlay, routeText;
+    juce::String overlay, routeText, soloText, scrollText, hoverText;
     juce::StringArray assignments;
     for (auto token : juce::StringArray::fromTokens (rawOverlay, ";", ""))
     {
         token = token.trim();
-        if (token == "reso")
+        if (token.startsWith ("solo:"))
+            soloText = token.fromFirstOccurrenceOf (":", false, false);
+        else if (token.startsWith ("scroll:"))
+            scrollText = token.fromFirstOccurrenceOf (":", false, false);
+        else if (token.startsWith ("hover:"))
+            hoverText = token.fromFirstOccurrenceOf (":", false, false);
+        else if (token == "reso")
             reso = true;
         else if (token == "more" && rawOverlay.contains (";"))
             moreOpen = true;
@@ -527,6 +535,23 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
             for (size_t i = 0; i < std::min<size_t> (2, visible.size()); ++i)
                 vc.ignore (visible[visible.size() - 1 - i]->id);
             ed->getCheckView().setIgnoredExpanded (true);
+        }
+        if (soloText.isNotEmpty())
+            proc.setSolo (soloText.getIntValue());
+        auto& chainView = ed->getChainView();
+        if (scrollText == "end")
+            chainView.scrollTo (chainView.getMaxScroll(), false);
+        else if (scrollText.isNotEmpty())
+            chainView.scrollTo (scrollText.getFloatValue(), false);
+        if (hoverText.isNotEmpty())
+        {
+            const int code = hoverText.getIntValue();
+            const auto id = dsp::selectionModule (code);
+            const int k = dsp::selectionInstance (code);
+            const auto at = hoverText.endsWith (":s") ? chainView.getSoloBounds (id, k).getCentre() : chainView.getIconBounds (id, k).getCentre();
+            const auto now = juce::Time::getCurrentTime();
+            chainView.mouseMove (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, {}, 1.0f, 0, 0, 0, 0,
+                                                   &chainView, &chainView, now, at, now, 0, false));
         }
     }
 

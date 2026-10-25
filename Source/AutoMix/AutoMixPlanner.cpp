@@ -233,7 +233,7 @@ namespace velvox::automix
             plan.set (id, 0.0f);
         }
         if (macrosWereSet)
-            plan.notes.push_back (de ("Die Makros stehen auf 0 - sie wirken als Feinschliff auf den neuen Mix."));
+            plan.notes.push_back (de ("Die SIMPEL-Regler starten wieder bei 0 - von dort aus verfeinern sie den neuen Mix."));
 
         plan.set (pid::deessListen, 0.0f);
         plan.set (pid::smoothDelta, 0.0f);
