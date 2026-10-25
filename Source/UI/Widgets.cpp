@@ -281,6 +281,13 @@ namespace velvox::ui
         slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
     }
 
+    void Knob::snapToValue()
+    {
+        shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
+        slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
+        slider.repaint();
+    }
+
     void Knob::setUp (const juce::String& label, juce::Colour accent)
     {
         // White (the old default) means "no module colour given": the design cyan

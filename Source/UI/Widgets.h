@@ -133,6 +133,8 @@ namespace velvox::ui
 
     protected:
         juce::Label name;
+        // The dial shows the slider's value at once (no glide), e.g. after an unbound knob set its range
+        void snapToValue();
 
     private:
         juce::Rectangle<float> dialBounds() const;

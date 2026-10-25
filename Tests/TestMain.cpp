@@ -320,10 +320,21 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //          "eq" (EQ panel with user bands, a macro band and a selection), "eqmore" (+ Mehr, migrated legacy curve),
 //          "eqcard" (+ a point being dragged: its value card)
 //          "set:<id>=<value>,..." (parameters in real units)
+//          prefixes, joined with ';': "reso" (the live vocal gets a 3.15 kHz resonance), "more" (+ Mehr open),
+//          "route:<routing string, ',' or '|'>"; e.g. "reso;more;route:v2|eq|smooth;set:smoothOn=1"
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
-                           const juce::String& mode, int selection, const juce::String& overlay)
+                           const juce::String& mode, int selection, const juce::String& rawOverlay)
 {
     using namespace velvox;
+    bool reso = false, moreOpen = false;
+    juce::String overlay, routeText;
+    for (auto& token : juce::StringArray::fromTokens (rawOverlay, ";", ""))
+    {
+        if (token == "reso") reso = true;
+        else if (token.startsWith ("route:")) routeText = token.fromFirstOccurrenceOf (":", false, false);
+        else if (token == "more" && rawOverlay.contains (";")) moreOpen = true;
+        else overlay = token;
+    }
     // Never touch the real user preferences; the welcome card only when asked for
     const auto prefs = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("velvox-snapshot.settings");
     prefs.deleteFile();
@@ -355,10 +366,18 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
         am.applyResult (am.runSynchronously (test::makeVocal (s)));
     }
 
+    if (routeText.isNotEmpty())   // e.g. "route:v2,eq,smooth,smooth#2,pitch"
+        proc.setRouting (dsp::Routing::fromString (routeText.replaceCharacter ('|', ',')));
+
     // Feed a synthetic vocal so meters show activity
     test::VocalSpec live;
     live.seconds = 3.0;
     live.channels = 2;
+    if (reso)
+    {
+        live.resonanceHz = 3150.0f;
+        live.resonanceDb = 14.0f;
+    }
     const auto voice = test::makeVocal (live);
     juce::AudioBuffer<float> buffer (2, 512);
     juce::MidiBuffer midi;
@@ -447,7 +466,7 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
         }
         if (overlay.startsWith ("focus:"))
             ed->getChainView().onSelect (overlay.fromFirstOccurrenceOf (":", false, false).getIntValue());
-        if (overlay == "more" && ed->getDetail() != nullptr)
+        if ((overlay == "more" || moreOpen) && ed->getDetail() != nullptr)
             ed->getDetail()->setMoreOpen (true);
         if (auto* eqp = dynamic_cast<ui::EqPanel*> (ed->getDetail()))
         {

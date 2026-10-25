@@ -69,3 +69,13 @@ first (compile: no getDetectedHz), passed on the first build)
 - Ruling: read-out holds the last voiced note 250 ms (consonants / breaths don't flicker it), glides within ±0.04 oct (vibrato)
   and jumps to a new note; OUT = IN × 2^((st + ct/100)/12), dimmed with less Mix.
 - Ruling: knob label "Semitones" (was "Pitch"); the latency note stays in its hover card.
+
+Task 4: complete (snapshots in C:\Users\jakob\dev\velvox-wt\shots-smoothpanel\: smooth-1000.png, smooth-889.png (min scale),
+smooth-mehr.png, smooth2-off.png (instance 2, off), pitch-1000.png (+7 st), pitch-889.png (-5 st, Formant +2.5), pitch-off.png;
+reviewed: fixed the Speed dial not showing its arc (unbound knob now snaps its dial: `Knob::snapToValue`, protected); help pages
+smooth / pitch rewritten for the new controls)
+- Added: TestMain --snapshot overlay tokens joined with ';': "reso" (live vocal with a 3.15 kHz +14 dB resonance), "more" (Mehr open
+  together with other tokens), "route:<routing, '|' for ','>".
+Final: full suite 28737 checks passed, 15 failed — all 15 are the base's PanelFrameTests "sat: reaches satMultiband/…" (13) and
+"pulse: reaches pulseShape/pulseAmount" (2), owned by the satpanel / timepanels tracks. The 12 "smooth: reaches smoothW…" are green.
+Smooth panel suite 141/141, Pitch panel suite 30/30.

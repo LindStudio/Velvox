@@ -192,6 +192,7 @@ namespace velvox::ui
         slider.addMouseListener (this, false);
         setDescription (de ("Wie schnell Smooth zupackt und loslässt: stellt Attack und Release gemeinsam."));
         sync();
+        snapToValue();
     }
 
     SpeedKnob::~SpeedKnob()
