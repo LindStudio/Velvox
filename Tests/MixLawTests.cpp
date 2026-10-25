@@ -264,7 +264,9 @@ public:
                     c.set (*h);
                     juce::MessageManager::getInstance()->runDispatchLoopUntil (2);
                 }
-                expect (l.proc.getMixLaws() == dsp::MixLaws::allLegacy() && t.proc.getMixLaws() == dsp::MixLaws::allTrue());
+                // 0.6.1: the slider writes the Mix itself; an instance it pushes over 50 % keeps the dry via the additive law
+                expect (l.proc.getMixLaws() == dsp::MixLaws::allLegacy());
+                expect (t.proc.getMixLaws() != dsp::MixLaws::allTrue(), t.proc.getMixLaws().toString());
                 expect (t.proc.getRouting() == l.proc.getRouting(), c.name);
                 const auto in = fixedSignal (t);
                 expectEquals (maxAbsDiff (t.run (in), l.run (in)), 0.0f, c.name);

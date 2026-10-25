@@ -540,14 +540,6 @@ namespace velvox::ui
             changed = true;
         }
 
-        const auto engaged = dsp::modulesEngagedByMacros (proc.readSettings(), proc.readMacros());
-        for (int i = 0; i < dsp::numModules; ++i)
-        {
-            if (engaged[(size_t) i] != macroEngaged[(size_t) i])
-                changed = true;
-            macroEngaged[(size_t) i] = engaged[(size_t) i];
-        }
-
         for (const auto& slot : routing)
         {
             const int code = dsp::selectionCode (slot.id, slot.instance);
@@ -645,8 +637,7 @@ namespace velvox::ui
         const auto code = t.code();
         const auto onIt = onState.find (code);
         const bool switchedOn = onIt != onState.end() ? onIt->second : isOn (t.id, t.instance);
-        const bool engagedOnly = t.instance == 0 && macroEngaged[(size_t) t.id] && ! switchedOn;
-        const bool on = switchedOn || engagedOnly;
+        const bool on = switchedOn;   // 0.6.1: the Simple sliders switch modules on for real - no "engaged only" state
         const bool isSelected = code == selected && ! ghost;
         const auto glowIt = hoverGlow.find (code);
         const float hov = ghost ? 0.0f : (glowIt != hoverGlow.end() ? glowIt->second.current : 0.0f);

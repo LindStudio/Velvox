@@ -69,20 +69,40 @@ namespace velvox
         struct Change { int index; float before, after; };
         ValueAction (UndoHistory& h, std::vector<Change> c) : owner (h), changes (std::move (c)) {}
 
-        // Coalescing: a single-parameter step that continues this one (same parameter, starting
-        // where this one ended) becomes part of it
-        bool extend (const Change& next, bool nextChangesStructure)
-        {
-            if (nextChangesStructure || changes.size() != 1 || changes[0].index != next.index || std::abs (changes[0].after - next.before) > 1.0e-6f)
-                return false;
-            changes[0].after = next.after;
-            return true;
-        }
-
         // Routing / mix law the gesture changed as a side effect (e.g. SPACE turning a fresh delay /
         // reverb insert into a send): restored after the values, so the step is exact
         struct Structure { juce::var routingBefore, routingAfter, lawBefore, lawAfter; };
         std::optional<Structure> structure;
+
+        // Coalescing: a step that continues this one (its first change on the same parameter, starting
+        // where this one ended) becomes part of it. The other parameters it moved join with their
+        // first value (nothing happened between the two steps); a structure change extends ours.
+        bool extend (const std::vector<Change>& next, const std::optional<Structure>& nextStructure)
+        {
+            if (next.empty() || changes.empty() || changes[0].index != next[0].index || std::abs (changes[0].after - next[0].before) > 1.0e-6f)
+                return false;
+            for (const auto& n : next)
+            {
+                auto it = std::find_if (changes.begin(), changes.end(), [&] (const Change& c) { return c.index == n.index; });
+                if (it != changes.end())
+                    it->after = n.after;
+                else
+                    changes.push_back (n);
+            }
+            if (nextStructure)
+            {
+                if (structure)
+                {
+                    structure->routingAfter = nextStructure->routingAfter;
+                    structure->lawAfter = nextStructure->lawAfter;
+                }
+                else
+                {
+                    structure = nextStructure;
+                }
+            }
+            return true;
+        }
 
         bool perform() override
         {
@@ -268,20 +288,20 @@ namespace velvox
             }
 
         // A quick repeat on the same parameter (wheel notches, arrow steps): part of the last step
-        if (coalesceCandidate != nullptr && changes.size() == 1 && gestureStartMs - lastStepMs <= coalesceMs
-            && manager.canUndo() && ! manager.canRedo() && coalesceCandidate->extend (changes[0], structure.has_value()))
+        const bool mayCoalesce = changes.size() == 1 || (coalescesWithSideEffects != nullptr && coalescesWithSideEffects (changes[0].index));
+        if (mayCoalesce && coalesceCandidate != nullptr && gestureStartMs - lastStepMs <= coalesceMs
+            && manager.canUndo() && ! manager.canRedo() && coalesceCandidate->extend (changes, structure))
         {
             lastStepMs = nowMs();
             sendChangeMessage();
             return;
         }
 
-        const bool single = changes.size() == 1;
         auto action = std::make_unique<ValueAction> (*this, std::move (changes));
         action->structure = std::move (structure);
         auto* raw = action.get();
         addStep (std::move (action), name);
-        if (single)
+        if (mayCoalesce)
             coalesceCandidate = raw;
     }
 

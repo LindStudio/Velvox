@@ -268,13 +268,6 @@ namespace velvox::ui
         const auto mapped = pidFor (paramId);
         auto k = std::make_unique<Knob> (apvts, mapped.toRawUTF8(), label, moduleId >= 0 ? moduleColour ((ModuleId) moduleId) : colours::teal);
         k->setDialSize (moreDial);
-        // Macro markers belong to the first instance only (macros never move the others)
-        if (instance == 0 && proc.effectiveValueOf (paramId).has_value())
-        {
-            const juce::String id (paramId);
-            auto* procPtr = &proc;
-            k->effectiveValue = [procPtr, id] { return procPtr->effectiveValueOf (id).value_or (0.0f); };
-        }
         auto& ref = *k;
         knobs.push_back (k.get());
         adopt (std::move (k));

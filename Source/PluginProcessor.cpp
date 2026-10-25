@@ -4,6 +4,7 @@
 #include "StateKeys.h"
 #include "Parameters/RoutingMigration.h"
 #include "DSP/Solo.h"
+#include "Parameters/MacroBake.h"
 
 using namespace velvox;
 
@@ -48,6 +49,7 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
     // An edit while the auto-mix "Vorher" is shown ends that compare and keeps the edit; its undo step
     // leads back to the "Nachher" state (spec Q3 / Q8, final-pass ruling)
     undoHistory.takeCompareBase = [this] { return autoMix.endCompareForEdit(); };
+    undoHistory.coalescesWithSideEffects = [this] (int index) { return macroMapper.isMacroIndex (index); };
     autoMix.onApplying = [this] (bool starting, bool asStep)
     {
         if (asStep)
@@ -90,6 +92,7 @@ void VelvoxAudioProcessor::parameterChanged (const juce::String&, float)
 
 void VelvoxAudioProcessor::handleAsyncUpdate()
 {
+    macroMapper.update();   // a Simple slider / automated macro moved: write its modules
     insertEngagedInstances();
     updateHostLatency();
 }
@@ -125,16 +128,7 @@ void VelvoxAudioProcessor::insertEngagedInstances()
         }
     }
 
-    // SPACE keeps its sends (its calibration, spec Q2): when the macros switch on a delay /
-    // reverb that a fresh chain holds as an (unused) insert, it becomes a send. Only at that
-    // moment - a later "Als Insert" by the user stays. Instances on the legacy law are left
-    // alone - an old project keeps its chain.
-    const auto engaged = dsp::modulesEngagedByMacros (readSettings(), readMacros());
-    const auto laws = getMixLaws();
-    for (auto id : { dsp::ModuleId::delay, dsp::ModuleId::reverb })
-        if (! loadingState && engaged[(size_t) id] && ! macroEngaged[(size_t) id] && routing.isInsert (id, 0) && ! laws.isLegacy (id, 0))
-            changed = routing.setInsert (id, 0, false) || changed;
-    macroEngaged = engaged;
+    // (SPACE turning a fresh insert into a send happens in the MacroMapper, when it switches the module on)
 
     if (changed)
         setRouting (routing);
@@ -243,30 +237,6 @@ dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
     auto s = reader.read (getRouting(), monoMonitor.load (std::memory_order_relaxed));
     s.mixLaws = getMixLaws();
     return s;
-}
-
-std::optional<float> VelvoxAudioProcessor::effectiveValueOf (const juce::String& id) const
-{
-    const auto e = readEffectiveSettings();
-    if (id == pid::highGain)         return e.eq.highGain;
-    if (id == pid::lowGain)          return e.eq.lowGain;
-    if (id == pid::deessRange)       return e.deess.rangeDb;
-    if (id == pid::satDrive)         return e.sat.driveDb;
-    if (id == pid::satLowDrive)      return e.sat.bands[0].driveDb;
-    if (id == pid::satMidDrive)      return e.sat.bands[1].driveDb;
-    if (id == pid::satHighDrive)     return e.sat.bands[2].driveDb;
-    if (id == pid::satMix)           return e.sat.enabled ? e.sat.mix * 100.0f : 0.0f;
-    if (id == pid::compThreshold)    return e.comp.thresholdDb;
-    if (id == pid::compRatio)        return e.comp.ratio;
-    if (id == pid::compAttack)       return e.comp.attackMs;
-    if (id == pid::compMakeup)       return e.comp.makeupDb;
-    if (id == pid::doublerMix)       return e.doubler.enabled ? e.doubler.mix * 100.0f : 0.0f;
-    if (id == pid::stereoWidth)      return e.stereo.width * 100.0f;
-    if (id == pid::reverbMix)        return e.reverbOn ? e.reverbMix * 100.0f : 0.0f;
-    if (id == pid::delayMix)         return e.delayOn ? e.delayMix * 100.0f : 0.0f;
-    if (id == pid::reverbDuckAmount) return e.reverbDuck.amountDb;
-    if (id == pid::delayDuckAmount)  return e.delayDuck.amountDb;
-    return std::nullopt;
 }
 
 dsp::MacroValues VelvoxAudioProcessor::readMacros() const noexcept
@@ -460,7 +430,7 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     // Routing: lock-free copy; while the message thread is writing it, the previous one stays
     routingShared.tryLoad (audioRouting);
     mixLawShared.tryLoad (audioMixLaws);
-    auto settings = dsp::applyMacros (reader.read (audioRouting, monoMonitor.load (std::memory_order_relaxed)), reader.readMacros());
+    auto settings = reader.read (audioRouting, monoMonitor.load (std::memory_order_relaxed));   // 0.6.1: no macro layer
     settings.mixLaws = audioMixLaws;
     // Module solo (listening aid): every other instance bypassed, latency unchanged
     if (const int solo = soloCode.load (std::memory_order_relaxed); solo >= 0)
@@ -626,12 +596,23 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
     if (! eqbands::containsBandValues (savedIds))
         eqbands::migrateState (eqbands::accessFor (apvts), true);
 
+    // 0.2 - 0.6.0 projects: the macros were an offset layer in the audio path. Baked into the module
+    // parameters once (exactly what dsp::applyMacros produced); the macro values stay as the Simple
+    // sliders' positions. Before the routing migration, which prunes by what is audible.
+    if (savedVersion < 4)
+    {
+        auto laws = dsp::MixLaws::fromString (apvts.state.getProperty (statekeys::mixLaw).toString());
+        const auto routing = savedRouting.isEmpty() ? dsp::Routing::legacyFull() : dsp::Routing::fromString (savedRouting);
+        if (macrobake::bake (eqbands::accessFor (apvts), routing, &laws))
+            apvts.state.setProperty (statekeys::mixLaw, laws.toString(), nullptr);
+    }
+
     // 0.1 - 0.3 routings list every module: keep only what can be heard (sound unchanged)
     apvts.state.setProperty (statekeys::routing, migrateRoutingString (savedRouting, apvts), nullptr);
 
     syncRoutingFromState();
     syncMixLawFromState();
-    macroEngaged = dsp::modulesEngagedByMacros (readSettings(), readMacros());   // a loaded chain is taken as it is
+    macroMapper.syncPositions();   // the loaded positions are where the sliders stand; nothing to map
     autoMix.readState (autoMixHolder, savedVersion < 3);
 
     // Another project (or the host restoring one): the history of the old state means nothing
