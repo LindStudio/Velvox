@@ -15,14 +15,42 @@ namespace velvox::dsp
         bandHpf.setCoeffs (design::highPass (fs, 100.0, 0.7071));
         bandLpf.setCoeffs (design::lowPass (fs, std::min (8000.0, fs * 0.45), 0.7071));
         fastCoeff = timeConstantCoeff (5.0f, fs);
-        syllableCoeff = timeConstantCoeff (60.0f, fs);
+        syllableCoeff = timeConstantCoeff (syllableMs, fs);
         enabled.reset (sampleRate, 0.05);
         enabled.setCurrentAndTargetValue (enabled.getTargetValue());
+        latency = (int) std::lround (lookaheadMs * 0.001 * sampleRate);
+        fadeInLength = std::max (1, (int) std::lround (0.01 * sampleRate));
+        lookahead.prepare (std::max (1, latency));
+        lookahead.setDelay (latency);
         reset();
         snapNext = true;
     }
 
     void RideModule::reset()
+    {
+        lookahead.reset();
+        // The emptied delay line releases silence for `latency` samples: the audio that
+        // follows fades in, so joining the chain never starts with a hard edge
+        warmupSamples = latency;
+        fadeInPos = latency > 0 ? 0 : fadeInLength;
+        resetControl();
+    }
+
+    void RideModule::applyWarmup (float* const* ch, int numChannels, int n) noexcept
+    {
+        for (int i = 0; i < n && fadeInPos < fadeInLength; ++i)
+        {
+            float g = 0.0f;
+            if (warmupSamples > 0)
+                --warmupSamples;
+            else
+                g = (float) ++fadeInPos / (float) fadeInLength;
+            for (int c = 0; c < numChannels; ++c)
+                ch[c][i] *= g;
+        }
+    }
+
+    void RideModule::resetControl() noexcept
     {
         bandHpf.reset();
         bandLpf.reset();
@@ -34,6 +62,7 @@ namespace velvox::dsp
         rampFrom = rampTo = 1.0f;
         rampPos = controlInterval;
         voiced = false;
+        voicedSamples = pauseSamples = 0;
         controlCounter = 0;
         currentGainDb.store (0.0f, std::memory_order_relaxed);
     }
@@ -67,7 +96,17 @@ namespace velvox::dsp
         if (voiced && syllableDb < s.silenceDb - hysteresisDb)
             voiced = false;
         else if (! voiced && syllableDb > s.silenceDb)
+        {
             voiced = true;
+            voicedSamples = 0;
+        }
+        if (voiced)
+        {
+            voicedSamples += controlInterval;
+            pauseSamples = 0;
+        }
+        else
+            pauseSamples += controlInterval;
 
         const float response = juce::jlimit (0.0f, 1.0f, s.response);
         const float phrase = juce::jlimit (0.0f, 1.0f, s.phrase);
@@ -86,7 +125,12 @@ namespace velvox::dsp
         {
             const float level = syllableDb + phrase * (phraseDb - syllableDb);
             target = juce::jlimit (-std::max (0.0f, s.maxCutDb), std::max (0.0f, s.maxBoostDb),
-                                   juce::jlimit (0.0f, 1.0f, s.amount) * (s.targetDb - level));
+                                   effectiveAmount (s.amount) * (s.targetDb - level));
+        }
+        else if (pauseSamples < (int) (pauseHoldMs * 0.001 * fs))
+        {
+            // Gap between words: hold the gain, the next word continues where this one ended
+            target = gainDb;
         }
         else
         {
@@ -94,14 +138,16 @@ namespace velvox::dsp
             target = std::min (gainDb, 0.0f);
         }
 
-        // Speeds: lowering is faster than lifting; both scale with Response
-        const float downMs = 250.0f - 225.0f * response;   // 250 .. 25 ms
-        const float upMs = 600.0f - 520.0f * response;     // 600 .. 80 ms
+        // Speeds: lowering is faster than lifting; both scale with Response (log mapping)
+        const float downMs = downSlowMs * std::pow (downFastMs / downSlowMs, response);
+        const float upMs = upSlowMs * std::pow (upFastMs / upSlowMs, response);
         float coeff = timeConstantCoeff (target < gainDb ? downMs : upMs, controlRate);
 
         // Transient protection: short peaks over the syllable level freeze the adaptation
         // and keep it frozen a little longer while the burst dies away
-        const float transientness = juce::jlimit (0.0f, 1.0f, (fastDb - syllableDb - transientStartDb) / 6.0f);
+        // (not at the start of a word: a word onset is the level the rider has to follow)
+        const bool inWord = voicedSamples > (int) (onsetGraceMs * 0.001 * fs);
+        const float transientness = inWord ? juce::jlimit (0.0f, 1.0f, (fastDb - syllableDb - transientStartDb) / 6.0f) : 0.0f;
         if (transientness > 0.5f)
             freezeSamples = (int) (0.06 * fs);
         else
@@ -126,16 +172,36 @@ namespace velvox::dsp
         if (! active)
         {
             if (wasActive)
-                reset();
+                resetControl();
             wasActive = false;
+            lookahead.process (ch, numChannels, n);   // constant latency, on or off
+            applyWarmup (ch, numChannels, n);
             return;
         }
         if (! wasActive)
         {
-            reset();
+            resetControl();
             wasActive = true;
         }
 
+        for (int start = 0; start < n; start += chunkSize)
+        {
+            const int len = std::min (chunkSize, n - start);
+            float* part[maxChannels] {};
+            for (int c = 0; c < numChannels; ++c)
+                part[c] = ch[c] + start;
+            analyse (part, numChannels, len);
+            // The gain was found on the undelayed input: applied to the audio lookaheadMs
+            // later, it is in place before each word (and each onset) reaches the output
+            lookahead.process (part, numChannels, len);
+            applyWarmup (part, numChannels, len);
+            for (int c = 0; c < numChannels; ++c)
+                juce::FloatVectorOperations::multiply (part[c], gains.data(), len);
+        }
+    }
+
+    void RideModule::analyse (float* const* ch, int numChannels, int n) noexcept
+    {
         for (int i = 0; i < n; ++i)
         {
             float mid = 0.0f;
@@ -160,10 +226,8 @@ namespace velvox::dsp
 
             // Per-sample linear ramp between control points: no zipper, no steps
             const float t = (float) std::min (rampPos, controlInterval) / (float) controlInterval;
-            const float g = rampFrom + (rampTo - rampFrom) * t;
+            gains[(size_t) i] = rampFrom + (rampTo - rampFrom) * t;
             ++rampPos;
-            for (int c = 0; c < numChannels; ++c)
-                ch[c][i] *= g;
         }
     }
 }

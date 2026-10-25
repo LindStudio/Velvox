@@ -133,6 +133,8 @@ namespace velvox::dsp
         int maxLatency = pitch.getLatencySamples();
         for (auto& sat : saturation)
             maxLatency += sat.getLatencySamples();
+        for (auto& r : ride)
+            maxLatency += r.getLatencySamples();
         bypassDelay.prepare (std::max (1, maxLatency));
         bypassDelay.setDelay (getLatencySamples());
 
@@ -788,6 +790,8 @@ namespace velvox::dsp
         for (const auto& slot : routing)
             if (slot.id == ModuleId::sat)
                 latency += saturation[(size_t) slot.instance].getLatencySamples();
+            else if (slot.id == ModuleId::ride)   // lookahead, constant while in the chain
+                latency += ride[(size_t) slot.instance].getLatencySamples();
         if (pitchOn && routing.contains (ModuleId::pitch))
             latency += pitch.getLatencySamples();
         return latency;

@@ -40,6 +40,24 @@ namespace velvox::dsp
         void setSettings (const RideSettings& s) noexcept;
         void process (float* const* channels, int numChannels, int numSamples) noexcept;
 
+        // Constant latency (the lookahead), also while the module is off
+        static constexpr float lookaheadMs = 80.0f;
+        int getLatencySamples() const noexcept { return latency; }
+
+        // Word-level control law (0.6, QUALITY_BASELINE gap #8)
+        static constexpr float syllableMs = 80.0f;        // syllable level window (0.5: 60 ms)
+        static constexpr float pauseHoldMs = 250.0f;      // gaps shorter than this hold the gain
+        static constexpr float onsetGraceMs = 60.0f;      // no transient freeze at word onsets
+        static constexpr float downSlowMs = 150.0f, downFastMs = 10.0f;   // Response 0 .. 1
+        static constexpr float upSlowMs = 200.0f, upFastMs = 10.0f;
+        // Share of the distance to the target that is corrected: the gain lags the level, so the
+        // knob maps onto a curve that makes the realised correction follow the set Amount
+        static float effectiveAmount (float amount) noexcept
+        {
+            const float a = juce::jlimit (0.0f, 1.0f, amount);
+            return 1.0f - (1.0f - a) * (1.0f - a);
+        }
+
         // UI / test read-outs
         std::atomic<float> currentGainDb { 0.0f };
         std::atomic<float> detectedLevelDb { -100.0f };
@@ -47,6 +65,15 @@ namespace velvox::dsp
 
     private:
         void control() noexcept;
+        void resetControl() noexcept;
+        void analyse (float* const* channels, int numChannels, int numSamples) noexcept;
+
+        static constexpr int chunkSize = 256;
+        IntegerDelay lookahead;
+        int latency = 0;
+        int warmupSamples = 0, fadeInPos = 0, fadeInLength = 480;
+        void applyWarmup (float* const* channels, int numChannels, int numSamples) noexcept;
+        std::array<float, chunkSize> gains {};
 
         double fs = 48000.0;
         RideSettings settings;
@@ -62,6 +89,7 @@ namespace velvox::dsp
         float rampFrom = 1.0f, rampTo = 1.0f;
         int rampPos = 0;
         bool voiced = false;
+        int voicedSamples = 0, pauseSamples = 0;
         int controlCounter = 0;
 
         juce::SmoothedValue<float> enabled { 0.0f };

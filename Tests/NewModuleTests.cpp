@@ -670,7 +670,15 @@ public:
             m.setSettings (s);
             auto out = in;
             runModule (m, out);
-            expectEquals (maxAbsDiff (in, out), 0.0);
+            // 0.6: the rider looks ahead (constant latency): amount 0 = the input, delayed,
+            // after the 10 ms fade-in that follows the empty delay line of a fresh instance
+            const int L = m.getLatencySamples(), settled = L + (int) (0.01 * fs) + 1;
+            expectGreaterThan (L, 0);
+            double d = 0.0;
+            for (int c = 0; c < 2; ++c)
+                for (int i = settled; i < in.getNumSamples(); ++i)
+                    d = std::max (d, (double) std::abs (in.getSample (c, i - L) - out.getSample (c, i)));
+            expectEquals (d, 0.0);
         }
     }
 

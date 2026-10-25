@@ -7,6 +7,7 @@
 #include "DSP/CompressorModule.h"
 #include "DSP/SmashModule.h"
 #include "DSP/DeEsserModule.h"
+#include "DSP/RideModule.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -578,3 +579,106 @@ public:
 };
 
 static DeEsserQualityTests deEsserQualityTests;
+
+//==============================================================================
+namespace
+{
+    // "Words": noise bursts of `wordMs` at cycling RMS levels, separated by quiet gaps
+    struct Words
+    {
+        Buffer buffer;
+        std::vector<std::pair<int, int>> words;   // start, length
+    };
+
+    Words wordSequence (double fs, const std::vector<float>& levelsDb, int cycles, double wordMs = 300.0, double gapMs = 80.0,
+                        float gapDb = -80.0f)
+    {
+        const int w = (int) (wordMs * 0.001 * fs), g = (int) (gapMs * 0.001 * fs);
+        const int n = (int) levelsDb.size() * cycles;
+        Words out { Buffer (2, n * (w + g) + g), {} };
+        juce::Random r (31);
+        const float noiseRms = 1.0f / std::sqrt (3.0f);
+        int pos = 0;
+        const auto fill = [&] (int start, int len, float db)
+        {
+            const float a = juce::Decibels::decibelsToGain (db) / noiseRms;
+            for (int i = start; i < start + len; ++i)
+            {
+                const float v = a * (r.nextFloat() * 2.0f - 1.0f);
+                out.buffer.setSample (0, i, v);
+                out.buffer.setSample (1, i, v);
+            }
+        };
+        for (int k = 0; k < n; ++k)
+        {
+            fill (pos, g, gapDb);
+            pos += g;
+            fill (pos, w, levelsDb[(size_t) k % levelsDb.size()]);
+            out.words.push_back ({ pos, w });
+            pos += w;
+        }
+        fill (pos, g, gapDb);
+        return out;
+    }
+
+    double rmsDbOf (const Buffer& b, int start, int len) { return 10.0 * std::log10 (energy (b, start, len) / len + 1.0e-20); }
+
+    double stdOf (const std::vector<double>& v)
+    {
+        double m = 0.0, s = 0.0;
+        for (auto x : v) m += x;
+        m /= (double) v.size();
+        for (auto x : v) s += (x - m) * (x - m);
+        return std::sqrt (s / (double) v.size());
+    }
+}
+
+class RideQualityTests final : public juce::UnitTest
+{
+public:
+    RideQualityTests() : juce::UnitTest ("Level Ride quality", "Dynamics") {}
+
+    void runTest() override
+    {
+        const double fs = 48000.0;
+
+        beginTest ("LEVEL RIDE: word-level evening");
+        {
+            const auto in = wordSequence (fs, { -19.0f, -10.0f, -15.0f, -6.0f }, 6);   // corrections within +-8 dB
+            RideModule m;
+            m.prepare (fs, 256);
+            RideSettings s;
+            s.enabled = true;   // defaults: target -18, amount 70 %, +-8 dB, response 50 %, phrase 40 %
+            m.setSettings (s);
+            auto out = in.buffer;
+            runBlocks (m, out, 256);
+            std::vector<double> li, lo;
+            for (size_t k = 4; k < in.words.size(); ++k)
+            {
+                li.push_back (rmsDbOf (in.buffer, in.words[k].first, in.words[k].second));
+                lo.push_back (rmsDbOf (out, in.words[k].first, in.words[k].second));
+            }
+            logMessage ("Word level spread: input " + juce::String (stdOf (li), 2) + " dB, output " + juce::String (stdOf (lo), 2) + " dB");
+            // defaults blend 40 % of the phrase level in, so words are evened by about a third
+            expectLessThan (stdOf (lo), 0.7 * stdOf (li));
+        }
+
+        beginTest ("LEVEL RIDE: constant lookahead latency while in the chain, on or off");
+        {
+            Harness h;
+            h.neutral();
+            const int base = h.proc.getLatencySamples();
+            h.set (pid::rideOn, 1.0f);
+            h.run (h.sine (300.0, 0.1f, 0.3));
+            const int on = h.proc.getLatencySamples();
+            h.set (pid::rideOn, 0.0f);
+            h.run (h.sine (300.0, 0.1f, 0.3));
+            const int off = h.proc.getLatencySamples();
+            logMessage ("Latency: without ride " + juce::String (base) + ", ride on " + juce::String (on) + ", ride off " + juce::String (off));
+            expectEquals (on - base, (int) std::lround (RideModule::lookaheadMs * 0.001 * h.fs));
+            expectEquals (off, on);
+        }
+    }
+};
+
+static RideQualityTests rideQualityTests;

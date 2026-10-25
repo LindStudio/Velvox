@@ -45,3 +45,21 @@ Task 5: Ruling: relative detection is a new option, default Absolute — it chan
   Relative in Mehr to get Pro-DS "Single Vocal" behaviour.
 Task 5: Ruling: the full-band envelope first used a 5 ms attack; the onset of a tone then read the HP-filter transient ~40 dB "too loud"
   (floored full level) and the split band no longer nulled bit-exactly (1.5e-5). Instant attack (like the band detector) fixes it.
+Task 6: complete (Level Ride: 80 ms lookahead (constant latency 3840 samples at 48 kHz, counted by VocalChain::getLatencyFor whenever a
+  ride instance is in the routing, on or off - like Saturation), word-level control law (syllable 80 ms, gaps < 250 ms hold the gain,
+  no transient freeze in the first 60 ms of a word, log Response mapping down 150->10 ms / up 200->10 ms, Amount curve
+  1-(1-a)^2), 10 ms fade-in after an emptied delay line. Tests: "LEVEL RIDE: word-level evening" red on the old code (4.99 vs 4.93 dB
+  spread, i.e. no evening at all) -> green (3.28 dB, limit 0.7 x); latency test; bench ride --no-ref: st_loudness 2.96 LU
+  (old 3.30, Vocal Rider 2.92, limit 3.22), gain jitter 0.07 dB (= old, limit ref + 0.05 = 0.10), transients -0.36 dB (limit +-0.5)
+Task 6: rounds (Q6, 3 used): 1 = zero-latency faster speeds + gap hold + Amount curve -> 3.17 LU but jitter 0.11 and transients -0.84
+  (FAIL: a zero-latency rider that moves within a word lifts the sustain after each onset); 2 = 50 ms lookahead -> 3.07 / 0.08 / -0.70
+  (FAIL transients); 3 = 80 ms lookahead, faster speeds, syllable 80 ms -> 2.96 / 0.07 / -0.36 (pass). Syllable 45 / 60 ms were tried
+  in round 3 (2.88 / 0.11 FAIL jitter, 2.92 / 0.09 marginal).
+Task 6: Ruling: the lookahead is fixed (not an option) and present whenever Ride is in the chain — spec Q9 forbids latency that changes
+  with a parameter, and an option defaulting to off would leave the gap open for every user. CHANGELOG: projects that use Level Ride get
+  80 ms plugin latency (host-compensated) and a stronger, word-level ride at the same settings (quality fix: Amount now delivers the set
+  share of the correction; the old law did not even the words of a sung phrase at all). Cost if wrong: 80 ms latency is noticeable when
+  monitoring through the plugin while recording; reducing lookaheadMs to 50 costs the transient metric (round 2).
+Task 6: Ruling: NewModuleTests "LEVEL RIDE: ... amount 0 is transparent" re-pointed to "amount 0 = the input delayed by the latency"
+  (after the 10 ms fade-in); not weakened (still bit-exact). The 0.3 toggle-click test first failed (0.26 step: an emptied delay line
+  released silence, then the voice with a hard edge) — fixed in the module (warm-up fade), test unchanged.
