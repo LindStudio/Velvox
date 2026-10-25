@@ -79,8 +79,8 @@ public:
     // whose Mix depends on the law can be true (Delay, Reverb, Doubler, Smash)
     bool usesLegacyMixLaw (velvox::dsp::ModuleId id, int instance = 0) const noexcept;
     // "Alte Mix-Kurve - umstellen": this instance from now on uses the true dry/wet law
-    // (settings up to 50 % keep their sound, above it the dry fades out)
-    void switchToTrueMixLaw (velvox::dsp::ModuleId id, int instance = 0) { setLegacyMixLaw (id, instance, false); }
+    // (settings up to 50 % keep their sound, above it the dry fades out). One undo step.
+    void switchToTrueMixLaw (velvox::dsp::ModuleId id, int instance = 0);
     void setLegacyMixLaw (velvox::dsp::ModuleId id, int instance, bool legacy);
 
     // Listening aid: sums the output to mono. Deliberately not a parameter and

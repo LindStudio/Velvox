@@ -18,3 +18,10 @@ between, after an undo, automation between).
   expects the wheel-up + wheel-down pair to be one step (that is the fix).
 - Ruling: the EQ graph's own wheel gesture timer (EqPanel.cpp, 450 ms) is left in place — it is not trivially redundant (it keeps
   one host gesture open across the notches, which hosts record as one automation touch) and it is consistent with coalescing.
+
+Task 2: complete (mix law in undo). Transactions compare the snapshot's `mixLaw` too (a law-only change is a step; snapshots
+already captured and restored it); `switchToTrueMixLaw` ("Alte Mix-Kurve – umstellen") runs as one transaction
+"Mix-Kurve umstellen". Test (MixLawTests): "\"Alte Mix-Kurve - umstellen\" is one undo step; undo / redo restore the law"
+(failed first: 0 steps, undo did not restore).
+- Ruling: only the user command is wrapped, not setLegacyMixLaw itself — markFreshInstances calls it from routing changes that
+  can happen inside an open gesture, and a transaction begun there would drop that gesture's start values.

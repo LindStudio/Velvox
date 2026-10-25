@@ -850,6 +850,28 @@ public:
             logMessage ("delay 100 %: dry residual " + juce::String (r, 1) + " dB");
             expectLessThan (r, -60.0, "dry >= 60 dB down");
         }
+
+        beginTest ("\"Alte Mix-Kurve - umstellen\" is one undo step; undo / redo restore the law");
+        {
+            Harness h;
+            h.proc.setLegacyMixLaw (ModuleId::delay, 0, true);   // as loaded from an old project
+            h.proc.getUndo().clear();
+            h.proc.switchToTrueMixLaw (ModuleId::delay, 0);
+            expect (! h.proc.usesLegacyMixLaw (ModuleId::delay, 0));
+            auto& undo = h.proc.getUndo();
+            expectEquals (undo.getNumSteps(), 1, "one step");
+            expect (undo.undo());
+            expect (h.proc.usesLegacyMixLaw (ModuleId::delay, 0), "undo: legacy law again");
+            expect (undo.redo());
+            expect (! h.proc.usesLegacyMixLaw (ModuleId::delay, 0), "redo: true law");
+
+            // A transaction that changes only a law is a step as well (nothing else compares it)
+            undo.clear();
+            undo.perform ("law", [&] { h.proc.setLegacyMixLaw (ModuleId::reverb, 0, true); });
+            expectEquals (undo.getNumSteps(), 1);
+            undo.undo();
+            expect (! h.proc.usesLegacyMixLaw (ModuleId::reverb, 0));
+        }
     }
 
     // One-off tools for the 0.5 baseline (run with VELVOX_MIXLAW_DUMP=<dir>)

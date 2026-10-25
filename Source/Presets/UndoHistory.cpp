@@ -166,7 +166,8 @@ namespace velvox
                 extras.push_back ({ i, transactionRaw[(size_t) i], now });
         }
         // An unchanged state records nothing
-        if (after.values == transactionBefore.values && after.routing == transactionBefore.routing && extras.empty())
+        if (after.values == transactionBefore.values && after.routing == transactionBefore.routing
+            && after.mixLaw == transactionBefore.mixLaw && extras.empty())
             return;
         auto action = std::make_unique<SnapshotAction> (*this, std::move (transactionBefore), std::move (after));
         action->extras = std::move (extras);

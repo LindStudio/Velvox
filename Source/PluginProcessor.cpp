@@ -312,6 +312,12 @@ void VelvoxAudioProcessor::setLegacyMixLaw (dsp::ModuleId id, int instance, bool
     apvts.state.setProperty (statekeys::mixLaw, laws.toString(), nullptr);
 }
 
+void VelvoxAudioProcessor::switchToTrueMixLaw (dsp::ModuleId id, int instance)
+{
+    // A user command that changes the sound: one undo step (the law is part of every snapshot)
+    undoHistory.perform (juce::String::fromUTF8 ("Mix-Kurve umstellen"), [&] { setLegacyMixLaw (id, instance, false); });
+}
+
 void VelvoxAudioProcessor::markFreshInstances (const dsp::Routing& before, const dsp::Routing& after)
 {
     // The browser adds an instance with default settings while it is off and switches it on
