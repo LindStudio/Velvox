@@ -38,6 +38,7 @@ struct BenchRow
     float inLufs = 0.0f, outLufs = 0.0f, inPeak = 0.0f, outPeak = 0.0f;
     float topIn = 0.0f, topOut = 0.0f, presenceIn = 0.0f, presenceOut = 0.0f, bodyIn = 0.0f, bodyOut = 0.0f;
     float sibIn = 0.0f, sibOut = 0.0f, baseTotal = 0.0f, chosenTotal = 0.0f;
+    float lowMidIn = 0.0f, lowMidOut = 0.0f, airIn = 0.0f, airOut = 0.0f;   // 0.6.1: appended columns
     juce::File original, processed;   // whole-file audio: original (level matched) and the mix
 };
 
@@ -145,6 +146,8 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         row->presenceIn = r.original.presenceDb; row->presenceOut = r.processed.presenceDb;
         row->bodyIn = r.original.bodyDb; row->bodyOut = r.processed.bodyDb;
         row->sibIn = r.original.sibilanceVsVowelDb; row->sibOut = r.processed.sibilanceVsVowelDb;
+        row->lowMidIn = r.original.lowMidDb; row->lowMidOut = r.processed.lowMidDb;
+        row->airIn = r.original.airDb; row->airOut = r.processed.airDb;
         if (! r.candidates.empty())
         {
             const auto& chosen = r.candidates[(size_t) juce::jlimit (0, (int) r.candidates.size() - 1, r.chosenCandidate)];
@@ -270,7 +273,8 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
     const auto csvField = [] (const juce::String& s) { return "\"" + s.replace ("\"", "\"\"") + "\""; };
     const auto num = [] (double v) { return juce::String (v, 2); };
     juce::String csv ("file,seconds,analysis_s,renders,in_lufs,out_lufs,in_peak,out_peak,top_in,top_out,presence_in,presence_out,"
-                      "body_in,body_out,s_vs_vowel_in,s_vs_vowel_out,base_score,chosen_score,chosen,chosen_breakdown\n");
+                      "body_in,body_out,s_vs_vowel_in,s_vs_vowel_out,base_score,chosen_score,chosen,chosen_breakdown,"
+                      "lowmid_in,lowmid_out,air_in,air_out\n");
     juce::String key ("pair,file,A,B\n");
     juce::Random random (20261024);   // fixed seed: the same folder always gives the same kit
     int ok = 0, failed = 0;
@@ -296,7 +300,8 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
             << num (row.inLufs) << "," << num (row.outLufs) << "," << num (row.inPeak) << "," << num (row.outPeak) << ","
             << num (row.topIn) << "," << num (row.topOut) << "," << num (row.presenceIn) << "," << num (row.presenceOut) << ","
             << num (row.bodyIn) << "," << num (row.bodyOut) << "," << num (row.sibIn) << "," << num (row.sibOut) << ","
-            << num (row.baseTotal) << "," << num (row.chosenTotal) << "," << csvField (row.chosen) << "," << csvField (row.chosenScore) << "\n";
+            << num (row.baseTotal) << "," << num (row.chosenTotal) << "," << csvField (row.chosen) << "," << csvField (row.chosenScore) << ","
+            << num (row.lowMidIn) << "," << num (row.lowMidOut) << "," << num (row.airIn) << "," << num (row.airOut) << "\n";
 
         const auto pair = juce::String (ok).paddedLeft ('0', 2);
         const bool mixIsA = random.nextBool();
