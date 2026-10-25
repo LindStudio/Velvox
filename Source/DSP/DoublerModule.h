@@ -64,16 +64,23 @@ namespace velvox::dsp
         float normalisation = 1.0f;             // sqrt (2 / count): four voices as loud as two
     };
 
-    // Two-voice doubler. Each voice is the (mono) input through a slowly
-    // modulated delay line: the moving delay produces a real, small pitch
-    // variation and a time offset, like a second take - not just a level
-    // difference between the channels. Zero latency (the dry signal is passed
-    // through untouched; only voices are added).
+    // Waves-Doubler-style doubler (0.6). Every voice is the band-limited mono input read from one
+    // delay line by a 6-point (5th-order) Lagrange tap:
+    //  - its own delay, slowly moved by two smoothed random walks (pitch and timing wobble; every
+    //    voice has its own seeds and rates, so no two voices move together),
+    //  - its own constant detune: the tap drifts at (1 - ratio) samples per sample and is spliced
+    //    back by a correlation-aligned raised-cosine crossfade when it reaches the end of its range
+    //    - most of the time one clean tap; formants move with the detune only (< 2 % at 30 ct),
+    //  - its own gain and pan (linear pan law of 0.2); Mono safe removes the voices' mid from the
+    //    mono sum.
+    // Zero latency: the dry passes untouched apart from the dry level and the true-law dry gain.
     class DoublerModule
     {
     public:
-        static constexpr float maxDelayMs = 40.0f;
-        static constexpr float maxDetuneCents = 25.0f;
+        static constexpr int maxVoices = 4;
+        static constexpr float maxDelayMs = 60.0f;
+        static constexpr float maxDetuneCents = 30.0f;
+        static constexpr float maxModCents = 25.0f;
 
         void prepare (double sampleRate, int maxBlockSize);
         void reset();
@@ -86,27 +93,61 @@ namespace velvox::dsp
         // Delay modulation depth (samples) producing `cents` at modulation rate `rateHz`
         static double depthForCents (double cents, double rateHz, double sampleRate) noexcept;
 
-    private:
-        float read (float delaySamples) const noexcept;
-        void updateFilters() noexcept;
+        // UI feed (stage strip), written once per block: effective pan (-1..1), level (dB incl. the
+        // voice-count normalisation and Mix; -100 = off), current pitch offset incl. the wobble (ct)
+        // and current delay (ms) of every voice; number of voices of the mode (2 or 4)
+        std::array<std::atomic<float>, maxVoices> voicePan {}, voiceGainDb {}, voiceCents {}, voiceDelayMs {};
+        std::atomic<int> voiceCount { 2 };
 
-        double fs = 48000.0;
-        std::vector<float> buffer;
-        int writePos = 0;
+    private:
+        // Smooth random walk: raised-cosine moves between random targets of alternating sign
+        struct Walk
+        {
+            juce::Random rng;
+            double from = 0.0, to = 0.0, pos = 0.0, len = 1.0;
+            double value() const noexcept;
+            void advance (double samples, double meanLength) noexcept;
+        };
 
         struct Voice
         {
-            double phase1 = 0.0, phase2 = 0.0;   // two incommensurate LFOs per voice
-            double inc1 = 0.0, inc2 = 0.0;
-            float baseFactor = 1.0f;
-            Biquad lowCut, highCut;
+            Walk walk1, walk2;
+            double rateFactor = 1.0;
+            double mod = 0.0, modStep = 0.0;      // delay offset of the wobble (samples), per-sample step
+            double shift = 0.0;                   // splice shifter: offset of the playing tap (samples)
+            double fadeShift = 0.0;               // offset of the tap that fades out
+            int fadeLeft = 0;                     // samples left of the crossfade (0 = one tap)
+            float detune = 0.0f;
+            bool started = false;
+            juce::SmoothedValue<float> delayMs { 14.0f }, gain { 0.0f }, pan { 0.0f };
         };
-        std::array<Voice, 2> voices;
 
-        juce::SmoothedValue<float> amount { 0.0f }, width { 0.8f }, monoSafe { 0.5f }, delayMs { 14.0f }, detune { 8.0f };
-        juce::SmoothedValue<float> dryGain { 1.0f };   // true law only (legacy: always 1)
-        juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> tone { 9000.0f };
+        float tap (double delaySamples) const noexcept;
+        double findJump (double delayA, double direction) const noexcept;
+        void updateFilters() noexcept;
+        void updateModulation (Voice& v, int samples) noexcept;
+
+        double fs = 48000.0;
+        std::vector<float> buffer;
+        int mask = 0;
+        int writePos = 0;
+        int fadeLength = 1440;                    // 30 ms
+        double shiftRange = 960.0;                // 20 ms
+        double minJump = 288.0, maxJump = 912.0;  // 6 .. 19 ms
+        double minDelaySamples = 48.0;            // 1 ms
+        double maxModSamples = 480.0;             // 10 ms per walk
+        int corrLength = 768;
+
+        Biquad lowCut, highCut;
+        std::array<Voice, maxVoices> voices;
+        int count = 2;
+        float modDepth = 8.0f, modRate = 0.31f, modDepthNow = 8.0f, modRateNow = 0.31f;
+        float lowCutTarget = 120.0f, toneTarget = 9000.0f, lowCutNow = 120.0f, toneNow = 9000.0f;
+
+        juce::SmoothedValue<float> amount { 0.0f }, monoSafe { 0.5f };
+        juce::SmoothedValue<float> dryGain { 1.0f };
         bool wasActive = false;
+        bool snapNext = true;     // first settings after prepare(): no glide
         MixLaw law = MixLaw::legacy;
     };
 }
