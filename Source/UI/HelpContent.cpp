@@ -227,11 +227,11 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "Saturation increases density similar to compression; with Vocal Smash or heavy compression use less. Warmth, Punch and Density (macro fader in SIMPEL) add saturation automatically."));
 
             p.push_back (modulePage ("doubler", "Doubler",
-                "Creates two extra takes left and right with small timing and pitch differences, for a wide and thick vocal while the original stays in the centre.",
+                "Creates extra takes of the vocal with small timing and pitch differences, like a double-tracked recording: two or four voices, each with its own delay, detune, level and pan, while the original stays in the centre.",
                 "For choruses, hooks and adlibs that should feel bigger and wider.",
-                "- Mix sets the level of the doubled voices; the original stays at full level.\n- Width places the voices left and right.\n- Timing sets the delay of the doubles (longer feels looser).\n- Detune sets their pitch variation.\n- Mono safe keeps the doubles out of the mono sum.\n- Tone darkens the doubles so they sit behind the lead.",
+                "- Stimmen: Classic (two voices set by Delay and Detune, as in older projects), 2 or 4 voices with their own values.\n- The stage shows every voice at its pan (left / right) and level (up = louder); drag a voice to move it, the mouse wheel changes its detune, right-click switches it off. Editing a voice in Classic switches to 2 voices that sound the same.\n- The rows under the stage hold each voice's on switch, delay, detune, gain and pan (drag, or click to type).\n- Mix sets the level of the doubled voices, Dry the level of the original.\n- Mod Depth (in Classic: Detune) and Mod Rate set the slow pitch and timing wobble of the voices.\n- In Mehr: Width scales the voices' pans, Mono safe keeps them out of the mono sum, Tone and Low Cut filter the doubles, Delay sets the Classic pair.",
                 "- Higher Mix = more obvious doubling.\n- More Detune and Timing = looser, more chorus-like; too much sounds out of tune or echoey.\n- Mono safe 100 % = mono playback sounds exactly like the original.",
-                "- Mix 40 to 50 %, Width 80 %, Timing 12 to 18 ms, Detune 6 to 10 ct, Mono safe 50 to 100 %.",
+                "- Mix 40 to 50 %, Width 80 %, Delay 12 to 18 ms, Detune / Mod Depth 6 to 10 ct, Mono safe 50 to 100 %.\n- 4 voices: two tight voices (10 to 20 ms, about 5 ct) wide, two looser ones (25 to 35 ms) further in and 3 to 6 dB lower.",
                 "- Too much Detune on a tuned lead.\n- Forgetting the club: check with Mono in the OUTPUT panel.",
                 "Choir is the bigger brother for whole groups of voices; you rarely need both at full level. Width (macro fader in SIMPEL) drives the doubler. Put reverb after the doubler so both doubles get the same room."));
 
@@ -292,7 +292,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
             p.push_back (modulePage ("choir", "Choir",
                 "Turns one voice into a double or a whole choir: each virtual voice gets its own pitch, timing, slow drift and stereo position.",
                 "For big hooks, festival choruses and backing layers.",
-                "- Voices sets the number of virtual voices (2 to 8).\n- Detune, Timing and Humanize make the voices differ in pitch, timing and over time.\n- Width spreads them across the stereo field.\n- Density sets how strongly the voices are present.\n- Mix blends the choir with the original.\n- The display shows each voice's position and pitch offset, and a mono compatibility bar.",
+                "- Voices sets the number of virtual voices (2 to 8).\n- Detune, Timing and Humanize make the voices differ in pitch, timing and over time.\n- Width spreads them across the stereo field.\n- Density sets how strongly the voices are present.\n- Mix blends the choir with the original.\n- The stage shows the voices on a half circle around the lead (outer = wider, further back = later entry); drag it sideways to change Width. MONO is the correlation of the choir (below 0 = mono risk).",
                 "- More Detune / Timing = looser and bigger, but less precise.\n- Higher Humanize = more natural movement.\n- Higher Mix = the choir takes over the original.",
                 "- Voices 4 to 8, Detune 10 to 16 ct, Timing 15 to 30 ms, Humanize 50 to 70 %, Mix 30 to 45 %.",
                 "- A huge choir on fast, rhythmic verses (it smears the rhythm).\n- Ignoring the mono bar: a negative value means parts cancel in mono.",

@@ -5,6 +5,7 @@
 #include "SatPanel.h"
 #include "../DSP/ChopModule.h"
 #include "TimePanels.h"
+#include "VoicesPanels.h"
 
 namespace velvox::ui
 {
@@ -272,91 +273,6 @@ namespace velvox::ui
             dsp::DeEssSettings s;
             bool on = true;
             Smoothed gr;
-        };
-
-        //======================================================================
-        // Doubler: the stereo stage - lead in the centre, two voices drifting at the sides
-        class DoublerView final : public ModuleView
-        {
-        public:
-            void update (const LiveData& d) override
-            {
-                s = d.settings.doubler;
-                time = d.time;
-                level.target = d.level();
-                level.tick (0.15f);
-                spread.target = s.width;
-                spread.tick (0.12f);
-                repaint();
-            }
-
-            void paint (juce::Graphics& g) override
-            {
-                const auto r = getLocalBounds().toFloat().reduced (24.0f, 16.0f);
-                const float alpha = s.enabled ? 1.0f : 0.35f;
-                const float cy = r.getCentreY() - 6.0f;
-                const auto centre = juce::Point<float> (r.getCentreX(), cy);
-
-                // Stage
-                juce::Path arc;
-                arc.startNewSubPath (r.getX(), cy + 30.0f);
-                arc.quadraticTo (r.getCentreX(), cy - 50.0f, r.getRight(), cy + 30.0f);
-                g.setColour (colours::accent.withAlpha (0.05f));
-                g.strokePath (arc, juce::PathStrokeType (1.0f));
-                g.setColour (colours::accent.withAlpha (0.04f));
-                g.fillRect (juce::Rectangle<float> (r.getCentreX() - 0.5f, r.getY(), 1.0f, r.getHeight() - 22.0f));
-                label (g, "L", r.withWidth (20.0f), juce::Justification::centredLeft);
-                label (g, "R", r.withLeft (r.getRight() - 20.0f), juce::Justification::centredRight);
-                label (g, "Stereo field", r.withHeight (12.0f));
-
-                // Lead vocal
-                drawGlow (g, centre, 46.0f + 20.0f * level.current, 0.18f + 0.25f * level.current);
-                g.setColour (juce::Colours::white);
-                g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre (centre));
-
-                // Two voices: placed by width, wobbling with detune, echo rings from timing
-                const float detune = juce::jlimit (0.0f, 1.0f, s.detuneCents / 30.0f);
-                for (int v : { -1, 1 })
-                {
-                    const float ph = (float) time * twoPi;
-                    const float dx = std::sin (ph * 0.23f + (float) v) * 10.0f * detune;
-                    const float dy = std::cos (ph * 0.31f + (float) v * 1.7f) * 8.0f * detune;
-                    const auto p = juce::Point<float> (centre.x + (float) v * spread.current * r.getWidth() * 0.42f + dx, cy + dy + 6.0f);
-                    const auto c = aurora (v < 0 ? 0.05f : 0.95f);
-                    const float strength = (0.3f + 0.7f * s.mix) * alpha;
-
-                    g.setColour (c.withAlpha (0.18f * strength));
-                    g.drawLine (juce::Line<float> (centre, p), 1.0f);
-
-                    // Timing: rings expanding out of the voice
-                    const float period = 0.6f + s.delayMs / 40.0f;
-                    for (int k = 0; k < 3; ++k)
-                    {
-                        const float phase = std::fmod ((float) time / period + (float) k / 3.0f + (v > 0 ? 0.37f : 0.0f), 1.0f);
-                        const float rad = 10.0f + phase * (16.0f + s.delayMs * 1.2f);
-                        g.setColour (c.withAlpha ((1.0f - phase) * 0.35f * strength));
-                        g.drawEllipse (juce::Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (p), 1.0f);
-                    }
-
-                    drawGlow (g, p, 30.0f + 14.0f * level.current, 0.55f * strength, c);
-                    g.setColour (c.interpolatedWith (juce::Colours::white, 0.5f).withAlpha (alpha));
-                    g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (p));
-                }
-
-                // Mono safe
-                auto meter = r.withTop (r.getBottom() - 14.0f).withSizeKeepingCentre (220.0f, 14.0f);
-                label (g, "Mono safe", meter.withWidth (70.0f), juce::Justification::centredLeft);
-                auto bar = meter.withTrimmedLeft (78.0f).withSizeKeepingCentre (meter.getWidth() - 78.0f, 3.0f);
-                g.setColour (juce::Colours::black.withAlpha (0.5f));
-                g.fillRoundedRectangle (bar, 1.5f);
-                g.setGradientFill (auroraGradient (bar.getTopLeft(), bar.getTopRight(), alpha));
-                g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * s.monoSafe), 1.5f);
-            }
-
-        private:
-            dsp::DoublerSettings s;
-            double time = 0.0;
-            Smoothed level, spread;
         };
 
         //======================================================================
@@ -633,98 +549,6 @@ namespace velvox::ui
         };
 
         //======================================================================
-        // CHOIR: every voice on the stage with its real pitch offset
-        class ChoirView final : public ModuleView
-        {
-        public:
-            ChoirView (VelvoxAudioProcessor& p, int k) : proc (p), instance (k) {}
-
-            void update (const LiveData& d) override
-            {
-                s = d.settings.choir;
-                time = d.time;
-                level.target = d.level();
-                level.tick (0.15f);
-                spread.target = s.width;
-                spread.tick (0.12f);
-                auto& m = proc.getChain().getChoir (instance);
-                corr.target = s.enabled ? m.outputCorrelation.load() : 1.0f;
-                corr.tick (0.1f);
-                for (int i = 0; i < dsp::ChoirModule::maxVoices; ++i)
-                    cents[(size_t) i] = m.voiceCents[(size_t) i].load();
-                repaint();
-            }
-
-            void paint (juce::Graphics& g) override
-            {
-                const float alpha = s.enabled ? 1.0f : 0.35f;
-                auto r = getLocalBounds().toFloat().reduced (24.0f, 14.0f);
-                label (g, juce::String (s.voices) + " voices", r.withHeight (12.0f));
-                auto meter = r.removeFromBottom (16.0f);
-                const float cy = r.getCentreY() + 4.0f;
-                const auto centre = juce::Point<float> (r.getCentreX(), cy);
-
-                g.setColour (colours::accent.withAlpha (0.04f));
-                g.fillRect (juce::Rectangle<float> (r.getCentreX() - 0.5f, r.getY() + 14.0f, 1.0f, r.getHeight() - 14.0f));
-                label (g, "L", r.withWidth (20.0f), juce::Justification::centredLeft);
-                label (g, "R", r.withLeft (r.getRight() - 20.0f), juce::Justification::centredRight);
-
-                drawGlow (g, centre, 40.0f + 18.0f * level.current, 0.18f + 0.25f * level.current);
-                g.setColour (juce::Colours::white);
-                g.fillEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre (centre));
-
-                const auto& sh = dsp::ChoirModule::shapes();
-                for (int v = 0; v < s.voices; ++v)
-                {
-                    const auto& shape = sh[(size_t) v];
-                    const float pan = shape.pan * spread.current;
-                    const float x = centre.x + pan * r.getWidth() * 0.44f;
-                    // Later voices stand further back (higher on the stage)
-                    const float y = cy - (r.getHeight() * 0.32f) * (s.timingMs / dsp::ChoirModule::maxTimingMs) * shape.timing
-                                    + std::sin ((float) time * (0.7f + 0.13f * (float) v) + (float) v) * 3.0f * s.humanize;
-                    const auto p = juce::Point<float> (x, y);
-                    const auto c = aurora ((pan + 1.0f) * 0.5f);
-                    const float size = 6.0f + 4.0f * s.density;
-
-                    g.setColour (c.withAlpha (0.12f * alpha));
-                    g.drawLine (juce::Line<float> (centre, p), 1.0f);
-                    drawGlow (g, p, 20.0f + 12.0f * level.current * s.density, (0.25f + 0.4f * s.mix) * alpha, c);
-                    g.setColour (c.interpolatedWith (juce::Colours::white, 0.5f).withAlpha (alpha));
-                    g.fillEllipse (juce::Rectangle<float> (size, size).withCentre (p));
-
-                    const float ct = cents[(size_t) v];
-                    g.setFont (medium (10.5f));
-                    g.setColour (colours::textDim.withAlpha (alpha));
-                    g.drawText ((ct >= 0.0f ? "+" : "") + juce::String (juce::roundToInt (ct)) + " ct", juce::Rectangle<float> (50.0f, 12.0f).withCentre (p.translated (0.0f, 14.0f)),
-                                juce::Justification::centred, false);
-                }
-
-                // Mono compatibility of the module output
-                // Only real cancellation (negative correlation) is a mono problem
-                const bool risk = s.enabled && corr.current < 0.0f;
-                label (g, risk ? "Mono risk - reduce Width" : "Mono compatibility", meter.withWidth (150.0f), juce::Justification::centredLeft,
-                       risk ? colours::warning : colours::textDim);
-                auto bar = meter.withTrimmedLeft (160.0f).withTrimmedRight (60.0f).withSizeKeepingCentre (meter.getWidth() - 220.0f, 3.0f);
-                g.setColour (juce::Colours::black.withAlpha (0.5f));
-                g.fillRoundedRectangle (bar, 1.5f);
-                const float x = juce::jmap (juce::jlimit (-1.0f, 1.0f, corr.current), -1.0f, 1.0f, bar.getX(), bar.getRight());
-                const auto c = risk ? colours::warning : colours::teal;
-                drawGlow (g, { x, bar.getCentreY() }, 10.0f, 0.45f, c);
-                g.setColour (c);
-                g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ x, bar.getCentreY() }));
-                label (g, juce::String (corr.current, 2), meter.withLeft (bar.getRight() + 8.0f), juce::Justification::centredLeft, colours::text);
-            }
-
-        private:
-            VelvoxAudioProcessor& proc;
-            const int instance;
-            dsp::ChoirSettings s;
-            double time = 0.0;
-            Smoothed level, spread, corr { 1.0f, 1.0f };
-            std::array<float, dsp::ChoirModule::maxVoices> cents {};
-        };
-
-        //======================================================================
         // SMOOTH: spectrum with the reductions that are applied right now
         class SmoothView final : public ModuleView
         {
@@ -994,14 +818,14 @@ namespace velvox::ui
             case ModuleId::comp:    return std::make_unique<CompView>();
             case ModuleId::deess:   return std::make_unique<DeEssView> (spectrum);
             case ModuleId::sat:     return createSatView (p, instance);
-            case ModuleId::doubler: return std::make_unique<DoublerView>();
+            case ModuleId::doubler: return createVoicesModuleView (p, ModuleId::doubler, instance);
             case ModuleId::pitch:   return std::make_unique<PitchView>();
             case ModuleId::chop:    return createTimeModuleView (p, ModuleId::chop, instance);
             case ModuleId::delay:   return createTimeModuleView (p, ModuleId::delay, instance);
             case ModuleId::reverb:  return createReverbRoom (p, instance);
             case ModuleId::pulse:   return createTimeModuleView (p, ModuleId::pulse, instance);
             case ModuleId::smash:   return std::make_unique<SmashView> (p, instance);
-            case ModuleId::choir:   return std::make_unique<ChoirView> (p, instance);
+            case ModuleId::choir:   return createVoicesModuleView (p, ModuleId::choir, instance);
             case ModuleId::smooth:  return std::make_unique<SmoothView> (p, spectrum, instance);
             case ModuleId::check:   return std::make_unique<CheckView> (p);
             case ModuleId::ride:    return std::make_unique<RideView>();

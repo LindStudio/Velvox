@@ -10,6 +10,7 @@
 #include "UserSettings.h"
 #include "VocalCheckView.h"
 #include "TimePanels.h"
+#include "VoicesPanels.h"
 
 namespace velvox::ui
 {
@@ -740,25 +741,6 @@ namespace velvox::ui
             GainReductionMeter gr { colours::accent, "GR" };
         };
 
-        // DOUBLER (the dsp tracks replace the engine): Width, Detune, Timing, Mix
-        class DoublerPanel final : public DetailPanel
-        {
-        public:
-            explicit DoublerPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Doubler", help::shortDescription ((int) ModuleId::doubler), pid::doublerOn)
-            {
-                auto& width = knob (pid::doublerWidth, "Width");
-                auto& delay = knob (pid::doublerDelay, "Timing");
-                auto& detune = knob (pid::doublerDetune, "Detune");
-                knob (pid::doublerMonoSafe, "Mono Safe");
-                knob (pid::doublerTone, "Tone");
-                auto& mix = knob (pid::doublerMix, "Mix");
-                setMainControls ({ &width, &detune, &delay, &mix });
-                setMixKnob (nullptr);
-                mix.setDescription (juce::String::fromUTF8 ("Anteil der Dopplungen am Signal."));
-            }
-        };
-
         // PITCH: Pitch, Formant, Fine; keep formants and Mix in Mehr
         class PitchPanel final : public DetailPanel
         {
@@ -908,25 +890,6 @@ namespace velvox::ui
             GainReductionMeter gr { colours::accent, "GR" };
         };
 
-        // CHOIR: Voices, Detune, Width, Mix; timing, humanize, density in Mehr
-        class ChoirPanel final : public DetailPanel
-        {
-        public:
-            explicit ChoirPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Choir", help::shortDescription ((int) ModuleId::choir), pid::choirOn)
-            {
-                auto& voices = segments (pid::choirVoices);
-                setCaption (voices, "Stimmen");
-                auto& detune = knob (pid::choirDetune, "Detune");
-                knob (pid::choirTiming, "Timing");
-                knob (pid::choirHumanize, "Humanize");
-                auto& width = knob (pid::choirWidth, "Width");
-                knob (pid::choirDensity, "Density");
-                auto& mix = knob (pid::choirMix, "Mix");
-                setMainControls ({ &voices, &detune, &width, &mix });
-            }
-        };
-
         // SMOOTH: Amount (Depth), Sharpness, Speed, Delta; the rest in Mehr
         class SmoothPanel final : public DetailPanel
         {
@@ -1059,14 +1022,14 @@ namespace velvox::ui
                 case ModuleId::comp:    panel = std::make_unique<CompPanel> (p); break;
                 case ModuleId::deess:   panel = std::make_unique<DeEssPanel> (p); break;
                 case ModuleId::sat:     panel = createSatPanel (p); break;   // SatPanel.cpp
-                case ModuleId::doubler: panel = std::make_unique<DoublerPanel> (p); break;
+                case ModuleId::doubler: panel = createVoicesModulePanel (p, ModuleId::doubler); break;
                 case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
                 case ModuleId::chop:    panel = createTimeModulePanel (p, ModuleId::chop); break;
                 case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
                 case ModuleId::reverb:  panel = createReverbPanel (p); break;
                 case ModuleId::pulse:   panel = createTimeModulePanel (p, ModuleId::pulse); break;
                 case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;
-                case ModuleId::choir:   panel = std::make_unique<ChoirPanel> (p); break;
+                case ModuleId::choir:   panel = createVoicesModulePanel (p, ModuleId::choir); break;
                 case ModuleId::smooth:  panel = std::make_unique<SmoothPanel> (p); break;
                 case ModuleId::check:   panel = std::make_unique<CheckPanel> (p); break;
                 case ModuleId::ride:    panel = std::make_unique<RidePanel> (p); break;

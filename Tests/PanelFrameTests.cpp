@@ -104,9 +104,7 @@ public:
                         // Parameters added by the DSP-quality tracks whose panel controls come later (AGENT_RULES:
                         // "Panels for new parameters are done later"). Remove an entry when its panel lands.
                         const auto base = dsp::splitInstanceParamId (pid).first;
-                        const bool pendingPanel = base.startsWith ("doublerV") || base.startsWith ("doublerMod")
-                                               || base == "doublerLowCut" || base == "doublerDry"
-                                               || base.startsWith ("smoothW");
+                        const bool pendingPanel = base.startsWith ("smoothW");
                         if (pendingPanel)
                             continue;
                         expect (isOnSwitch || curveHandle || eqBand || reached.contains (pid), name + ": reaches " + pid);

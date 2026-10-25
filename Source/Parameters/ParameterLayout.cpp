@@ -536,6 +536,8 @@ namespace velvox
         if ((baseId == pid::monoBelow || baseId == pid::compScHpf) && value <= 20.5f)
             return "Off";
 
+        if (unit == "Hz" && value < 10.0f)   // modulation rates (Doubler Mod Rate 0.05 - 3 Hz)
+            return juce::String (value, 2) + " Hz";
         if (unit == "Hz")
             return value >= 1000.0f ? juce::String (value / 1000.0f, value >= 10000.0f ? 1 : 2) + " kHz"
                                     : juce::String (juce::roundToInt (value)) + " Hz";
