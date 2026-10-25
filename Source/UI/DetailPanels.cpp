@@ -5,6 +5,7 @@
 #include "Icons.h"
 #include "HelpContent.h"
 #include "UserSettings.h"
+#include "VocalCheckView.h"
 
 namespace velvox::ui
 {
@@ -1151,263 +1152,9 @@ namespace velvox::ui
         };
 
         //======================================================================
-        // VOCAL CHECK results: measured facts, what the last automatic mix changed, and the
-        // diagnoses (issue, evidence, confidence, why it matters, suggestion, whether the
-        // chain already takes care of it). Scrolls when it does not fit.
-        class FindingsList final : public juce::Component
-        {
-        public:
-            explicit FindingsList (VelvoxAudioProcessor& p) : proc (p), content (*this)
-            {
-                viewport.setViewedComponent (&content, false);
-                viewport.setScrollBarsShown (true, false);
-                viewport.setScrollBarThickness (8);
-                addAndMakeVisible (viewport);
-            }
-
-            std::function<void (int moduleId)> onOpen;
-
-            void resized() override
-            {
-                viewport.setBounds (getLocalBounds());
-                content.layout (getWidth() - 10);
-            }
-
-            void refresh (bool moduleOn)
-            {
-                const auto& r = proc.getLatestAnalysis();
-                juce::String key = juce::String ((int) moduleOn) + juce::String ((int) r.enoughMaterial) + juce::String (juce::roundToInt (r.voicedSeconds * 2.0f))
-                                   + juce::String (juce::roundToInt (r.peakDb)) + juce::String (r.clipEvents) + juce::String ((int) proc.getAutoMix().getReport().valid);
-                for (auto& f : r.findings)
-                    key << f.title << (int) f.certainty << (int) f.handling << juce::roundToInt (f.confidence * 20.0f);
-                if (key != lastKey)
-                {
-                    lastKey = key;
-                    on = moduleOn;
-                    content.layout (getWidth() - 10);
-                }
-            }
-
-        private:
-            struct Content final : public juce::Component
-            {
-                explicit Content (FindingsList& o) : owner (o) {}
-
-                struct Card
-                {
-                    juce::Rectangle<float> bounds, link;
-                    int module = -1;
-                    juce::TextLayout body;
-                };
-
-                void layout (int width)
-                {
-                    width = std::max (300, width);
-                    cards.clear();
-                    const auto& r = owner.proc.getLatestAnalysis();
-                    float y = 0.0f;
-
-                    // Facts strip and auto-mix summary
-                    factsHeight = owner.on && (r.analysedSeconds > 0.0f || r.peakDb > -99.0f) ? 58.0f : 0.0f;
-                    y += factsHeight;
-                    const auto& report = owner.proc.getAutoMix().getReport();
-                    summary = {};
-                    if (owner.on && report.valid && ! report.steps.empty())
-                    {
-                        juce::AttributedString a;
-                        a.append ("What the automatic mix changed\n", font (13.5f, true), colours::text);
-                        int n = 0;
-                        for (auto& s : report.steps)
-                            if (n++ < 6)
-                                a.append (juce::String::fromUTF8 ("\xe2\x80\xa2  ") + s.title + "\n", font (13.0f), colours::textDim);
-                        summary.createLayout (a, (float) width - 32.0f);
-                        summaryBounds = { 0.0f, y, (float) width, summary.getHeight() + 22.0f };
-                        y += summaryBounds.getHeight() + 10.0f;
-                    }
-
-                    for (auto& f : r.findings)
-                    {
-                        Card c;
-                        juce::AttributedString a;
-                        const auto label = [&] (const juce::String& head, const juce::String& text, juce::Colour colour)
-                        {
-                            if (text.isEmpty())
-                                return;
-                            a.append (head + "  ", caps (10.5f), colours::textFaint);
-                            a.append (text + "\n", font (13.5f), colour);
-                        };
-                        a.append (f.title + "\n", font (15.5f, true), colours::text);
-                        label ("EVIDENCE", f.detail, colours::textDim);
-                        label ("WHY IT MATTERS", f.why, colours::textDim);
-                        label ("SUGGESTION", f.advice, colours::cyan.interpolatedWith (colours::text, 0.45f));
-                        if (f.handlingText.isNotEmpty())
-                            label (f.handling == dsp::Finding::Handling::appliedBefore ? "ALREADY BEFORE" : "HANDLED", f.handlingText,
-                                   f.handling == dsp::Finding::Handling::appliedBefore ? colours::bypass : colours::ok);
-                        else
-                            label ("STATUS", f.module.has_value() ? juce::String ("Not applied automatically - your choice.")
-                                                                  : juce::String ("Needs a change before the plugin (recording or track level)."), colours::textFaint);
-                        c.body.createLayout (a, (float) width - 150.0f);
-                        c.bounds = { 0.0f, y, (float) width, std::max (64.0f, c.body.getHeight() + 22.0f) };
-                        c.module = f.module.has_value() ? (int) *f.module : -1;
-                        if (c.module >= 0)
-                            c.link = { c.bounds.getRight() - 130.0f, c.bounds.getY() + 44.0f, 118.0f, 24.0f };
-                        y += c.bounds.getHeight() + 8.0f;
-                        cards.push_back (std::move (c));
-                    }
-
-                    status.clear();
-                    if (! owner.on)
-                        status = "VOCAL CHECK is off. Switch it on with the power button - it analyses the signal at its place in the chain and never changes the sound.";
-                    else if (! r.enoughMaterial)
-                        status = "Collecting material: " + juce::String (r.voicedSeconds, 1) + " of " + juce::String (juce::roundToInt (dsp::VocalAnalyzer::minVoicedSeconds))
-                                 + " s of voice. Play the vocal - pauses are ignored.";
-                    else if (r.findings.empty())
-                        status = "Nothing stands out in " + juce::String (r.voicedSeconds, 1) + " s of voice: level, tone, sibilance, dynamics"
-                                 + (r.stereo ? ", stereo" : "") + " and noise are inside the usual range.";
-                    if (status.isNotEmpty())
-                        y += 46.0f;
-
-                    setSize (width, (int) std::ceil (y) + 4);
-                    repaint();
-                }
-
-                void paint (juce::Graphics& g) override
-                {
-                    const auto& r = owner.proc.getLatestAnalysis();
-                    float y = 0.0f;
-
-                    // Measured facts (no judgement)
-                    if (factsHeight > 0.0f)
-                    {
-                        drawCaption (g, "Measured at this point of the chain", { 0.0f, 0.0f, (float) getWidth(), 16.0f },
-                                     juce::Justification::centredLeft, colours::textFaint, 9.5f);
-                        juce::StringArray facts;
-                        facts.add ("Peak " + (r.peakDb > -99.0f ? juce::String (r.peakDb, 1) + " dBFS" : juce::String ("-")));
-                        if (r.loudnessRangeDb > 0.0f)
-                            facts.add ("Level range " + juce::String (r.loudnessRangeDb, 1) + " dB");
-                        if (r.crestDb > 0.0f)
-                            facts.add ("Crest " + juce::String (r.crestDb, 1) + " dB");
-                        if (r.sibilanceVsVowelDb > -99.0f)
-                            facts.add ("S vs vowels " + juce::String (r.sibilanceVsVowelDb, 1) + " dB");
-                        if (r.noiseFloorDb > -199.0f)
-                            facts.add ("Noise floor " + juce::String (r.noiseFloorDb, 0) + " dBFS (" + juce::String (r.snrDb, 0) + " dB below voice)");
-                        if (r.stereo)
-                            facts.add ("Correlation " + juce::String (r.correlation, 2));
-                        facts.add ("Voice " + juce::String (r.voicedSeconds, 1) + " s");
-                        float x = 0.0f;
-                        for (auto& t : facts)
-                        {
-                            const float w = (float) juce::GlyphArrangement::getStringWidthInt (medium (12.0f), t) + 22.0f;
-                            if (x + w > (float) getWidth())
-                                break;
-                            const auto chip = juce::Rectangle<float> (x, 22.0f, w, 26.0f);
-                            g.setColour (colours::accent.withAlpha (0.035f));
-                            g.fillRoundedRectangle (chip, 13.0f);
-                            g.setColour (colours::lineSoft.brighter (0.3f));
-                            g.drawRoundedRectangle (chip.reduced (0.5f), 13.0f, 1.0f);
-                            g.setColour (colours::textDim);
-                            g.setFont (medium (12.0f));
-                            g.drawText (t, chip, juce::Justification::centred, false);
-                            x += w + 8.0f;
-                        }
-                        y = factsHeight;
-                    }
-
-                    if (! summaryBounds.isEmpty())
-                    {
-                        g.setColour (colours::ok.withAlpha (0.05f));
-                        g.fillRoundedRectangle (summaryBounds, 10.0f);
-                        g.setColour (colours::ok.withAlpha (0.35f));
-                        g.drawRoundedRectangle (summaryBounds.reduced (0.5f), 10.0f, 1.0f);
-                        summary.draw (g, summaryBounds.reduced (16.0f, 11.0f));
-                    }
-
-                    for (size_t i = 0; i < cards.size() && i < r.findings.size(); ++i)
-                    {
-                        const auto& c = cards[i];
-                        const auto& f = r.findings[i];
-                        const bool sure = f.certainty == dsp::Finding::Certainty::sure;
-                        g.setColour (colours::accent.withAlpha (0.028f));
-                        g.fillRoundedRectangle (c.bounds, 10.0f);
-                        g.setColour (sure ? colours::cyan.withAlpha (0.28f) : colours::lineSoft.brighter (0.25f));
-                        g.drawRoundedRectangle (c.bounds.reduced (0.5f), 10.0f, 1.0f);
-
-                        // Kind and confidence, as text (never colour alone)
-                        auto right = c.bounds.withTrimmedLeft (c.bounds.getWidth() - 130.0f).reduced (6.0f, 10.0f);
-                        auto badge = right.removeFromTop (22.0f).withSizeKeepingCentre (118.0f, 22.0f);
-                        if (sure)
-                        {
-                            g.setGradientFill (auroraGradient (badge.getTopLeft(), badge.getTopRight(), 0.85f));
-                            g.fillRoundedRectangle (badge, 11.0f);
-                            drawCaption (g, "Likely problem", badge, juce::Justification::centred, colours::background, 9.0f);
-                        }
-                        else
-                        {
-                            g.setColour (colours::line.brighter (0.5f));
-                            g.drawRoundedRectangle (badge.reduced (0.5f), 11.0f, 1.0f);
-                            drawCaption (g, "Observation", badge, juce::Justification::centred, colours::textDim, 9.0f);
-                        }
-                        drawCaption (g, "Confidence " + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %",
-                                     right.removeFromTop (16.0f).translated (0.0f, 2.0f), juce::Justification::centred, colours::textFaint, 9.0f);
-                        if (c.module >= 0)
-                        {
-                            g.setColour (colours::cyan.withAlpha (hoveredLink == (int) i ? 0.18f : 0.08f));
-                            g.fillRoundedRectangle (c.link, 12.0f);
-                            drawCaption (g, juce::String ("Open ") + dsp::moduleDisplayName ((dsp::ModuleId) c.module), c.link,
-                                         juce::Justification::centred, colours::cyan, 9.0f);
-                        }
-                        c.body.draw (g, c.bounds.reduced (16.0f, 11.0f).withTrimmedRight (124.0f));
-                        y = c.bounds.getBottom() + 8.0f;
-                    }
-
-                    if (status.isNotEmpty())
-                    {
-                        g.setColour (colours::textDim);
-                        g.setFont (font (14.0f));
-                        g.drawFittedText (status, juce::Rectangle<float> (0.0f, y + 4.0f, (float) getWidth(), 40.0f).toNearestInt(),
-                                          juce::Justification::centredLeft, 2);
-                    }
-                }
-
-                void mouseMove (const juce::MouseEvent& e) override
-                {
-                    int over = -1;
-                    for (size_t i = 0; i < cards.size(); ++i)
-                        if (cards[i].module >= 0 && cards[i].link.contains (e.position))
-                            over = (int) i;
-                    if (over != hoveredLink)
-                    {
-                        hoveredLink = over;
-                        setMouseCursor (over >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
-                        repaint();
-                    }
-                }
-
-                void mouseUp (const juce::MouseEvent& e) override
-                {
-                    for (auto& c : cards)
-                        if (c.module >= 0 && c.link.contains (e.position) && owner.onOpen)
-                            owner.onOpen (c.module);
-                }
-
-                FindingsList& owner;
-                std::vector<Card> cards;
-                juce::TextLayout summary;
-                juce::Rectangle<float> summaryBounds;
-                float factsHeight = 0.0f;
-                juce::String status;
-                int hoveredLink = -1;
-            };
-
-            VelvoxAudioProcessor& proc;
-            bool on = false;
-            juce::String lastKey;
-            juce::Viewport viewport;
-            Content content;
-        };
-
-        // VOCAL CHECK (the check track replaces this with score + tiles): live view and the findings in the
-        // visual area; analysis mode, Start / Stop, Reset and the status as the main row
+        // VOCAL CHECK module in the chain: its live picture (spectrum, balance) and a compact summary
+        // (score, number of findings, link to the VOCAL CHECK tab, where the tiles with Ignorieren /
+        // Anwenden live); analysis mode, Start / Stop, Reset as the main row
         class CheckPanel final : public DetailPanel
         {
         public:
@@ -1436,7 +1183,7 @@ namespace velvox::ui
                 };
                 resetButton.setTooltip (juce::String::fromUTF8 ("Alles bisher Analysierte vergessen (auch Spitzen und Clips)"));
                 resetButton.onClick = [this] { proc.getAnalyzer().clear(); proc.refreshAnalysis(); };
-                findings.onOpen = [this] (int id) { if (onOpenModule) onOpenModule (id); };
+                findings.onOpenTab = [this] { if (onShowVocalCheck) onShowVocalCheck(); };
             }
 
             void refresh() override
@@ -1457,22 +1204,24 @@ namespace velvox::ui
                                                   : "Laufend, letzte " + juce::String (juce::roundToInt (std::min (30.0f, r.analysedSeconds))) + " s";
                 if (statusLabel.getText() != text)
                     statusLabel.setText (text, juce::dontSendNotification);
-                findings.refresh (on);
+                if (++summaryTick % 6 == 0)
+                    findings.refresh();
             }
 
         private:
             void layoutVisual (juce::Rectangle<int> area) override
             {
                 auto r = area.reduced (10);
-                auto left = r.removeFromLeft (std::min (300, r.getWidth() / 3));
-                statusLabel.setBounds (left.removeFromBottom (20));
-                r.removeFromLeft (12);
-                findings.setBounds (r);
+                auto right = r.removeFromRight (std::min (250, r.getWidth() / 3));
+                findings.setBounds (right.removeFromTop (96));
+                statusLabel.setBounds (right.removeFromTop (22).withTrimmedLeft (6));
+                r.removeFromRight (12);
                 if (auto* v = getVisual())
-                    v->setBounds (left.reduced (1));
+                    v->setBounds (r.reduced (1));
             }
 
-            FindingsList findings;
+            CheckSummary findings;
+            int summaryTick = 0;
             juce::Label statusLabel;
             juce::TextButton* start = nullptr;
             juce::TextButton* reset = nullptr;

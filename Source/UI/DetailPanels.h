@@ -56,6 +56,8 @@ namespace velvox::ui
         std::function<void (int moduleIdOrOutput)> onHelp;
         // Asks for a name (module preset); without it the panel picks "Eigenes n"
         std::function<void (const juce::String& title, std::function<void (const juce::String&)> onName)> askForName;
+        // Asks the editor to switch to the VOCAL CHECK tab (link in the Check module's summary)
+        std::function<void()> onShowVocalCheck;
 
         juce::TextButton& getHelpButton() noexcept { return helpButton; }
         juce::TextButton& getPresetsButton() noexcept { return presetsButton; }
