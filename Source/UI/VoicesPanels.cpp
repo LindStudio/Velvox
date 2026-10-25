@@ -318,7 +318,7 @@ namespace velvox::ui
                                                 [this] { return description; });
         }
 
-        ~ValueField() override { endEdit(); }
+        ~ValueField() override { edit.reset(); }   // ends an open drag; the stage may be going away too
 
         void refresh (const doubleredit::VoiceValues& vv, bool linked)
         {
@@ -868,10 +868,14 @@ namespace velvox::ui
         // Classic: the two voices are one linked pair (Delay / Detune / Width)
         if (classic && shownVoices >= 2)
         {
+            // A bracket over the pair (the voices themselves sit on the 0 dB line)
             const auto p0 = voicePoint (0), p1 = voicePoint (1);
+            const float y = std::min (p0.y, p1.y) - 18.0f;
             const float dash[] { 3.0f, 4.0f };
-            g.setColour (hue.withAlpha (0.35f * a));
-            g.drawDashedLine ({ p0.translated (10.0f, 0.0f), p1.translated (-10.0f, 0.0f) }, dash, 2, 1.0f);
+            g.setColour (hue.withAlpha (0.45f * a));
+            g.drawLine ({ p0.x, p0.y - 11.0f, p0.x, y }, 1.0f);
+            g.drawLine ({ p1.x, p1.y - 11.0f, p1.x, y }, 1.0f);
+            g.drawDashedLine ({ p0.x, y, p1.x, y }, dash, 2, 1.0f);
         }
 
         // Voices: a line from the lead, the live ghost (heard position and wobble), the dot with its number
