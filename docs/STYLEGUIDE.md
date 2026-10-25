@@ -1,22 +1,23 @@
-# HEADLINER VOCAL – UI-Stil (ab 0.5)
+# HEADLINER – UI-Stil (0.5, Shell 0.6)
 
 Vorlage: Claude-Design-Paket „HEADLINER VOCAL“ (`docs/design/HEADLINER_DESIGN_HANDOFF.md`,
 Referenzcode in `docs/design/reference/`). Was davon mangels Parametern nicht gebaut ist: `docs/DESIGN_MAPPING.md`.
 Alle Werte stehen als Tokens in `Source/UI/Theme.h`; neue Komponenten nutzen nur diese Tokens.
 
-## Fenster
+## Fenster (ab 0.6)
 
-Design-Canvas 1384 × 1040, gleichmäßig skaliert (fester Seitenverhältnis-Constrainer, 70 … 140 %).
-Unter 70 % werden die 9-px-Reglernamen unlesbar.
+Design-Canvas **1000 × 600**, gleichmäßig skaliert (fester Seitenverhältnis-Constrainer, 8/9 … 200 %, gespeichert als
+`uiScale`). Unter 8/9 würde 9-px-Text kleiner als 8 px.
 
 | Bereich | Höhe | Inhalt |
 |---|---|---|
-| Header (`TopBar`) | 56 | Preset-Box 290 × 36 mit ‹ › + Speichern/Menü, Logo HEADLINER VOCAL, Tabs CHAIN / AUTO MIX / VOCAL CHECK (aktiv = 2-px-Unterstrich), A/B, Kopieren, Bypass, ? |
-| Kette (`ChainView`) | 330 | eine Spalte pro Modulinstanz (≥ 104 px, sonst scrollen), Sends hinter gestrichelter Linie, runder „+“ |
-| Detail | 460 | Modul-Panel 1180 breit (`DetailPanel`), rechts IN/OUT-Meter |
-| Vocal Control | Rest | 6 Makros + Gain Reduction (`VocalControlBar`), in allen Tabs |
+| Header (`TopBar`) | 44 | Logo · Presets ‹ Name ▾ › · SIMPEL \| ADVANCED · Tabs AUTO MIX \| VOCAL CHECK (aktiv = 2-px-Unterstrich) · Bypass · ? |
+| SIMPEL (`SimpleView`) | Rest | links Spektrum (vorher gestrichelt, nachher gefüllt) + „Vocal analysieren“, Vorher \| Nachher, Details; rechts 6 Makro-Fader (`HSlider`); unten IN/OUT (`CompactMeters`) |
+| ADVANCED Kette (`ChainView`) | 88 | Kacheln Name → Icon → Ein/Aus, „+“-Kachel, Sends hinter gestrichelter Linie (SEND-Badge), OUTPUT; rechts IN/OUT |
+| ADVANCED Panel (`DetailPanel`) | Rest | volle Breite, siehe Modul-Panel |
 
-AUTO MIX und VOCAL CHECK belegen Kette + Detail + Meterspalte.
+VOCAL CHECK zeigt das Check-Panel über dem ganzen Körper (beide Modi). Ansicht: `uiMode` ("beginner" = SIMPEL,
+"pro" = ADVANCED) + `uiTab` ("automix"/"check").
 
 ## Farben
 
@@ -49,16 +50,28 @@ Werte Roboto Mono 11,5 `text` · Reglernamen SemiBold 9 `knobName`.
 
 - **Regler** (`VelvoxLookAndFeel::drawRotarySlider`, `Knob`): 57 Striche über 270°, bis zum Wert in der
   Modulfarbe mit Glow, Rest #30343D; Körper r35 #34373F → #121418, vertiefte Kappe r26, Leuchtpunkt r3,4.
-  Bipolare Parameter leuchten von der Mitte aus. Darunter Wert (Mono) und Name. Größen: Modul 50–56,
-  Spalte 48, Vocal Control 54, SMASH 150. Doppelklick = Standardwert, Shift = fein.
+  Bipolare Parameter leuchten von der Mitte aus. Darunter Wert (Mono) und Name. Größen: Hauptregler 50,
+  Mehr 32, SMASH 120.
+- **Fader** (`HSlider`, `drawLinearSlider`): Spur 4 px #30343D, bis zum Wert in der Akzentfarbe (bipolar ab 0),
+  Daumen 14 px mit Akzentring; Name links (Farbpunkt + Großbuchstaben), Wert rechts.
 - **Schalter** (`Toggle`): Spur 26 × 14 in der Akzentfarbe, Knopf 10 px, Label rechts.
 - **Segmente** (`Segments`): Radio-Buttons auf #0D0F15, aktiv = Akzent 16 %, Text Akzent → Weiß 55 %.
   An Choice- oder Bool-Parameter gebunden; Labels werden über den Namen der Choices zugeordnet.
 - **Neon-Icons**: `Resources/Icons/*.svg` (weiße Linien, 48 × 48, Strich 1,6) – werden in die Modulfarbe
   umgefärbt (`NeonIcon`, `moduleIconSvg`).
 
-## Modul-Panel
+## Gesten (alle Regler, Fader, Segmente – zentral in `FineSlider`, `Segments`, `ValueText`)
 
-Kopf: Power · Neon-Icon 30 · NAME + „SLOT n · INSERT/SEND“ · Funktionszeile (11 px).
-Darunter links der Visualizer, rechts Segmente und Schalter (`hasSideControls`), unten das Regler-Raster
-(`knobGrid`). Ausgeschaltet: Inhalt gedimmt, Power bleibt voll bedienbar.
+Ziehen · Shift/Strg + Ziehen = fein (1/10) · Doppelklick oder Alt+Klick = Standardwert · Mausrad = Schritt (nur über
+dem Regler; Listen behalten das Rad) · Klick auf den Wert = eintippen (Einheiten: „2k“, „-3 dB“, „1.5 s“, „1/8“) ·
+Rechtsklick = Menü (Standardwert, Wert eingeben, kopieren, einfügen; im Panel zusätzlich Modul zurücksetzen,
+Modul-Preset speichern). Hover nach 600 ms: Name, Kurzbeschreibung, Wert mit Einheit (`HoverInfo`).
+Kein dauerhafter Erklärtext in Panels – Erklärungen stehen im Hover und in der Hilfe.
+
+## Modul-Panel (`DetailPanel`, Stil A „Grafik zuerst“)
+
+Kopf 44: Power · Icon 24 · NAME n · Badge (SEND / AUS) · Presets · Mehr · ?.
+Darunter die Grafik (so groß wie möglich), darunter **eine** Reihe mit 3–5 Hauptreglern (`setMainControls`).
+Alles andere liegt in der „Mehr“-Schublade (rechts, 430 breit): Segmente und Schalter oben, kleine Regler im Raster.
+Extras in der Grafik: `placeInVisual` + `layoutVisual`, Meter mit `placeMeter`. Delay/Reverb als Send: Mix heißt
+„SEND“ (`setMixKnob`). Ausgeschaltet: Inhalt gedimmt, Power bleibt voll bedienbar.

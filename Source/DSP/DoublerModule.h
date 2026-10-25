@@ -2,7 +2,7 @@
 
 #include "DspUtilities.h"
 #include "MixLaw.h"
-#include "SpliceShifter.h"
+#include "VoiceSplice.h"
 
 namespace velvox::dsp
 {
@@ -106,7 +106,7 @@ namespace velvox::dsp
             SmoothRandomWalk walk1, walk2;
             double rateFactor = 1.0;
             double mod = 0.0, modStep = 0.0;      // delay offset of the wobble (samples), per-sample step
-            SpliceShifter shifter;                // static detune
+            VoiceSpliceShifter shifter;                // static detune
             float detune = 0.0f;
             bool started = false;
             juce::SmoothedValue<float> delayMs { 14.0f }, gain { 0.0f }, pan { 0.0f };
@@ -117,7 +117,7 @@ namespace velvox::dsp
 
         double fs = 48000.0;
         LagrangeDelayLine line;
-        SpliceConfig splice;
+        VoiceSpliceConfig splice;
         double maxModSamples = 480.0;             // 10 ms per walk
 
         Biquad lowCut, highCut;

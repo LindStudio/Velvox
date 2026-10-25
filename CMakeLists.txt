@@ -39,8 +39,10 @@ set(VELVOX_SOURCES
     Source/DSP/CompressorModule.cpp
     Source/DSP/DeEsserModule.cpp
     Source/DSP/SaturationModule.cpp
+    Source/DSP/SatOversampler.cpp
     Source/DSP/DelayModule.cpp
     Source/DSP/ReverbModule.cpp
+    Source/DSP/ReverbDepth.cpp
     Source/DSP/VocalChain.cpp
     Source/DSP/Routing.cpp
     Source/DSP/MixLaw.cpp
@@ -49,6 +51,9 @@ set(VELVOX_SOURCES
     Source/DSP/DoublerModule.cpp
     Source/DSP/Ducker.cpp
     Source/DSP/PitchModule.cpp
+    Source/DSP/PitchTracker.cpp
+    Source/DSP/FormantCorrector.cpp
+    Source/DSP/SpliceShifter.cpp
     Source/DSP/ChopModule.cpp
     Source/DSP/PulseModule.cpp
     Source/DSP/SmashModule.cpp
@@ -56,23 +61,32 @@ set(VELVOX_SOURCES
     Source/DSP/SmoothModule.cpp
     Source/DSP/CheckModule.cpp
     Source/DSP/VocalAnalyzer.cpp
+    Source/Check/CheckTargets.cpp
+    Source/Check/CheckRules.cpp
+    Source/Check/CheckFixPlanner.cpp
+    Source/Check/VocalCheckController.cpp
     Source/DSP/RideModule.cpp
     Source/DSP/Macros.cpp
     Source/Presets/ParameterSnapshot.cpp
     Source/Presets/FactoryPresets.cpp
     Source/Presets/PresetManager.cpp
     Source/Presets/ModulePresets.cpp
+    Source/Presets/UndoHistory.cpp
     Source/Mixing/ProposalSession.cpp
     Source/UI/Theme.cpp
     Source/UI/VelvoxLookAndFeel.cpp
     Source/UI/Widgets.cpp
     Source/UI/Segments.cpp
-    Source/UI/VocalControlBar.cpp
+    Source/UI/ValueText.cpp
+    Source/UI/SimpleView.cpp
+    Source/UI/PresetBrowser.cpp
     Source/UI/Spectrum.cpp
     Source/UI/ModuleViews.cpp
     Source/UI/ChainView.cpp
     Source/UI/ModuleBrowser.cpp
     Source/UI/DetailPanels.cpp
+    Source/UI/EqPanel.cpp
+    Source/UI/ReverbPanel.cpp
     Source/UI/AutoMixView.cpp
     Source/UI/AnalysisOverlay.cpp
     Source/UI/TopBar.cpp
@@ -169,7 +183,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/AbCompareTests.cpp Tests/VocalCheckTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/MixLawTests.cpp Tests/EqTests.cpp Tests/EqModuleTests.cpp Tests/EqModelTests.cpp Tests/EqRoleTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/VocalCheckRealDataTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/SaturationTests.cpp Tests/ReverbQualityTests.cpp Tests/EqPanelTests.cpp Tests/ReverbPanelTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)
@@ -204,4 +218,9 @@ if(VELVOX_BUILD_TESTS)
             ${VELVOX_COMMON_LIBS}
             juce::juce_recommended_config_flags
             juce::juce_recommended_warning_flags)
+endif()
+
+# Time modules quality tests (0.6: Delay, Pulse, Stutter)
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/TimeModuleTests.cpp)
 endif()

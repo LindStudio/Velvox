@@ -147,42 +147,70 @@ Calibrated: vocal: Pro-DS Threshold=-50.1562
 <!-- BEGIN smooth -->
 #### Smooth (`smooth`)
 
-Calibrated: vocal: soothe2 depth=0
+Calibrated: vocal: soothe2 depth=1.4; light: soothe2 depth=0; sharp: soothe2 depth=1.8; hard: soothe2 depth=1
 
 | case | metric | Headliner | soothe2 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| vocal | delta_db (dB) | -13.5 | -16.6 | 3.07 | ref − 0.00 | info |
-| vocal | pte_reduction_db (dB) | 0.05 | 0.20 | -0.15 | ref − 0.30 | pass |
-| vocal | ltas_reduction_db (dB) | 0.26 | 0.98 | -0.72 | ref − 0.50 | FAIL |
-| vocal | flatness_gain_db (dB) | 1.03 | 0.79 | 0.24 | ref − 0.20 | pass |
-| vocal | transient_change_db (dB) | 0.42 | 0.26 | 0.16 | 0.00 ± 0.50 | pass |
-| vocal | musical_noise_db (dB) | 0.11 | 0.06 | 0.05 | ref + 0.20 | pass |
+| vocal | delta_db (dB) | -13.3 | -14.0 | 0.66 | ref − 0.00 | info |
+| vocal | pte_reduction_db (dB) | 0.20 | 0.27 | -0.07 | ref − 0.30 | pass |
+| vocal | ltas_reduction_db (dB) | 1.60 | 1.27 | 0.33 | ref − 0.50 | pass |
+| vocal | flatness_gain_db (dB) | 1.24 | 1.12 | 0.12 | ref − 0.20 | pass |
+| vocal | transient_change_db (dB) | 0.27 | 0.38 | -0.12 | 0.00 ± 0.50 | pass |
+| vocal | musical_noise_db (dB) | 0.06 | 0.09 | -0.02 | ref + 0.20 | pass |
 | vocal | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| vocal | cpu_pct (%) – median over this module's renders | 1.44 | 1.24 | 0.19 | ref + 1.00 | pass |
+| vocal | cpu_pct (%) – median over this module's renders | 1.31 | 1.25 | 0.06 | ref + 1.00 | pass |
+| light | delta_db (dB) | -15.9 | -16.6 | 0.61 | ref − 0.00 | info |
+| light | pte_reduction_db (dB) | 0.15 | 0.20 | -0.05 | ref − 0.30 | pass |
+| light | ltas_reduction_db (dB) | 1.11 | 0.98 | 0.13 | ref − 0.50 | pass |
+| light | flatness_gain_db (dB) | 0.88 | 0.79 | 0.09 | ref − 0.20 | pass |
+| light | transient_change_db (dB) | 0.20 | 0.26 | -0.06 | 0.00 ± 0.50 | pass |
+| light | musical_noise_db (dB) | 0.04 | 0.06 | -0.02 | ref + 0.20 | pass |
+| sharp | delta_db (dB) | -12.6 | -13.4 | 0.81 | ref − 0.00 | info |
+| sharp | pte_reduction_db (dB) | 0.22 | 0.30 | -0.08 | ref − 0.30 | pass |
+| sharp | ltas_reduction_db (dB) | 1.78 | 1.35 | 0.43 | ref − 0.50 | pass |
+| sharp | flatness_gain_db (dB) | 1.37 | 1.22 | 0.15 | ref − 0.20 | pass |
+| sharp | transient_change_db (dB) | 0.31 | 0.42 | -0.12 | 0.00 ± 0.50 | pass |
+| sharp | musical_noise_db (dB) | 0.07 | 0.10 | -0.02 | ref + 0.20 | pass |
+| hard | delta_db (dB) | -11.7 | -11.4 | -0.33 | ref − 0.00 | info |
+| hard | pte_reduction_db (dB) | 0.30 | 0.48 | -0.19 | ref − 0.30 | pass |
+| hard | ltas_reduction_db (dB) | 2.57 | 2.00 | 0.57 | ref − 0.50 | pass |
+| hard | flatness_gain_db (dB) | 1.60 | 1.66 | -0.07 | ref − 0.20 | pass |
+| hard | transient_change_db (dB) | 0.31 | 0.44 | -0.13 | 0.00 ± 0.50 | pass |
+| hard | musical_noise_db (dB) | 0.10 | 0.13 | -0.03 | ref + 0.20 | pass |
 <!-- END smooth -->
 
 <!-- BEGIN sat -->
 #### Saturation (`sat`)
 
-Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.25
+Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.25; tape3band: Saturn 2 Band 2 Drive=56.0938
 
 | case | metric | Headliner | Saturn 2 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| tape | thd_1k_db (dB) | -19.8 | -19.9 | 0.07 | ref ± 1.00 | pass |
-| tape | thd_1k_m24_db (dB) | -38.4 | -45.8 | 7.38 | ref − 0.00 | info |
-| tape | h2_h3_db (dB) | -116 | -113 | -2.51 | ref − 0.00 | info |
-| tape | aliasing_db (dB) | -36.6 | -70.2 | 33.6 | ref + 3.00 | FAIL |
-| tape | imd_db (dB) | -5.75 | -2.41 | -3.34 | ref + 3.00 | pass |
-| tape | crest_reduction_db (dB) – mean of clips | 7.41 | 8.72 | -1.31 | ref − 0.00 | info |
+| tape | thd_1k_db (dB) | -19.8 | -19.9 | 0.05 | ref ± 1.00 | pass |
+| tape | thd_1k_m24_db (dB) | -38.4 | -45.8 | 7.35 | ref − 0.00 | info |
+| tape | h2_h3_db (dB) | -116 | -113 | -2.86 | ref − 0.00 | info |
+| tape | aliasing_db (dB) | -91.5 | -70.2 | -21.2 | ref + 3.00 | pass |
+| tape | imd_db (dB) | -5.74 | -2.41 | -3.33 | ref + 3.00 | pass |
+| tape | crest_reduction_db (dB) – mean of clips | 7.38 | 8.72 | -1.34 | ref − 0.00 | info |
 | tape | st_loudness_std_lu (LU) – mean of clips | 3.20 | 3.27 | -0.07 | ref − 0.00 | info |
-| tape | mix0_null_db (dB) – latency 3 | -152 | – | – | ≤ -60.0 | pass |
+| tape | mix0_null_db (dB) – latency 5 | -152 | – | – | ≤ -60.0 | pass |
 | tape | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| tape | cpu_pct (%) – median over this module's renders | 0.37 | 2.51 | -2.13 | ref + 1.00 | pass |
-| tube | thd_1k_db (dB) | -15.2 | -15.3 | 0.08 | ref ± 1.00 | pass |
-| tube | thd_1k_m24_db (dB) | -24.9 | -23.9 | -1.05 | ref − 0.00 | info |
-| tube | h2_h3_db (dB) | 13.2 | -13.5 | 26.7 | ref − 0.00 | info |
-| tube | aliasing_db (dB) | -47.1 | -66.2 | 19.1 | ref + 3.00 | FAIL |
-| tube | imd_db (dB) | -5.32 | -1.52 | -3.79 | ref + 3.00 | pass |
+| tape | cpu_pct (%) – median over this module's renders | 0.93 | 2.50 | -1.57 | ref + 1.00 | pass |
+| tube | thd_1k_db (dB) | -15.3 | -15.3 | 0.07 | ref ± 1.00 | pass |
+| tube | thd_1k_m24_db (dB) | -24.9 | -23.9 | -1.06 | ref − 0.00 | info |
+| tube | h2_h3_db (dB) | 13.3 | -13.5 | 26.8 | ref − 0.00 | info |
+| tube | aliasing_db (dB) | -91.5 | -66.2 | -25.3 | ref + 3.00 | pass |
+| tube | imd_db (dB) | -5.31 | -1.52 | -3.79 | ref + 3.00 | pass |
+| tape3band | thd_1k_db (dB) | -20.0 | -20.1 | 0.12 | ref ± 1.00 | pass |
+| tape3band | thd_1k_m24_db (dB) | -38.6 | -45.9 | 7.35 | ref − 0.00 | info |
+| tape3band | h2_h3_db (dB) | -116 | -111 | -4.92 | ref − 0.00 | info |
+| tape3band | aliasing_db (dB) | -91.5 | -69.0 | -22.6 | ref + 3.00 | pass |
+| tape3band | imd_db (dB) | -109 | -36.7 | -72.1 | ref + 3.00 | pass |
+| tape3band | crest_reduction_db (dB) – mean of clips | 5.48 | 6.28 | -0.80 | ref − 0.00 | info |
+| tape3band | st_loudness_std_lu (LU) – mean of clips | 3.05 | 3.08 | -0.03 | ref − 0.00 | info |
+| tape3band | mix0_null_db (dB) – latency 5 | -152 | – | – | ≤ -60.0 | pass |
+| tape3band | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
+| tape3band | cpu_pct (%) – median over this module's renders | 1.16 | 2.63 | -1.46 | ref + 1.00 | pass |
 <!-- END sat -->
 
 <!-- BEGIN pitch -->
@@ -190,21 +218,31 @@ Calibrated: tape: Saturn 2 Band 1 Drive=56.0938; tube: Saturn 2 Band 1 Drive=81.
 
 | case | metric | Headliner | Graillon 3 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|
-| up12 | pitch_err_cents (ct) | 2.70 | 36.0 | -33.3 | ≤ 2.00 | FAIL |
-| up12 | pitch_jitter_cents (ct) | 0.00 | 0.00 | 0.00 | ≤ 1.00 | pass |
-| up12 | spurious_db (dB) | -73.2 | -44.4 | -28.8 | ≤ -60.0 | pass |
-| up12 | latency_ms (ms) | 120 | 22.4 | 97.6 | ref + 10.0 | FAIL |
-| up12 | vocal_pitch_err_cents (ct) | 1.65 | 1.95 | -0.30 | ref + 1.00 | pass |
-| up12 | hnr_drop_db (dB) | -8.51 | -2.55 | -5.96 | ref − 0.00 | info |
-| up12 | mix0_null_db (dB) – latency 5760 | -152 | – | – | ≤ -60.0 | pass |
+| up12 | pitch_err_cents (ct) | 0.00 | 36.0 | -36.0 | ≤ 2.00 | pass |
+| up12 | pitch_jitter_cents (ct) | 0.00 | 0.00 | -0.00 | ≤ 1.00 | pass |
+| up12 | spurious_db (dB) | -84.4 | -44.4 | -40.0 | ≤ -60.0 | pass |
+| up12 | latency_ms (ms) | 14.6 | 22.4 | -7.75 | ref + 10.0 | pass |
+| up12 | vocal_pitch_err_cents (ct) | 2.20 | 1.95 | 0.25 | ref + 1.00 | pass |
+| up12 | hnr_drop_db (dB) | -2.89 | -2.55 | -0.35 | ref − 0.00 | info |
+| up12 | formant_shift_oct (oct) – mean of 6 vowels | 0.18 | 0.99 | -0.81 | ≤ 0.33 | pass |
+| up12 | sustain_roughness_db (dB) – mean of 6 vowels | 0.15 | 0.01 | 0.14 | ref + 0.50 | pass |
+| up12 | mix0_null_db (dB) – latency 702 | -152 | – | – | ≤ -60.0 | pass |
 | up12 | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| up12 | cpu_pct (%) – median over this module's renders | 2.24 | 0.75 | 1.50 | ref + 2.00 | pass |
-| down5 | pitch_err_cents (ct) | 2.68 | 23.7 | -21.1 | ≤ 2.00 | FAIL |
+| up12 | cpu_pct (%) – median over this module's renders | 1.26 | 0.77 | 0.49 | ref + 2.00 | pass |
+| down5 | pitch_err_cents (ct) | 0.00 | 23.7 | -23.7 | ≤ 2.00 | pass |
 | down5 | pitch_jitter_cents (ct) | 0.00 | 0.00 | -0.00 | ≤ 1.00 | pass |
-| down5 | spurious_db (dB) | -90.9 | -55.4 | -35.4 | ≤ -60.0 | pass |
-| down5 | latency_ms (ms) | 120 | 22.4 | 97.6 | ref + 10.0 | FAIL |
-| down5 | vocal_pitch_err_cents (ct) | 1.02 | 1.14 | -0.12 | ref + 1.00 | pass |
-| down5 | hnr_drop_db (dB) | -4.09 | 0.49 | -4.58 | ref − 0.00 | info |
+| down5 | spurious_db (dB) | -81.6 | -55.4 | -26.2 | ≤ -60.0 | pass |
+| down5 | latency_ms (ms) | 14.6 | 22.4 | -7.75 | ref + 10.0 | pass |
+| down5 | vocal_pitch_err_cents (ct) | 1.34 | 1.14 | 0.20 | ref + 1.00 | pass |
+| down5 | hnr_drop_db (dB) | 0.10 | 0.49 | -0.38 | ref − 0.00 | info |
+| down12 | pitch_err_cents (ct) | 0.01 | 69.9 | -69.9 | ≤ 2.00 | pass |
+| down12 | pitch_jitter_cents (ct) | 0.00 | 0.00 | -0.00 | ≤ 1.00 | pass |
+| down12 | spurious_db (dB) | -85.1 | -57.5 | -27.6 | ≤ -60.0 | pass |
+| down12 | latency_ms (ms) | 14.6 | 22.4 | -7.75 | ref + 10.0 | pass |
+| down12 | vocal_pitch_err_cents (ct) | 2.93 | 3.35 | -0.42 | ref + 1.00 | pass |
+| down12 | hnr_drop_db (dB) | 1.86 | 1.80 | 0.06 | ref − 0.00 | info |
+| down12 | formant_shift_oct (oct) – mean of 6 vowels | 0.11 | 0.99 | -0.88 | ≤ 0.33 | pass |
+| down12 | sustain_roughness_db (dB) – mean of 6 vowels | 0.22 | 0.08 | 0.14 | ref + 0.50 | pass |
 <!-- END pitch -->
 
 <!-- BEGIN doubler -->
@@ -277,11 +315,12 @@ Choir: the single 440 Hz roughness is information only (Ruling): with the measur
 | plain | echo_time_err_ms (ms) | 0.08 | 0.17 | -0.09 | ref + 0.50 | pass |
 | plain | feedback_db_per_repeat (dB) – set feedback 30% | -11.6 | -11.8 | 0.15 | ref ± 1.00 | pass |
 | plain | echo_smear_ms (ms) | 0.17 | 0.19 | -0.02 | ref + 1.00 | pass |
-| plain | inter_echo_floor_db (dB) | -288 | -103 | -184 | ref + 3.00 | pass |
+| plain | inter_echo_floor_db (dB) | -288 | -103 | -185 | ref + 3.00 | pass |
 | plain | dry_leak_db (dB) – burst, 100 % wet | -300 | -300 | 0.00 | ≤ -60.0 | pass |
 | plain | mix0_null_db (dB) – latency 0 | -152 | – | – | ≤ -60.0 | pass |
 | plain | off_null_db (dB) | -152 | – | – | ≤ -100 | pass |
-| plain | cpu_pct (%) – median over this module's renders | 0.34 | 0.63 | -0.29 | ref + 1.00 | pass |
+| plain | cpu_pct (%) – median over this module's renders | 0.33 | 0.62 | -0.29 | ref + 1.00 | pass |
+| tape | cpu_pct (%) – median over this module's renders | 0.33 | 0.62 | -0.29 | ref + 1.00 | pass |
 <!-- END delay -->
 
 <!-- BEGIN reverb -->
@@ -289,30 +328,30 @@ Choir: the single 440 Hz roughness is information only (Ruling): with the measur
 
 | case | metric | Headliner | VintageVerb | Pro-R 2 | gap | tolerance | verdict |
 |---|---|---|---|---|---|---|---|
-| plate | t30_s (s) – set decay 1.8 s | 1.66 | 1.49 | 1.53 | 0.17 | ref − 0.00 | info |
-| plate | t30_err_pct (%) – set decay 1.8 s | 7.68 | 17.1 | 15.0 | -9.41 | ≤ 10.0 | pass |
-| plate | edt_s (s) | 1.51 | 1.46 | 1.83 | 0.04 | ref − 0.00 | info |
-| plate | curvature_db (dB) | 0.18 | 0.15 | 0.15 | 0.04 | ref + 0.50 | pass |
-| plate | mean_ned | 0.97 | 0.90 | 0.93 | 0.07 | ref − 0.05 | pass |
-| plate | mixing_ms (ms) | 26.0 | 107 | 72.0 | -81.0 | ref + 20.0 | pass |
-| plate | modal_ringing_db (dB) | 11.1 | 7.46 | 8.90 | 3.65 | ref + 2.00 | FAIL |
-| plate | tail_corr | -0.02 | -0.00 | -0.06 | -0.02 | ref + 0.10 | pass |
-| plate | bass_ratio (x) | 0.98 | 1.03 | 1.31 | -0.05 | ref ± 0.20 | pass |
-| plate | treble_ratio (x) | 0.84 | 0.89 | 0.97 | -0.05 | ref ± 0.20 | pass |
+| plate | t30_s (s) – set decay 1.8 s | 1.79 | 1.49 | 1.53 | 0.30 | ref − 0.00 | info |
+| plate | t30_err_pct (%) – set decay 1.8 s | 0.79 | 17.4 | 14.9 | -16.6 | ≤ 10.0 | pass |
+| plate | edt_s (s) | 1.67 | 1.46 | 1.84 | 0.20 | ref − 0.00 | info |
+| plate | curvature_db (dB) | 0.18 | 0.12 | 0.21 | 0.06 | ref + 0.50 | pass |
+| plate | mean_ned | 0.99 | 0.90 | 0.90 | 0.09 | ref − 0.05 | pass |
+| plate | mixing_ms (ms) | 22.0 | 107 | 72.0 | -85.0 | ref + 20.0 | pass |
+| plate | modal_ringing_db (dB) | 8.28 | 6.91 | 8.23 | 1.37 | ref + 2.00 | pass |
+| plate | tail_corr | -0.01 | -0.00 | -0.06 | -0.00 | ref + 0.10 | pass |
+| plate | bass_ratio (x) | 1.03 | 0.98 | 1.24 | 0.04 | ref ± 0.20 | pass |
+| plate | treble_ratio (x) | 0.87 | 0.91 | 0.96 | -0.04 | ref ± 0.20 | pass |
 | plate | dry_leak_db (dB) – burst, 100 % wet | -300 | -151 | -300 | -149 | ≤ -60.0 | pass |
 | plate | mix0_null_db (dB) – latency 0 | -152 | – | – | – | ≤ -60.0 | pass |
 | plate | off_null_db (dB) | -152 | – | – | – | ≤ -100 | pass |
-| plate | cpu_pct (%) – median over this module's renders | 0.79 | 0.24 | 0.64 | 0.55 | ref + 2.00 | pass |
-| hall | t30_s (s) – set decay 2.6 s | 2.21 | 2.66 | 2.24 | -0.45 | ref − 0.00 | info |
-| hall | t30_err_pct (%) – set decay 2.6 s | 15.0 | 2.12 | 13.9 | 12.9 | ≤ 10.0 | FAIL |
-| hall | edt_s (s) | 1.65 | 2.17 | 2.07 | -0.52 | ref − 0.00 | info |
-| hall | curvature_db (dB) | 0.32 | 0.26 | 0.10 | 0.06 | ref + 0.50 | pass |
-| hall | mean_ned | 0.91 | 0.70 | 0.53 | 0.21 | ref − 0.05 | pass |
-| hall | mixing_ms (ms) | 72.0 | 207 | 363 | -135 | ref + 20.0 | pass |
-| hall | modal_ringing_db (dB) | 6.44 | 11.2 | 3.79 | -4.76 | ref + 2.00 | pass |
-| hall | tail_corr | 0.00 | 0.01 | -0.02 | -0.00 | ref + 0.10 | pass |
-| hall | bass_ratio (x) | 1.05 | 1.19 | 1.19 | -0.13 | ref ± 0.20 | pass |
-| hall | treble_ratio (x) | 0.69 | 0.75 | 0.90 | -0.05 | ref ± 0.20 | pass |
+| plate | cpu_pct (%) – median over this module's renders | 0.83 | 0.24 | 0.65 | 0.59 | ref + 2.00 | pass |
+| hall | t30_s (s) – set decay 2.6 s | 2.58 | 2.67 | 2.25 | -0.09 | ref − 0.00 | info |
+| hall | t30_err_pct (%) – set decay 2.6 s | 0.87 | 2.51 | 13.4 | -1.64 | ≤ 10.0 | pass |
+| hall | edt_s (s) | 1.96 | 2.17 | 2.06 | -0.22 | ref − 0.00 | info |
+| hall | curvature_db (dB) | 0.35 | 0.28 | 0.14 | 0.06 | ref + 0.50 | pass |
+| hall | mean_ned | 0.93 | 0.70 | 0.52 | 0.23 | ref − 0.05 | pass |
+| hall | mixing_ms (ms) | 69.0 | 207 | 419 | -138 | ref + 20.0 | pass |
+| hall | modal_ringing_db (dB) | 6.37 | 11.1 | 4.51 | -4.77 | ref + 2.00 | pass |
+| hall | tail_corr | 0.01 | 0.01 | -0.02 | 0.01 | ref + 0.10 | pass |
+| hall | bass_ratio (x) | 1.05 | 1.16 | 1.20 | -0.11 | ref ± 0.20 | pass |
+| hall | treble_ratio (x) | 0.70 | 0.74 | 0.90 | -0.04 | ref ± 0.20 | pass |
 <!-- END reverb -->
 
 <!-- BEGIN smash -->
@@ -350,7 +389,7 @@ Choir: the single 440 Hz roughness is information only (Ruling): with the measur
 | gate | edge_splatter_db (dB) | -88.5 | – | ≤ -60.0 | pass |
 | gate | gate_depth_db (dB) | -185 | – | ≤ -40.0 | pass |
 | gate | off_null_db (dB) | -152 | – | ≤ -100 | pass |
-| gate | cpu_pct (%) – median over this module's renders | 0.18 | – | ≤ 1.00 | pass |
+| gate | cpu_pct (%) – median over this module's renders | 0.22 | – | ≤ 1.00 | pass |
 <!-- END chop -->
 
 <!-- BEGIN pulse -->
@@ -362,7 +401,13 @@ Choir: the single 440 Hz roughness is information only (Ruling): with the measur
 | default | gate_depth_db (dB) | -36.5 | – | ≤ -30.0 | pass |
 | default | mix0_null_db (dB) – latency 0 | -152 | – | ≤ -60.0 | pass |
 | default | off_null_db (dB) | -152 | – | ≤ -100 | pass |
-| default | cpu_pct (%) – median over this module's renders | 0.16 | – | ≤ 1.00 | pass |
+| default | cpu_pct (%) – median over this module's renders | 0.19 | – | ≤ 1.00 | pass |
+| classic | edge_splatter_db (dB) | -150 | – | ≤ -60.0 | pass |
+| classic | gate_depth_db (dB) | -48.1 | – | ≤ -30.0 | pass |
+| classic | cpu_pct (%) – median over this module's renders | 0.19 | – | ≤ 1.00 | pass |
+| gate16 | edge_splatter_db (dB) | -151 | – | ≤ -60.0 | pass |
+| gate16 | gate_depth_db (dB) | -108 | – | ≤ -30.0 | pass |
+| gate16 | cpu_pct (%) – median over this module's renders | 0.19 | – | ≤ 1.00 | pass |
 <!-- END pulse -->
 
 <!-- BEGIN check -->
@@ -386,6 +431,10 @@ Stutter, Pulse and Vocal Check pass at baseline.
    THD unchanged (`thd_1k_db` stays the calibration point). The planned 3-band split (spec 5.6) must not add aliasing:
    oversample once around all three shapers. Character note (info): Tube is even-dominant (H2/H3 +13 dB) where Saturn's
    Warm Tube is odd-dominant (−13 dB), and Tape distorts more at −24 dBFS (−38 vs −46 dB) – a choice, not a defect.
+   **Resolved (overhaul/sat):** 4× hiir half-band up, ADAA (double), half-band + order-11 elliptic decimator (stop band
+   from the base Nyquist – a half-band alone lets 5 × 4987 Hz fold back); aliasing −91.5 dB in all cases incl. the new
+   3-band case (Saturn 2 3-band −69.0), THD within 0.12 dB of the calibration, latency 5 samples (was 3), CPU 0.9 % /
+   1.2 % (3 bands) vs Saturn 2 2.5 / 2.6 %. After-renders: `velvox-bench\2026-10-25\modules-after\sat\`.
 2. **EQ – cramping near Nyquist: a 15 kHz bell is 5.5 dB off** its own shape (Pro-Q 4: 0.06 dB). The +6 dB "air" bell
    lands narrower and lower; the 12 kHz shelf in the vocal case is 0.64 dB off. *Do:* Vicanek magnitude-matched
    biquads (or MZTi / 2× oversampling for bands above ~fs/8) for bell, shelves and cuts; the cut/shelf prototypes already
@@ -403,6 +452,15 @@ Stutter, Pulse and Vocal Check pass at baseline.
    allpasses with incommensurate lengths in the input diffuser, and give each loop its own 1-pole absorption so no mode
    decays slower than its neighbours. *Do (hall):* derive per-line feedback from the actual loop lengths
    (g = 10^(−3·L/(fs·T60))) and calibrate the type's decay scaling so T30 = set decay ± 10 %.
+   **Done (reverb track, 0.6):** passes every gated metric (table above). Plate ringing 8.3 dB (VintageVerb 6.9,
+   Pro-R 2 8.2), T30 within 1 % for plate and hall and within 5.2 % for all 8 types at 1 / 2.6 / 6 s
+   (was 10–31 % short: the damping shortened the highs, where a white impulse has most of its energy).
+   Fixes: broadband decay compensation (`ReverbModule::decayCompensationFor`), per-line absorption shelves on
+   one common RT60(f) law, short in-loop all-passes, deeper per-line modulation at incommensurate rates (a
+   random walk rang 1–2 dB more than sines in the measurements), 6 input all-passes. After-renders:
+   `velvox-bench\2026-10-25\modules-after\reverb\`. Character note (info): Headliner's mixing time (22 / 69 ms)
+   stays much shorter than the references' (72–419 ms) – a denser onset; the mids ring ~10–20 % longer than the
+   set decay so that the whole tail meets it (VintageVerb does the same).
 5. **Smooth – removes broadband instead of targeting resonances.** At more removed energy than soothe2 (Amount 75 vs
    depth 0) the largest stationary resonance drops 0.26 dB (soothe2 0.98 dB) and the STFT peak-to-envelope only 0.05 dB
    (0.20 dB); flatness gain is higher (1.03 vs 0.79) – the hallmark of an overall dulling. Musical noise and transients are
@@ -410,6 +468,12 @@ Stutter, Pulse and Vocal Check pass at baseline.
    1/3-oct (or cepstral) smoothing, gain only where |X| exceeds the envelope by > sensitivity, per-bin attack/release and
    ±2-bin frequency smoothing of the gain mask, phase-coherent overlap-add, depth scaled by excess (soothe-like). Re-check
    `musical_noise_db` and `transient_change_db` – those are where STFT designs usually regress.
+   **Closed (overhaul/smooth, 0.6):** STFT engine 1024/256 (latency 1024 @ 48 kHz, constant). At the calibrated equal removed
+   energy it passes all four cases (vocal A 75, light A 35, sharp Sens 85, hard): stationary peak 1.60 vs 1.27 dB (soothe2),
+   peak-to-envelope 0.20 vs 0.27 dB (within − 0.3), flatness 1.24 vs 1.12, musical noise 0.06 vs 0.09, transients 0.27 vs
+   0.38 dB; table above = after-state (`modules-after\smooth`). Remaining character difference (not gated): soothe2 lowers
+   single harmonic peaks more (pte on f7_row 0.64 vs 0.32 dB) – Headliner detects on the harmonic-peak contour so the ripple
+   between partials of high voices is not taken for resonances (ledger Ruling 4).
 6. **Compressor – ballistics distortion at 100 Hz: −48 dB vs −57 dB (Pro-C 2 Vocal)**; static curve 1.13 dB off the
    ideal soft knee (limit 1.0). Audible as grit on low male notes with 10/120 ms. *Do:* move the smoothing into the log
    domain (Giannoulis et al. 2012, branching smooth detector) with a short peak-hold (~ one 50 Hz period) or an RMS

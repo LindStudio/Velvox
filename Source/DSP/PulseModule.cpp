@@ -14,6 +14,76 @@ namespace velvox::dsp
         return beats[juce::jlimit (0, (int) std::size (beats) - 1, rateIndex)];
     }
 
+    const juce::StringArray& PulseModule::shapeNames()
+    {
+        static const juce::StringArray n { "Custom", "Classic", "Punch", "Swell", "Gate" };
+        return n;
+    }
+
+    namespace
+    {
+        inline float smoothstep (float t) noexcept
+        {
+            t = juce::jlimit (0.0f, 1.0f, t);
+            return t * t * (3.0f - 2.0f * t);
+        }
+
+        // Curated pump shapes: 0 = ducked, 1 = open. Each one closes with a short
+        // raised-cosine fade into the next beat's duck (no step at the cycle edge).
+        float pumpShape (int shape, float p) noexcept
+        {
+            constexpr float closeStart = 0.975f;
+            float c = 1.0f;
+            switch (shape)
+            {
+                case 1:   // Classic: S-shaped recovery over 60 % of the beat - the sidechain-pump sound
+                    c = smoothstep (p / 0.6f);
+                    break;
+                case 2:   // Punch: a short hard duck, quick fast-starting release (tight, rhythmic)
+                {
+                    const float t = juce::jlimit (0.0f, 1.0f, (p - 0.04f) / 0.26f);
+                    c = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+                    break;
+                }
+                case 3:   // Swell: slow, breathing recovery across the whole beat
+                {
+                    const float t = juce::jlimit (0.0f, 1.0f, p / 0.95f);
+                    c = t * t;
+                    break;
+                }
+                case 4:   // Gate: held down to the off-beat, then opens fast (choppy pump)
+                    c = smoothstep ((p - 0.22f) / 0.08f);
+                    break;
+                default:
+                    break;
+            }
+            if (p > closeStart)
+                c *= 0.5f + 0.5f * std::cos (juce::MathConstants<float>::pi * (p - closeStart) / (1.0f - closeStart));
+            return c;
+        }
+    }
+
+    float PulseModule::evaluateShape (const PulseSettings& s, float phase) noexcept
+    {
+        if (s.shape <= 0 || s.shape >= shapeNames().size())
+            return evaluate (s, phase);
+        return pumpShape (s.shape, phase - std::floor (phase));
+    }
+
+    float PulseModule::effectiveDepth (float depth, float amount) noexcept
+    {
+        depth = juce::jlimit (0.0f, 1.0f, depth);
+        amount = juce::jlimit (0.0f, 1.0f, amount);
+        if (amount <= 0.5f)
+            return depth * (amount * 2.0f);   // exact at 0.5: old states keep their depth bit for bit
+        return depth + (1.0f - depth) * ((amount - 0.5f) * 2.0f);
+    }
+
+    float PulseModule::gainAt (const PulseSettings& s, float phase) noexcept
+    {
+        return 1.0f - effectiveDepth (s.depth, s.amount) * (1.0f - evaluateShape (s, phase));
+    }
+
     float PulseModule::evaluate (const PulseSettings& s, float phase) noexcept
     {
         constexpr int n = PulseSettings::numPoints;
@@ -87,15 +157,16 @@ namespace velvox::dsp
     void PulseModule::rebuildTable() noexcept
     {
         for (int i = 0; i <= tableSize; ++i)
-            table[(size_t) i] = evaluate (settings, (float) i / (float) tableSize);
+            table[(size_t) i] = evaluateShape (settings, (float) i / (float) tableSize);
     }
 
     void PulseModule::setSettings (const PulseSettings& s) noexcept
     {
         const bool curveChanged = s.x != settings.x || s.y != settings.y || s.interpolation != settings.interpolation
-                                  || s.tension != settings.tension;
+                                  || s.tension != settings.tension || s.shape != settings.shape;
         settings = s;
         settings.rate = juce::jlimit (0, rateNames().size() - 1, s.rate);
+        settings.shape = juce::jlimit (0, shapeNames().size() - 1, s.shape);
         if (curveChanged)
             rebuildTable();
 
@@ -139,7 +210,7 @@ namespace velvox::dsp
 
         const double cycleBeats = beatsPerCycle (settings.rate);
         const double ppqPerSample = bpm / 60.0 / fs;
-        const float depth = juce::jlimit (0.0f, 1.0f, settings.depth);
+        const float depth = effectiveDepth (settings.depth, settings.amount);
         double ppq = hostPlaying ? hostPpq : freePpq;
         float phase = 0.0f;
 

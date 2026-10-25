@@ -93,7 +93,7 @@ namespace velvox::ui
     {
         inline constexpr int revealMs = 260;     // panels sliding in
         inline constexpr float fadeRate = 0.2f;  // per-frame approach for Smoothed fades
-        inline constexpr int hoverInfoDelayMs = 450;
+        inline constexpr int hoverInfoDelayMs = 600;   // spec 8: tooltip delay 600 ms
     }
 
     namespace colours
@@ -309,6 +309,6 @@ namespace velvox::ui
     }
 
     // Base design size; the editor scales this canvas uniformly
-    inline constexpr int baseWidth = 1384;
-    inline constexpr int baseHeight = 1040;
+    inline constexpr int baseWidth = 1000;   // spec 2.1 / 8: base 1000 x 600 (like Pro-Q 4)
+    inline constexpr int baseHeight = 600;
 }

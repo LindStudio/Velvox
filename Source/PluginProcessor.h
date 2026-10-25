@@ -5,11 +5,13 @@
 #include "DSP/VocalChain.h"
 #include "DSP/Macros.h"
 #include "DSP/VocalAnalyzer.h"
+#include "Check/VocalCheckController.h"
 #include "DSP/SeqLockValue.h"
 #include "Parameters/ParameterLayout.h"
 #include "Parameters/SettingsReader.h"
 #include "Parameters/EqBands.h"
 #include "Presets/PresetManager.h"
+#include "Presets/UndoHistory.h"
 #include "AutoMix/AutoMixController.h"
 
 class VelvoxAudioProcessor final : public juce::AudioProcessor,
@@ -52,18 +54,16 @@ public:
     //==========================================================================
     juce::AudioProcessorValueTreeState& getState() noexcept { return apvts; }
     velvox::PresetManager& getPresetManager() noexcept { return presetManager; }
+
+    // One global undo history (parameter gestures, routing edits, preset loads, transactions).
+    // Message thread only. Other code groups several edits into one step with
+    // getUndo().beginTransaction (name) / endTransaction() or getUndo().perform (name, fn).
+    velvox::UndoHistory& getUndo() noexcept { return undoHistory; }
     velvox::dsp::VocalChain& getChain() noexcept { return chain; }
 
     // Automatic mix: capture during playback, analysis, plan, apply (see AutoMix/)
     velvox::automix::AutoMixController& getAutoMix() noexcept { return autoMix; }
 
-    // A/B comparison (message thread only): two complete states - every parameter and the
-    // chain with its instances. An empty slot starts as a copy of the active one.
-    int getActiveSlot() const noexcept { return activeSlot; }
-    void selectSlot (int slot);
-    void copyActiveSlotToOther();
-    bool isSlotFilled (int slot) const noexcept { return slotValid[(size_t) juce::jlimit (0, 1, slot)]; }
-    bool slotsAreEqual();   // the other slot sounds like the current state (or is empty)
 
     // Module instances in the chain, order, send-insert modes. setRouting is
     // message-thread only; the audio thread reads a lock-free copy (SeqLockValue).
@@ -118,6 +118,8 @@ public:
     // Latest findings (recomputed about twice a second while the module is on)
     const velvox::dsp::AnalysisResult& getLatestAnalysis() const noexcept { return latestAnalysis; }
     void refreshAnalysis();
+    // VOCAL CHECK findings, score, Anwenden / Alles anwenden / Ignorieren for the UI
+    velvox::check::VocalCheckController& getVocalCheck() noexcept { return vocalCheck; }
     // True when that module instance is in the chain and audible with the current settings
     bool isInstanceAudible (velvox::dsp::ModuleId id, int instance) const;
 
@@ -155,6 +157,7 @@ public:
 private:
 
     juce::AudioProcessorValueTreeState apvts;
+    velvox::UndoHistory undoHistory { apvts };
     velvox::PresetManager presetManager;
     velvox::dsp::VocalChain chain;
     velvox::automix::AutoMixController autoMix { *this, apvts };
@@ -173,6 +176,11 @@ private:
 
     velvox::dsp::VocalAnalyzer analyzer { chain.getCheck() };
     velvox::dsp::AnalysisResult latestAnalysis;
+    velvox::check::VocalCheckController vocalCheck { apvts, analyzer,
+        { [this]() -> const velvox::dsp::AnalysisResult& { return latestAnalysis; },
+          [this] { refreshAnalysis(); },
+          [this] { return getRouting(); },
+          [this] (velvox::dsp::ModuleId id, int k) { return isInstanceAudible (id, k); } } };
     double lastAnalysisMs = 0.0;
     struct AnalyzerTimer final : juce::Timer
     {
@@ -186,10 +194,16 @@ private:
     velvox::dsp::SeqLockValue<velvox::dsp::MixLaws> mixLawShared { velvox::dsp::MixLaws::allTrue() };
     velvox::dsp::MixLaws audioMixLaws = velvox::dsp::MixLaws::allTrue();   // audio thread's last good copy
 
-    // A/B slots hold full parameter snapshots
-    std::array<velvox::ParameterSnapshot, 2> slots;
-    std::array<bool, 2> slotValid { false, false };
-    int activeSlot = 0;
+    // Feeds the undo history with the plugin's own gestures (message thread)
+    struct GestureListener final : juce::AudioProcessorListener
+    {
+        explicit GestureListener (velvox::UndoHistory& h) : history (h) {}
+        void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
+        void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
+        void audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int index) override { history.gestureBegan (index); }
+        void audioProcessorParameterChangeGestureEnd (juce::AudioProcessor*, int index) override { history.gestureEnded (index); }
+        velvox::UndoHistory& history;
+    } gestureListener { undoHistory };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VelvoxAudioProcessor)
 };

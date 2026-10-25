@@ -64,6 +64,8 @@ namespace velvox::ui
         void setShowLabels (bool shouldShow) { labels = shouldShow; repaint(); }
         void setRange (float bottomDb, float topDb) { minDb = bottomDb; maxDb = topDb; repaint(); }
         void setIntensity (float i) { intensity = i; repaint(); }
+        // Simple mode: the input (before) as a dashed line instead of the faint outline
+        void setInputDashed (bool dashed) { inputDashed = dashed; repaint(); }
 
         void refresh() { if (spectrum != nullptr && isShowing()) repaint(); }
         void paint (juce::Graphics&) override;
@@ -83,5 +85,6 @@ namespace velvox::ui
         bool grid = true, labels = true;
         float minDb = -90.0f, maxDb = 0.0f;
         float intensity = 1.0f;
+        bool inputDashed = false;
     };
 }

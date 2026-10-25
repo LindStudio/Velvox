@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DspUtilities.h"
-#include "SpliceShifter.h"
+#include "VoiceSplice.h"
 
 namespace velvox::dsp
 {
@@ -64,14 +64,14 @@ namespace velvox::dsp
         double fs = 48000.0;
         ChoirSettings settings;
         LagrangeDelayLine line;
-        SpliceConfig splice;
+        VoiceSpliceConfig splice;
         Biquad sourceHpf, sourceLpf;
 
         struct Voice
         {
             SmoothRandomWalk pitchWalk, timeWalk;
             double pitchRate = 0.2, timeRate = 0.15;   // Hz
-            SpliceShifter shifter;
+            VoiceSpliceShifter shifter;
             float driftCents = 0.0f, driftMs = 0.0f;
             double drift = 0.0;                         // splice shifter drift (1 - ratio)
             float gain = 1.0f;                          // level offset (normalised)

@@ -20,6 +20,11 @@ namespace velvox::dsp
         float manualBpm = 150.0f;   // used when the host reports no tempo
         std::array<float, numPoints> x { 0.0f, 0.06f, 0.28f, 0.5f, 0.75f, 0.95f };
         std::array<float, numPoints> y { 0.0f, 0.1f, 0.7f, 0.95f, 1.0f, 1.0f };
+
+        // 0.6 "like Kickstart": 0 = the custom 6-point curve above (pre-0.6 behaviour),
+        // 1..4 = curated pump shapes. Amount is the one big control, centred on depth.
+        int shape = 0;              // index into PulseModule::shapeNames()
+        float amount = 0.5f;        // 0..1, 0.5 = exactly `depth` (old states)
     };
 
     // PULSE - rhythmic volume shaper. A user-drawn level curve is repeated once
@@ -39,6 +44,15 @@ namespace velvox::dsp
         // is exactly what is processed). Points need not be sorted.
         static float evaluate (const PulseSettings& s, float phase) noexcept;
 
+        // 0.6: Custom + four pump shapes (Classic, Punch, Swell, Gate). The curated shapes
+        // ignore points, interpolation and tension (those shape the Custom curve only).
+        static const juce::StringArray& shapeNames();
+        static float evaluateShape (const PulseSettings& s, float phase) noexcept;   // curve of the active shape
+        // Amount macro: 0 -> no pumping, 0.5 -> `depth`, 1 -> full ducking (linear in between)
+        static float effectiveDepth (float depth, float amount) noexcept;
+        // Target gain at a phase (before attack/release/smooth): what the UI draws
+        static float gainAt (const PulseSettings& s, float phase) noexcept;
+
         void prepare (double sampleRate, int maxBlockSize);
         void reset();
         void setSettings (const PulseSettings& s) noexcept;
@@ -46,7 +60,8 @@ namespace velvox::dsp
 
         void process (float* const* channels, int numChannels, int numSamples) noexcept;
 
-        // UI read-outs (relaxed atomics)
+        // UI read-outs (relaxed atomics): the current cycle phase and the applied gain
+        // (draw the curve with gainAt() and the playhead at displayPhase)
         std::atomic<float> displayPhase { -1.0f }; // < 0 while off
         std::atomic<float> displayGain { 1.0f };
         std::atomic<float> displayBpm { 150.0f };

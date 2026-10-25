@@ -278,6 +278,9 @@ namespace velvox::automix
         hasPreviousSnapshot = true;
         showingPrevious = false;
 
+        // The whole mix is one undo step
+        if (onApplying) onApplying (true, true);
+
         // Apply through the normal parameters (gestures: the host sees every change)
         eqbands::ScopedBridgeSuspend noEqBridge;   // the plan sets the EQ bands itself
         for (const auto& [id, value] : result.plan.values)
@@ -291,10 +294,9 @@ namespace velvox::automix
                 param->endChangeGesture();
             }
         apvts.state.setProperty (statekeys::routing, result.plan.routing.toString(), nullptr);
+        if (onApplying) onApplying (false, true);
 
         mixSnapshot = ParameterSnapshot::capture (apvts, de ("Headliner Auto-Mix"));
-        if (onMixApplied)
-            onMixApplied (previousSnapshot, mixSnapshot);
 
         // Report for the UI (only what was really set up)
         MixReport r;
@@ -328,17 +330,10 @@ namespace velvox::automix
 
     void AutoMixController::showPrevious (bool previous)
     {
-        if (selectCompare)
-        {
-            if (! hasPreviousSnapshot || ! hasMix())
-                return;
-            selectCompare (previous);
-            showingPrevious = previous;
-            sendChangeMessage();
-            return;
-        }
         if (! hasPreviousSnapshot || ! hasMix() || previous == showingPrevious)
             return;
+        // Listening to the state before / after is no edit: never an undo step
+        if (onApplying) onApplying (true, false);
         if (previous)
         {
             mixSnapshot = ParameterSnapshot::capture (apvts, mixSnapshot.name); // keep tweaks made to the mix
@@ -348,6 +343,7 @@ namespace velvox::automix
         {
             mixSnapshot.applyTo (apvts, true);
         }
+        if (onApplying) onApplying (false, false);
         showingPrevious = previous;
         sendChangeMessage();
     }
@@ -356,7 +352,9 @@ namespace velvox::automix
     {
         if (! hasPreviousSnapshot)
             return;
+        if (onApplying) onApplying (true, true);
         previousSnapshot.applyTo (apvts, true);
+        if (onApplying) onApplying (false, true);
         hasPreviousSnapshot = false;
         showingPrevious = false;
         report = {};

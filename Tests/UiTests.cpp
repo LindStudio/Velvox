@@ -6,6 +6,7 @@
 #include "UI/ChainView.h"
 #include "UI/ModuleBrowser.h"
 #include "UI/ModuleViews.h"
+#include "UI/EqPanel.h"
 #include "PluginEditor.h"
 
 using namespace velvox;
@@ -52,7 +53,7 @@ namespace
     {
         Harness h;
         ui::ChainView view { h.proc };
-        ViewFixture() { view.setBounds (0, 0, 1408, ui::ChainView::preferredHeight); }
+        ViewFixture() { view.setBounds (0, 0, 886, ui::ChainView::preferredHeight); }
     };
 
     float value (Harness& h, const juce::String& id) { return h.proc.getState().getRawParameterValue (id)->load(); }
@@ -110,19 +111,22 @@ public:
             const auto comp = f.view.getTileBounds (ModuleId::comp);
             drag (f.view, comp.getCentre(), f.view.getLaneBounds().getCentre());
             expect (f.h.proc.getRouting() == before, "routing unchanged");
-            expect (f.view.getHint().contains ("Only Delay and Reverb"), "explains why");
+            expect (f.view.getHint().contains ("nur Delay und Reverb"), "explains why");
         }
 
-        beginTest ("Power dot bypasses the instance, send/insert switch toggles the mode");
+        beginTest ("Power switch bypasses the instance, \"Als Insert\" / \"Als Send\" switch the mode");
         {
             ViewFixture f;
             const float before = f.h.get (pid::compOn);
             click (f.view, f.view.getPowerBounds (ModuleId::comp).getCentre());
             expectEquals (f.h.get (pid::compOn), 1.0f - before);
 
-            // A fresh chain holds the reverb as an insert (0.6): the switch makes it a send
-            click (f.view, f.view.getModeBounds (ModuleId::reverb).getCentre());
-            expect (f.h.proc.getRouting().isSend (ModuleId::reverb), "reverb switched to send");
+            // A fresh chain holds the reverb as an insert (0.6): the menu makes it a send
+            const int reverb = dsp::selectionCode (ModuleId::reverb, 0);
+            const bool wasSend = f.h.proc.getRouting().isSend (ModuleId::reverb);
+            expect (f.view.performTileAction (reverb, wasSend ? ui::ChainView::TileAction::asInsert : ui::ChainView::TileAction::asSend));
+            expect (f.h.proc.getRouting().isSend (ModuleId::reverb) != wasSend, "reverb switched");
+            expect (! f.view.performTileAction ((int) ModuleId::comp, ui::ChainView::TileAction::asSend), "only delay / reverb can be sends");
         }
 
         beginTest ("Add, duplicate, remove, undo and redo instances");
@@ -148,10 +152,8 @@ public:
             expectEquals (r.indexOf (ModuleId::eq, 2), r.indexOf (ModuleId::eq, 1) + 1);
             expectWithinAbsoluteError (value (f.h, "midGain_3"), 6.0f, 0.01f, "settings copied");
 
-            // Remove via the hover button (mouse moves over the card first, like a real user)
-            const auto card = f.view.getTileBounds (ModuleId::eq, 1);
-            f.view.mouseMove (mouse (f.view, card.getCentre(), card.getCentre(), false));
-            click (f.view, f.view.getRemoveBounds (ModuleId::eq, 1).getCentre());
+            // Remove through the tile menu action
+            expect (f.view.performTileAction (dsp::selectionCode (ModuleId::eq, 1), ui::ChainView::TileAction::remove));
             expect (! f.h.proc.getRouting().contains (ModuleId::eq, 1), "EQ 2 removed");
             expect (value (f.h, "eqOn_2") < 0.5f, "removed instance is switched off");
 
@@ -166,7 +168,7 @@ public:
             f.view.insertModule (ModuleId::eq);
             expectEquals (f.h.proc.getRouting().countOf (ModuleId::eq), 4);
             expectEquals (f.view.insertModule (ModuleId::eq), -1, "no fifth EQ");
-            expect (f.view.getHint().contains ("All 4"));
+            expect (f.view.getHint().contains ("Alle 4"));
         }
 
         beginTest ("\"+\" between two cards and the add card open the browser for that position");
@@ -199,7 +201,7 @@ public:
 
             for (const auto& s : r0)
                 if (s.insert)
-                    expect (f.view.getTileBounds (s.id, s.instance).getWidth() >= ui::ChainView::minCardW - 0.01f,
+                    expect (f.view.getTileBounds (s.id, s.instance).getWidth() >= ui::ChainView::minTileW - 0.01f,
                             juce::String ("card width ") + dsp::moduleDisplayName (s.id));
             expect (f.view.getMaxScroll() > 0.0f, "13 modules do not fit: the row scrolls");
 
@@ -257,20 +259,38 @@ public:
             }
         }
 
-        beginTest ("Module browser: categories, search, instance limits, insertion");
+        beginTest ("Module browser: cards grouped by category, search, Esc, Enter, highlight, full modules greyed with a reason");
         {
             Harness h;
             ui::ModuleBrowser browser (h.proc);
             browser.setBounds (0, 0, ui::baseWidth, ui::baseHeight);
             browser.open (1, false);
-            expectEquals ((int) browser.visibleModules().size(), dsp::numModules, "all modules in 'All'");
+            using C = ui::ModuleBrowser::Category;
+            expectEquals ((int) browser.visibleModules().size(), dsp::numModules, "every module");
+            const std::vector<std::pair<C, std::vector<ModuleId>>> expected {
+                { C::cleanUp, { ModuleId::eq, ModuleId::deess, ModuleId::smooth } },
+                { C::dynamics, { ModuleId::comp, ModuleId::smash, ModuleId::ride } },
+                { C::colour, { ModuleId::sat } },
+                { C::widthVoices, { ModuleId::doubler, ModuleId::choir, ModuleId::pitch } },
+                { C::space, { ModuleId::delay, ModuleId::reverb } },
+                { C::rhythm, { ModuleId::chop, ModuleId::pulse } },
+                { C::analysis, { ModuleId::check } } };
+            std::vector<ModuleId> order;
+            for (auto& [cat, ids] : expected)
+            {
+                const auto group = browser.groupBoundsFor (cat);
+                expect (! group.isEmpty(), ui::ModuleBrowser::categoryName (cat));
+                for (auto id : ids)
+                {
+                    expect (ui::ModuleBrowser::categoryOf (id) == cat);
+                    expect (group.contains (browser.cardBoundsFor (id)), juce::String (dsp::moduleKey (id)) + " in its group");
+                    order.push_back (id);
+                }
+            }
+            expect (browser.visibleModules() == order, "grouped display order");
+            for (auto id : order)
+                expect (browser.getLocalBounds().contains (browser.cardBoundsFor (id)), "card inside the window");
 
-            browser.setCategory (ui::ModuleBrowser::Category::space);
-            expect (browser.visibleModules() == std::vector<ModuleId> { ModuleId::delay, ModuleId::reverb });
-            browser.setCategory (ui::ModuleBrowser::Category::analysis);
-            expect (browser.visibleModules() == std::vector<ModuleId> { ModuleId::check }, "analysis tools separate");
-
-            browser.setCategory (ui::ModuleBrowser::Category::all);
             browser.setSearchText ("harsh");
             const auto harsh = browser.visibleModules();
             expect (std::find (harsh.begin(), harsh.end(), ModuleId::smooth) != harsh.end()
@@ -279,21 +299,41 @@ public:
             expect (browser.visibleModules().empty());
             browser.setSearchText ({});
 
+            // Hover shows the description
+            const auto reverbCard = browser.cardBoundsFor (ModuleId::reverb).getCentre().toFloat();
+            browser.mouseMove (mouse (browser, reverbCard, reverbCard, false));
+            expect (browser.getInfoText().startsWith ("Reverb"), "hover description: " + browser.getInfoText());
+
             ModuleId chosen = ModuleId::eq;
             int at = -1;
             browser.onChoose = [&] (ModuleId id, int index, bool) { chosen = id; at = index; };
-            click (browser, browser.cardBoundsFor (ModuleId::reverb).getCentre().toFloat());
+            click (browser, reverbCard);
             expect (chosen == ModuleId::reverb && at == 1, "clicking a card chooses it for the position");
             expect (! browser.isOpen(), "the browser closes");
 
-            // Full bank: the card does nothing
+            // Keys: highlight + Enter, Esc
+            browser.open (0, true);
+            expect (browser.getHighlighted() == ModuleId::eq, "first card highlighted");
+            browser.moveHighlight (1);
+            expect (browser.getHighlighted() == ModuleId::deess, "arrow moves the highlight");
+            expect (browser.keyPressed (juce::KeyPress (juce::KeyPress::returnKey)));
+            expect (chosen == ModuleId::deess && ! browser.isOpen(), "Enter adds the highlighted module");
+            browser.open (0, true);
+            browser.keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+            expect (! browser.isOpen(), "Esc closes");
+
+            // Full: greyed with a reason, not choosable, skipped by the highlight
             browser.open (0, true);
             auto r = h.proc.getRouting();
             r.insertAt (r.size(), ModuleId::pitch, 0);
             h.proc.setRouting (r);
+            expect (browser.reasonUnavailable (ModuleId::pitch).isNotEmpty(), "reason for pitch");
+            expect (browser.reasonUnavailable (ModuleId::reverb).isEmpty());
             chosen = ModuleId::eq;
             click (browser, browser.cardBoundsFor (ModuleId::pitch).getCentre().toFloat());
             expect (chosen == ModuleId::eq && browser.isOpen(), "pitch is already in the chain (one instance)");
+            browser.setSearchText ("transpose");
+            expect (! browser.chooseHighlighted(), "Enter does not add a full module");
         }
 
         beginTest ("Editor: browser inserts at the chosen position and opens the new instance");
@@ -356,31 +396,37 @@ public:
             expectEquals (ui::eqWheelQ (0.31f, -2.0f, false, 0.3f, 8.0f), 0.3f, "clamped at the bottom");
             expectEquals (ui::eqWheelQ (1.0f, std::numeric_limits<float>::quiet_NaN(), false, 0.3f, 8.0f), 1.0f, "invalid delta ignored");
 
-            // Real view, second EQ instance: the parameter of that instance follows the wheel
+            // Real view (the 0.6 EQ graph), second EQ instance: the Q of that instance's band follows the wheel
             Harness h;
             auto r = h.proc.getRouting();
             r.insertAt (1, ModuleId::eq, 1);
             h.proc.setRouting (r);
+            const int band = ui::eqedit::addBand (h.proc, 1, 1500.0f, 4.0f);
             auto view = ui::createModuleView (h.proc, dsp::selectionCode (ModuleId::eq, 1), nullptr);
+            auto* graph = dynamic_cast<ui::EqGraph*> (view.get());
+            expect (graph != nullptr, "the EQ visual is the EqGraph");
+            if (graph == nullptr)
+                return;
             view->setBounds (0, 0, 900, 200);
-            const auto plot = ui::EqCurve::plotArea (view->getLocalBounds().toFloat());
-            const juce::Point<float> node (ui::SpectrumView::xForFrequency (value (h, "midFreq_2"), plot), plot.getCentreY());
-            const float before = value (h, "midQ_2");
+            const auto node = graph->pointFor (band);
+            const auto qId = ui::eqedit::paramId (1, band, pid::eqband::q);
+            const float before = value (h, qId);
             view->mouseWheelMove (mouse (*view, node, node, false), wheel (0.11f));
-            const float narrower = value (h, "midQ_2");
+            const float narrower = value (h, qId);
             view->mouseWheelMove (mouse (*view, node, node, false), wheel (-0.22f));
-            const float wider = value (h, "midQ_2");
-            logMessage ("mid Q: " + juce::String (before, 3) + " -> " + juce::String (narrower, 3) + " -> " + juce::String (wider, 3));
+            const float wider = value (h, qId);
+            logMessage ("band Q: " + juce::String (before, 3) + " -> " + juce::String (narrower, 3) + " -> " + juce::String (wider, 3));
             expect (narrower > before * 1.15f, "wheel up narrows the band");
             expect (wider < before, "wheel down widens it");
-            expectWithinAbsoluteError (h.get (pid::midQ), 1.0f, 1.0e-4f, "EQ 1 untouched");
+            expectWithinAbsoluteError (value (h, ui::eqedit::paramId (0, band, pid::eqband::q)), 1.0f, 1.0e-4f, "EQ 1 untouched");
 
-            const float atRest = value (h, "midQ_2");
+            const float atRest = value (h, qId);
+            const auto plot = graph->plotArea();
             const juce::Point<float> empty (plot.getX() + 5.0f, plot.getY() + 4.0f);
             view->mouseWheelMove (mouse (*view, empty, empty, false), wheel (0.11f));
-            expectEquals (value (h, "midQ_2"), atRest, "away from the nodes nothing changes");
+            expectEquals (value (h, qId), atRest, "away from the nodes nothing changes");
             view->mouseWheelMove (mouse (*view, node, node, false), wheel (0.0f, 0.3f));
-            expectEquals (value (h, "midQ_2"), atRest, "horizontal scrolling is not hijacked");
+            expectEquals (value (h, qId), atRest, "horizontal scrolling is not hijacked");
         }
 
         beginTest ("Hover info card sits next to its control and stays inside the window");

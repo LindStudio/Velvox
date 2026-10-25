@@ -104,7 +104,8 @@ namespace velvox
         bind (raw.pulseX[i], pid::pulseX[i]);
         bind (raw.pulseY[i], pid::pulseY[i]);
     }
-    bind (raw.smashOn, pid::smashOn);           bind (raw.smashAmount, pid::smashAmount);
+    bind (raw.pulseShape, pid::pulseShape);     bind (raw.pulseAmount, pid::pulseAmount);
+    bind (raw.smashOn, pid::smashOn);          bind (raw.smashAmount, pid::smashAmount);
     bind (raw.smashBlend, pid::smashBlend);     bind (raw.smashAttack, pid::smashAttack);
     bind (raw.smashRelease, pid::smashRelease); bind (raw.smashTone, pid::smashTone);
     bind (raw.smashOutput, pid::smashOutput);
@@ -117,6 +118,11 @@ namespace velvox
     bind (raw.smoothHigh, pid::smoothHigh);     bind (raw.smoothAttack, pid::smoothAttack);
     bind (raw.smoothRelease, pid::smoothRelease); bind (raw.smoothMode, pid::smoothMode);
     bind (raw.smoothOutput, pid::smoothOutput); bind (raw.smoothDelta, pid::smoothDelta);
+    for (size_t i = 0; i < raw.smoothWFreq.size(); ++i)
+    {
+        bind (raw.smoothWFreq[i], pid::smoothWFreq[i]);
+        bind (raw.smoothWGain[i], pid::smoothWGain[i]);
+    }
     bind (raw.checkOn, pid::checkOn);           bind (raw.checkMode, pid::checkMode);
     bind (raw.rideOn, pid::rideOn);             bind (raw.rideTarget, pid::rideTarget);
     bind (raw.rideAmount, pid::rideAmount);     bind (raw.rideMaxBoost, pid::rideMaxBoost);
@@ -128,6 +134,11 @@ namespace velvox
     bind (raw.reverbHighCut, pid::reverbHighCut);
     bind (raw.delaySpread, pid::delaySpread);   bind (raw.delayDrive, pid::delayDrive);
     bind (raw.delayDiffusion, pid::delayDiffusion); bind (raw.delayMod, pid::delayMod);
+    bind (raw.satMultiband, pid::satMultiband);
+    bind (raw.satXoverLow, pid::satXoverLow);   bind (raw.satXoverHigh, pid::satXoverHigh);
+    bind (raw.satBandOn[0], pid::satLowOn);     bind (raw.satBandDrive[0], pid::satLowDrive);   bind (raw.satBandChar[0], pid::satLowChar);
+    bind (raw.satBandOn[1], pid::satMidOn);     bind (raw.satBandDrive[1], pid::satMidDrive);   bind (raw.satBandChar[1], pid::satMidChar);
+    bind (raw.satBandOn[2], pid::satHighOn);    bind (raw.satBandDrive[2], pid::satHighDrive);  bind (raw.satBandChar[2], pid::satHighChar);
     for (int n = 0; n < dsp::maxEqBands; ++n)
     {
         auto& b = raw.eqBands[(size_t) n];
@@ -278,6 +289,11 @@ namespace velvox
     }
     s.eq.legacyResponse = raw.eqLegacyResponse.on();
     s.sat.character = raw.satCharacter.index();
+    s.sat.multiband = raw.satMultiband.on();
+    s.sat.xoverLowHz = raw.satXoverLow.get();
+    s.sat.xoverHighHz = raw.satXoverHigh.get();
+    for (size_t b = 0; b < s.sat.bands.size(); ++b)
+        s.sat.bands[b] = { raw.satBandOn[b].on(), raw.satBandDrive[b].get(), raw.satBandChar[b].index() };
     s.deess.mode = raw.deessMode.index();
     s.comp.detector = raw.compDetector.index();
     s.comp.sidechainHpfHz = raw.compScHpf.get();
@@ -292,6 +308,8 @@ namespace velvox
     s.pulse.tension = raw.pulseTension.get() * 0.01f;
     s.pulse.mix = raw.pulseMix.get() * 0.01f;
     s.pulse.manualBpm = raw.pulseBpm.get();
+    s.pulse.shape = raw.pulseShape.index();
+    s.pulse.amount = raw.pulseAmount.get() * 0.01f;
     for (size_t i = 0; i < raw.pulseX.size(); ++i)
     {
         s.pulse.x[i] = raw.pulseX[i].get();
@@ -325,6 +343,11 @@ namespace velvox
     s.smooth.mode = raw.smoothMode.index();
     s.smooth.outputDb = raw.smoothOutput.get();
     s.smooth.delta = raw.smoothDelta.on();
+    for (size_t i = 0; i < raw.smoothWFreq.size(); ++i)
+    {
+        s.smooth.weightFreq[i] = raw.smoothWFreq[i].get();
+        s.smooth.weightGain[i] = raw.smoothWGain[i].get();
+    }
 
     s.checkOn = raw.checkOn.on();
 

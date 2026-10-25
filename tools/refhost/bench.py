@@ -69,6 +69,8 @@ METRICS = {
     "vocal_pitch_err_cents": ("lower", 3.0, "ct", "median |f0 ratio error| on the vocals"),
     "hnr_drop_db": ("info", 0.0, "dB", "HNR(dry) - HNR(out) on the vocals (pitch changes it; informative only)"),
     "latency_ms": ("lower", 10.0, "ms", "reported latency"),
+    "formant_shift_oct": ("lower", 0.0, "oct", "|envelope scaling (oct)| that maps the dry LPC envelope onto the output, sustained VocalSet vowels"),
+    "sustain_roughness_db": ("lower", 0.5, "dB", "2-period envelope std of the shifted held vowel minus the dry one (phasiness/beating)"),
     "comb_depth_db": ("lower", 1.0, "dB", "peak-to-notch range of the mono-sum transfer (pink noise)"),
     "am_roughness_db": ("lower", 0.5, "dB", "std of the 20 ms envelope of a 440 Hz tone (beating/flanging)"),
     "am_roughness_multi_db": ("lower", 0.5, "dB", "am_roughness averaged over 6 tones 196-880 Hz (less dependent on beat phases)"),
@@ -235,7 +237,8 @@ class Ctx:
                 params = list(r.params) + list(c.refs.get(r.name, []))
                 if r.name in self.calibrated.get(c.name, {}):
                     k, v = self.calibrated[c.name][r.name]
-                    params = [p for p in params if p[0] != k] + [(k, v)]
+                    keys = [k] + list(c.calibrate[r.name].also)
+                    params = [p for p in params if p[0] not in keys] + [(kk, v) for kk in keys]
                 out.append(Side(r.name, "ref", r.plugin, r.sub, params, r.setn))
         return out
 
@@ -350,7 +353,7 @@ def calibrate(ctx: Ctx, case: M.Case):
         tried = {}
 
         def measure(v):
-            side = Side(ref_name, "ref", ref.plugin, ref.sub, base + [(cal.param, f"{v:g}")], ref.setn)
+            side = Side(ref_name, "ref", ref.plugin, ref.sub, base + [(p, f"{v:g}") for p in [cal.param] + list(cal.also)], ref.setn)
             r = ctx.render("calib", x, sides=[side], tag=f"_{cal.param.replace(' ', '')}{v:g}")
             tried[v] = probe_value(cal.probe, x, r[ref_name]) if ref_name in r else None
             return tried[v]
@@ -367,6 +370,11 @@ def calibrate(ctx: Ctx, case: M.Case):
                 if (ok[a] - target) * (ok[b] - target) < 0:
                     for _ in range(5):
                         mid = 0.5 * (a + b)
+                        if cal.step:
+                            # the plugin only reaches a grid of values (it rejects the rest)
+                            mid = round(round(mid / cal.step) * cal.step, 6)
+                            if mid in tried or mid <= min(a, b) or mid >= max(a, b):
+                                break
                         m = measure(mid)
                         if m is None:
                             break
@@ -643,6 +651,50 @@ def proc_pitch_vocal(ctx, case):
     ctx.metric("hnr_drop_db", _mean_over_clips(hnr))
 
 
+PITCH_VOWELS = [S.Clip(f"{s}_{v}", os.path.join(S.VOCALSET, rf"{d}\long_tones\straight\{s}_long_straight_{v}.wav"), 0.5, 1.4)
+                for s, d in (("f7", "female7"), ("m8", "male8")) for v in ("a", "i", "u")]
+
+
+def _env_spread_db(y):
+    """Fast envelope fluctuation (dB): std of the RMS envelope in frames of whole periods (median f0, >= 20 ms, so the
+    waveform itself does not count) minus its 150 ms moving average (note shape, onsets and decays do not count),
+    over the frames within 20 dB of the loudest."""
+    m = q.mono(y)
+    f0 = q.f0_track(m, FS)
+    f0 = float(np.median(f0[f0 > 0])) if np.any(f0 > 0) else 100.0
+    w = int(round(max(2, math.ceil(0.02 * f0)) * FS / f0))   # whole periods, >= 20 ms
+    c = np.concatenate([[0], np.cumsum(m ** 2)])
+    hop = max(1, w // 2)
+    st = np.arange(int(0.1 * FS), len(m) - w - int(0.1 * FS), hop)
+    e = 10 * np.log10((c[st + w] - c[st]) / w + 1e-20)
+    k = max(3, int(round(0.15 * FS / hop)) | 1)
+    trend = np.convolve(np.pad(e, k // 2, mode="edge"), np.ones(k) / k, mode="valid")
+    act = e > e.max() - 20
+    return float(np.std((e - trend)[act]))
+
+
+def proc_pitch_formant(ctx, case):
+    """Sustained VocalSet vowels (validation singers f7, m8; a/i/u): formant shift of F1/F2 against the dry vowel
+    (LPC envelope, preserve formants on), and the added envelope roughness on the held note (phasiness/beating)."""
+    shift, rough = [], []
+    for clip in PITCH_VOWELS:
+        x = S.load_clip(clip)
+        ys = ctx.render("vowel_" + clip.name, x)
+        q.write_wav(os.path.join(ctx.listen, f"{ctx.case.name}__vowel_{clip.name}__dry.wav"), x, FS)
+        sx = _env_spread_db(x)
+        s, r = {}, {}
+        for n, y in ys.items():
+            y = y[:len(x)]
+            q.write_wav(os.path.join(ctx.listen, f"{ctx.case.name}__vowel_{clip.name}__{n.replace(' ', '_')}.wav"),
+                        q.apply_gain_db(y, q.match_gain_db(x, y, FS)), FS)
+            s[n] = abs(q.formant_shift_oct(x, y, FS))
+            r[n] = _env_spread_db(y) - sx
+        ctx.log(f"  {clip.name}: formant shift " + ", ".join(f"{n} {v:+.2f} oct" for n, v in s.items()))
+        shift.append(s), rough.append(r)
+    ctx.metric("formant_shift_oct", _mean_over_clips(shift), note="mean of 6 vowels")
+    ctx.metric("sustain_roughness_db", _mean_over_clips(rough), note="mean of 6 vowels")
+
+
 def _am_roughness(y):
     m = q.mono(y)[int(0.5 * FS):]
     w = int(0.02 * FS)
@@ -865,7 +917,7 @@ PROCEDURES = {
     "eq_response": proc_eq_response, "eq_cramping": proc_eq_cramping, "dyn_curve": proc_dyn_curve, "dyn_timing": proc_dyn_timing, "thd_lf": proc_thd_lf,
     "vocal": proc_vocal, "vocal_listen": proc_vocal_listen, "deess_vocal": proc_deess_vocal,
     "deess_inactive_null": proc_deess_inactive_null, "resonance_vocal": proc_resonance_vocal, "sat_tones": proc_sat_tones,
-    "pitch_tones": proc_pitch_tones, "pitch_vocal": proc_pitch_vocal, "mod_widen": proc_mod_widen,
+    "pitch_tones": proc_pitch_tones, "pitch_vocal": proc_pitch_vocal, "pitch_formant": proc_pitch_formant, "mod_widen": proc_mod_widen,
     "voice_tracking": proc_voice_tracking, "voice_splice": proc_voice_splice,
     "vocal_width": proc_vocal_width, "delay_ir": proc_delay_ir, "dry_leak": proc_dry_leak, "reverb_ir": proc_reverb_ir,
     "ride_vocal": proc_ride_vocal, "gate_tone": proc_gate_tone, "check_null": proc_check_null, "nulls": proc_nulls,

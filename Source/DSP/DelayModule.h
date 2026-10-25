@@ -23,8 +23,11 @@ namespace velvox::dsp
     // exactly once). Repeats are band-limited by a high-pass and low-pass in the
     // loop and pass through a soft limiter, so the loop can never run away.
     //
-    // A change of the delay time (new note value, tempo change, automation) crossfades
-    // between the old and the new read position over 60 ms: no pitch glide and no click.
+    // Delay time changes (0.6): small and continuous moves (automation, echo-map drags,
+    // tempo drifts) glide tape-style - the read position follows the target smoothly
+    // (50 ms, slew limited to about +-1.4 semitones), so a sweep has no flutter and no
+    // dips. A jump (new note value, more than 15 ms away) crossfades between the old and
+    // the new read position over 60 ms instead: no pitch dive and no click.
     // Optional in the loop: diffusion all-passes (latency compensated - a diffusion of 0
     // keeps the timing exact), saturation and slow modulation.
     class DelayModule
@@ -41,6 +44,20 @@ namespace velvox::dsp
         void process (const float* const* input, float* const* wetOut, int numChannels, int numSamples) noexcept;
 
         static float timeForTempo (double bpm, int divisionIndex) noexcept;
+
+        // Echo map feed (UI): the repeats a centred mono impulse produces with these
+        // settings, in time order. level = linear gain per side (feedback, ping-pong
+        // routing, spread and the loop filters' gain at 1 kHz; drive / diffusion /
+        // modulation ignored). Stops below floorDb or after maxTaps; returns the count.
+        // Message thread or audio thread (no allocation).
+        struct EchoTap { float timeMs; float levelL; float levelR; };
+        static int echoTaps (const DelaySettings& s, double sampleRate, EchoTap* out, int maxTaps, float floorDb = -60.0f) noexcept;
+        // Inverse for dragging an echo's height: the feedback that makes each repeat
+        // `ratio` (linear) of the previous one, clamped to the feedback range
+        static float feedbackForRatio (const DelaySettings& s, double sampleRate, float ratio) noexcept;
+
+        // UI read-out: the current (gliding) delay time of the left tap in ms
+        std::atomic<float> displayTimeMs { 375.0f };
 
     private:
         float readInterpolated (const std::vector<float>& buf, float delaySamples) const noexcept;
@@ -62,6 +79,24 @@ namespace velvox::dsp
         };
         static constexpr int numDiffusers = 3;
 
+        // Drive (0.6): the saturator runs at 2x through a linear-phase half-band FIR
+        // (47 taps, Kaiser) - no aliasing fizz on bright repeats. Its constant latency
+        // (driveLatency base samples) is taken off the read position and the undriven tap
+        // is delayed by the same amount, so the echo timing and the drive-off sound stay
+        // exactly as before.
+        static constexpr int halfbandTaps = 47, driveLatency = 23;
+        struct DriveStage
+        {
+            std::array<float, 32> x {};      // base-rate input history (age 0..23)
+            std::array<float, 32> even {};   // saturated even 2x samples (age 0..23)
+            std::array<float, 16> odd {};    // saturated odd 2x samples (age 0..11)
+        };
+        float driveSample (int ch, float t, float k, float amount) noexcept;
+        std::array<DriveStage, maxChannels> driveStages;
+        std::array<float, halfbandTaps> halfband {};
+        int drivePos = 0;
+        juce::SmoothedValue<float> driveAmount { 0.0f };   // 0/1 blend: switching drive on/off never clicks
+
         double fs = 44100.0;
         DelaySettings settings;
         std::array<std::vector<float>, maxChannels> lines;
@@ -70,9 +105,11 @@ namespace velvox::dsp
         int writePos = 0;
         int size = 0;
 
-        // Time crossfade: the current read position, the next one, and the fade between them
-        float currentDelay = 1.0f, nextDelay = 1.0f, targetDelay = 1.0f;
+        // Time changes: the gliding read position, the crossfade target for jumps, the fade
+        double currentDelay = 1.0;   // double: the glide's last tiny steps must not vanish in float rounding
+        float nextDelay = 1.0f, targetDelay = 1.0f;
         float fade = 1.0f, fadeStep = 0.0f;
+        float glideCoeff = 0.0f, maxGlideStep = 0.08f, jumpSamples = 720.0f;
         bool snapTime = true;
 
         double modPhase1 = 0.0, modPhase2 = 0.0;

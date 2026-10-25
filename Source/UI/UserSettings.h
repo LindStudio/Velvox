@@ -12,6 +12,7 @@ namespace velvox::ui::settings
     inline constexpr const char* myLayoutOrder = "myLayoutOrder";  // dsp::Routing string
     inline constexpr const char* myLayoutHidden = "myLayoutHidden"; // comma separated module keys
     inline constexpr const char* assistantAutoApply = "assistantAutoApply"; // bool: apply proposals right away
+    inline constexpr const char* presetFavourites = "presetFavourites";   // favourite presets, one per line: "f:Name" / "u:Name"
 
     juce::String getString (const juce::String& key, const juce::String& fallback = {});
     bool getBool (const juce::String& key, bool fallback = false);

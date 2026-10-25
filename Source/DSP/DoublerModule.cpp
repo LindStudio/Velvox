@@ -50,7 +50,7 @@ namespace velvox::dsp
     void DoublerModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
-        splice = SpliceConfig::forRate (fs);
+        splice = VoiceSpliceConfig::forRate (fs);
         maxModSamples = 0.010 * fs;
         // Longest read: delay + wobble (2 walks, 0..2A each) + the shifter's range and search window
         line.setSize ((int) (maxDelayMs * 0.001 * fs + 4.0 * maxModSamples + splice.headroom()));

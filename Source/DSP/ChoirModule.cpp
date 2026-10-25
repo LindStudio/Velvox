@@ -73,7 +73,7 @@ namespace velvox::dsp
     void ChoirModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
-        splice = SpliceConfig::forRate (fs);
+        splice = VoiceSpliceConfig::forRate (fs);
         line.setSize ((int) ((baseDelayMs + maxTimingMs + maxDriftMs) * 0.001 * fs + splice.headroom()));
 
         sourceHpf.setCoeffs (design::highPass (fs, 150.0, 0.7071));
