@@ -26,6 +26,11 @@ namespace
         {
             if (const auto id = paramOf (child); id.isNotEmpty())
                 out.addIfNotAlreadyThere (id);
+            // Graph handles of the visual (e.g. Smooth's weighting points and limit edges; their own panel
+            // tests check that every listed parameter really is edited by the graph)
+            if (auto* view = dynamic_cast<ui::ModuleView*> (child))
+                for (const auto& id : view->getEditedParameters())
+                    out.addIfNotAlreadyThere (id);
             if (auto* ch = dynamic_cast<ui::Choice*> (child))
                 juce::ignoreUnused (ch);
             collectParams (*child, out);

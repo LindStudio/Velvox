@@ -1,6 +1,7 @@
 #include "ModuleViews.h"
 #include "EqPanel.h"
 #include "ReverbPanel.h"
+#include "SmoothPanel.h"
 #include "../PluginProcessor.h"
 #include "../DSP/SaturationModule.h"
 #include "../DSP/ChopModule.h"
@@ -1231,80 +1232,6 @@ namespace velvox::ui
         };
 
         //======================================================================
-        // SMOOTH: spectrum with the reductions that are applied right now
-        class SmoothView final : public ModuleView
-        {
-        public:
-            SmoothView (VelvoxAudioProcessor& p, const SpectrumSource* src, int k) : proc (p), instance (k), spectrum (src)
-            {
-                addAndMakeVisible (spectrum);
-                spectrum.setRange (-90.0f, 0.0f);
-                spectrum.setIntensity (0.6f);
-            }
-
-            void resized() override { spectrum.setBounds (getLocalBounds().withTrimmedTop (22)); }
-
-            void update (const LiveData& d) override
-            {
-                s = d.settings.smooth;
-                auto& m = proc.getChain().getSmooth (instance);
-                for (int b = 0; b < dsp::SmoothModule::numBands; ++b)
-                {
-                    cut[(size_t) b].target = m.bandCutDb[(size_t) b].load();
-                    cut[(size_t) b].tick (0.35f);
-                }
-                spectrum.refresh();
-                repaint();
-            }
-
-            void paintOverChildren (juce::Graphics& g) override
-            {
-                const float alpha = s.enabled ? 1.0f : 0.4f;
-                const auto plot = spectrum.getBounds().toFloat();
-                auto head = getLocalBounds().toFloat().reduced (16.0f, 6.0f).withHeight (12.0f);
-
-                // Untreated range is shaded
-                const float lo = SpectrumView::xForFrequency (std::min (s.lowHz, s.highHz), plot);
-                const float hi = SpectrumView::xForFrequency (std::max (s.lowHz, s.highHz), plot);
-                g.setColour (colours::background.withAlpha (0.55f));
-                g.fillRect (plot.withRight (lo));
-                g.fillRect (plot.withLeft (hi));
-                g.setColour (colours::teal.withAlpha (0.35f * alpha));
-                g.fillRect (juce::Rectangle<float> (lo, plot.getY(), 1.0f, plot.getHeight()));
-                g.fillRect (juce::Rectangle<float> (hi, plot.getY(), 1.0f, plot.getHeight()));
-
-                // Reductions hang from the top, one bar per band
-                float maxCut = 0.0f, maxHz = 0.0f;
-                for (int b = 0; b < dsp::SmoothModule::numBands; ++b)
-                {
-                    const float c = cut[(size_t) b].current;
-                    if (c < 0.05f)
-                        continue;
-                    const float f = dsp::SmoothModule::bandFrequency (b);
-                    const float x = SpectrumView::xForFrequency (f, plot);
-                    const float h = plot.getHeight() * 0.75f * juce::jlimit (0.0f, 1.0f, c / 18.0f);
-                    const auto bar = juce::Rectangle<float> (x - 3.0f, plot.getY(), 6.0f, h);
-                    const auto col = aurora (juce::jlimit (0.0f, 1.0f, (x - plot.getX()) / plot.getWidth()));
-                    drawGlow (g, { x, bar.getBottom() }, 10.0f + h * 0.3f, 0.35f * alpha, col);
-                    g.setGradientFill (juce::ColourGradient (col.withAlpha (0.15f * alpha), 0.0f, bar.getY(), col.withAlpha (0.9f * alpha), 0.0f, bar.getBottom(), false));
-                    g.fillRoundedRectangle (bar, 3.0f);
-                    if (c > maxCut) { maxCut = c; maxHz = f; }
-                }
-
-                label (g, "Live reductions", head);
-                label (g, maxCut > 0.3f ? "Strongest  -" + juce::String (maxCut, 1) + " dB at " + hz (maxHz) : juce::String ("Nothing to tame right now"),
-                       head, juce::Justification::topRight, colours::text);
-            }
-
-        private:
-            VelvoxAudioProcessor& proc;
-            const int instance;
-            SpectrumView spectrum;
-            dsp::SmoothSettings s;
-            std::array<Smoothed, dsp::SmoothModule::numBands> cut {};
-        };
-
-        //======================================================================
         // VOCAL CHECK: what the analysis measured - long-term spectrum and balance
         class CheckView final : public ModuleView
         {
@@ -1508,7 +1435,7 @@ namespace velvox::ui
             case ModuleId::pulse:   return std::make_unique<PulseView> (p);
             case ModuleId::smash:   return std::make_unique<SmashView> (p, instance);
             case ModuleId::choir:   return std::make_unique<ChoirView> (p, instance);
-            case ModuleId::smooth:  return std::make_unique<SmoothView> (p, spectrum, instance);
+            case ModuleId::smooth:  return createSmoothGraph (p, instance);
             case ModuleId::check:   return std::make_unique<CheckView> (p);
             case ModuleId::ride:    return std::make_unique<RideView>();
         }

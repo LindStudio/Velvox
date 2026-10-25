@@ -248,7 +248,269 @@ public:
             auto* speed = main.size() > 2 ? dynamic_cast<SpeedKnob*> (main[2]) : nullptr;
             expect (speed != nullptr && std::abs (speed->slider.getValue() - 1.0) < 0.01, "Speed shows instance 2's times");
         }
+
+        //======================================================================
+        // The graph
+        beginTest ("Graph: geometry round trips; points sit on the weighting curve; it edits the 14 handle parameters");
+        {
+            Harness h;
+            Graph g (h);
+            auto& v = g.view;
+            expectWithinAbsoluteError (v.freqForX (v.xForFreq (1000.0f)), 1000.0f, 0.5f);
+            expectWithinAbsoluteError (v.weightForY (v.yForWeight (6.0f)), 6.0f, 0.01f);
+            expect (v.yForWeight (12.0f) < v.yForWeight (-12.0f), "up = more weight");
+            setReal (h, smoothedit::weightGainId (0, 2), 4.0f);
+            g.update();
+            const auto p = v.pointPosition (2);
+            expectWithinAbsoluteError (p.x, v.xForFreq (1000.0f), 0.5f);
+            expectWithinAbsoluteError (p.y, v.yForWeight (4.0f), 0.5f);
+            expectEquals (v.pointAt (p), 2);
+            expectEquals (v.pointAt (p.translated (0.0f, 60.0f)), -1);
+            const auto ids = v.getEditedParameters();
+            expectEquals (ids.size(), 14);
+            for (int i = 0; i < 6; ++i)
+                expect (ids.contains (smoothedit::weightFreqId (0, i)) && ids.contains (smoothedit::weightGainId (0, i)));
+            expect (ids.contains (pid::smoothLow) && ids.contains (pid::smoothHigh));
+        }
+
+        beginTest ("Graph: drag a point = freq (x) and weight (y), one step, gestures; Shift fine; clamped");
+        {
+            Harness h;
+            Graph g (h);
+            auto& v = g.view;
+            auto& undo = h.proc.getUndo();
+            undo.clear();
+            HostLog log (h.proc);
+            const auto p = v.pointPosition (2);
+            const juce::Point<float> delta (v.xForFreq (2000.0f) - v.xForFreq (1000.0f), v.yForWeight (6.0f) - v.yForWeight (0.0f));
+            g.drag (p, delta);
+            expectWithinAbsoluteError (real (h, smoothedit::weightFreqId (0, 2)), 2000.0f, 25.0f, "one octave right");
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 2)), 6.0f, 0.1f, "+6 dB up");
+            expectEquals (undo.getNumSteps(), 1, "one step");
+            expectEquals (log.events[0], "b" + juce::String (indexOf (h, smoothedit::weightFreqId (0, 2))), "gesture at mouse-down");
+            expect (log.events[log.events.size() - 1].startsWith ("e"));
+            expectEquals (v.getDraggedPoint(), -1);
+
+            const auto p2 = v.pointPosition (2);
+            g.drag (p2, delta, juce::ModifierKeys::shiftModifier);
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 2)), 6.6f, 0.05f, "Shift: 1/10");
+            expectWithinAbsoluteError (real (h, smoothedit::weightFreqId (0, 2)), 2000.0f * std::pow (2.0f, 0.1f), 30.0f);
+
+            g.drag (v.pointPosition (2), { 0.0f, -2000.0f });
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 2)), 12.0f, 0.001f, "clamped at +12 dB");
+            expect (undo.undo() && undo.undo() && undo.undo());
+            expectWithinAbsoluteError (real (h, smoothedit::weightFreqId (0, 2)), 1000.0f, 0.5f, "undone");
+        }
+
+        beginTest ("Graph: a point dragged across another stays the grabbed point");
+        {
+            Harness h;
+            Graph g (h);
+            auto& v = g.view;
+            const auto p = v.pointPosition (2);
+            const float dx = v.xForFreq (5000.0f) - p.x;   // past point 4 (2.5 kHz)
+            v.mouseDown (mouseAt (v, p, p, false));
+            for (int i = 1; i <= 10; ++i)
+            {
+                v.mouseDrag (mouseAt (v, p.translated (dx * (float) i / 10.0f, 0.0f), p, true));
+                expectEquals (v.getDraggedPoint(), 2);
+            }
+            v.mouseUp (mouseAt (v, p.translated (dx, 0.0f), p, true));
+            expectWithinAbsoluteError (real (h, smoothedit::weightFreqId (0, 2)), 5000.0f, 60.0f);
+            expectWithinAbsoluteError (real (h, smoothedit::weightFreqId (0, 3)), 2500.0f, 1.0f, "the passed point stays");
+            g.update();
+            const float w = dsp::SmoothModule::weightingDbAt (v.getSettings(), 3000.0f);
+            expect (std::isfinite (w), "curve finite with crossed points");
+        }
+
+        beginTest ("Graph: double-click / Alt+click reset the point; wheel = +-0.5 dB per notch; one step each");
+        {
+            Harness h;
+            Graph g (h);
+            auto& v = g.view;
+            auto& undo = h.proc.getUndo();
+            setReal (h, smoothedit::weightFreqId (0, 1), 600.0f);
+            setReal (h, smoothedit::weightGainId (0, 1), -5.0f);
+            g.update();
+            undo.clear();
+            auto p = v.pointPosition (1);
+            v.mouseDown (mouseAt (v, p, p, false));
+            v.mouseUp (mouseAt (v, p, p, false));
+            v.mouseDown (mouseAt (v, p, p, false, {}, 2));
+            v.mouseDoubleClick (mouseAt (v, p, p, false, {}, 2));
+            v.mouseDrag (mouseAt (v, p.translated (30.0f, -30.0f), p, true, {}, 2));
+            v.mouseUp (mouseAt (v, p.translated (30.0f, -30.0f), p, true, {}, 2));
+            expectWithinAbsoluteError (real (h, smoothedit::weightFreqId (0, 1)), 400.0f, 0.5f, "double-click: default freq (no drag after it)");
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 1)), 0.0f, 0.001f, "and gain");
+            expectEquals (undo.getNumSteps(), 1, "double-click = one step");
+
+            setReal (h, smoothedit::weightGainId (0, 1), -5.0f);
+            g.update();
+            undo.clear();
+            p = v.pointPosition (1);
+            v.mouseDown (mouseAt (v, p, p, false, juce::ModifierKeys::altModifier));
+            v.mouseUp (mouseAt (v, p, p, false, juce::ModifierKeys::altModifier));
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 1)), 0.0f, 0.001f, "Alt+click");
+            expectEquals (undo.getNumSteps(), 1);
+
+            g.update();
+            undo.clear();
+            p = v.pointPosition (1);
+            v.mouseWheelMove (mouseAt (v, p, p, false), wheel (0.11f));
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 1)), SmoothGraph::wheelGainDb, 0.01f, "wheel up");
+            v.mouseWheelMove (mouseAt (v, p, p, false), wheel (-0.22f));
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 1)), -SmoothGraph::wheelGainDb, 0.01f, "two notches down");
+            expectEquals (undo.getNumSteps(), 2);
+        }
+
+        beginTest ("Graph: low / high limit edges drag, reset, wheel; clamped to the parameter range");
+        {
+            Harness h;
+            Graph g (h);
+            auto& v = g.view;
+            auto& undo = h.proc.getUndo();
+            undo.clear();
+            const juce::Point<float> low (v.edgeX (SmoothGraph::Edge::low), v.plotArea().getBottom() - 10.0f);
+            expect (v.edgeAt (low) == SmoothGraph::Edge::low, "low edge found");
+            expect (v.edgeAt ({ v.edgeX (SmoothGraph::Edge::high), low.y }) == SmoothGraph::Edge::high, "high edge found");
+            g.drag (low, { v.xForFreq (1600.0f) - v.xForFreq (800.0f), 0.0f });
+            expectWithinAbsoluteError (real (h, pid::smoothLow), 1600.0f, 20.0f, "low edge one octave up");
+            expectEquals (undo.getNumSteps(), 1);
+            g.drag ({ v.edgeX (SmoothGraph::Edge::low), low.y }, { -2000.0f, 0.0f });
+            expectWithinAbsoluteError (real (h, pid::smoothLow), 100.0f, 0.5f, "clamped at 100 Hz");
+            const juce::Point<float> at (v.edgeX (SmoothGraph::Edge::low), low.y);
+            v.mouseWheelMove (mouseAt (v, at, at, false), wheel (0.11f));
+            expectWithinAbsoluteError (real (h, pid::smoothLow), 100.0f * std::pow (2.0f, SmoothGraph::wheelEdgeOct), 0.5f, "wheel 1/24 oct");
+            v.mouseDown (mouseAt (v, at, at, false, juce::ModifierKeys::altModifier));
+            v.mouseUp (mouseAt (v, at, at, false, juce::ModifierKeys::altModifier));
+            expectWithinAbsoluteError (real (h, pid::smoothLow), 800.0f, 0.5f, "Alt+click: default");
+        }
+
+        beginTest ("Graph: menus (point: Zurücksetzen / Alle flach + panel items; edge: value menu); card while dragging");
+        {
+            Harness h;
+            auto panel = createDetailPanel (h.proc, (int) ModuleId::smooth);
+            panel->setBounds (panelSize());
+            auto* v = findChild<SmoothGraph> (*panel);
+            expect (v != nullptr, "the panel's visual is the graph");
+            if (v == nullptr)
+                return;
+            auto texts = [] (juce::PopupMenu m)
+            {
+                juce::StringArray out;
+                for (juce::PopupMenu::MenuItemIterator it (m, true); it.next();)
+                    out.add (it.getItem().text);
+                return out;
+            };
+            setReal (h, smoothedit::weightGainId (0, 4), 3.0f);
+            const auto pm = texts (v->buildPointMenu (4));
+            for (auto* t : { "Zurücksetzen", "Alle flach", "Modul zurücksetzen" })
+                expect (pm.contains (juce::String::fromUTF8 (t)), juce::String::fromUTF8 (t) + " in " + pm.joinIntoString (", "));
+            auto pointMenu = v->buildPointMenu (4);
+            juce::PopupMenu::MenuItemIterator it (pointMenu, true);
+            h.proc.getUndo().clear();
+            while (it.next())
+                if (it.getItem().text == "Alle flach" && it.getItem().action)
+                    it.getItem().action();
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 4)), 0.0f, 0.001f, "Alle flach");
+            expectEquals (h.proc.getUndo().getNumSteps(), 1);
+            const auto em = texts (v->buildEdgeMenu (SmoothGraph::Edge::high));
+            expect (em.contains ("Standardwert") && em.contains (juce::String::fromUTF8 ("Wert eingeben …")), em.joinIntoString (", "));
+
+            const auto p = v->pointPosition (3);
+            v->mouseDown (mouseAt (*v, p, p, false));
+            v->mouseDrag (mouseAt (*v, p.translated (10.0f, 0.0f), p, true));
+            v->update (ui::LiveData());
+            expect (v->isCardShown(), "card while dragging");
+            expect (v->getCardTitle().contains ("4"), v->getCardTitle());
+            expect (v->getCardValues().contains ("kHz") && v->getCardValues().contains ("dB"), v->getCardValues());
+            v->mouseUp (mouseAt (*v, p.translated (10.0f, 0.0f), p, true));
+        }
+
+        beginTest ("Graph: the removed energy shows at the resonance (pink), nothing far from it; none while off");
+        {
+            Harness h;
+            auto r = h.proc.getRouting();
+            if (! r.contains (ModuleId::smooth))
+                r.insertDefault (ModuleId::smooth, 0);
+            h.proc.setRouting (r);
+            h.set (pid::smoothOn, 1.0f);
+            h.set (pid::smoothAmount, 80.0f);
+            h.set (pid::smoothSensitivity, 60.0f);
+            h.set (pid::smoothLow, 500.0f);
+            Graph g (h);
+            expect (! g.view.hasSpectrum() || g.view.shownRemovedDb (3000.0f) < 0.01f, "nothing before audio");
+            juce::Random rnd (17);
+            juce::AudioBuffer<float> buf (2, 512);
+            juce::MidiBuffer midi;
+            double phase = 0.0;
+            for (int b = 0; b < 300; ++b)
+            {
+                for (int i = 0; i < 512; ++i)
+                {
+                    const float tone = 0.25f * (float) std::sin (phase);
+                    phase += juce::MathConstants<double>::twoPi * 3000.0 / 48000.0;
+                    for (int c = 0; c < 2; ++c)
+                        buf.setSample (c, i, 0.2f * (rnd.nextFloat() * 2.0f - 1.0f) + tone);
+                }
+                h.proc.processBlock (buf, midi);
+                if (b > 200)
+                    g.update();
+            }
+            expect (g.view.hasSpectrum());
+            const float at = g.view.shownRemovedDb (3000.0f), away = g.view.shownRemovedDb (1000.0f);
+            logMessage ("removed at 3 kHz " + juce::String (at, 1) + " dB, at 1 kHz " + juce::String (away, 1) + " dB");
+            expectGreaterThan (at, 1.0f, "pink at the resonance");
+            expectLessThan (away, 0.5f * at, "much less away from it");
+            expect (g.view.shownInputDb (3000.0f) > g.view.shownInputDb (1000.0f), "input peak at 3 kHz");
+            expect (g.view.getPeakText().contains ("kHz"), g.view.getPeakText());
+
+            h.set (pid::smoothOn, 0.0f);
+            for (int i = 0; i < 3; ++i)
+                g.update();
+            expectWithinAbsoluteError (g.view.shownRemovedDb (3000.0f), 0.0f, 1.0e-4f, "off: no pink");
+        }
+
+        beginTest ("Graph instance 2 edits only the _2 parameters");
+        {
+            Harness h;
+            addSecondSmooth (h);
+            Graph g (h, 1);
+            auto& v = g.view;
+            g.drag (v.pointPosition (0), { 0.0f, v.yForWeight (3.0f) - v.yForWeight (0.0f) });
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (1, 0)), 3.0f, 0.1f);
+            expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 0)), 0.0f, 0.001f, "instance 1 untouched");
+            expect (v.getEditedParameters().contains ("smoothHigh_2"));
+        }
     }
+
+    // A free-standing graph (as in the panel's visual area) fed with the processor's settings
+    struct Graph
+    {
+        explicit Graph (Harness& harness, int instance = 0) : h (harness), view (harness.proc, instance)
+        {
+            view.setBounds (0, 0, 940, 300);
+            update();
+        }
+        void update()
+        {
+            live->settings = h.proc.readEffectiveSettings();
+            live->sampleRate = 48000.0;
+            live->time += 1.0 / 30.0;
+            view.update (*live);
+        }
+        void drag (juce::Point<float> start, juce::Point<float> by, juce::ModifierKeys mods = {})
+        {
+            view.mouseDown (mouseAt (view, start, start, false, mods));
+            for (int i = 1; i <= 10; ++i)
+                view.mouseDrag (mouseAt (view, start + by * ((float) i / 10.0f), start, true, mods));
+            view.mouseUp (mouseAt (view, start + by, start, true, mods));
+            update();
+        }
+        Harness& h;
+        ui::SmoothGraph view;
+        std::unique_ptr<ui::LiveData> live = std::make_unique<ui::LiveData>();
+    };
 
     static juce::MouseEvent mouseAt (juce::Component& c, juce::Point<float> pos, juce::Point<float> downPos, bool dragged,
                                      juce::ModifierKeys mods = {}, int clicks = 1)
