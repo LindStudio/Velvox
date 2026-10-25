@@ -1,4 +1,4 @@
-# HEADLINER – Übergabe (Stand 2026-10-24, Branch `feature/automix`)
+# HEADLINER – Übergabe (Stand 2026-10-25, Branch `feature/automix`, Version 0.6.0)
 
 ## Wo der Code liegt
 - Arbeitskopie: `%USERPROFILE%\dev\velvox`, Branch `feature/automix` (NICHT auf GitHub, nur lokal + Drive-Bundle).
@@ -38,6 +38,19 @@ Umgesetzt nach Jakobs Design-Paket (`docs/design/`), Plan `docs/superpowers/plan
 Entscheidungen und offene Kleinigkeiten: `docs/design/UI_REDESIGN_DECISIONS.md`, Änderungen: CHANGELOG 0.5.0.
 Stil: `docs/STYLEGUIDE.md`; was mangels DSP fehlt: `docs/DESIGN_MAPPING.md` (eigenes DSP-Projekt, wenn gewünscht).
 Screenshots zum Abgleich: `%USERPROFILE%\dev\velvox-bench\ui-2026-10-24\`.
+
+## 0.6 „Pro-Overhaul“ (25.10., committed, getestet)
+Spec `docs/superpowers/specs/2026-10-25-headliner-pro-overhaul-design.md`; Pläne und Ledger je Spur unter
+`docs/superpowers/plans/2026-10-25-overhaul-*.{md,ledger.md}` (Rulings = getroffene Entscheidungen); Änderungen: CHANGELOG 0.6.0.
+- Oberfläche: SIMPEL | ADVANCED, Panels pro Modul auf einem Rahmen, einheitliche Gesten, globales Undo, Modul-Browser,
+  Preset-Liste, Vocal Check; A/B und VOCAL-CONTROL-Leiste entfernt (Auto-Mix: Vorher | Nachher in Simpel).
+- Klang: 16-Band-EQ, neue Pitch-Engine (14,6 ms), Sättigung mit Oversampling, Smooth, Dynamik, Reverb, Delay, Doubler/Choir,
+  Mix-Kurve pro Instanz. Messung gegen Referenz-Plugins: `docs/QUALITY_BASELINE.md` (ein offener Messwert, siehe `docs/BENCHMARK.md`).
+- Neue Einheiten: `docs/ARCHITECTURE.md`, Abschnitt „0.6 – Pro-Overhaul“.
+- Schlussrunde (`overhaul/final`): Mausrad-Undo zusammengefasst, Mix-Kurve und SPACE-Umschaltung im Undo, Vorher/Nachher
+  verliert keine Änderungen mehr, EQ-Bridge pro Instanz, Latenz-Gesamttest, Tab MODULE in Advanced, lesbare Spektrum-Beschriftung.
+- Offen: FL-Studio-Test (Pops, Latenz alter Projekte mit Pitch/Smooth/Ride, Undo im echten Host), Hörtest der 0.6-Module
+  (Dateien unter `%USERPROFILE%\dev\velvox-bench\2026-10-25\modules-after\<modul>\listen\`), pluginval.
 
 ## Nächste Schritte
 Design/UI ist NICHT Teil dieser Liste – dafür gibt Jakob eine eigene Anweisung.

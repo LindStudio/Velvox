@@ -113,3 +113,38 @@ Message-Thread: applyResult: Snapshot "Vorher", Parameter mit Gesten setzen, Rou
 - `AutoMixView` ersetzt die Beginner-Ansicht; `AnalysisOverlay` ist das Popup (Intro, Warten, Erfassen, Analyse, Fertig, Fehler).
 - Der `uiMode`-Wert bleibt aus Kompatibilitätsgründen "beginner"/"pro" und steht für "Auto Mix"/"Module".
 - Der Hintergrund der Leinwand wird einmal pro Bildschirmskalierung gerendert und danach nur kopiert (keine Dauer-Animation).
+
+## 0.6 – Pro-Overhaul (Einheiten)
+
+```
+UI:   PluginEditor ─ TopBar (SIMPEL|ADVANCED, AUTO MIX bzw. MODULE | VOCAL CHECK) ─ SimpleView (Spektrum, Makros, Vorher|Nachher)
+                   ─ ChainView + DetailPanel-Rahmen (DetailPanels.h) ─ Modul-Panels ─ ModuleBrowser ─ PresetBrowser ─ VocalCheckView
+Undo: UndoHistory (Presets/) ◄─ GestureListener des Prozessors, Transaktionen (Preset, Auto-Mix, Anwenden, Kette)
+DSP:  VocalChain ─ MixLaw (pro Instanz) ─ EqDesign/EqualizerModule (16 Bänder) ─ überarbeitete Module
+Mess: tools/refhost (HeadlinerRefHost + bench.py/modules.py/qmetrics.py/signals.py) ─ docs/QUALITY_BASELINE.md
+```
+
+- **Panels** (`Source/UI/`, alle auf dem gemeinsamen Rahmen `DetailPanel`: Kopf, Visual, Hauptzeile, „Mehr“, Meter, Mix-Regler):
+  `EqPanel` (EqGraph + eqedit), `SmoothPanel` (Gewichtungskurve), `PitchPanel`, `SatPanel` (Charakter-Kacheln, 3 Bänder),
+  `TimePanels` (Delay-Echokarte, Pulse, Stutter-Wellenform), `VoicesPanels` (Doubler-Bühne, Choir-Halbkreis), `DynPanels`
+  (CompGraph, DeEssGraph, SmashStage, RideBars; Live-Daten über `DSP/DynamicsFeed.h`), `ReverbPanel` (Raum mit Tiefe-Punkt,
+  `DSP/ReverbDepth`), `VocalCheckView`. Gemeinsame Gesten in `ValueText` (`gestures::`), Werte eintippen über `parseValueText`.
+  Malen alloziert nicht; Live-Daten ≤ 30 Hz.
+- **UndoHistory** (`Presets/UndoHistory.*`, nur Message-Thread): eine `juce::UndoManager`-Historie. Gesten = `ValueAction`
+  (normalisierte Vorher/Nachher-Werte + Routing/Mix-Kurve, falls Code im Gestenverlauf sie änderte, z. B. SPACE Insert → Send);
+  Transaktionen = `SnapshotAction` (ganzer Zustand inkl. Routing und Mix-Kurve, plus Roh-Werte außerhalb des Snapshots).
+  Schnelle Wiederholungen auf demselben Parameter (Mausrad, < 400 ms, ohne Schritt dazwischen) verschmelzen zu einem Schritt.
+  `takeCompareBase`: eine Änderung bei „Vorher“ beendet den Auto-Mix-Vergleich und wird als Schritt vom „Nachher“-Zustand aus
+  aufgezeichnet (`AutoMixController::endCompareForEdit`). Laden eines Projekts leert die Historie.
+- **MixLaw** (`DSP/MixLaw.*`): siehe Routing oben; Umschalten per `switchToTrueMixLaw` ist ein Undo-Schritt.
+- **EqDesign / EqBands**: siehe „EQ-Bänder“ oben. `eqbands::ScopedBridgeSuspend (apvts)` gilt pro Plugin-Instanz.
+- **Check/** (`CheckRules`, `CheckTargets`, `CheckFixPlanner`, `VocalCheckController`, `VoiceTemplate`): Vocal-Check-Regeln
+  gegen Zielbereiche pro Stimmtyp/Genre, Vorschläge als reine Pläne, „Anwenden“ / „Alles anwenden“ als eine Transaktion.
+- **Routing-Übergabe:** `routingShared` / `mixLawShared` sind `SeqLockValue`s mit genau einem Schreiber (Message-Thread,
+  `isStateWriterThread()` per jassert). Eine reine Insert↔Send-Umschaltung eines stillen Delay/Reverb (Return ≤ −30 dB)
+  übernimmt die Kette sofort, ohne die Routing-Ausblendung; jede andere Änderung läuft weiter über die Ausblendung.
+- **Latenz (0.6):** Sättigung 5 Samples/Instanz (48 kHz), Smooth = FFT-Größe (1024 bei 48 kHz), Level Ride 80 ms Vorausschau,
+  Pitch ceil(fs/70)+16 – jeweils konstant, solange die Instanz in der Kette steht (Pitch: solange an). Test „Combined latency“
+  prüft gemeldete = gemessene Verzögerung für alle zusammen bei 44,1 und 192 kHz.
+- **refhost** (`tools/refhost`, CMake-Ziel `HeadlinerRefHost`): rendert ein Modul (echter Prozessor, Ein-Modul-Kette) oder ein
+  VST3-Referenz-Plugin offline; `bench.py` misst die Fälle aus `modules.py` und schreibt die Tabellen in QUALITY_BASELINE.

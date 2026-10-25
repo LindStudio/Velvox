@@ -108,3 +108,13 @@ resp_max_dev_db 1.00 dB at 20 Hz in the 100 Hz/24 dB-oct low cut's stop band, pr
 Test (VelvoxTests "Velvox chain"): "Version: 0.6.0 in CMake and ProductInfo" (failed first: 0.4.0).
 - Ruling: the vocal-case FAIL is not fixed here (the brief forbids DSP sound changes outside the listed items; the deviation sits
   56 dB down below 27 Hz). Cost if wrong: none audible.
+
+Task 10b: complete (docs). CHANGELOG.md 0.6.0 (German like the file): new UI, sound, "Alte Projekte" list (mix law, EQ migration
++ inert old EQ automation, pitch 120 → ~15 ms, Smooth +1024 samples @48 kHz even when off, Ride +80 ms even when off, reverb
+decay law, comp peak hold, delay limiter, doubler Classic close-not-identical, choir, sat band-limit/DC/latency 3 → 5, Stutter
+names + raised-cosine repeats + grid after latent modules, auto-mix results shifting, Doubler Mod Rate display, Pulse unchanged).
+docs/BENCHMARK.md: 0.6 section pointing to QUALITY_BASELINE with the remaining gaps. docs/HANDOFF.md: 0.6 section.
+docs/ARCHITECTURE.md: "0.6 – Pro-Overhaul (Einheiten)" (panels, UndoHistory, MixLaw, EqDesign/EqBands, Check/*, routing
+hand-over, latency, refhost).
+- Ruling: CHANGELOG key numbers taken from QUALITY_BASELINE (after-measurements of each track) and the track ledgers; no
+  numbers re-measured here except the EQ block.

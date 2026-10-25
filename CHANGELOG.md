@@ -2,6 +2,78 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [0.6.0] – Branch `feature/automix` („Pro-Overhaul“, Entwicklungsstand, FL-Studio-Test ausstehend)
+
+### Neu – Oberfläche
+- **SIMPEL | ADVANCED** statt Tabs-Wirrwarr: Simpel = Live-Spektrum (vorher gestrichelt, nachher gefüllt), „Vocal analysieren“,
+  sechs Makros; Advanced = Modul-Kette oben, darunter das Panel des gewählten Moduls. Tabs: AUTO MIX (in Simpel) bzw.
+  MODULE (in Advanced) | VOCAL CHECK. Fenster 1000 × 600, skalierbar.
+- **Neue Modul-Panels** mit großer Live-Grafik, 3–5 Hauptreglern und „Mehr“: EQ (Pro-Q-artig), Kompressor (Kennlinie +
+  GR-Verlauf), De-Esser (Band im Spektrum), Vocal Smash, Level Ride (Wort-Balken), Smooth (Gewichtungskurve), Pitch,
+  Sättigung (Charakter-Kacheln, 3 Bänder), Delay (Echo-Karte), Pulse, Stutter (Schnitte auf der Wellenform), Doubler
+  (Stimmen-Bühne), Choir (Halbkreis), Reverb (Raum mit Tiefe-Punkt), Vocal Check.
+- **Einheitliche Gesten** für alle Regler und Grafik-Punkte: Ziehen, Shift/Strg fein, Doppelklick/Alt+Klick = Standard,
+  Mausrad, Klick auf den Wert = eintippen, Rechtsklick-Menü (Zurücksetzen, Kopieren/Einfügen), Info nach 600 ms.
+- **Undo/Redo** (Strg+Z / Strg+Y / Strg+Shift+Z, Rechtsklick): jede Geste, jede Ketten-Änderung, jedes Preset und jedes
+  „Anwenden“ ist ein Schritt; schnelle Mausrad-Rasten auf einem Regler werden zu einem Schritt zusammengefasst.
+- **Modul-Browser** (Suche, Gruppen) und **Preset-Liste** (Kategorien, Suche, Favoriten, eigene Presets).
+- **Vocal Check**: Diagnose mit Vorschlägen und „Anwenden“ / „Alles anwenden“ (je ein Undo-Schritt).
+- Entfernt: A/B-Slots (der Auto-Mix behält einen versteckten Vorher-Zustand: **Vorher | Nachher** in Simpel) und die
+  VOCAL-CONTROL-Leiste (die Makros sitzen in Simpel).
+
+### Neu – Klang
+- **EQ: 16 Bänder pro Instanz** (Bell, Shelves, Low/High Cut 6–48 dB/Okt., Notch, Band Pass, Tilt), analog-gematcht ohne
+  Höhen-Stauchung: 15-kHz-Bell 0,27 dB neben der Analog-Kurve (vorher 5,5 dB; Pro-Q 4: 0,06 dB).
+- **Pitch: neue Engine** mit 14,6 ms Latenz (vorher 120 ms; Graillon 3: 22 ms), exakte Transposition (0,00 ct statt 2–7 ct
+  daneben), Formanten bei ±12 Halbtönen innerhalb 0,2 Oktaven.
+- **Sättigung:** 4-fach Oversampling + ADAA, Aliasing −91,5 dB (vorher −36,6 dB; Saturn 2: −70 dB), neuer 3-Band-Modus.
+- **Smooth** auf soothe2-Niveau (alle 26 Messwerte bestanden), Gewichtungskurve, Delta-Hören, Speed.
+- **Kompressor:** Kennlinie exakt (4,00:1 gemessen), Attack 10,5 ms bei eingestellten 10 ms, Auto Release, Auto Makeup.
+  **De-Esser:** Relative-Erkennung (De-Esser aus dem Browser starten darauf), S-Reduktion wie Pro-DS (3,9 vs. 3,8 dB) ohne Transienten-Verlust.
+- **Level Ride** mit 80 ms Vorausschau: Lautheitsschwankung 2,56 LU (trocken 3,80; Vocal Rider 2,92).
+- **Reverb:** Decay = tatsächliche Nachhallzeit (T30-Fehler 0,8 %; VintageVerb 17 %), weniger Klingeln (Plate 8,3 dB statt 11,1).
+- **Delay:** Echozeit auf 0,08 ms genau, sauberer Feedback-Begrenzer, Bandmaschinen-Gleiten bei Zeitänderungen.
+- **Doubler:** Modi Classic / 2 / 4 Stimmen mit eigener Verzögerung, Verstimmung (0,00 ct Fehler), Pan und Pegel.
+  **Choir:** sauberer Shifter, natürlichere Stimmen. **Pulse:** Amount und vier Kurvenformen. **Stutter** (vorher „Chop“).
+- **Mix-Kurve:** neue Instanzen nutzen echtes Dry/Wet (über 50 % Mix wird das Original leiser); alte bleiben, umstellbar
+  über „Alte Mix-Kurve – umstellen“ (ein Undo-Schritt). Neue Delay/Reverb aus dem Browser sind Inserts; SPACE und der
+  Auto-Mix nutzen Sends (ohne Pegel-Einbruch beim Umschalten).
+- Alle Messwerte gegen Referenz-Plugins: `docs/QUALITY_BASELINE.md`.
+
+### Alte Projekte – was sich hörbar oder in der Latenz ändert
+- **Mix-Kurve:** alte Projekte behalten die alte Kurve (Mix addiert zum Original); Presets ohne Kurven-Angabe bekommen die alte
+  Kurve nur dort, wo ein additiver Mix über 50 % steht – sie klingen wie gespeichert.
+- **EQ:** die festen Bänder (HPF/Low/Mid/High/LPF) werden zu den Bändern 1–5 mit der alten Kennlinie (klanggleich, Null-Test
+  ≤ −120 dB; per Menü auf die neue umstellbar). **Automation der alten EQ-Parameter ist wirkungslos** (die Spuren laden, tun aber
+  nichts mehr). Werks-Presets nutzen die neue Kennlinie (oberhalb ~8 kHz minimal anders).
+- **Pitch:** neue Engine auch in alten Projekten – Latenz 120 → ~15 ms (der Host gleicht neu aus), sauberer und tonrichtig.
+- **Smooth:** eine Smooth-Instanz in der Kette verzögert um 1024 Samples bei 48 kHz (2048 bei 96, 4096 bei 192 kHz) – **auch
+  wenn sie aus ist**, solange sie in der Kette steht.
+- **Level Ride:** +80 ms Latenz, **auch wenn er aus ist**, solange er in der Kette steht; stärkeres, wortgenaues Ausgleichen bei
+  gleichen Einstellungen (Amount liefert jetzt den eingestellten Anteil).
+- **Reverb:** Decay folgt dem eingestellten Wert über das ganze Spektrum; mit dunkler Dämpfung klingen die Mitten bis ~25 % länger
+  als in 0.5. Weniger Klingeln, neue Stimmungen der Typen.
+- **Kompressor (Peak):** Peak-Hold im Detektor – etwas gleichmäßigere Kompression (GR erreicht bei gehaltenen Tönen die
+  Kennlinie, Attack entspricht dem eingestellten Wert statt ~16 ms, Release +10 ms Hold). RMS unverändert.
+- **Delay:** Feedback-Begrenzer erst ab −2 dBFS (vorher weich überall) – heiße Feedback-Einstellungen klingen sauberer;
+  Drive 2-fach überabgetastet.
+- **Doubler (Classic):** nah am alten Klang, aber nicht identisch (Pegel ≤ +0,4 dB, minimal heller, Wobble auf neuem Pfad).
+- **Choir:** breitere Stereoverteilung bei Width 30–80 %, sauberer Shifter, leicht ungleiche Stimmpegel (gleiche Energie).
+- **Sättigung:** Aliasing-Filterung und DC-Blocker nur auf dem Verzerrungsanteil (kein Bassverlust unter 40 Hz mehr);
+  Latenz pro Instanz 3 → 5 Samples bei 48 kHz.
+- **Stutter / Pulse** hinter latenten Modulen (Pitch, Sättigung, Smooth) laufen jetzt im Raster des Songs; Stutter-Wiederholungen
+  mit Raised-Cosine-Blende (weniger Klick). Parameter-Namen im Host „Chop …“ → „Stutter …“ (IDs unverändert).
+- **Auto-Mix:** Ergebnisse können sich verschieben (Ausgangspegel-Trim, gematchter EQ, Reverb erreicht seine Nachhallzeit –
+  z. B. wählt ein dunkler 44,1-kHz-Take den Basisplan statt „Mehr Raum“).
+- **Anzeige:** Doubler Mod Rate zeigt Werte unter 10 Hz mit zwei Nachkommastellen („0,31 Hz“ statt „0 Hz“).
+- Pulse: unverändert (bitgleich).
+
+### Technik
+- Referenz-Host `HeadlinerRefHost` + `tools/refhost/bench.py` (Messung gegen Pro-Q 4, Pro-C 2, Pro-DS, soothe2, Saturn 2,
+  Graillon 3, Doubler2/4, Timeless 3, VintageVerb, Pro-R 2, Vocal Rider); Ergebnisse in `docs/QUALITY_BASELINE.md`.
+- Globale Undo-Historie (`UndoHistory`), Mix-Kurve (`DSP/MixLaw`), EQ-Bänder (`DSP/EqDesign`, `Parameters/EqBands`),
+  Vocal Check (`Source/Check/*`). Volle Testsuite > 30 500 Checks.
+
 ## [0.5.0] – Branch `feature/automix` (Entwicklungsstand, FL-Studio-Test ausstehend)
 
 ### Neu

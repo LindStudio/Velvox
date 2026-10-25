@@ -114,3 +114,20 @@ Headliner auf der Vocal. Blind gemessen (Dateien zufällig A/B benannt, Zuordnun
 Urteil nach Messung: Headliner-Fassung klarer, weniger mulmig, breiter, gleichmäßiger; S-Laute trotz mehr Höhen im Griff.
 Einziger Punkt dagegen: ~1 dB stärkere Schärfe-Spitzen (2,5–5 kHz) – beim Harshness-Thema im Blick behalten.
 Grenze: Die beiden Exporte sind nicht sample-gleich (Differenz unkorreliert), die Vocal ließ sich nicht isolieren.
+
+## 0.6 – Modulqualität gegen Referenz-Plugins (2026-10-25)
+
+Die Modul-für-Modul-Messung (Headliner gegen Pro-Q 4, Pro-C 2, Pro-DS, soothe2, Saturn 2, Graillon 3, Doubler2/4,
+Timeless 3, VintageVerb, Pro-R 2, Vocal Rider) steht mit Methode, Toleranzen und allen Tabellen in
+`docs/QUALITY_BASELINE.md`; neu messen mit `python -I tools\refhost\bench.py <modul|all> [--update-doc]`
+(Renders unter `%USERPROFILE%\dev\velvox-bench\2026-10-25\modules\` bzw. `modules-after\`).
+
+Stand 0.6: alle 15 Module bestehen ihre Gates bis auf einen Messwert. Offene Lücken:
+- **EQ, Fall „vocal“:** 1,00 dB Abweichung von der Analog-Kurve bei 20 Hz im Sperrbereich des 24-dB-Low-Cuts (−56 dB;
+  unterhalb ~27 Hz rechnet der EQ bilinear) – unhörbar, Gate 0,5 dB.
+- **CPU:** EQ 0,27 % vs. Pro-Q 4 0,05 %, Pitch 1,26 % vs. Graillon 0,77 % (innerhalb der Toleranz, aber teurer).
+- **Latenz:** Level Ride +80 ms und Smooth +1024 Samples (48 kHz), solange sie in der Kette stehen – auch ausgeschaltet.
+- **Charakter (nur Info, kein Gate):** Sättigung Tube geradzahlig statt ungeradzahlig wie Saturn „Warm Tube“, Tape verzerrt
+  bei −24 dBFS stärker; Choir-Rauigkeit bei 440 Hz einzeln (6-Ton-Mittel besteht); Vocal Smash ist kein Pro-C-Klon.
+- **Nicht gemessen:** Automation während des Renders (Zipper, Delay-Zeit-Sweeps – nur Unit-Tests), Stutter/Pulse/Vocal Check
+  ohne Referenz-Plugin (absolute Grenzen), kein Hörtest der 0.6-Module (Dateien in `listen\` liegen bereit).
