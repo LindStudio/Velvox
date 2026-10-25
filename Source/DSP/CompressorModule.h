@@ -14,6 +14,9 @@ namespace velvox::dsp
         float makeupDb = 0.0f;
         int detector = 0;           // 0 = peak, 1 = RMS (smoother, more "musical")
         float sidechainHpfHz = 20.0f; // <= 20 Hz = off; ignores low end when detecting
+        // 0.6 (defaults = 0.5 behaviour)
+        bool autoRelease = false;   // program-dependent dual release
+        bool autoMakeup = false;    // adds the static gain reduction at autoMakeupLevelDb
     };
 
     // Running maximum over the last `window` samples (monotonic wedge, O(1) amortised).
@@ -75,13 +78,31 @@ namespace velvox::dsp
         // Static curve: output level for a given input level (both dB)
         static float computeGainDb (float inputDb, float thresholdDb, float ratio, float kneeDb) noexcept;
 
+        // Auto makeup: the static gain reduction of a tone whose detector level is
+        // -18 dBFS (a typical vocal level), so a voice at that level keeps its loudness
+        static constexpr float autoMakeupLevelDb = -18.0f;
+        static float autoMakeupDb (const CompSettings& s) noexcept;
+        // Complete static transfer curve (output dB for a steady input dB), incl. makeup and
+        // auto makeup - for the Pro-C style curve display (UI thread builds the settings)
+        static float transferDb (const CompSettings& s, float inputDb) noexcept;
+
+        // Dual release (Auto release): fast branch attack A / release fastFactor * R,
+        // slow branch attack slowAttackFactor * R / release slowFactor * R; GR = max of both
+        static constexpr float fastReleaseFactor = 0.4f, slowAttackFactor = 4.0f, slowReleaseFactor = 2.5f;
+
+        float getGainReductionDb() const noexcept { return grDb; }
+
         PeakMeter gainReductionDb; // positive dB of reduction
 
     private:
         double fs = 44100.0;
         CompSettings settings;
         float attackCoeff = 0.0f, releaseCoeff = 0.0f;
-        float envDb = 0.0f; // current gain reduction in dB (>= 0)
+        float fastReleaseCoeff = 0.0f, slowAttackCoeff = 0.0f, slowReleaseCoeff = 0.0f;
+        float envDb = 0.0f;   // gain reduction of the main (fixed release) branch in dB (>= 0)
+        float fastDb = 0.0f, slowDb = 0.0f;   // dual release branches
+        float grDb = 0.0f;    // applied gain reduction
+        juce::SmoothedValue<float> dualMix { 0.0f };   // 0 = fixed release, 1 = dual (crossfaded on toggle)
         float rmsState = 0.0f, rmsCoeff = 0.0f;
         Biquad sidechainHpf;
         bool hpfActive = false;

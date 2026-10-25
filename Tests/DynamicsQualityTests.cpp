@@ -220,3 +220,152 @@ public:
 };
 
 static CompressorQualityTests compressorQualityTests;
+
+//==============================================================================
+namespace
+{
+    // Seconds from `from` until the compressor's gain reduction falls below `belowDb`
+    double recoverySeconds (CompressorModule& m, double fs, double belowDb)
+    {
+        Buffer quiet (2, 16);
+        for (int k = 0; k < (int) (3.0 * fs / 16); ++k)
+        {
+            quiet.clear();
+            float* ch[2] { quiet.getWritePointer (0), quiet.getWritePointer (1) };
+            m.process (ch, 2, 16);
+            if (m.getGainReductionDb() < belowDb)
+                return (k + 1) * 16 / fs;
+        }
+        return 3.0;
+    }
+
+    double maxSecondDifference (const Buffer& b, int start, int len)
+    {
+        double d = 0.0;
+        for (int i = start + 1; i < start + len - 1; ++i)
+            d = std::max (d, (double) std::abs (b.getSample (0, i + 1) - 2.0f * b.getSample (0, i) + b.getSample (0, i - 1)));
+        return d;
+    }
+}
+
+class CompressorOptionTests final : public juce::UnitTest
+{
+public:
+    CompressorOptionTests() : juce::UnitTest ("Compressor options", "Dynamics") {}
+
+    void runTest() override
+    {
+        const double fs = 48000.0;
+
+        beginTest ("Compressor auto release: short bursts recover faster than sustained compression");
+        {
+            double rec[2][2] {};   // [auto][short/long]
+            for (int a = 0; a < 2; ++a)
+                for (int l = 0; l < 2; ++l)
+                {
+                    CompressorModule m;
+                    m.prepare (fs, 512);
+                    auto s = vocalComp();
+                    s.thresholdDb = -30.0f;
+                    s.autoRelease = a == 1;
+                    m.setSettings (s);
+                    auto b = sineBuffer (fs, 1000.0, 0.5f, l == 0 ? 0.03 : 2.0);
+                    runBlocks (m, b, 64);
+                    rec[a][l] = recoverySeconds (m, fs, 3.0);
+                }
+            logMessage ("Recovery to 3 dB GR after 30 ms / 2 s: fixed " + juce::String (rec[0][0] * 1000.0, 0) + " / "
+                        + juce::String (rec[0][1] * 1000.0, 0) + " ms, auto " + juce::String (rec[1][0] * 1000.0, 0) + " / "
+                        + juce::String (rec[1][1] * 1000.0, 0) + " ms");
+            expectLessThan (rec[1][0], 0.6 * rec[1][1], "auto: program dependent");
+            expectWithinAbsoluteError (rec[0][0] / rec[0][1], 1.0, 0.25, "fixed: same release for both");
+        }
+
+        beginTest ("Compressor auto makeup keeps a -18 dBFS tone at its level");
+        {
+            CompressorModule m;
+            m.prepare (fs, 512);
+            auto s = vocalComp();
+            s.autoMakeup = true;
+            m.setSettings (s);
+            auto b = sineBuffer (fs, 1000.0, juce::Decibels::decibelsToGain (-18.0f), 1.0);
+            runBlocks (m, b, 512);
+            const float outDb = peakDb (b, (int) (0.8 * fs), (int) (0.2 * fs));
+            logMessage ("Auto makeup " + juce::String (CompressorModule::autoMakeupDb (s), 2) + " dB, -18 dBFS tone out at "
+                        + juce::String (outDb, 2) + " dBFS");
+            expectWithinAbsoluteError (outDb, -18.0f, 0.3f);
+            expectGreaterThan (CompressorModule::autoMakeupDb (s), 1.0f);
+        }
+
+        beginTest ("Compressor transfer curve matches the rendered steady state");
+        {
+            CompressorModule m;
+            m.prepare (fs, 512);
+            auto s = vocalComp();
+            s.makeupDb = 3.0f;
+            s.autoMakeup = true;
+            m.setSettings (s);
+            float worst = 0.0f;
+            for (float level = -40.0f; level <= -0.99f; level += 3.0f)
+            {
+                auto b = sineBuffer (fs, 1000.0, juce::Decibels::decibelsToGain (level), 0.5);
+                runBlocks (m, b, 512);
+                worst = std::max (worst, std::abs (peakDb (b, (int) (0.35 * fs), (int) (0.15 * fs)) - CompressorModule::transferDb (s, level)));
+            }
+            logMessage ("Largest transfer curve error " + juce::String (worst, 3) + " dB");
+            expectLessThan (worst, 0.3f);
+        }
+
+        beginTest ("Compressor: toggles do not click");
+        {
+            for (int which = 0; which < 2; ++which)
+            {
+                CompressorModule m;
+                m.prepare (fs, 512);
+                auto s = vocalComp();
+                s.thresholdDb = -30.0f;
+                m.setSettings (s);
+                auto b = sineBuffer (fs, 1000.0, 0.5f, 1.0);
+                runBlocks (m, b, 512, [&] (int start)
+                {
+                    if (start == 512 * 47)
+                    {
+                        (which == 0 ? s.autoMakeup : s.autoRelease) = true;
+                        m.setSettings (s);
+                    }
+                });
+                const double omega2 = std::pow (twoPi * 1000.0 / fs, 2.0);
+                const double limit = 1.5 * omega2 * b.getMagnitude (0, 0, b.getNumSamples());
+                const double d2 = maxSecondDifference (b, (int) (0.3 * fs), (int) (0.7 * fs));
+                logMessage (juce::String (which == 0 ? "Auto makeup" : "Auto release") + " toggle: max 2nd difference "
+                            + juce::String (d2, 4) + " (smooth limit " + juce::String (limit, 4) + ")");
+                expectLessThan (d2, limit);
+            }
+        }
+
+        beginTest ("Compressor: silence stays silent");
+        {
+            CompressorModule m;
+            m.prepare (fs, 512);
+            auto s = vocalComp();
+            s.autoMakeup = s.autoRelease = true;
+            m.setSettings (s);
+            Buffer b (2, 4800);
+            b.clear();
+            runBlocks (m, b, 512);
+            expectEquals (b.getMagnitude (0, b.getNumSamples()), 0.0f);
+            expectEquals (m.getGainReductionDb(), 0.0f);
+        }
+
+        beginTest ("Compressor options: parameters exist and default to the old behaviour");
+        {
+            Harness h;
+            expectEquals (h.get (pid::compAutoRelease), 0.0f);
+            expectEquals (h.get (pid::compAutoMakeup), 0.0f);
+            h.set (pid::compAutoRelease, 1.0f);
+            h.set (pid::compAutoMakeup, 1.0f);
+            expectEquals (h.get (pid::compAutoRelease), 1.0f);
+        }
+    }
+};
+
+static CompressorOptionTests compressorOptionTests;

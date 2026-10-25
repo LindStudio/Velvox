@@ -238,4 +238,8 @@ namespace velvox::pid
 
     // Hidden per EQ instance: 1 = bands use the 0.5 bilinear designs (set only by the migration)
     inline constexpr const char* eqLegacyResponse = "eqLegacyResponse";
+
+    // ---- added in 0.6: dynamics options (defaults = 0.5 behaviour) ----
+    inline constexpr const char* compAutoRelease = "compAutoRelease";
+    inline constexpr const char* compAutoMakeup  = "compAutoMakeup";
 }

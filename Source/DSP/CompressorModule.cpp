@@ -7,14 +7,16 @@ namespace velvox::dsp
         fs = sampleRate;
         peakHold.prepare ((int) std::ceil (holdMs * 0.001 * sampleRate));
         makeup.reset (sampleRate, 0.05);
+        dualMix.reset (sampleRate, 0.05);
         setSettings (settings);
-        makeup.setCurrentAndTargetValue (dbToGain (settings.makeupDb));
+        makeup.setCurrentAndTargetValue (makeup.getTargetValue());
+        dualMix.setCurrentAndTargetValue (dualMix.getTargetValue());
         reset();
     }
 
     void CompressorModule::reset()
     {
-        envDb = 0.0f;
+        envDb = fastDb = slowDb = grDb = 0.0f;
         rmsState = 0.0f;
         sidechainHpf.reset();
         peakHold.reset();
@@ -26,7 +28,12 @@ namespace velvox::dsp
         settings.ratio = std::max (1.0f, s.ratio);
         attackCoeff = timeConstantCoeff (std::max (0.05f, s.attackMs), fs);
         releaseCoeff = timeConstantCoeff (std::max (1.0f, s.releaseMs), fs);
-        makeup.setTargetValue (dbToGain (s.makeupDb));
+        const float r = std::max (1.0f, s.releaseMs);
+        fastReleaseCoeff = timeConstantCoeff (fastReleaseFactor * r, fs);
+        slowAttackCoeff = timeConstantCoeff (slowAttackFactor * r, fs);
+        slowReleaseCoeff = timeConstantCoeff (slowReleaseFactor * r, fs);
+        dualMix.setTargetValue (s.autoRelease ? 1.0f : 0.0f);
+        makeup.setTargetValue (dbToGain (s.makeupDb + (s.autoMakeup ? autoMakeupDb (settings) : 0.0f)));
         rmsCoeff = timeConstantCoeff (10.0f, fs);
 
         const bool wantHpf = s.sidechainHpfHz > 20.5f;
@@ -52,6 +59,18 @@ namespace velvox::dsp
             return t + over / ratio;
 
         return x;
+    }
+
+    float CompressorModule::autoMakeupDb (const CompSettings& s) noexcept
+    {
+        const float ratio = std::max (1.0f, s.ratio);
+        return autoMakeupLevelDb - computeGainDb (autoMakeupLevelDb, s.thresholdDb, ratio, s.kneeDb);
+    }
+
+    float CompressorModule::transferDb (const CompSettings& s, float inputDb) noexcept
+    {
+        return computeGainDb (inputDb, s.thresholdDb, std::max (1.0f, s.ratio), s.kneeDb)
+               + s.makeupDb + (s.autoMakeup ? autoMakeupDb (s) : 0.0f);
     }
 
     void CompressorModule::process (float* const* channels, int numChannels, int numSamples) noexcept
@@ -83,16 +102,32 @@ namespace velvox::dsp
             // Branching one-pole smoother: attack when reduction rises
             const float coeff = targetReduction > envDb ? attackCoeff : releaseCoeff;
             envDb = targetReduction + coeff * (envDb - targetReduction);
+            grDb = envDb;
 
-            const float gain = dbToGain (-envDb) * makeup.getNextValue();
+            // Program-dependent (dual) release: short peaks recover with the fast branch,
+            // sustained compression charges the slow branch and recovers slowly
+            const float dual = dualMix.getNextValue();
+            if (dual > 0.0f || dualMix.isSmoothing())
+            {
+                fastDb = targetReduction + (targetReduction > fastDb ? attackCoeff : fastReleaseCoeff) * (fastDb - targetReduction);
+                slowDb = targetReduction + (targetReduction > slowDb ? slowAttackCoeff : slowReleaseCoeff) * (slowDb - targetReduction);
+                grDb = envDb + dual * (std::max (fastDb, slowDb) - envDb);
+            }
+            else
+            {
+                fastDb = envDb;
+                slowDb = 0.0f;
+            }
+
+            const float gain = dbToGain (-grDb) * makeup.getNextValue();
 
             for (int ch = 0; ch < numChannels; ++ch)
                 channels[ch][i] *= gain;
 
-            maxReduction = std::max (maxReduction, envDb);
+            maxReduction = std::max (maxReduction, grDb);
         }
 
-        if (! std::isfinite (envDb) || ! std::isfinite (rmsState) || ! sidechainHpf.isStateFinite())
+        if (! std::isfinite (envDb) || ! std::isfinite (grDb) || ! std::isfinite (rmsState) || ! sidechainHpf.isStateFinite())
             reset();
 
         gainReductionDb.push (maxReduction);

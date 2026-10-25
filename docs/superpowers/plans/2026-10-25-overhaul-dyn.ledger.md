@@ -19,3 +19,13 @@ Task 2: Ruling: bench attack_ms is judged against the set 10 ms ± 5 (absolute),
   (still ± 5 ms). Cost if wrong: our attack feels faster than Pro-C Vocal at equal numbers.
 Task 2: Ruling: ProExtensionTests "Compressor RMS detector and sidechain filter" asserted "RMS ripples less than Peak on noise" — that was
   the ballistics ripple this task removes (peak now 0.00 dB, RMS 0.04 dB). Re-pointed to "both detectors ripple < 0.1 dB on steady noise".
+Task 3: complete (params compAutoRelease / compAutoMakeup (Bool, default off), CompSettings::autoRelease/autoMakeup,
+  CompressorModule::autoMakeupDb / transferDb / getGainReductionDb; tests "Compressor options" red (compile) -> green: recovery to 3 dB GR
+  after 30 ms / 2 s: fixed 223 / 225 ms, auto 95 / 543 ms; auto makeup 4.5 dB keeps -18 dBFS at -18.00; transfer curve error 0.000 dB;
+  toggles click-free (2nd difference 0.003 / 0.001 vs 0.012 limit); silence stays silent)
+Task 3: Ruling: "Style" of the spec Mehr list = the release behaviour (Auto release on/off), not a new detector choice — adding choices
+  to the existing compDetector would change its normalised automation values. Dual release: fast branch release 0.4 R, slow branch
+  attack 4 R / release 2.5 R, GR = max; crossfaded over 50 ms when toggled; with Auto off the code path is bit-identical to Task 2.
+  Cost if wrong: the factors are constants in CompressorModule.h.
+Task 3: Ruling: Auto makeup = static GR of a -18 dBFS (detector level) tone, added to the Makeup knob (Pro-C style "auto gain" for a
+  typical vocal level, not full 0 dBFS compensation which over-lifts). Cost if wrong: one constant (autoMakeupLevelDb).

@@ -391,6 +391,12 @@ namespace velvox
               "Smears the repeats into a soft wash - from clear echoes to ambient clouds." },
             { pid::delayMod,       "Delay Modulation","Delay", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Slow wow and flutter on the repeats, like a tape echo." },
+
+            // ---------------- Dynamics options (0.6) ----------------
+            { pid::compAutoRelease, "Comp Auto Release", "Compressor", T::Bool, 0, 1, 0, 0, "", {},
+              "Program-dependent release: short peaks recover quickly, sustained compression recovers slowly and smoothly." },
+            { pid::compAutoMakeup,  "Comp Auto Makeup",  "Compressor", T::Bool, 0, 1, 0, 0, "", {},
+              "Adds back the gain the compressor takes from a voice at about -18 dBFS, so the level stays similar." },
         };
             appendEqBandSpecs (table);
             appendInstanceBanks (table);
