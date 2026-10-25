@@ -238,6 +238,48 @@ namespace velvox::ui
     {
         endWheelGesture();
         endDrag();
+        setAuditionBand (-1);   // a monitoring state: closing the panel ends it
+    }
+
+    //==========================================================================
+    // Band solo (0.6.1)
+
+    int EqGraph::getAuditionBand() const { return proc.getChain().getEqualizer (instance).getAuditionBand(); }
+
+    void EqGraph::setAuditionBand (int band)
+    {
+        proc.getChain().getEqualizer (instance).setAuditionBand (band);
+        if (band != shownAudition)
+        {
+            shownAudition = band;
+            repaint();
+        }
+    }
+
+    juce::Rectangle<float> EqGraph::auditionIconArea (int band) const
+    {
+        if (band < 0 || band >= dsp::maxEqBands)
+            return {};
+        const auto p = pointFor (band);
+        const float d = 18.0f, offset = 21.0f;
+        // Right of the point; left of it near the right edge
+        const float x = p.x + offset + d * 0.5f < plotArea().getRight() ? p.x + offset : p.x - offset;
+        return juce::Rectangle<float> (d, d).withCentre ({ x, p.y });
+    }
+
+    bool EqGraph::isAuditionIconShown (int band) const
+    {
+        if (band < 0 || band >= dsp::maxEqBands || ! shown[(size_t) band].used)
+            return false;
+        return band == getAuditionBand() || band == auditionPressBand || (band == hovered && dragged < 0);
+    }
+
+    int EqGraph::auditionIconAt (juce::Point<float> p) const
+    {
+        for (int b : { auditionPressBand, getAuditionBand(), hovered })
+            if (isAuditionIconShown (b) && auditionIconArea (b).expanded (2.0f).contains (p))
+                return b;
+        return -1;
     }
 
     std::unique_ptr<ModuleView> createEqGraph (VelvoxAudioProcessor& p, const SpectrumSource* spectrum, int instance)
@@ -329,6 +371,8 @@ namespace velvox::ui
                           || eff.eq.legacyResponse != lastSettings.legacyResponse || eff.eq.bands != lastSettings.bands
                           || getLocalBounds() != lastSize;
         shown = eqedit::shownBands (proc, instance);   // macro-only state can change without a new curve
+        if (const int solo = getAuditionBand(); solo >= 0 && ! shown[(size_t) solo].used)
+            setAuditionBand (-1);                       // the soloed band was deleted: the solo ends
         if (! changed)
             return;
 
@@ -398,6 +442,11 @@ namespace velvox::ui
     {
         spectrumView.refresh();
         refreshCurves();
+        if (const int solo = getAuditionBand(); solo != shownAudition)
+        {
+            shownAudition = solo;
+            repaint();
+        }
 
         // Hover card: after 600 ms on a point, at once while dragging
         int card = dragged >= 0 ? dragged : -1;
@@ -467,30 +516,33 @@ namespace velvox::ui
                         juce::Justification::centred, false);
 
         const float active = eqOn ? 1.0f : 0.4f;
+        const int solo = getAuditionBand();
         {
             juce::Graphics::ScopedSaveState clip (g);
             g.reduceClipRegion (r.expanded (0.0f, 2.0f).toNearestInt());
 
-            // Each band faint in its colour, the selected one a little brighter
+            // Each band faint in its colour, the selected one a little brighter; while a band is
+            // soloed it stands out and the rest steps back
             for (int b = 0; b < dsp::maxEqBands; ++b)
             {
                 if (! shown[(size_t) b].used)
                     continue;
                 const auto c = eqedit::bandColour (b);
-                const bool sel = b == selected;
-                const float on = shown[(size_t) b].band.on ? 1.0f : 0.35f;
-                g.setColour (c.withAlpha ((sel ? 0.12f : 0.035f) * on * active));
+                const bool sel = b == selected, soloed = b == solo;
+                const float on = (shown[(size_t) b].band.on ? 1.0f : 0.35f) * (solo >= 0 && ! soloed ? 0.45f : 1.0f);
+                g.setColour (c.withAlpha ((soloed ? 0.2f : (sel ? 0.12f : 0.035f)) * on * active));
                 g.fillPath (bandFill[(size_t) b]);
-                g.setColour (c.withAlpha ((sel ? 0.75f : 0.32f) * on * active));
-                g.strokePath (bandStroke[(size_t) b], juce::PathStrokeType (sel ? 1.4f : 1.0f));
+                g.setColour (c.withAlpha ((soloed || sel ? 0.75f : 0.32f) * on * active));
+                g.strokePath (bandStroke[(size_t) b], juce::PathStrokeType (soloed || sel ? 1.4f : 1.0f));
             }
 
             // The sum: bright, with a soft glow
-            g.setColour (eqColour.withAlpha (0.05f * active));
+            const float sumAlpha = active * (solo >= 0 ? 0.35f : 1.0f);
+            g.setColour (eqColour.withAlpha (0.05f * sumAlpha));
             g.fillPath (sumFill);
-            g.setColour (eqColour.withAlpha (0.16f * active));
+            g.setColour (eqColour.withAlpha (0.16f * sumAlpha));
             g.strokePath (sumStroke, juce::PathStrokeType (6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-            g.setColour (eqColour.interpolatedWith (juce::Colours::white, 0.15f).withAlpha (active));
+            g.setColour (eqColour.interpolatedWith (juce::Colours::white, 0.15f).withAlpha (sumAlpha));
             g.strokePath (sumStroke, juce::PathStrokeType (2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
@@ -527,6 +579,25 @@ namespace velvox::ui
                 const auto tagArea = juce::Rectangle<float> (40.0f, 11.0f).withCentre (p.translated (0.0f, size * 0.5f + 8.0f));
                 g.drawText (eqedit::roleTag (s.band.role), tagArea, juce::Justification::centred, false);
             }
+        }
+
+        // Headphone hot spot beside the hovered point (and the soloed one)
+        const int iconBands[3] { hovered, solo, auditionPressBand };
+        for (int i = 0; i < 3; ++i)
+        {
+            const int b = iconBands[i];
+            if (! isAuditionIconShown (b) || (i > 0 && b == iconBands[0]) || (i > 1 && b == iconBands[1]))
+                continue;
+            const auto area = auditionIconArea (b);
+            const auto c = eqedit::bandColour (b);
+            const bool on = b == solo;
+            if (on)
+                drawGlow (g, area.getCentre(), 14.0f, 0.4f, c);
+            g.setColour (on ? c.withAlpha (0.28f).overlaidWith (colours::panelInset.withAlpha (0.5f)) : colours::panelInset.withAlpha (0.92f));
+            g.fillEllipse (area);
+            g.setColour (c.withAlpha (on ? 0.95f : 0.6f));
+            g.drawEllipse (area.reduced (0.5f), 1.0f);
+            drawHeadphones (g, area.reduced (4.5f), on ? c.interpolatedWith (juce::Colours::white, 0.4f) : colours::textSoft, on, 1.2f);
         }
 
         // Hover / drag card with the band's values
@@ -626,7 +697,10 @@ namespace velvox::ui
 
     void EqGraph::mouseMove (const juce::MouseEvent& e)
     {
-        const int b = bandAt (e.position);
+        int b = bandAt (e.position);
+        // On its headphone the point stays hovered (the hot spot sits beside it)
+        if (const int icon = auditionIconAt (e.position); b < 0 && icon >= 0)
+            b = icon;
         if (b != hovered)
         {
             hovered = b;
@@ -654,6 +728,19 @@ namespace velvox::ui
         endDrag();
         if (isShowing())
             grabKeyboardFocus();
+
+        // The headphone hot spot: solo on at the press (click = latched, hold = only while held)
+        if (const int icon = auditionIconAt (e.position); icon >= 0 && ! e.mods.isPopupMenu() && bandAt (e.position) < 0)
+        {
+            const bool wasActive = getAuditionBand() == icon;
+            auditionPress.press (wasActive, clock());
+            auditionPressBand = icon;
+            if (! wasActive)
+                setAuditionBand (icon);
+            repaint();
+            return;
+        }
+
         const int b = bandAt (e.position);
 
         if (e.mods.isPopupMenu())
@@ -715,7 +802,7 @@ namespace velvox::ui
 
     void EqGraph::mouseDrag (const juce::MouseEvent& e)
     {
-        if (dragged < 0)
+        if (dragged < 0 || auditionPressBand >= 0)
             return;
         // Relative movement: Shift / Ctrl switch to fine (1/10) at any moment without a jump
         const auto delta = e.position - dragLast;
@@ -744,6 +831,15 @@ namespace velvox::ui
 
     void EqGraph::mouseUp (const juce::MouseEvent&)
     {
+        if (auditionPressBand >= 0)
+        {
+            const int band = auditionPressBand;
+            auditionPressBand = -1;
+            if (! auditionPress.release (clock()) && getAuditionBand() == band)
+                setAuditionBand (-1);
+            repaint();
+            return;
+        }
         endDrag();
         refreshCurves();
     }
@@ -752,6 +848,8 @@ namespace velvox::ui
     {
         if (e.mods.isPopupMenu() || e.mods.isAltDown())
             return;
+        if (bandAt (e.position) < 0 && auditionIconAt (e.position) >= 0)
+            return;   // two clicks on the headphone: on and off again, nothing else
         endDrag();
         const int b = bandAt (e.position);
         if (b >= 0)
@@ -933,6 +1031,18 @@ namespace velvox::ui
         noBand.setInterceptsMouseClicks (false, false);
         addChildComponent (noBand);
 
+        // Band solo of the selected band (monitoring only: the DSP atomic, no parameter)
+        soloButton.setDescription (de ("Nur dieses Band hören. Klick: an / aus, gedrückt halten: solange gehalten."));
+        soloButton.onChange = [this] (bool on)
+        {
+            auto& eq = proc.getChain().getEqualizer (getInstance());
+            if (on)
+                eq.setAuditionBand (selectedBand);
+            else if (eq.getAuditionBand() == selectedBand)
+                eq.setAuditionBand (-1);
+        };
+        addChildComponent (soloButton);
+
         // Opening: the band selected last time in this EQ, else the first band there is
         const int k = juce::jlimit (0, 3, getInstance());
         const auto shown = eqedit::shownBands (proc, k);
@@ -949,6 +1059,17 @@ namespace velvox::ui
     {
         if (auto* g = getGraph())
             g->onSelect = nullptr;
+        proc.getChain().getEqualizer (getInstance()).setAuditionBand (-1);   // closing the panel ends the solo
+    }
+
+    void EqPanel::syncAudition()
+    {
+        auto& eq = proc.getChain().getEqualizer (getInstance());
+        // Hidden in a window (another tab / view): a monitoring state ends with the panel
+        if (auto* top = getTopLevelComponent(); top != nullptr && top->isOnDesktop() && ! isShowing() && eq.getAuditionBand() >= 0)
+            eq.setAuditionBand (-1);
+        soloButton.setVisible (selectedBand >= 0);
+        soloButton.setActive (selectedBand >= 0 && eq.getAuditionBand() == selectedBand);
     }
 
     std::unique_ptr<DetailPanel> createEqPanel (VelvoxAudioProcessor& p) { return std::make_unique<EqPanel> (p); }
@@ -1006,6 +1127,7 @@ namespace velvox::ui
             noBand.setVisible (true);
             boundBand = -1;
             boundType = -1;
+            syncAudition();
             layoutBandRow();
             repaint();
             return;
@@ -1030,6 +1152,8 @@ namespace velvox::ui
         boundType = b.type;
         badgeText = "BAND " + juce::String (selectedBand + 1);
         badgeTag = eqedit::roleTag (b.role);
+        soloButton.setAccent (eqedit::bandColour (selectedBand));
+        syncAudition();
         layoutBandRow();
         repaint();
     }
@@ -1044,6 +1168,7 @@ namespace velvox::ui
 
         if (selectedBand >= 0 && eqedit::parameterBand (proc, getInstance(), selectedBand).type != boundType)
             bindSlots();
+        syncAudition();
 
         const bool legacy = apvts.getRawParameterValue (pidFor (pid::eqLegacyResponse))->load() > 0.5f;
         if (legacy != lastLegacyShown)
@@ -1066,7 +1191,10 @@ namespace velvox::ui
         auto row = getMainRowArea().withTrimmedTop (6);
         if (row.isEmpty())
             return;
-        badgeArea = row.removeFromLeft (std::min (96, row.getWidth() / 6));
+        badgeArea = row.removeFromLeft (std::min (128, row.getWidth() / 5));
+        // The headphone at the badge's right end, level with its band name
+        const auto badge = badgeArea.toFloat().withSizeKeepingCentre ((float) badgeArea.getWidth(), 44.0f).translated (0.0f, -8.0f);
+        soloButton.setBounds (juce::Rectangle<float> (28.0f, 28.0f).withCentre ({ badge.getRight() - 18.0f, badge.getY() + 16.0f }).toNearestInt());
         const int widths[5] { 96, 150, 96, 96, 132 };
         const int gap = 16;
         int total = gap * 4;
@@ -1096,13 +1224,14 @@ namespace velvox::ui
         g.fillEllipse (dot);
         g.setColour (colours::textStrong);
         g.setFont (semiBold (11.0f, 0.15f));
-        g.drawText (badgeText, juce::Rectangle<float> (r.getX() + 22.0f, r.getY() + 4.0f, r.getWidth() - 22.0f, 16.0f),
+        const float textW = std::max (0.0f, (float) soloButton.getX() - r.getX() - 26.0f);
+        g.drawText (badgeText, juce::Rectangle<float> (r.getX() + 22.0f, r.getY() + 4.0f, textW, 16.0f),
                     juce::Justification::centredLeft, false);
         if (badgeTag.isNotEmpty())
         {
             g.setColour (c.withAlpha (0.85f));
             g.setFont (semiBold (9.0f, 0.12f));
-            g.drawText (badgeTag, juce::Rectangle<float> (r.getX() + 22.0f, r.getY() + 22.0f, r.getWidth() - 22.0f, 14.0f),
+            g.drawText (badgeTag, juce::Rectangle<float> (r.getX() + 22.0f, r.getY() + 22.0f, textW, 14.0f),
                         juce::Justification::centredLeft, false);
         }
     }

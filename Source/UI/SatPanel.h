@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DetailPanels.h"
+#include "AuditionButton.h"
 
 namespace velvox::ui
 {
@@ -78,6 +79,9 @@ namespace velvox::ui
         juce::Component& getCrossoverHandle (int which);   // 0 = Low / Mid, 1 = Mid / High
         juce::Component& getBandArea (int band);
         Toggle& getBandSwitch (int band);
+        // Band solo (0.6.1): headphone at the top right of each band, multiband only. Monitoring state in
+        // the DSP (SaturationModule::setSoloBand), one band at a time, ended with the view / multiband off
+        AuditionButton& getSoloButton (int band);
 
         class Handle;   // shared gesture code of the crossover handles and the band areas
 
@@ -99,6 +103,9 @@ namespace velvox::ui
         std::array<std::unique_ptr<Crossover>, 2> crossovers;
         std::array<std::unique_ptr<BandArea>, 3> bands;
         std::array<std::unique_ptr<Toggle>, 3> switches;
+        std::array<std::unique_ptr<AuditionButton>, 3> solos;
+        int soloShown = -1;
+        void syncSolo();
 
         dsp::SatSettings shown;   // effective settings (macros applied), from the live data
         bool haveLive = false, multiband = false, enabled = false;

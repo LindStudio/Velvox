@@ -177,6 +177,9 @@ namespace velvox::dsp
         weight.setCurrentAndTargetValue (amountTarget > 0.0f ? 1.0f : 0.0f);
         xoverLow.reset (sampleRate, 0.05);
         xoverHigh.reset (sampleRate, 0.05);
+        for (auto& w : soloWeight)
+            w.reset (sampleRate, 0.015);
+        stopSolo();
         activeMultiband = requestedMultiband;
         setSettings (pending);
         for (auto& p : bandParams)
@@ -207,11 +210,22 @@ namespace velvox::dsp
         dryPrev.fill (0.0);
         dcX.fill (0.0);
         dcY.fill (0.0);
+        for (int b = 0; b < numBands; ++b)
+        {
+            soloDcX[(size_t) b].fill (0.0);
+            soloDcY[(size_t) b].fill (0.0);
+        }
         for (auto& b : bandPrev)
             b.fill (0.0);
         for (auto& f : firHist)
             f = { 0.0, 0.0 };
         needsReset = false;
+    }
+
+    void SaturationModule::stopSolo() noexcept
+    {
+        for (auto& w : soloWeight)
+            w.setCurrentAndTargetValue (0.0f);
     }
 
     void SaturationModule::reset()
@@ -308,10 +322,36 @@ namespace velvox::dsp
             for (int b = 0; b < numBands; ++b)
                 updateBandParams (b, 0, true);
             needsReset = true;
+            stopSolo();   // the output is the dry right now: no jump
+        }
+
+        // Band solo (multiband only): the wanted band fades in while the others fade out - from one
+        // band to another the shares always add up to 1 (band to band, never via the full signal)
+        std::array<bool, numBands> soloOn {};
+        {
+            int want = soloRequest.load (std::memory_order_relaxed);
+            if (! activeMultiband || ! requestedMultiband || want < 0 || want >= numBands)
+                want = -1;
+            for (int b = 0; b < numBands; ++b)
+            {
+                auto& w = soloWeight[(size_t) b];
+                const float target = b == want ? 1.0f : 0.0f;
+                if (w.getTargetValue() != target)
+                {
+                    if (target > 0.0f && w.getCurrentValue() <= 0.0f && ! w.isSmoothing())
+                    {
+                        soloDcX[(size_t) b].fill (0.0);   // a band starting to be heard: fresh DC blocker
+                        soloDcY[(size_t) b].fill (0.0);
+                    }
+                    w.setTargetValue (target);
+                }
+                soloOn[(size_t) b] = w.getCurrentValue() > 0.0f || w.isSmoothing();
+            }
         }
 
         if (amountTarget <= 0.0f && ! amount.isSmoothing() && weight.getCurrentValue() <= 0.0f && ! weight.isSmoothing())
         {
+            stopSolo();
             for (int ch = 0; ch < numChannels; ++ch)
                 juce::FloatVectorOperations::copy (channels[ch], dry.getReadPointer (ch), numSamples);
             needsReset = true;
@@ -332,6 +372,7 @@ namespace velvox::dsp
         }
 
         const bool mb = activeMultiband;
+        const bool solo = mb && (soloOn[0] || soloOn[1] || soloOn[2]);
         const int factor = oversampler.getFactor();
         float* const* up = oversampler.upsample (channels, numChannels, numSamples);
         std::array<double, numBands> inSum {}, outSum {};
@@ -344,13 +385,16 @@ namespace velvox::dsp
             if (mb)
                 updateCrossovers (n, false);
 
-            float aBuf[updateInterval], gBuf[updateInterval], onBuf[numBands][updateInterval];
+            float aBuf[updateInterval], gBuf[updateInterval], onBuf[numBands][updateInterval], sBuf[numBands][updateInterval];
             for (int i = 0; i < n; ++i)
             {
                 aBuf[i] = amount.getNextValue();
                 gBuf[i] = outGain.getNextValue();
                 for (int b = 0; b < numBands; ++b)
+                {
                     onBuf[b][i] = bandParams[(size_t) b].onAmount.getNextValue();
+                    sBuf[b][i] = solo && soloOn[(size_t) b] ? soloWeight[(size_t) b].getNextValue() : 0.0f;
+                }
             }
 
             for (int ch = 0; ch < numChannels; ++ch)
@@ -362,6 +406,7 @@ namespace velvox::dsp
                     const int i = j / factor - start;
                     const double u = s[j];
                     double wet = 0.0, sum = u;
+                    double soloLin[numBands] {}, soloWet[numBands] {};   // each band's dry share and output
 
                     if (! mb)
                     {
@@ -415,6 +460,8 @@ namespace velvox::dsp
                                 sh.stale = true;
                             }
                             wet += y;
+                            soloLin[b] = lin;
+                            soloWet[b] = y;
                             inSum[(size_t) b] += xb * xb;
                             outSum[(size_t) b] += y * y;
                         }
@@ -430,7 +477,29 @@ namespace velvox::dsp
                     dcY[(size_t) ch] = hpDiff;
 
                     const double a = aBuf[i];
-                    const double v = dryOs + a * ((double) gBuf[i] * (dryOs + hpDiff) - dryOs);
+                    double v = dryOs + a * ((double) gBuf[i] * (dryOs + hpDiff) - dryOs);
+
+                    if (solo)
+                    {
+                        // Each soloed band alone, through the same Mix / Output law (own DC blockers:
+                        // the three solos add up to v), weighted by its share
+                        double share = 0.0, soloed = 0.0;
+                        for (int b = 0; b < numBands; ++b)
+                        {
+                            if (! soloOn[(size_t) b])
+                                continue;
+                            const double d = soloWet[b] - soloLin[b];
+                            auto& dx = soloDcX[(size_t) b][(size_t) ch];
+                            auto& dy = soloDcY[(size_t) b][(size_t) ch];
+                            const double hp = d - dx + dcR * dy;
+                            dx = d;
+                            dy = hp;
+                            const double vs = soloLin[b] + a * ((double) gBuf[i] * (soloLin[b] + hp) - soloLin[b]);
+                            share += (double) sBuf[b][i];
+                            soloed += (double) sBuf[b][i] * vs;
+                        }
+                        v = v * (1.0 - share) + soloed;
+                    }
 
                     // Undo the cos (w / 2) roll-off of the half-sample average (ADAA and dry):
                     // symmetric 3-tap FIR 1 + 2c (1 - cos w), within 0.02 dB up to 20 kHz
@@ -466,8 +535,12 @@ namespace velvox::dsp
             meters.outDb[(size_t) b].store (meterDb (outSum[(size_t) b], count), std::memory_order_relaxed);
         }
 
-        for (auto& v : dcY)
-            if (! std::isfinite (v))
+        for (int ch = 0; ch < maxChannels; ++ch)
+            if (! std::isfinite (dcY[(size_t) ch]) || ! std::isfinite (soloDcY[0][(size_t) ch])
+                || ! std::isfinite (soloDcY[1][(size_t) ch]) || ! std::isfinite (soloDcY[2][(size_t) ch]))
+            {
                 reset();
+                break;
+            }
     }
 }

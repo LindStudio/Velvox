@@ -491,6 +491,20 @@ namespace velvox::ui
             switches[(size_t) b] = std::make_unique<Toggle> (s, onIds[b].toRawUTF8(), bandNames[b]);
             switches[(size_t) b]->setColour (juce::ToggleButton::tickColourId, moduleColour (dsp::ModuleId::sat));
             addAndMakeVisible (*switches[(size_t) b]);
+
+            auto solo = std::make_unique<AuditionButton>();
+            solo->setDescription (juce::String::fromUTF8 ("Nur dieses Band hören. Klick: an / aus, gedrückt halten: solange gehalten."));
+            solo->onChange = [this, b] (bool on)
+            {
+                auto& sat = proc.getChain().getSaturation (instance);
+                if (on)
+                    sat.setSoloBand (b);
+                else if (sat.getSoloBand() == b)
+                    sat.setSoloBand (-1);
+                syncSolo();
+            };
+            addChildComponent (*solo);
+            solos[(size_t) b] = std::move (solo);
         }
 
         multiband = raw (multibandId) > 0.5f;
@@ -499,7 +513,34 @@ namespace velvox::ui
         xover[1] = raw (xoverIds[1]);
     }
 
-    SatView::~SatView() = default;
+    SatView::~SatView()
+    {
+        proc.getChain().getSaturation (instance).setSoloBand (-1);   // a monitoring state: closing the panel ends it
+    }
+
+    AuditionButton& SatView::getSoloButton (int band) { return *solos[(size_t) juce::jlimit (0, 2, band)]; }
+
+    void SatView::syncSolo()
+    {
+        auto& sat = proc.getChain().getSaturation (instance);
+        // No solo without the bands, nor while the panel is hidden inside a window
+        const auto* top = getTopLevelComponent();
+        if (sat.getSoloBand() >= 0 && (! multiband || (top != nullptr && top->isOnDesktop() && ! isShowing())))
+            sat.setSoloBand (-1);
+        const int solo = sat.getSoloBand();
+        if (solo != soloShown)
+        {
+            soloShown = solo;
+            repaint();
+        }
+        for (int b = 0; b < 3; ++b)
+        {
+            auto& s = *solos[(size_t) b];
+            s.setVisible (multiband);
+            s.setActive (solo == b);
+            s.setAccent (satlook::characterColour (shownCharacter (b)));
+        }
+    }
 
     float SatView::raw (const juce::String& id) const
     {
@@ -584,7 +625,11 @@ namespace velvox::ui
             auto& sw = *switches[(size_t) b];
             sw.setVisible (multiband);
             const auto br = getBandBounds (b);
-            sw.setBounds (juce::Rectangle<float> (br.getX() + 8.0f, br.getY() + 7.0f, juce::jlimit (30.0f, 76.0f, br.getWidth() - 14.0f), 22.0f).toNearestInt());
+            // On switch at the top left, the headphone at the top right
+            sw.setBounds (juce::Rectangle<float> (br.getX() + 8.0f, br.getY() + 7.0f, juce::jlimit (30.0f, 76.0f, br.getWidth() - 46.0f), 22.0f).toNearestInt());
+            auto& solo = *solos[(size_t) b];
+            solo.setVisible (multiband);
+            solo.setBounds (juce::Rectangle<float> (br.getRight() - 30.0f, br.getY() + 7.0f, 22.0f, 22.0f).toNearestInt());
         }
         for (int i = 0; i < 2; ++i)
         {
@@ -657,6 +702,7 @@ namespace velvox::ui
         haveLive = true;
         enabled = s.enabled;
         rebuildCurve();
+        syncSolo();
 
         // Drive meters: band input level + drive = how hard the band hits its curve (fast up, slow down)
         const auto& m = proc.getChain().getSaturation (instance).getMeters();
@@ -713,7 +759,8 @@ namespace velvox::ui
             const int character = shownCharacter (b);
             const float drive = shownDrive (b);
             const auto c = on ? satlook::characterColour (character) : colours::textFaint;
-            const float a = alpha * (on ? 1.0f : 0.5f);
+            // While a band is soloed the others step back
+            const float a = alpha * (on ? 1.0f : 0.5f) * (soloShown >= 0 && soloShown != b ? 0.4f : 1.0f);
             const float amount = juce::jlimit (0.0f, 1.0f, drive / 24.0f);
 
             // Body: the character colour, stronger with more drive
@@ -875,14 +922,14 @@ namespace velvox::ui
                 }
                 auto& multibandSwitch = toggle (pid::satMultiband, "Multiband");
                 linkSwitch = &toggle (pid::satLink, "Link");
-                knob (pid::satMix, "Mix");
+                mixKnob = &knob (pid::satMix, "Mix");   // 0.6.1: a main control
                 knob (pid::satOutput, "Output");
                 xovers[0] = &knob (pid::satXoverLow, "Low / Mid");
                 xovers[1] = &knob (pid::satXoverHigh, "Mid / High");
 
                 tileStack = &stack;
                 multiband = &multibandSwitch;
-                setMainControls ({ &stack, &multibandSwitch, linkSwitch });
+                setMainControls ({ &stack, &multibandSwitch, linkSwitch, mixKnob });
                 placeInVisual ({ drives[0], drives[1], drives[2], drives[3] });
                 multibandId = pidFor (pid::satMultiband);
                 sync();
@@ -897,19 +944,23 @@ namespace velvox::ui
             void resized() override
             {
                 DetailPanel::resized();
-                // Main row: tall character tiles, then the two switches, centred
+                // Main row: tall character tiles, the two switches, then Mix - centred
                 auto row = getMainRowArea().withTrimmedTop (6);
                 if (row.isEmpty() || tileStack == nullptr)
                     return;
-                const int swW = row.getWidth() > 700 ? 128 : 108, gap = row.getWidth() > 700 ? 28 : 16;
-                const int tilesW = juce::jlimit (160, 372, row.getWidth() - 2 * (swW + gap));
-                const int total = tilesW + 2 * (swW + gap);
+                const bool wide = row.getWidth() > 700;
+                const int swW = wide ? 128 : 108, gap = wide ? 28 : 16, mixW = wide ? 96 : 84;
+                const int tilesW = juce::jlimit (160, 372, row.getWidth() - 2 * (swW + gap) - (mixW + gap));
+                const int total = tilesW + 2 * (swW + gap) + (mixW + gap);
                 int x = row.getX() + std::max (0, (row.getWidth() - total) / 2);
                 tileStack->setBounds (juce::Rectangle<int> (x, row.getY(), tilesW, row.getHeight()).withSizeKeepingCentre (tilesW, std::min (76, row.getHeight() - 8)));
                 x += tilesW + gap;
                 multiband->setBounds (juce::Rectangle<int> (x, row.getY(), swW, row.getHeight()).withSizeKeepingCentre (swW, 28));
                 x += swW + gap;
                 linkSwitch->setBounds (juce::Rectangle<int> (x, row.getY(), swW, row.getHeight()).withSizeKeepingCentre (swW, 28));
+                x += swW + gap;
+                if (mixKnob != nullptr)
+                    mixKnob->setBounds (juce::Rectangle<int> (x, row.getY() - 6, mixW, row.getHeight() + 6));
             }
 
         private:
@@ -966,6 +1017,7 @@ namespace velvox::ui
             juce::Component* tileStack = nullptr;
             Toggle* multiband = nullptr;
             Toggle* linkSwitch = nullptr;
+            Knob* mixKnob = nullptr;
             SatView* view = nullptr;
             juce::String multibandId;
             int shownIndex = -1;

@@ -31,6 +31,23 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
   gespeicherten Stellung, auf dem Message-Thread (nicht sample-genau; beim Offline-Bounce kann eine schnelle Makro-Fahrt
   leicht verzögert greifen).
 
+### Neu – Abhören
+- **EQ-Band solo (Kopfhörer wie Pro-Q 4):** neben dem Punkt unter der Maus und neben dem Namen des gewählten Bands. Man
+  hört nur den Bereich des Bands (Bell/Notch/Band Pass: Bandpass mit seiner Güte; Low Shelf/Low Cut: alles darunter;
+  High Shelf/High Cut: alles darüber), ohne seine Verstärkung, lautheitsangeglichen (Spitzen höchstens −1 dBFS).
+  Klick = an bis zum nächsten Klick, gedrückt halten = nur solange gehalten. Wechsel zwischen Bändern blendet Bereich in
+  Bereich über (15 ms), ohne Knackser.
+- **Sättigung: einzelne Bänder hören** (Multiband): Kopfhörer oben rechts in jedem Band, man hört nur dieses Band so,
+  wie es das Modul verlässt (die drei Solos ergeben zusammen genau den normalen Klang).
+- Beide sind Abhör-Zustände: kein Parameter, nicht gespeichert, nicht automatisierbar, kein Undo-Schritt; sie enden mit
+  dem Schließen des Panels.
+
+### Geändert
+- **Sättigung: Mix** sitzt jetzt in der Hauptreihe des Panels (nicht mehr in „Mehr“).
+
+### Alte Projekte – Abhören
+- Ohne aktives Band-Solo ist die Ausgabe bitgleich zu vorher.
+
 ## [0.6.0] – Branch `feature/automix` („Pro-Overhaul“, Entwicklungsstand, FL-Studio-Test ausstehend)
 
 ### Neu – Oberfläche

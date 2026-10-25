@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DetailPanels.h"
+#include "AuditionButton.h"
 #include "../Parameters/EqBands.h"
 
 class VelvoxAudioProcessor;
@@ -102,7 +103,17 @@ namespace velvox::ui
         int getHoverBand() const noexcept { return hovered; }
         const eqedit::ShownBands& getShown() const noexcept { return shown; }
 
+        // ---- Band solo (0.6.1): the headphone hot spot beside the hovered (or soloed) point. Click =
+        //      solo on / off, press longer than AuditionPress::holdMs = only while held. A monitoring
+        //      state in the DSP (EqualizerModule::setAuditionBand), ended when the graph goes away.
+        int getAuditionBand() const;            // -1: none
+        void setAuditionBand (int band);        // -1: off
+        juce::Rectangle<float> auditionIconArea (int band) const;
+        bool isAuditionIconShown (int band) const;
+        std::function<juce::uint32()> clock = [] { return juce::Time::getMillisecondCounter(); };
+
     private:
+        int auditionIconAt (juce::Point<float> p) const;   // band whose shown hot spot is at p, -1: none
         void timerCallback() override;
         void endWheelGesture();
         void beginDrag (int band);
@@ -137,6 +148,10 @@ namespace velvox::ui
         // Hover card text, built in update() (no allocation while painting)
         juce::String cardTitle, cardValues;
         float cardWidth = 0.0f;
+        // Band solo
+        AuditionPress auditionPress;
+        int auditionPressBand = -1;   // hot spot being pressed
+        int shownAudition = -1;       // last state read from the DSP (repaints when it changes)
     };
 
     std::unique_ptr<ModuleView> createEqGraph (VelvoxAudioProcessor& p, const SpectrumSource* spectrum, int instance);
@@ -158,6 +173,8 @@ namespace velvox::ui
         int getSelectedBand() const noexcept { return selectedBand; }
         EqGraph* getGraph() noexcept;
         juce::Button& getLegacyResponseButton() noexcept { return *legacyResponse; }
+        // Headphone of the selected band (0.6.1 band solo); hidden while no band is selected
+        AuditionButton& getAuditionButton() noexcept { return soloButton; }
 
         // One slot of the selected-band row; holds the control bound to the band's parameter
         class Slot;
@@ -172,7 +189,9 @@ namespace velvox::ui
 
         std::array<Slot*, 5> slots {};
         juce::TextButton* legacyResponse = nullptr;
+        void syncAudition();
         juce::Label noBand;
+        AuditionButton soloButton;
         juce::Rectangle<int> badgeArea;
         juce::String badgeText, badgeTag;   // built when the selection changes, not in paint
         int selectedBand = -1, boundBand = -2, boundType = -1;

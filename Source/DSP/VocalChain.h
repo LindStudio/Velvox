@@ -172,6 +172,8 @@ namespace velvox::dsp
         PulseModule& getPulse() noexcept { return pulse; }
         const PitchModule& getPitch() const noexcept { return pitch; }   // UI: getDetectedHz (lock-free)
         const SaturationModule& getSaturation (int instance = 0) const noexcept { return saturation[(size_t) clampInstance (ModuleId::sat, instance)]; }   // UI: getMeters()
+        SaturationModule& getSaturation (int instance = 0) noexcept { return saturation[(size_t) clampInstance (ModuleId::sat, instance)]; }   // UI: setSoloBand (lock-free)
+        EqualizerModule& getEqualizer (int instance = 0) noexcept { return eq[(size_t) clampInstance (ModuleId::eq, instance)]; }   // UI: setAuditionBand (lock-free)
         SmashModule& getSmash (int instance = 0) noexcept { return smash[(size_t) clampInstance (ModuleId::smash, instance)]; }
         ChoirModule& getChoir (int instance = 0) noexcept { return choir[(size_t) clampInstance (ModuleId::choir, instance)]; }
         DoublerModule& getDoubler (int instance = 0) noexcept { return doubler[(size_t) clampInstance (ModuleId::doubler, instance)]; }

@@ -37,6 +37,11 @@ namespace velvox::dsp
             b.gain.reset (sampleRate, 0.05);
             b.amount.reset (sampleRate, 0.03);
         }
+        for (auto& v : auditionVoices)
+        {
+            v.path.prepare (sampleRate);
+            v.band = -1;
+        }
         reset();
     }
 
@@ -45,7 +50,74 @@ namespace velvox::dsp
         for (auto& b : bands)
             for (auto& f : b.filters)
                 f.reset();
+        for (auto& v : auditionVoices)
+            v.path.reset();
         snapNext = true;
+    }
+
+    void EqualizerModule::processAudition (const float* const* moduleInput, float* const* io, int numChannels, int numSamples) noexcept
+    {
+        int want = auditionRequest.load (std::memory_order_relaxed);
+        if (want < 0 || want >= maxEqBands || bands[(size_t) want].target.isFree())
+            want = -1;
+        const auto region = auditionRegionFor (bands[(size_t) (want >= 0 ? want : 0)].target);
+
+        // The path that plays the wanted band keeps playing it (and follows a dragged band); every
+        // other path fades out. A new band (or a new shape of the band) starts on a silent path while
+        // the old one fades out: a crossfade between the two regions.
+        bool playing = false;
+        for (auto& v : auditionVoices)
+        {
+            if (v.path.isSilent())
+                v.band = -1;
+            if (want >= 0 && ! playing && v.band == want && v.path.getShape() == region.shape)
+            {
+                v.path.follow (region);
+                v.path.setOn (true);
+                playing = true;
+            }
+            else
+            {
+                v.path.setOn (false);
+            }
+        }
+        if (want >= 0 && ! playing)
+            for (auto& v : auditionVoices)
+                if (v.band < 0)
+                {
+                    v.band = want;
+                    v.path.start (region);
+                    v.path.setOn (true);
+                    break;
+                }   // both paths still fading: the new band starts at the next block
+
+        const bool a = ! auditionVoices[0].path.isSilent(), b = ! auditionVoices[1].path.isSilent();
+        if (! a && ! b)
+            return;
+        if (a != b)
+        {
+            (a ? auditionVoices[0] : auditionVoices[1]).path.process (moduleInput, io, io, numChannels, numSamples);
+            return;
+        }
+
+        // Both audible: each path needs the normal output (and the input, when it is io) unchanged
+        numChannels = std::min (numChannels, maxChannels);
+        const bool inputIsIo = moduleInput[0] == io[0];
+        for (int start = 0; start < numSamples; start += auditionBlock)
+        {
+            const int n = std::min (auditionBlock, numSamples - start);
+            std::array<const float*, maxChannels> normal {}, input {};
+            std::array<float*, maxChannels> out {};
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                std::copy (io[ch] + start, io[ch] + start + n, auditionNormal[(size_t) ch].begin());
+                normal[(size_t) ch] = auditionNormal[(size_t) ch].data();
+                input[(size_t) ch] = inputIsIo ? normal[(size_t) ch] : moduleInput[ch] + start;
+                out[(size_t) ch] = io[ch] + start;
+            }
+            for (auto& v : auditionVoices)
+                v.path.process (input.data(), normal.data(), out.data(), numChannels, n);
+        }
     }
 
     void EqualizerModule::setSettings (const EqSettings& s)

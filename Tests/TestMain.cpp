@@ -327,7 +327,8 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //          "set:<id>=<value>,...[,more][|<overlay>]" (parameters in real units, applied after the preset; then ~1.4 s of
 //          audio so live views fill; ",more" opens Mehr; "|<overlay>" adds one other overlay)
 //          tokens joined with ';' (any order, combinable with all of the above): "reso" (the live vocal gets a 3.15 kHz
-//          resonance), "more" (Mehr open), "route:<routing string, ',' or '|'>", "set:..." as above;
+//          resonance), "more" (Mehr open), "route:<routing string, ',' or '|'>", "set:..." as above,
+//          "bandsolo:<band>" (0.6.1: that EQ / Saturation band soloed), "hoverpoint" (EQ: the selected point hovered);
 //          e.g. "reso;more;route:v2|eq|smooth;set:smoothOn=1,smoothAmount=70"
 //          0.6.1 chain tokens: "solo:<selection code>" (module solo), "scroll:<px>|end" (chain row scrolled),
 //          "hover:<selection code>" (mouse over that tile; "hover:<code>:s" over its S)
@@ -336,7 +337,8 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
 {
     using namespace velvox;
     // One parser for every overlay form: ';' tokens, each a flag, a route, a set: list or the overlay itself
-    bool reso = false, moreOpen = false, hasSet = false;
+    bool reso = false, moreOpen = false, hasSet = false, hoverPoint = false;
+    int soloBand = -1;   // "bandsolo:<band>": EQ band / Saturation band soloed (0.6.1); "hoverpoint": EQ hot spot shown
     juce::String overlay, routeText, soloText, scrollText, hoverText;
     juce::StringArray assignments;
     for (auto token : juce::StringArray::fromTokens (rawOverlay, ";", ""))
@@ -350,6 +352,10 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
             hoverText = token.fromFirstOccurrenceOf (":", false, false);
         else if (token == "reso")
             reso = true;
+        else if (token.startsWith ("bandsolo:"))
+            soloBand = token.fromFirstOccurrenceOf (":", false, false).getIntValue();
+        else if (token == "hoverpoint")
+            hoverPoint = true;
         else if (token == "more" && rawOverlay.contains (";"))
             moreOpen = true;
         else if (token.startsWith ("route:"))
@@ -522,6 +528,25 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
                     const auto now = juce::Time::getCurrentTime();
                     g->mouseDown (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, {}, 1.0f, 0, 0, 0, 0,
                                                     g, g, now, at, now, 1, false));
+                }
+        }
+        if (auto* panel = ed->getDetail(); panel != nullptr && (soloBand >= 0 || hoverPoint))
+        {
+            auto* eqp = dynamic_cast<ui::EqPanel*> (panel);
+            if (soloBand >= 0)
+            {
+                if (eqp != nullptr)
+                    proc.getChain().getEqualizer (panel->getInstance()).setAuditionBand (soloBand);
+                else
+                    proc.getChain().getSaturation (panel->getInstance()).setSoloBand (soloBand);
+            }
+            if (hoverPoint && eqp != nullptr)
+                if (auto* g = eqp->getGraph())
+                {
+                    const auto at = g->pointFor (eqp->getSelectedBand());
+                    const auto now = juce::Time::getCurrentTime();
+                    g->mouseMove (juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, {}, 1.0f, 0, 0, 0, 0,
+                                                    g, g, now, at, now, 0, false));
                 }
         }
         if (overlay == "details")

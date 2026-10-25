@@ -2,6 +2,8 @@
 
 #include "DspUtilities.h"
 #include "EqDesign.h"
+#include "Audition.h"
+#include <atomic>
 
 namespace velvox::dsp
 {
@@ -43,6 +45,21 @@ namespace velvox::dsp
         void setSettings (const EqSettings& s);
         void process (float* const* channels, int numChannels, int numSamples) noexcept;
 
+        // ---- Band solo (0.6.1, Pro-Q-style headphone; Audition.h). A monitoring state, never a parameter:
+        //      the UI sets the band to hear (-1 = none; any thread, lock-free), the audio thread follows at
+        //      its next block through a 15 ms crossfade (from one band to another: region to region).
+        //      A free slot is none; out of range is stored as -1.
+        void setAuditionBand (int band) noexcept { auditionRequest.store (band >= 0 && band < maxEqBands ? band : -1, std::memory_order_relaxed); }
+        int getAuditionBand() const noexcept { return auditionRequest.load (std::memory_order_relaxed); }
+        // Audio thread, after process() and the module gate: replaces `io` by the region of the band,
+        // filtered from `moduleInput` (the EQ's input; may be `io` itself while the EQ is bypassed).
+        // Touches nothing (bit-identical output) while no band is or was just auditioned.
+        void processAudition (const float* const* moduleInput, float* const* io, int numChannels, int numSamples) noexcept;
+        bool isAuditionAudible() const noexcept   // audio thread / tests
+        {
+            return ! auditionVoices[0].path.isSilent() || ! auditionVoices[1].path.isSilent();
+        }
+
         // ---- Curves for the UI. Pure functions of the settings: thread-safe on any thread when given a
         //      copy of the settings, e.g. processor.readEffectiveSettings().instance (k).eq (atomic reads).
         //      They describe exactly what the audio thread processes (same designs).
@@ -83,5 +100,17 @@ namespace velvox::dsp
         std::array<BandState, maxEqBands> bands;
         bool snapNext = true;   // the first settings after prepare() / reset() apply without a sweep
         static constexpr int updateInterval = 16;
+
+        // Two listening paths, so hopping from one band (or shape) to the next is a crossfade between
+        // the two regions, never a blip of the full signal (audio thread)
+        struct AuditionVoice
+        {
+            BandAudition path;
+            int band = -1;   // band it plays or fades out
+        };
+        std::atomic<int> auditionRequest { -1 };
+        std::array<AuditionVoice, 2> auditionVoices;
+        static constexpr int auditionBlock = 256;
+        std::array<std::array<float, auditionBlock>, maxChannels> auditionNormal {};
     };
 }

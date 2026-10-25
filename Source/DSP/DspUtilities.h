@@ -53,6 +53,9 @@ namespace velvox::dsp
                 dry.copyFrom (ch, 0, channels[ch], numSamples);
         }
 
+        // The module input of the last captureDry (valid until the next one)
+        const float* const* dryChannels() const noexcept { return dry.getArrayOfReadPointers(); }
+
         // out = dry + (wet - dry) * amount
         void mix (float* const* channels, int numChannels, int numSamples) noexcept
         {

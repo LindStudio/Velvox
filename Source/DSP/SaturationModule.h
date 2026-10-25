@@ -73,6 +73,22 @@ namespace velvox::dsp
 
         int getLatencySamples() const noexcept { return latency; }
 
+        // ---- Band solo (0.6.1 item 5). A monitoring state, never a parameter: the UI sets the band to
+        //      hear (0 Low, 1 Mid, 2 High, -1 none; any thread, lock-free). Multiband mode only: the output
+        //      is that band's own processed signal (its dry share + its saturation, at Mix / Output, with
+        //      its own DC blocker), so the three solos add up to the normal output. 15 ms crossfades
+        //      (from one band to another: band to band); while nothing is soloed the output is
+        //      bit-identical to the module without solo.
+        void setSoloBand (int band) noexcept { soloRequest.store (band >= 0 && band < numBands ? band : -1, std::memory_order_relaxed); }
+        int getSoloBand() const noexcept { return soloRequest.load (std::memory_order_relaxed); }
+        bool isSoloAudible() const noexcept   // audio thread / tests
+        {
+            for (const auto& w : soloWeight)
+                if (w.getCurrentValue() > 0.0f || w.isSmoothing())
+                    return true;
+            return false;
+        }
+
         // Transfer curves incl. level compensation (also used by the UI)
         static constexpr int numCharacters = 4;
         static float shape (float x, float driveLin, int character = 0) noexcept;
@@ -150,5 +166,10 @@ namespace velvox::dsp
         int latency = 0;
         int warmup = 0, warmupLength = 240;
         SatMeters meters;
+
+        std::atomic<int> soloRequest { -1 };
+        std::array<juce::SmoothedValue<float>, 3> soloWeight;   // share of each band's solo in the output (audio thread)
+        std::array<std::array<double, maxChannels>, 3> soloDcX {}, soloDcY {};
+        void stopSolo() noexcept;
     };
 }
