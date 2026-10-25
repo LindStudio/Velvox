@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DspUtilities.h"
+#include "DynamicsFeed.h"
 
 namespace velvox::dsp
 {
@@ -93,6 +94,11 @@ namespace velvox::dsp
         float getGainReductionDb() const noexcept { return grDb; }
 
         PeakMeter gainReductionDb; // positive dB of reduction
+
+        // UI feed (Pro-C style display): scrolling input / output / GR history and the
+        // gain reduction at the end of the last block
+        DynamicsHistory history;
+        std::atomic<float> currentGainReductionDb { 0.0f };
 
     private:
         double fs = 44100.0;

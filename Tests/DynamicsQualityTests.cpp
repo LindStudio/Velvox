@@ -5,6 +5,7 @@
 #include "TestHelpers.h"
 #include "DSP/DynamicsFeed.h"
 #include "DSP/CompressorModule.h"
+#include "DSP/SmashModule.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -369,3 +370,58 @@ public:
 };
 
 static CompressorOptionTests compressorOptionTests;
+
+//==============================================================================
+class DynamicsFeedModuleTests final : public juce::UnitTest
+{
+public:
+    DynamicsFeedModuleTests() : juce::UnitTest ("Dynamics module feeds", "Dynamics") {}
+
+    void runTest() override
+    {
+        const double fs = 48000.0;
+        std::vector<DynamicsFrame> frames (DynamicsHistory::capacity);
+
+        beginTest ("Compressor feed: history shows input, output and gain reduction");
+        {
+            CompressorModule m;
+            m.prepare (fs, 512);
+            auto s = vocalComp();
+            s.thresholdDb = -30.0f; s.kneeDb = 0.0f;
+            m.setSettings (s);
+            auto b = sineBuffer (fs, 1000.0, 0.5f, 1.0);
+            runBlocks (m, b, 512);
+            const int got = m.history.pull (frames.data(), (int) frames.size());
+            expectEquals (got, (int) (fs / juce::roundToInt (fs * 0.005)));
+            const auto& f = frames[(size_t) got - 1];
+            logMessage ("Last frame: in " + juce::String (f.inputDb, 2) + " out " + juce::String (f.outputDb, 2) + " GR "
+                        + juce::String (f.gainReductionDb, 2) + "; current GR " + juce::String (m.currentGainReductionDb.load(), 2));
+            expectWithinAbsoluteError (f.inputDb, -6.02f, 0.3f);
+            expectWithinAbsoluteError (f.outputDb, -24.0f, 0.5f);
+            expectWithinAbsoluteError (f.gainReductionDb, 18.0f, 0.5f);
+            expectWithinAbsoluteError (m.currentGainReductionDb.load(), 18.0f, 0.5f);
+        }
+
+        beginTest ("Smash feed: gain reduction column");
+        {
+            SmashModule m;
+            m.prepare (fs, 512);
+            SmashSettings s;
+            s.enabled = true; s.amount = 0.8f;
+            m.setSettings (s);
+            auto b = sineBuffer (fs, 1000.0, 0.5f, 1.0);
+            runBlocks (m, b, 512);
+            const int got = m.history.pull (frames.data(), (int) frames.size());
+            expectGreaterThan (got, 150);
+            const auto& f = frames[(size_t) got - 1];
+            logMessage ("Smash last frame: in " + juce::String (f.inputDb, 2) + " out " + juce::String (f.outputDb, 2) + " GR "
+                        + juce::String (f.gainReductionDb, 2));
+            expectWithinAbsoluteError (f.inputDb, -6.02f, 0.3f);
+            expectGreaterThan (f.gainReductionDb, 10.0f);
+            expectWithinAbsoluteError (m.currentGainReductionDb.load(), f.gainReductionDb, 1.0f);
+            expectWithinAbsoluteError (f.outputDb, juce::Decibels::gainToDecibels (b.getMagnitude (0, b.getNumSamples() - 240, 240)), 0.1f);
+        }
+    }
+};
+
+static DynamicsFeedModuleTests dynamicsFeedModuleTests;

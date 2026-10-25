@@ -2,6 +2,7 @@
 
 #include "DspUtilities.h"
 #include "MixLaw.h"
+#include "DynamicsFeed.h"
 
 namespace velvox::dsp
 {
@@ -48,6 +49,9 @@ namespace velvox::dsp
         static float wetGainDb (float detectorLevelDb, float amount) noexcept;
 
         PeakMeter gainReductionDb;              // squashed path, dB (positive)
+        // UI feed (gain-reduction column): input / output / squashed-path GR history
+        DynamicsHistory history;
+        std::atomic<float> currentGainReductionDb { 0.0f };
         std::atomic<float> blendLevelDb { -100.0f }; // level of the added path after blend
 
     private:
@@ -60,6 +64,7 @@ namespace velvox::dsp
         Biquad detectorHpf, lowShelf, highShelf;
         float envDb = -120.0f;                 // detector level
         float grDb = 0.0f;                     // smoothed gain change (<= 0)
+        float lastGr = 0.0f;                   // feed: compression of the last sample (dB, >= 0)
         float attackCoeff = 0.0f, releaseCoeff = 0.0f, levelCoeff = 0.0f;
 
         juce::SmoothedValue<float> enabled { 0.0f }, blend { 0.35f }, outputGain { 1.0f }, amountSmoothed { 0.5f };

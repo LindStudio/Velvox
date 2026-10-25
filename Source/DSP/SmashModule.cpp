@@ -45,6 +45,7 @@ namespace velvox::dsp
     void SmashModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
+        history.prepare (sampleRate);
         detectorHpf.setCoeffs (design::highPass (fs, detectorHpfHz, 0.7071));
         for (auto* s : { &enabled, &blend, &outputGain, &amountSmoothed })
         {
@@ -141,10 +142,12 @@ namespace velvox::dsp
             const float norm = 1.0f / (1.0f + 0.6f * extra);
             const float on = enabled.getNextValue();
             const float out = outputGain.getNextValue();
+            float inAbs = 0.0f, outAbs = 0.0f;
 
             for (int c = 0; c < numChannels; ++c)
             {
                 const float dry = ch[c][i];
+                inAbs = std::max (inAbs, std::abs (dry));
                 float wet = highShelf.process (lowShelf.process (dry * wetGain, c), c);
                 // The squashed path never adds hard overs
                 if (std::abs (wet) > 0.9f)
@@ -154,12 +157,16 @@ namespace velvox::dsp
                 blendPeak = std::max (blendPeak, std::abs (added));
                 const float processed = (dry * dryGain + added) * norm * out;
                 ch[c][i] = dry + on * (processed - dry);
+                outAbs = std::max (outAbs, std::abs (ch[c][i]));
             }
 
             maxGr = std::max (maxGr, -compression); // meter: compression only, not the breath expander
+            history.add (inAbs, outAbs, -compression);
+            lastGr = -compression;
         }
 
         gainReductionDb.push (maxGr);
+        currentGainReductionDb.store (lastGr, std::memory_order_relaxed);
         blendLevelDb.store (gainToDb (blendPeak), std::memory_order_relaxed);
     }
 }

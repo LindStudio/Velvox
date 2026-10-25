@@ -29,3 +29,8 @@ Task 3: Ruling: "Style" of the spec Mehr list = the release behaviour (Auto rele
   Cost if wrong: the factors are constants in CompressorModule.h.
 Task 3: Ruling: Auto makeup = static GR of a -18 dBFS (detector level) tone, added to the Makeup knob (Pro-C style "auto gain" for a
   typical vocal level, not full 0 dBFS compensation which over-lifts). Cost if wrong: one constant (autoMakeupLevelDb).
+Task 4: complete (CompressorModule::history / currentGainReductionDb, SmashModule::history / currentGainReductionDb; tests "Dynamics module
+  feeds" red (compile) -> green: comp last frame in -6.02 / out -24.00 / GR 17.98 dB; smash in -6.02 / out = rendered / GR 28.1 dB)
+Task 4: Ruling: the comp feed's output is the module output before the Mix/On gate (ModuleGate in VocalChain) — the Pro-C display shows
+  the compressor's own action; the chain's IN/OUT meters show the gated result. Smash GR in the feed = compression of the squashed path
+  only (same as its existing meter, not the breath expander). Cost if wrong: one line each.

@@ -5,6 +5,7 @@ namespace velvox::dsp
     void CompressorModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
+        history.prepare (sampleRate);
         peakHold.prepare ((int) std::ceil (holdMs * 0.001 * sampleRate));
         makeup.reset (sampleRate, 0.05);
         dualMix.reset (sampleRate, 0.05);
@@ -79,9 +80,10 @@ namespace velvox::dsp
 
         for (int i = 0; i < numSamples; ++i)
         {
-            float peak = 0.0f, power = 0.0f;
+            float peak = 0.0f, power = 0.0f, inAbs = 0.0f;
             for (int ch = 0; ch < numChannels; ++ch)
             {
+                inAbs = std::max (inAbs, std::abs (channels[ch][i]));
                 const float d = hpfActive ? sidechainHpf.process (channels[ch][i], ch) : channels[ch][i];
                 peak = std::max (peak, std::abs (d));
                 power = std::max (power, d * d);
@@ -123,6 +125,7 @@ namespace velvox::dsp
 
             for (int ch = 0; ch < numChannels; ++ch)
                 channels[ch][i] *= gain;
+            history.add (inAbs, inAbs * gain, grDb);
 
             maxReduction = std::max (maxReduction, grDb);
         }
@@ -131,5 +134,6 @@ namespace velvox::dsp
             reset();
 
         gainReductionDb.push (maxReduction);
+        currentGainReductionDb.store (grDb, std::memory_order_relaxed);
     }
 }
