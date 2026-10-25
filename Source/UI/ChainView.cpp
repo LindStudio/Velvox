@@ -3,6 +3,8 @@
 #include "../StateKeys.h"
 #include "UserSettings.h"
 #include "Icons.h"
+#include "SoloButton.h"
+#include "../DSP/Solo.h"
 
 namespace velvox::ui
 {
@@ -222,6 +224,22 @@ namespace velvox::ui
         return juce::Rectangle<float> (18.0f, 18.0f).withCentre ({ t.bounds.getCentreX(), t.bounds.getY() + 4.0f + nameH + iconH + powerH * 0.5f });
     }
 
+    // Solo "S": bottom right, on the line of the power switch
+    juce::Rectangle<float> ChainView::soloBounds (const Tile& t) const
+    {
+        if (! dsp::canSolo (t.id))
+            return {};
+        return juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ t.bounds.getRight() - 15.0f, powerBounds (t).getCentreY() });
+    }
+
+    juce::Rectangle<float> ChainView::getSoloBounds (ModuleId id, int instance)
+    {
+        layoutTiles();
+        if (auto* t = findTile (id, instance))
+            return soloBounds (*t);
+        return {};
+    }
+
     juce::Rectangle<float> ChainView::getTileBounds (ModuleId id, int instance)
     {
         layoutTiles();
@@ -399,6 +417,11 @@ namespace velvox::ui
         const bool bypassedNow = proc.getState().getRawParameterValue (pid::bypass)->load() > 0.5f;
         bool changed = bypassedNow != globalBypass;
         globalBypass = bypassedNow;
+        if (proc.getSolo() != shownSolo)
+        {
+            shownSolo = proc.getSolo();
+            changed = true;
+        }
 
         const auto r = proc.getRouting();
         if (r != routing)
@@ -572,6 +595,26 @@ namespace velvox::ui
             g.setColour (colours::bypass.withAlpha (0.6f));
             g.drawRoundedRectangle (r.reduced (2.0f), corner - 2.0f, 1.0f);
         }
+
+        // Solo: the soloed tile framed in solo yellow, every other module dimmed (it is bypassed now)
+        const int solo = proc.getSolo();
+        const bool soloed = solo >= 0 && solo == code;
+        if (solo >= 0 && ! soloed && dsp::canSolo (t.id) && ! ghost)
+        {
+            g.setColour (colours::windowBg.withAlpha (0.62f));
+            g.fillRoundedRectangle (r, corner);
+        }
+        if (soloed)
+        {
+            g.setColour (soloColour.withAlpha (0.85f));
+            g.drawRoundedRectangle (r.reduced (0.7f), corner, 1.4f);
+        }
+        // The S: on hover (fades with it) and always while soloed
+        const auto s = soloBounds (shifted);
+        if (! s.isEmpty() && (soloed || hov > 0.01f))
+            drawSoloGlyph (g, s, soloed, hoveredSolo && hovered >= 0 && hovered < (int) tiles.size()
+                                                 && tiles[(size_t) hovered].code() == code ? 1.0f : 0.0f,
+                           soloed ? 1.0f : hov);
     }
 
     void ChainView::drawAddCard (juce::Graphics& g, juce::Rectangle<float> r) const
@@ -612,6 +655,17 @@ namespace velvox::ui
         arrow.lineTo (c.x + 2.0f, c.y + 5.0f);
         g.setColour (isSel ? colours::teal : colours::textDim);
         g.strokePath (arrow, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        // What leaves the plugin while a module is soloed: a SOLO tag
+        if (proc.isSoloActive())
+        {
+            const auto tag = juce::Rectangle<float> (40.0f, 14.0f).withCentre ({ r.getCentreX(), r.getY() + 4.0f + nameH + iconH + powerH * 0.5f });
+            g.setColour (soloColour);
+            g.fillRoundedRectangle (tag, 7.0f);
+            g.setColour (colours::windowBg);
+            g.setFont (semiBold (8.0f, 0.15f));
+            g.drawText ("SOLO", tag, juce::Justification::centred, false);
+        }
     }
 
     void ChainView::paint (juce::Graphics& g)
@@ -758,6 +812,15 @@ namespace velvox::ui
         }
         if (i == hitOutput)
         {
+            // The SOLO tag on OUTPUT ends the solo
+            const auto out = outputArea();
+            if (proc.isSoloActive() && e.position.y > out.getY() + 4.0f + nameH + iconH)
+            {
+                proc.setSolo (-1);
+                shownSolo = -1;
+                repaint();
+                return;
+            }
             selected = outputTile;
             if (onSelect)
                 onSelect (outputTile);
@@ -768,6 +831,13 @@ namespace velvox::ui
             return;
 
         const auto t = tiles[(size_t) i];
+        if (dsp::canSolo (t.id) && (soloBounds (t).expanded (3.0f).contains (e.position) || e.mods.isAltDown()))
+        {
+            proc.toggleSolo (t.code());
+            shownSolo = proc.getSolo();
+            repaint();
+            return;
+        }
         if (powerBounds (t).expanded (4.0f).contains (e.position))
         {
             toggleOn (t.id, t.instance);
@@ -844,28 +914,39 @@ namespace velvox::ui
         layoutTiles();
         const int i = tileAt (e.position);
         const int g = gapAt (e.position);
-        if (i != hovered || g != hoveredGap)
-        {
-            hovered = i;
-            hoveredGap = g;
-            const bool clickable = g >= 0 || i >= 0 || i == hitOutput || i == hitAddCard;
-            setMouseCursor (clickable ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
-            if (i >= 0)
-                setTooltip (juce::String (dsp::moduleDisplayName (tiles[(size_t) i].id)) + de (" - Klick öffnet, Ziehen ordnet um, Rechtsklick: Menü"));
-            else if (i == hitAddCard || g >= 0)
-                setTooltip (de ("Modul hinzufügen"));
-            else if (i == hitOutput)
-                setTooltip (de ("Ausgang: Eingangs-Gain, Stereo, Level Match, Clip Guard"));
-            else
-                setTooltip ({});
-            repaint();
-        }
+        const bool overSolo = i >= 0 && soloBounds (tiles[(size_t) i]).expanded (3.0f).contains (e.position);
+        if (i != hovered || g != hoveredGap || overSolo != hoveredSolo)
+            updateHoverInfo (i, g, overSolo);
+    }
+
+    void ChainView::updateHoverInfo (int i, int g, bool overSolo)
+    {
+        hovered = i;
+        hoveredGap = g;
+        hoveredSolo = overSolo;
+        const bool clickable = g >= 0 || i >= 0 || i == hitOutput || i == hitAddCard;
+        setMouseCursor (clickable ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+        if (overSolo)
+            setTooltip (de ("Solo: nur dieses Modul hören, alle anderen umgangen (nochmal klicken: aus)"));
+        else if (i >= 0)
+            setTooltip (juce::String (dsp::moduleDisplayName (tiles[(size_t) i].id))
+                        + (dsp::canSolo (tiles[(size_t) i].id) ? de (" - Klick öffnet, Ziehen ordnet um, S oder Alt+Klick: Solo, Rechtsklick: Menü")
+                                                               : de (" - Klick öffnet, Ziehen ordnet um, Rechtsklick: Menü")));
+        else if (i == hitAddCard || g >= 0)
+            setTooltip (de ("Modul hinzufügen"));
+        else if (i == hitOutput)
+            setTooltip (proc.isSoloActive() ? de ("Ausgang - SOLO aktiv: Klick auf SOLO hebt es auf")
+                                            : de ("Ausgang: Eingangs-Gain, Stereo, Level Match, Clip Guard"));
+        else
+            setTooltip ({});
+        repaint();
     }
 
     void ChainView::mouseExit (const juce::MouseEvent&)
     {
         hovered = hitNothing;
         hoveredGap = -1;
+        hoveredSolo = false;
         setMouseCursor (juce::MouseCursor::NormalCursor);
         repaint();
     }
@@ -1148,6 +1229,13 @@ namespace velvox::ui
             case TileAction::undo:      return undo();
             case TileAction::redo:      return redo();
             case TileAction::help:      if (onHelp) onHelp (code); return true;
+            case TileAction::solo:
+                if (! dsp::canSolo (id))
+                    return false;
+                proc.toggleSolo (code);
+                shownSolo = proc.getSolo();
+                repaint();
+                return true;
         }
         return false;
     }
@@ -1174,6 +1262,8 @@ namespace velvox::ui
         juce::PopupMenu menu;
         menu.addSectionHeader (cardName (routing, id, k));
         menu.addItem (on ? "Bypass" : "Einschalten", act (TileAction::toggle));
+        if (dsp::canSolo (id))
+            menu.addItem (de ("Solo (Alt+Klick)"), true, proc.isSoloed (code), act (TileAction::solo));
         menu.addItem (de ("Duplizieren"), routing.nextFreeInstance (id) >= 0, false, act (TileAction::duplicate));
         menu.addItem (de ("Entfernen"), act (TileAction::remove));
         menu.addSeparator();

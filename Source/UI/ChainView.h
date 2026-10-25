@@ -13,6 +13,7 @@ namespace velvox::ui
     // each showing ONLY its name, then its icon, then its on/off switch (top to bottom). No knobs or
     // values in the chain.
     //   - click = select (the panel below shows it), drag = reorder, power = on/off
+    //   - "S" (shows on hover, lit while soloed) or Alt+click = solo: only this module heard (0.6.1)
     //   - right-click = menu: on/off, duplicate, remove, move left/right, reset, "Als Send" / "Als Insert"
     //     (delay, reverb), undo / redo, help
     //   - the "+" tile at the end (and a "+" on the gap between two tiles) opens the module browser
@@ -82,7 +83,7 @@ namespace velvox::ui
         static std::vector<std::pair<juce::String, float>> freshInstanceValues (dsp::ModuleId id);
 
         // The tile menu's actions (right-click), callable directly
-        enum class TileAction { toggle, duplicate, remove, moveLeft, moveRight, reset, asSend, asInsert, undo, redo, help };
+        enum class TileAction { toggle, duplicate, remove, moveLeft, moveRight, reset, asSend, asInsert, undo, redo, help, solo };
         bool performTileAction (int selectionCode, TileAction action);
         juce::PopupMenu buildTileMenu (int selectionCode);
 
@@ -91,6 +92,7 @@ namespace velvox::ui
         juce::Rectangle<float> getNameBounds (dsp::ModuleId id, int instance = 0);
         juce::Rectangle<float> getIconBounds (dsp::ModuleId id, int instance = 0);
         juce::Rectangle<float> getPowerBounds (dsp::ModuleId id, int instance = 0);    // on/off of a tile
+        juce::Rectangle<float> getSoloBounds (dsp::ModuleId id, int instance = 0);     // "S" of a tile (empty: no solo)
         juce::Rectangle<float> getAddCardBounds();
         juce::Rectangle<float> getOutputBounds() const { return outputArea(); }
         juce::Rectangle<float> getLaneBounds() { layoutTiles(); return laneArea(); }
@@ -133,6 +135,8 @@ namespace velvox::ui
         juce::Rectangle<float> nameBounds (const Tile& t) const;
         juce::Rectangle<float> iconBounds (const Tile& t) const;
         juce::Rectangle<float> powerBounds (const Tile& t) const;
+        juce::Rectangle<float> soloBounds (const Tile& t) const;
+        void updateHoverInfo (int tile, int gap, bool overSolo);
         bool moveBy (dsp::ModuleId id, int instance, int steps);
         void drawIcon (juce::Graphics&, dsp::ModuleId id, juce::Rectangle<float> area, float alpha) const;
         juce::Rectangle<float> addCardArea() const;
@@ -164,6 +168,8 @@ namespace velvox::ui
         int selected = 0;
         int hovered = -2;
         int hoveredGap = -1;
+        bool hoveredSolo = false;   // the mouse is over the hovered tile's S
+        int shownSolo = -1;         // processor solo at the last refresh
 
         // dragging a tile
         int dragTile = -1;

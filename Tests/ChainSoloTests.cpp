@@ -3,6 +3,10 @@
 
 #include "TestHelpers.h"
 #include "DSP/Solo.h"
+#include "UI/ChainView.h"
+#include "UI/DetailPanels.h"
+#include "UI/SoloButton.h"
+#include "PluginEditor.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -10,6 +14,72 @@ using dsp::ModuleId;
 
 namespace
 {
+    juce::MouseEvent mouse (juce::Component& c, juce::Point<float> pos, juce::Point<float> downPos, bool dragged,
+                            juce::ModifierKeys mods = {}, int clicks = 1)
+    {
+        const auto now = juce::Time::getCurrentTime();
+        return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), pos, mods,
+                                 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &c, &c, now, downPos, now, clicks, dragged);
+    }
+
+    void click (juce::Component& c, juce::Point<float> at, juce::ModifierKeys mods = {})
+    {
+        c.mouseMove (mouse (c, at, at, false));
+        c.mouseDown (mouse (c, at, at, false, mods));
+        c.mouseUp (mouse (c, at, at, false, mods));
+    }
+
+    void drag (juce::Component& c, juce::Point<float> from, juce::Point<float> to, juce::ModifierKeys mods = {})
+    {
+        c.mouseDown (mouse (c, from, from, false, mods));
+        for (int i = 1; i <= 8; ++i)
+            c.mouseDrag (mouse (c, from + (to - from) * ((float) i / 8.0f), from, true, mods));
+        c.mouseUp (mouse (c, to, from, true, mods));
+    }
+
+    VelvoxAudioProcessorEditor& asVelvox (juce::AudioProcessorEditor& e) { return dynamic_cast<VelvoxAudioProcessorEditor&> (e); }
+
+    std::unique_ptr<juce::AudioProcessorEditor> proEditor (Harness& h)
+    {
+        h.proc.getAutoMix().dismissPrompt();
+        h.proc.getState().state.setProperty ("uiMode", "pro", nullptr);
+        return std::unique_ptr<juce::AudioProcessorEditor> (h.proc.createEditor());
+    }
+
+    // Mean brightness of an image area (0..1)
+    float brightness (const juce::Image& img, juce::Rectangle<int> r)
+    {
+        double sum = 0.0;
+        int n = 0;
+        r = r.getIntersection (img.getBounds());
+        for (int y = r.getY(); y < r.getBottom(); ++y)
+            for (int x = r.getX(); x < r.getRight(); ++x, ++n)
+                sum += img.getPixelAt (x, y).getPerceivedBrightness();
+        return n > 0 ? (float) (sum / n) : 0.0f;
+    }
+
+    // Pixels close to the solo colour
+    int soloPixels (const juce::Image& img, juce::Rectangle<int> r)
+    {
+        int n = 0;
+        r = r.getIntersection (img.getBounds());
+        for (int y = r.getY(); y < r.getBottom(); ++y)
+            for (int x = r.getX(); x < r.getRight(); ++x)
+            {
+                const auto c = img.getPixelAt (x, y);
+                if (std::abs (c.getHue() - ui::soloColour.getHue()) < 0.03f && c.getSaturation() > 0.5f && c.getBrightness() > 0.7f)
+                    ++n;
+            }
+        return n;
+    }
+
+    juce::Image render (juce::Component& c)
+    {
+        juce::Image img (juce::Image::ARGB, c.getWidth(), c.getHeight(), true);
+        juce::Graphics g (img);
+        c.paintEntireComponent (g, false);
+        return img;
+    }
     // Every module instance switched on (the flags applySolo works on)
     dsp::ChainSettings allOn()
     {
@@ -106,6 +176,123 @@ public:
         }
 
         runProcessorTests();
+        runSoloUiTests();
+    }
+
+    void runSoloUiTests()
+    {
+        const int comp = dsp::selectionCode (ModuleId::comp, 0);
+
+        beginTest ("Chain tile: S solos with one click, again releases; it never selects, drags or switches power");
+        {
+            Harness h;
+            setupBusyChain (h, false);
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
+            view.setSelected ((int) ModuleId::eq);
+            const auto s = view.getSoloBounds (ModuleId::comp);
+            expect (! s.isEmpty() && s.getWidth() >= 14.0f, "an S on the tile");
+            expect (! s.intersects (view.getPowerBounds (ModuleId::comp).expanded (2.0f)), "apart from the power switch");
+            expect (view.getTileBounds (ModuleId::comp).contains (s), "inside its tile");
+            const auto routingBefore = h.proc.getRouting();
+            click (view, s.getCentre());
+            expect (h.proc.isSoloed (comp), "soloed");
+            expectEquals (view.getSelected(), (int) ModuleId::eq, "selection unchanged");
+            expect (h.get (pid::compOn) > 0.5f && h.get (pid::eqOn) > 0.5f, "no power switch touched");
+            expect (h.proc.getRouting() == routingBefore, "no reorder");
+            click (view, s.getCentre());
+            expect (! h.proc.isSoloActive(), "click again releases");
+        }
+
+        beginTest ("Chain tile: Alt+click solos, the tile menu has Solo, the hover card names it; Check has no solo");
+        {
+            Harness h;
+            setupBusyChain (h, false);
+            auto r = h.proc.getRouting();
+            r.insertDefault (ModuleId::check, 0);
+            h.proc.setRouting (r);
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
+            view.refresh();
+
+            click (view, view.getIconBounds (ModuleId::sat).getCentre(), juce::ModifierKeys::altModifier);
+            expect (h.proc.isSoloed ((int) ModuleId::sat), "Alt+click on the tile");
+            click (view, view.getIconBounds (ModuleId::comp).getCentre(), juce::ModifierKeys::altModifier);
+            expect (h.proc.isSoloed (comp), "Alt+click on another tile moves the solo");
+            click (view, view.getIconBounds (ModuleId::comp).getCentre(), juce::ModifierKeys::altModifier);
+            expect (! h.proc.isSoloActive(), "Alt+click again releases");
+
+            expect (view.performTileAction (comp, ui::ChainView::TileAction::solo) && h.proc.isSoloed (comp), "menu action");
+            bool hasSoloItem = false, ticked = false;
+            const auto menu = view.buildTileMenu (comp);
+            for (juce::PopupMenu::MenuItemIterator it (menu); it.next();)
+                if (it.getItem().text.startsWith ("Solo"))
+                {
+                    hasSoloItem = true;
+                    ticked = it.getItem().isTicked;
+                }
+            expect (hasSoloItem && ticked, "Solo in the tile menu, ticked while soloed");
+            view.performTileAction (comp, ui::ChainView::TileAction::solo);
+            expect (! h.proc.isSoloActive());
+
+            view.mouseMove (mouse (view, view.getIconBounds (ModuleId::comp).getCentre(), {}, false));
+            expect (view.getTooltip().contains ("Solo"), "hover card: " + view.getTooltip());
+            view.mouseMove (mouse (view, view.getSoloBounds (ModuleId::comp).getCentre(), {}, false));
+            expect (view.getTooltip().startsWith ("Solo"), "hover card on the S: " + view.getTooltip());
+
+            expect (view.getSoloBounds (ModuleId::check).isEmpty(), "Check: no S");
+            click (view, view.getIconBounds (ModuleId::check).getCentre(), juce::ModifierKeys::altModifier);
+            expect (! h.proc.isSoloActive(), "Check cannot be soloed");
+        }
+
+        beginTest ("Chain: solo shows clearly - soloed tile in solo yellow, the others dimmed, OUTPUT says SOLO");
+        {
+            Harness h;
+            setupBusyChain (h, false);
+            ui::ChainView view (h.proc);
+            view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
+            view.refresh();
+            const auto before = render (view);
+            h.proc.setSolo (comp);
+            view.refresh();
+            const auto after = render (view);
+            const auto compTile = view.getTileBounds (ModuleId::comp).toNearestInt();
+            const auto eqTile = view.getTileBounds (ModuleId::eq).toNearestInt();
+            expect (soloPixels (after, compTile) > 40, "solo yellow on the soloed tile");
+            expect (soloPixels (before, compTile) == 0, "no yellow without solo");
+            expect (brightness (after, eqTile) < brightness (before, eqTile) * 0.8f, "the other tiles are dimmed");
+            expect (soloPixels (after, view.getOutputBounds().toNearestInt()) > 10, "OUTPUT shows the solo");
+        }
+
+        beginTest ("Panel header: solo button follows and sets the processor state; editor closing ends the solo");
+        {
+            Harness h;
+            setupBusyChain (h, false);
+            {
+                auto e = proEditor (h);
+                auto& ed = asVelvox (*e);
+                ed.selectModule (comp);
+                auto* panel = ed.getDetail();
+                expect (panel != nullptr && panel->getSoloButton() != nullptr, "S in the compressor's header");
+                if (panel != nullptr && panel->getSoloButton() != nullptr)
+                {
+                    auto* b = panel->getSoloButton();
+                    expect (b->isVisible() && panel->getHeaderArea().contains (b->getBounds()), "in the header");
+                    expect (! b->getBounds().intersects (panel->getPresetsButton().getBounds()), "apart from Presets");
+                    b->onClick();
+                    expect (h.proc.isSoloed (comp), "header solo");
+                    h.proc.setSolo (-1);
+                    panel->refresh();
+                    expect (! b->getToggleState(), "follows the processor");
+                    h.proc.setSolo (comp);
+                    panel->refresh();
+                    expect (b->getToggleState(), "lit while soloed (also from the tile)");
+                }
+                ed.selectModule (ui::ChainView::outputTile);
+                expect (ed.getDetail() != nullptr && ed.getDetail()->getSoloButton() == nullptr, "Output: no solo");
+            }
+            expect (! h.proc.isSoloActive(), "closing the editor ends the solo");
+        }
     }
 
     // A chain with tone, dynamics, colour, latency and a send: EQ, Comp, Sat, Smash, Pitch (off), Reverb send

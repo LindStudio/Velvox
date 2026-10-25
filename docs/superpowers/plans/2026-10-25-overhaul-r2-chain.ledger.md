@@ -23,5 +23,23 @@ Ruling: Solo ends when the soloed instance leaves the routing (checked in syncRo
 (setStateInformation) — why: nothing may stay silently bypassed; a loaded project must sound as saved — cost if wrong: user
 re-clicks S after an undo that removed and re-added the module.
 
-Ruling: Solo is stored as a selection code in a std::atomic<int> on the processor (like monoMonitor) — why: survives editor
-re-creation within a session (DAW window close/open is handled by the editor rule in Task 3), lock-free for the audio thread.
+Ruling: Solo is stored as a selection code in a std::atomic<int> on the processor (like monoMonitor) — why: one source for
+tile, panel header and audio thread, lock-free (the editor-close rule is in Task 3) — cost if wrong: none.
+
+Task 3: complete (tile S + Alt+click + "Solo (Alt+Klick)" in the tile menu + hover-card texts; soloed tile framed in solo
+yellow, every other tile dimmed, OUTPUT shows a SOLO tag (click on it ends the solo); panel header S next to the power switch;
+editor destructor ends the solo; snapshot tokens solo:/scroll:/hover: in --snapshot; 999 checks green)
+
+Ruling: The tile's S sits bottom right on the power switch's line and appears on hover (always shown while soloed); Alt+click
+anywhere on the tile solos too — why: the tile has a fixed 88 px layout (name / icon / power); bottom right is the only free
+spot that is not the name, and Alt+click is the DAW-familiar quick gesture — cost if wrong: move one rectangle.
+
+Ruling: Closing the editor ends the solo — why: spec item 1 (same monitoring rules) says closing the plugin ends it; a hidden
+solo would leave the mix silently bypassed — cost if wrong: one line in the editor destructor.
+
+Ruling: Solo colour is a new lemon yellow (0xffffd84d) defined in Source/UI/SoloButton.h (not Theme.h) — why: classic solo
+colour, distinct from bypass amber; a new header keeps Theme.h (shared by every track) untouched — cost if wrong: move the
+constant into Theme.h at merge time (the audition track's band solo may want the same colour).
+
+Ruling: Panel header order is power · S · icon · NAME — why: on/off and solo belong together like a channel strip; the right
+side holds Presets / Mehr / ? — cost if wrong: header layout lines in DetailPanel::resized/paint.

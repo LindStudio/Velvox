@@ -298,6 +298,7 @@ VelvoxAudioProcessorEditor::~VelvoxAudioProcessorEditor()
 {
     stopTimer();
     proc.getAutoMix().removeChangeListener (this);
+    proc.setSolo (-1);   // module solo is a listening aid of the open window: closing it ends the solo
     auto& animator = juce::Desktop::getInstance().getAnimator();
     animator.cancelAnimation (&simpleView, false);
     animator.cancelAnimation (&checkView, false);

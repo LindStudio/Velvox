@@ -14,6 +14,8 @@
 #include "TimePanels.h"
 #include "VoicesPanels.h"
 #include "DynPanels.h"
+#include "SoloButton.h"
+#include "../DSP/Solo.h"
 
 namespace velvox::ui
 {
@@ -222,6 +224,19 @@ namespace velvox::ui
             if (instance > 0 || proc.getRouting().countOf ((ModuleId) id) > 1)
                 title << " " << (instance + 1);
             addAndMakeVisible (presetsButton);
+
+            // Solo (0.6.1): only this instance heard; the same state as the S on its chain tile
+            if (dsp::canSolo ((ModuleId) id) && solo == nullptr)
+            {
+                solo = std::make_unique<SoloButton>();
+                solo->onClick = [this]
+                {
+                    proc.toggleSolo (dsp::selectionCode ((ModuleId) moduleId, instance));
+                    solo->setToggleState (proc.isSoloed (dsp::selectionCode ((ModuleId) moduleId, instance)), juce::dontSendNotification);
+                };
+                solo->setToggleState (proc.isSoloed (dsp::selectionCode ((ModuleId) id, instance)), juce::dontSendNotification);
+                addAndMakeVisible (*solo);
+            }
 
             // Old-law instances (0.5 projects): "Alte Mix-Kurve – umstellen" in Mehr
             if (dsp::Routing::canBeSend ((ModuleId) id) || id == (int) ModuleId::doubler || id == (int) ModuleId::smash)
@@ -512,6 +527,7 @@ namespace velvox::ui
         // Header: icon, NAME n, badge
         auto header = headerArea;
         header.removeFromLeft (power != nullptr ? 34 : 0);
+        header.removeFromLeft (solo != nullptr ? 30 : 0);
         if (icon != nullptr)
         {
             const auto iconArea = header.removeFromLeft (26).toFloat().withSizeKeepingCentre (24.0f, 24.0f);
@@ -611,6 +627,11 @@ namespace velvox::ui
         auto header = headerArea;
         if (power != nullptr)
             power->setBounds (header.removeFromLeft (26).withSizeKeepingCentre (26, 26));
+        if (solo != nullptr)
+        {
+            header.removeFromLeft (power != nullptr ? 6 : 0);
+            solo->setBounds (header.removeFromLeft (24).withSizeKeepingCentre (24, 24));
+        }
         helpButton.setBounds (header.removeFromRight (28).withSizeKeepingCentre (28, 26));
         header.removeFromRight (8);
         moreButton.setBounds (header.removeFromRight (72).withSizeKeepingCentre (72, 26));
@@ -652,6 +673,12 @@ namespace velvox::ui
     {
         for (auto* k : knobs)
             k->refreshEffective();
+        if (solo != nullptr)
+        {
+            const bool soloed = proc.isSoloed (dsp::selectionCode ((ModuleId) moduleId, instance));
+            if (soloed != solo->getToggleState())
+                solo->setToggleState (soloed, juce::dontSendNotification);
+        }
         if (visual != nullptr && live != nullptr)
             visual->update (*live);
 
@@ -660,7 +687,7 @@ namespace velvox::ui
         {
             lastOn = on;
             for (auto* c : getChildren())
-                if (c != power.get() && c != visual.get() && c != &presetsButton && c != &helpButton && c != &moreButton)
+                if (c != power.get() && c != solo.get() && c != visual.get() && c != &presetsButton && c != &helpButton && c != &moreButton)
                     c->setAlpha (on ? 1.0f : 0.55f);
             repaint();
         }
