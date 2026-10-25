@@ -1,6 +1,8 @@
 #include "DetailPanels.h"
 #include "EqPanel.h"
 #include "ReverbPanel.h"
+#include "SmoothPanel.h"
+#include "PitchPanel.h"
 #include "SatPanel.h"
 #include "ChainView.h"
 #include "../PluginProcessor.h"
@@ -759,42 +761,6 @@ namespace velvox::ui
             }
         };
 
-        // PITCH: Pitch, Formant, Fine; keep formants and Mix in Mehr
-        class PitchPanel final : public DetailPanel
-        {
-        public:
-            explicit PitchPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Pitch", help::shortDescription ((int) ModuleId::pitch), pid::pitchOn)
-            {
-                toggle (pid::pitchPreserveFormants, "Formanten erhalten");
-                semis = &knob (pid::pitchSemitones, "Pitch");
-                auto& fine = knob (pid::pitchCents, "Fine");
-                auto& formant = knob (pid::pitchFormant, "Formant");
-                knob (pid::pitchMix, "Mix");
-                setMainControls ({ semis, &formant, &fine });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                // The latency note lives in the hover card, not on the panel
-                if (++frame % 30 != 1)
-                    return;
-                auto withPitch = proc.getRouting();
-                if (! withPitch.contains (dsp::ModuleId::pitch))
-                    withPitch.insertDefault (dsp::ModuleId::pitch, 0);
-                const int latency = proc.getChain().getLatencyFor (withPitch, true) - proc.getChain().getLatencyFor (withPitch, false);
-                const double ms = 1000.0 * latency / std::max (1.0, proc.getSampleRate());
-                const auto* spec = findParameterSpec (pid::pitchSemitones);
-                semis->setDescription (juce::String (spec != nullptr ? spec->description : "") + "\n\n"
-                                       + juce::String::fromUTF8 ("Solange Pitch an ist: ") + juce::String (juce::roundToInt (ms)) + " ms Latenz.");
-            }
-
-        private:
-            Knob* semis = nullptr;
-            int frame = 0;
-        };
-
         // OUTPUT: stereo image + loudness; Input Gain, Vocal Level, Width, Level Match;
         // Mehr: mono below, max correction, measure window, clip guard, mono listening
         class OutputPanel final : public DetailPanel
@@ -927,26 +893,6 @@ namespace velvox::ui
             }
         };
 
-        // SMOOTH: Amount (Depth), Sharpness, Speed, Delta; the rest in Mehr
-        class SmoothPanel final : public DetailPanel
-        {
-        public:
-            explicit SmoothPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Smooth", help::shortDescription ((int) ModuleId::smooth), pid::smoothOn)
-            {
-                segments (pid::smoothMode);
-                auto& delta = toggle (pid::smoothDelta, "Delta");
-                auto& amount = knob (pid::smoothAmount, "Depth");
-                auto& sensitivity = knob (pid::smoothSensitivity, "Sharpness");
-                knob (pid::smoothLow, "Focus Low");
-                knob (pid::smoothHigh, "Focus High");
-                auto& attack = knob (pid::smoothAttack, "Speed");
-                knob (pid::smoothRelease, "Release");
-                knob (pid::smoothOutput, "Output");
-                setMainControls ({ &amount, &sensitivity, &attack, &delta });
-            }
-        };
-
         // LEVEL RIDE: Ausgleich (Amount), Target, Speed; limits and detection in Mehr
         class RidePanel final : public DetailPanel
         {
@@ -1060,14 +1006,14 @@ namespace velvox::ui
                 case ModuleId::deess:   panel = std::make_unique<DeEssPanel> (p); break;
                 case ModuleId::sat:     panel = createSatPanel (p); break;   // SatPanel.cpp
                 case ModuleId::doubler: panel = std::make_unique<DoublerPanel> (p); break;
-                case ModuleId::pitch:   panel = std::make_unique<PitchPanel> (p); break;
+                case ModuleId::pitch:   panel = createPitchPanel (p); break;
                 case ModuleId::chop:    panel = createTimeModulePanel (p, ModuleId::chop); break;
                 case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
                 case ModuleId::reverb:  panel = createReverbPanel (p); break;
                 case ModuleId::pulse:   panel = createTimeModulePanel (p, ModuleId::pulse); break;
                 case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;
                 case ModuleId::choir:   panel = std::make_unique<ChoirPanel> (p); break;
-                case ModuleId::smooth:  panel = std::make_unique<SmoothPanel> (p); break;
+                case ModuleId::smooth:  panel = createSmoothPanel (p); break;
                 case ModuleId::check:   panel = std::make_unique<CheckPanel> (p); break;
                 case ModuleId::ride:    panel = std::make_unique<RidePanel> (p); break;
             }

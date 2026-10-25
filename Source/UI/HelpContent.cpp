@@ -238,9 +238,9 @@ Each module shows real data from the audio or from its own settings: the EQ curv
             p.push_back (modulePage ("pitch", "Pitch",
                 "Creative transposition: shifts the vocal by semitones and cents, with optional formant control. It is not a pitch correction tool.",
                 "For octave layers, chipmunk hooks, dark monster voices and effects.",
-                "- Pitch transposes in semitones, Fine in cents.\n- Keep formants keeps the natural character of the voice; off moves the character with the pitch.\n- Formant moves the character independently of the pitch.\n- Mix blends the shifted voice with the original (for layers).",
+                "- The big Semitones control transposes in semitones (it snaps; the ring marks the octaves), Fine adds cents.\n- Between the two big controls you see the note that is sung (IN) and the note that comes out (OUT).\n- Formanten erhalten keeps the natural character of the voice; off moves the character with the pitch.\n- Formant moves the character independently of the pitch.\n- Mix blends the shifted voice with the original (for layers).",
                 "- Large shifts sound more artificial, especially downwards.\n- Formant up = smaller, brighter voice; down = bigger, darker voice.\n- Mix 50 % = octave layer; 100 % = only the shifted voice.",
-                "- Octave layer: Pitch -12 st, Keep formants on, Mix 40 to 50 %.\n- Chipmunk hook: Pitch +12 st, Keep formants off.",
+                "- Octave layer: Semitones -12, Formanten erhalten on, Mix 40 to 50 %.\n- Chipmunk hook: Semitones +12, Formanten erhalten off.",
                 "- Forgetting the latency: while Pitch is on it adds about 15 ms, which FL Studio and other DAWs compensate automatically. Live monitoring through the plugin is delayed.\n- Using it as pitch correction.",
                 "Place Pitch before Doubler / Choir to double the shifted voice, or after them to shift the whole stack. Effects after Pitch (reverb, delay) follow the new pitch."));
 
@@ -299,11 +299,11 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "Use Choir or Doubler, rarely both at full level. Put Reverb after Choir so the voices share one room."));
 
             p.push_back (modulePage ("smooth", "Smooth",
-                "Adaptive resonance control: finds frequencies that ring or stick out of their neighbours and lowers them only while they stick out. The display shows where and how much it reduces.",
+                "Adaptive resonance control: finds frequencies that ring or stick out of their neighbours and lowers them only while they stick out. The display shows the live spectrum of the vocal; what is removed right now is drawn in pink.",
                 "For harsh, nasal or ringing vocals, cheap microphones and bright, compressed leads.",
-                "- Amount sets how strongly resonances are reduced.\n- Sensitivity sets how far a frequency must stick out before it counts.\n- From and To limit the treated frequency range.\n- Mode: Soft (wide, gentle) or Hard (narrow, stronger, faster).\n- Attack and Release set the speed; Output trims the level.\n- Delta plays only what is being removed.",
-                "- More Amount or Sensitivity = more reduction; too much makes the voice dull.\n- A wider From / To range treats more of the voice.",
-                "- Amount 40 to 60 %, Sensitivity 50 %, From 800 Hz, To 12 kHz, Mode Soft.\n- Turn on Delta briefly: you should hear only harshness, not the voice itself.",
+                "- Depth sets how strongly resonances are reduced.\n- Sharpness sets how far a frequency must stick out before it counts.\n- Speed sets how fast it reacts and lets go (Attack and Release together; both are in Mehr separately).\n- The curve with six points weights the treatment per frequency: drag a point up for more reduction there, down for less (x = frequency). Double-click a point to reset it; right-click for 'Alle flach'.\n- The shaded areas left and right are not treated: drag their edges (Low / High).\n- Mehr: Mode Soft (wide, gentle) or Hard (narrow, stronger), Attack, Release, Output, Low, High.\n- Delta plays only what is being removed.",
+                "- More Depth or Sharpness = more reduction; too much makes the voice dull.\n- A wider Low / High range treats more of the voice.\n- A point at -12 dB nearly stops the treatment around its frequency.",
+                "- Depth 40 to 60 %, Sharpness 50 %, Low 800 Hz, High 12 kHz, Mode Soft.\n- Turn on Delta briefly: you should hear only harshness, not the voice itself.",
                 "- Leaving Delta on.\n- Using Smooth to remove sibilance - the De-esser is made for that.",
                 "Place it after compression and saturation, which bring resonances out. Static problems are often better fixed with an EQ cut first."));
 

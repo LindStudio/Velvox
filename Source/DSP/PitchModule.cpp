@@ -27,6 +27,7 @@ namespace velvox::dsp
         tracker.reset();
         shifter.reset();
         corrector.reset();
+        detectedHz.store (0.0f, std::memory_order_relaxed);
         // a module that (re)joins the chain starts at its Mix (the chain fades it in)
         mix.setCurrentAndTargetValue (mix.getTargetValue());
         dryDelay.setDelay (getLatencySamples());
@@ -84,6 +85,10 @@ namespace velvox::dsp
             period[(size_t) i] = tracker.getPeriod();
         }
 
+        {
+            const float p = tracker.getPeriod();
+            detectedHz.store (p > 0.0f ? (float) (fs / p) : 0.0f, std::memory_order_relaxed);
+        }
         shifter.process (ch, numChannels, n, period.data());
         corrector.process (monoIn.data(), ch, numChannels, n, period.data());
 
