@@ -41,3 +41,22 @@ budget; the air shelf is not corrected in a round where the "chain too bright" r
 more renders on takes outside the windows.
 Ruling: "Höhen sanfter" variant is skipped when the base plan already cuts the highs (air ≤ −1 dB); the EQ 2 variant also
 moves an autoTone presence lift — golden shift in "Optimizer: a bright take gets a softer-highs variant" (base plan or variant).
+Task 5: Ruling (tuning round 2 of max 3): broad moves no longer aim one measure each but minimise the objective's tonal +
+harshness terms on the model (0.5 dB grid, 1 dB margin inside the windows, 0.03 per dB of band size, must gain > 0.05) — round 1
+cut a bright take's top with the 5 kHz shelf and lost its (already low) air band (m8_row_vibrato 2.16 -> 5.31); the optimiser
+picks the 2-5 kHz bell there — cost if wrong: the model's preferences differ from what a listener wants (hearing test pending).
+Bench round 1 (per-measure solve): val 1.015 -> 0.949, real 11.516 -> 11.002. Round 2 (optimiser): val 0.273, real 10.069.
+Merge: feature/automix ec3a8d5 (chain + macros) merged cleanly (92695ef); 85d5c08 (audition) merged, conflict only in the
+CMakeLists test registrations (both kept) (de4e2ea).
+Ruling: golden shift in "Velvox EQ auto-mix" (5 synthetic cases recorded from 0.5): EQ decisions now follow AutoEq (values,
+chosen candidates and output trims updated, reasons in the test comment; autoTone checked as well) — the spec asks for exactly
+this change — cost: none beyond the documented shift.
+Ruling: "clean dry" / "stereo with rumble" lose the 0.6.0 body shelf cut (body −1.7/−2.3 dB is inside the window) — the old
+taste rule (cut at > −3 dB) is replaced by the target curve — cost if wrong: slightly fuller low end on such takes.
+Task 6: complete (bench on the merged head identical to round 2: VocalSet val 1.015 -> 0.273 (20 better / 3 worse), real
+13 vocals 11.516 -> 10.069 (9 / 2); listening files + blind kit in C:\Users\jakob\dev\velvox-bench\2026-10-25\autoeq\;
+BENCHMARK, AUTOMIX_OBJECTIVE, ARCHITECTURE, CHANGELOG updated; full suite on the merged head (85d5c08 + this track):
+32670 checks passed, 0 failed)
+Note for the coordinator: the macros track's MacroMapper/Macros still write the air / warmth role bands, which the auto-mix
+also owns (as in 0.6.0); after an auto-mix the air band can be a 5 kHz CUT shelf, so the Simple PRESENCE slider then moves
+that cut shelf. Not changed here (macros are the other track's scope).
