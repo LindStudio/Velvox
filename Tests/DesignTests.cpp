@@ -275,9 +275,12 @@ public:
             expect (found[(int) ModuleId::chop].segments.contains ("chopRate"), "STUTTER rate as segments");
             expect (found[(int) ModuleId::smash].knobs.contains ("smashAmount"), "VOCAL SMASH big knob");
 
-            expect (found[(int) ModuleId::eq].segments.contains ("hpfSlope") && found[(int) ModuleId::eq].segments.contains ("lowType")
-                    && found[(int) ModuleId::eq].segments.contains ("highType"), "EQ slopes and band types as segments");
-            expect (found[(int) ModuleId::eq].toggles.contains ("hpfOn") && found[(int) ModuleId::eq].toggles.contains ("lpfOn"), "EQ cut switches");
+            // EQ (0.6): the bands live in the graph and the selected-band row ("Headliner EQ panel"); with no band only Mix
+            // (Mehr); the hidden 0.5 fixed bands are never shown
+            expect (found[(int) ModuleId::eq].knobs.contains ("eqMix"), "EQ Mix");
+            for (auto* legacy : { "hpfSlope", "lowType", "highType", "hpfOn", "lpfOn", "hpfFreq", "midGain" })
+                expect (! found[(int) ModuleId::eq].segments.contains (legacy) && ! found[(int) ModuleId::eq].toggles.contains (legacy)
+                        && ! found[(int) ModuleId::eq].knobs.contains (legacy), juce::String ("EQ hides ") + legacy);
             expect (found[(int) ModuleId::comp].segments.contains ("compDetector"), "COMPRESSOR detector as segments");
             expect (found[(int) ModuleId::deess].segments.contains ("deessMode") && found[(int) ModuleId::deess].toggles.contains ("deessListen"), "DE-ESSER mode + listen");
             expect (found[(int) ModuleId::sat].segments.contains ("satCharacter"), "SATURATION character as segments");

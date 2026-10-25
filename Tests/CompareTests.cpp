@@ -110,10 +110,7 @@ public:
         beginTest ("Switching Vorher / Nachher while playing never clicks");
         {
             Harness h;
-            // Known EQ DSP issue (reported to the eq track): switching the low-cut SLOPE while audio runs
-            // steps the filter state (~0.16 on a 0.3 sine). The mix sets slope 12 dB, so the state before
-            // uses it too - this test is about the compare switch, not about the EQ.
-            h.set (pid::hpfSlope, 0.0f);
+            // No slope pin any more: the 0.6 EQ crossfades slope / type changes (see the test below)
             runMix (h);
             const auto in = h.sine (180.0, 0.3f, 4.0);
             juce::MidiBuffer midi;
@@ -149,6 +146,61 @@ public:
                         + " (steady state " + juce::String (steadyMax, 4) + ")");
             expectGreaterThan (switches, 10);
             expectLessThan (maxStep, std::max (0.12f, 1.6f * steadyMax), "no jump beyond the signal's own movement");
+        }
+
+        beginTest ("Switching the low-cut slope while playing never jumps (legacy hpfSlope and band slope)");
+        {
+            // Shell finding: with the 0.5 EQ a slope switch stepped the filter state (~0.16 on a 0.3 sine).
+            for (int variant = 0; variant < 2; ++variant)
+            {
+                Harness h;
+                dsp::Routing r;
+                r.insertAt (0, ModuleId::eq, 0, true);
+                h.proc.setRouting (r);
+                h.set (pid::eqOn, 1.0f);
+                h.set (pid::hpfOn, 1.0f);
+                h.set (pid::hpfFreq, 100.0f);   // the bridge writes the low-cut role band
+                const auto slopeId = pid::eqBandId (1, pid::eqband::slope);
+                const auto setSlope = [&] (bool steep)
+                {
+                    if (variant == 0)
+                        h.set (pid::hpfSlope, steep ? 2.0f : 0.0f);   // 12 <-> 48 dB/oct (0.5 IDs)
+                    else
+                        h.set (slopeId.toRawUTF8(), steep ? 5.0f : 0.0f);   // 6 <-> 48 dB/oct
+                };
+                setSlope (false);
+                expectEquals ((int) h.get (pid::eqBandId (1, pid::eqband::role).toRawUTF8()), (int) dsp::EqRole::lowCut, "role band 1");
+
+                const auto in = h.sine (130.0, 0.3f, 3.0);
+                juce::MidiBuffer midi;
+                const int bs = 256;
+                float maxStep = 0.0f, steadyMax = 0.0f, last = 0.0f;
+                int switches = 0;
+                for (int start = 0; start + bs <= in.getNumSamples(); start += bs)
+                {
+                    if (start > 0 && start % 12032 < bs)
+                        setSlope (++switches % 2 == 1);
+                    juce::AudioBuffer<float> block (2, bs);
+                    for (int ch = 0; ch < 2; ++ch)
+                        block.copyFrom (ch, 0, in, ch, start, bs);
+                    h.proc.processBlock (block, midi);
+                    for (int i = 0; i < bs; ++i)
+                    {
+                        const float y = block.getSample (0, i);
+                        if (start + i > 4800)
+                        {
+                            maxStep = std::max (maxStep, std::abs (y - last));
+                            if (start % 12032 > 7000)
+                                steadyMax = std::max (steadyMax, std::abs (y - last));
+                        }
+                        last = y;
+                    }
+                }
+                logMessage ((variant == 0 ? "hpfSlope" : "eqBand1Slope") + juce::String (": switches ") + juce::String (switches)
+                            + ", largest step " + juce::String (maxStep, 4) + " (steady " + juce::String (steadyMax, 4) + ")");
+                expectGreaterThan (switches, 8);
+                expectLessThan (maxStep, std::max (0.012f, 1.6f * steadyMax), "no jump beyond the signal's own movement");
+            }
         }
 
         beginTest ("The before snapshot is saved with the project");

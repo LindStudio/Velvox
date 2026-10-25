@@ -6,6 +6,7 @@
 #include "UI/ChainView.h"
 #include "UI/ModuleBrowser.h"
 #include "UI/ModuleViews.h"
+#include "UI/EqPanel.h"
 #include "PluginEditor.h"
 
 using namespace velvox;
@@ -395,31 +396,37 @@ public:
             expectEquals (ui::eqWheelQ (0.31f, -2.0f, false, 0.3f, 8.0f), 0.3f, "clamped at the bottom");
             expectEquals (ui::eqWheelQ (1.0f, std::numeric_limits<float>::quiet_NaN(), false, 0.3f, 8.0f), 1.0f, "invalid delta ignored");
 
-            // Real view, second EQ instance: the parameter of that instance follows the wheel
+            // Real view (the 0.6 EQ graph), second EQ instance: the Q of that instance's band follows the wheel
             Harness h;
             auto r = h.proc.getRouting();
             r.insertAt (1, ModuleId::eq, 1);
             h.proc.setRouting (r);
+            const int band = ui::eqedit::addBand (h.proc, 1, 1500.0f, 4.0f);
             auto view = ui::createModuleView (h.proc, dsp::selectionCode (ModuleId::eq, 1), nullptr);
+            auto* graph = dynamic_cast<ui::EqGraph*> (view.get());
+            expect (graph != nullptr, "the EQ visual is the EqGraph");
+            if (graph == nullptr)
+                return;
             view->setBounds (0, 0, 900, 200);
-            const auto plot = ui::EqCurve::plotArea (view->getLocalBounds().toFloat());
-            const juce::Point<float> node (ui::SpectrumView::xForFrequency (value (h, "midFreq_2"), plot), plot.getCentreY());
-            const float before = value (h, "midQ_2");
+            const auto node = graph->pointFor (band);
+            const auto qId = ui::eqedit::paramId (1, band, pid::eqband::q);
+            const float before = value (h, qId);
             view->mouseWheelMove (mouse (*view, node, node, false), wheel (0.11f));
-            const float narrower = value (h, "midQ_2");
+            const float narrower = value (h, qId);
             view->mouseWheelMove (mouse (*view, node, node, false), wheel (-0.22f));
-            const float wider = value (h, "midQ_2");
-            logMessage ("mid Q: " + juce::String (before, 3) + " -> " + juce::String (narrower, 3) + " -> " + juce::String (wider, 3));
+            const float wider = value (h, qId);
+            logMessage ("band Q: " + juce::String (before, 3) + " -> " + juce::String (narrower, 3) + " -> " + juce::String (wider, 3));
             expect (narrower > before * 1.15f, "wheel up narrows the band");
             expect (wider < before, "wheel down widens it");
-            expectWithinAbsoluteError (h.get (pid::midQ), 1.0f, 1.0e-4f, "EQ 1 untouched");
+            expectWithinAbsoluteError (value (h, ui::eqedit::paramId (0, band, pid::eqband::q)), 1.0f, 1.0e-4f, "EQ 1 untouched");
 
-            const float atRest = value (h, "midQ_2");
+            const float atRest = value (h, qId);
+            const auto plot = graph->plotArea();
             const juce::Point<float> empty (plot.getX() + 5.0f, plot.getY() + 4.0f);
             view->mouseWheelMove (mouse (*view, empty, empty, false), wheel (0.11f));
-            expectEquals (value (h, "midQ_2"), atRest, "away from the nodes nothing changes");
+            expectEquals (value (h, qId), atRest, "away from the nodes nothing changes");
             view->mouseWheelMove (mouse (*view, node, node, false), wheel (0.0f, 0.3f));
-            expectEquals (value (h, "midQ_2"), atRest, "horizontal scrolling is not hijacked");
+            expectEquals (value (h, qId), atRest, "horizontal scrolling is not hijacked");
         }
 
         beginTest ("Hover info card sits next to its control and stays inside the window");
