@@ -43,3 +43,19 @@ Task 6: Ruling: the applied-generation guard lives only in memory (the analysis 
 Merge: feature/automix (EQ track) merged; conflict only in the CMakeLists test list.
 EQ: Ruling: the temporary LegacyEqResolver is replaced by EqBandsResolver on eqbands::findBand / findOrCreateBand through a value overlay (pure, so "Alles anwenden" stays one merged transaction; the APVTS wrapper findOrCreateEqBand writes directly and is not used) — cost: none.
 EQ: Ruling: one band per role in the 0.6 EQ, so Vocal Check cuts use mud (< 1 kHz: mud, boxy, low resonances) and presence (>= 1 kHz: harshness, resonances), the free roles named by the coordinator; low cut, warmth and air requests use the existing lowCut / warmth / air role bands (shared with the automatic mix - two low cuts or two air shelves would stack) — cost if wrong: Vocal Check moves the auto-mix's low cut up / air shelf; and two findings in the same region share one band (the stronger cut wins in "Alles anwenden").
+Task 7: complete (commits up to "real-vocal suite test", tests: full suite 22742 checks passed, 0 failed; Headliner Vocal Check real vocals 28/28 in 21 s)
+Task 7: Ruling: devZ 1.8 (shown at z ~2 incl. the material factor) — z 2.0 hid too much on 10-20 s takes — cost: a few more mild mud/boxy findings.
+Task 7: Ruling: the plan's goal "recall >= 0.8 at precision >= 0.8" is not reachable for mud/boxy/sibilance with +6/+8 dB injections on VocalSet (natural spread between voices is as large as the injected change; classical singers have very weak S). Reported as measured, nothing tuned to the eval set beyond the thresholds above — cost: those problems are detected only when they are larger.
+
+Evaluation (VelvoxTests --check-eval; injections: mud +6 dB 300 Hz Q1.4, boxy +6 dB 700 Hz Q1.4, sibilance +8 dB 7 kHz Q1,
+rumble 25-70 Hz noise 20 dB under the voice, resonance +10 dB 3.5 kHz Q8, 8 plosive thumps +12 dB; frequency must be +-1/3 octave;
+FP = finding of that kind on the clean take or at the wrong frequency):
+  VocalSet val (f7, f8, m8, m9 excerpts) + MYLK, 29 takes        recall / precision
+    mud 0.10 / 0.43, boxy 0.17 / 0.62, sibilance 0.03 / 0.50, rumble 1.00 / 1.00, resonance 0.48 / 0.37, plosives 1.00 / 0.94; all 0.47 / 0.70
+  same with 1.5x injections (+9 / +12 / +15 dB): mud 0.21 / 0.60, boxy 0.28 / 0.67, sibilance 0.21 / 0.86, resonance 0.55 / 0.40; all 0.54 / 0.73
+  same with 2x injections (+12 / +16 / +20 dB):  mud 0.38 / 0.73, boxy 0.45 / 0.81, sibilance 0.52 / 0.94, resonance 0.66 / 0.44; all 0.67 / 0.77
+  13 pop originals of the 2026-10-24 bench (hooks, partly wet): mud 0.15 / 0.29, boxy 0.08 / 0.50, sibilance 0.62 / 0.62 (the 5 "FP" are the takes
+    the listening test called sibilant), rumble 1.00 / 1.00, resonance 0.38 / 0.62, plosives 1.00 / 1.00; all 0.54 / 0.75
+  Resonance precision on VocalSet is low because its singers have natural 13-17 dB singer's-formant peaks at 2.5-4 kHz.
+Processed vs unprocessed: VocalSet val + MYLK clean 79 findings (mean score 74) -> rendered through Headliner with the auto mix 24 findings (mean 95);
+  pop originals 26 findings (78) -> auto mix 22 (89); MYLK 08_A score 86 -> 94 in the suite test, m9_row_straight 79 -> 100.
