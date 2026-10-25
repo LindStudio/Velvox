@@ -57,3 +57,8 @@ from DetailPanels.cpp, createDetailPanel(eq) -> createEqPanel; EQ help page rewr
   (hpfSlope/lowType/highType segments, hpfOn/lpfOn toggles) -> 'EQ Mix' + 'EQ hides' the 0.5 IDs; PanelFrameTests exemption
   'eqBand* belong to the panels track' -> hidden 0.5 fixed-band IDs must NOT be reached, eqBand* / eqLegacyResponse are checked
   band by band in 'Headliner EQ panel'; UiTests EQ wheel test now drives the new graph (eqBand1Q_2 instead of midQ_2).
+
+Task 5: complete (snapshots C:\Users\jakob\dev\velvox-wt\shots-eqpanel\ eq / eqmore / eqcard at 1000 and 889 px; iterated once:
+own frequency labels under the plot, quieter spectrum (intensity 0.42), fainter band fills; docs/ARCHITECTURE.md EQ panel line)
+Final: full suite 23758 checks passed, 0 failed.
+Deferred: display range switch (+-12/24/30 like Pro-Q); per-band solo/listen; dynamic EQ (spec: not required).
