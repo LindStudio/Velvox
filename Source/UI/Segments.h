@@ -29,6 +29,12 @@ namespace velvox::ui
         void setAccent (juce::Colour accent);
         const juce::String& getParamId() const noexcept { return paramId; }
 
+        // Optional tile look (Saturation character tiles): each segment is painted by this function
+        // instead of the text segment; the gestures stay the same. Bounds are the segment's local area.
+        using TilePainter = std::function<void (juce::Graphics&, int segment, juce::Rectangle<float> bounds, bool selected, bool hover)>;
+        void setTilePainter (TilePainter painter);
+        bool hasTilePainter() const noexcept { return tilePainter != nullptr; }
+
         int getOverflowSegment() const noexcept { return overflow != nullptr ? (int) choiceIndex.size() : -1; }
         juce::String getOverflowText() const { return overflow != nullptr ? overflow->getButtonText() : juce::String(); }
         void chooseFromOverflow (int choice);
@@ -52,6 +58,7 @@ namespace velvox::ui
         std::unique_ptr<juce::ParameterAttachment> attachment;
         int selectedSegment = -1;
         std::unique_ptr<HoverInfo> info;
+        TilePainter tilePainter;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Segments)
     };

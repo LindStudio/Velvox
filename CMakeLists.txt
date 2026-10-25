@@ -99,6 +99,9 @@ set(VELVOX_SOURCES
     Source/UI/TutorialOverlay.cpp
 )
 
+# Saturation panel (0.6: character tiles, big Drive, Low / Mid / High strip)
+list(APPEND VELVOX_SOURCES Source/UI/SatPanel.cpp)
+
 set(VELVOX_COMMON_DEFINITIONS
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
@@ -217,4 +220,9 @@ endif()
 # Time modules quality tests (0.6: Delay, Pulse, Stutter)
 if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Tests/TimeModuleTests.cpp)
+endif()
+
+# Saturation panel tests (0.6)
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/SatPanelTests.cpp)
 endif()
