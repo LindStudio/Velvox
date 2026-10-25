@@ -245,13 +245,16 @@ namespace velvox::test
         auto v = in;
         const double fs = v.sampleRate;
         juce::Random rnd ((juce::int64) seed);
+        // CHECK_EVAL_GAIN scales the EQ-type problems (sensitivity sweep; default 1 = +6 / +8 / +10 dB)
+        const auto gainText = juce::SystemStats::getEnvironmentVariable ("CHECK_EVAL_GAIN", {});
+        const double scale = gainText.isEmpty() ? 1.0 : juce::jlimit (0.25, 4.0, gainText.getDoubleValue());
         switch (what)
         {
             case Injection::none: break;
-            case Injection::mud:       peakFilter (v, 300.0, 1.4, 6.0); break;
-            case Injection::boxy:      peakFilter (v, 700.0, 1.4, 6.0); break;
-            case Injection::sibilance: peakFilter (v, 7000.0, 1.0, 8.0); break;
-            case Injection::resonance: peakFilter (v, 3500.0, 8.0, 10.0); break;
+            case Injection::mud:       peakFilter (v, 300.0, 1.4, 6.0 * scale); break;
+            case Injection::boxy:      peakFilter (v, 700.0, 1.4, 6.0 * scale); break;
+            case Injection::sibilance: peakFilter (v, 7000.0, 1.0, 8.0 * scale); break;
+            case Injection::resonance: peakFilter (v, 3500.0, 8.0, 10.0 * scale); break;
             case Injection::rumble:
             {
                 // 25-70 Hz noise (traffic / handling), 20 dB below the voice

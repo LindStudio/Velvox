@@ -483,7 +483,7 @@ namespace velvox::check
     {
         const auto t = targetsFor (r, genre);
         Rules rules { r, t };
-        rules.material = juce::jlimit (0.9f, 1.0f, 0.9f + 0.1f * (r.voicedSeconds - dsp::VocalAnalyzer::minVoicedSeconds) / 6.0f);
+        rules.material = juce::jlimit (0.9f, 1.0f, 0.9f + 0.1f * (r.voicedSeconds - dsp::VocalAnalyzer::minVoicedSeconds) / 4.0f);
 
         rules.level();
         if (r.enoughMaterial)

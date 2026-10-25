@@ -45,7 +45,7 @@ namespace velvox::check
         // dB and devZ times the spread of the template voices in that band
         float devMud = 2.5f;                // 200 - 500 Hz
         float devBoxy = 2.5f;               // 500 - 1000 Hz
-        float devZ = 2.0f;
+        float devZ = 1.8f;
         float resonanceMin = 12.0f;         // narrow peak over its +-1/2 octave surroundings
 
         static CheckTargets make (Genre genre, bool highVoice, bool spoken);
