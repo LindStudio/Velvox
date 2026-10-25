@@ -241,7 +241,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
                 "- Pitch transposes in semitones, Fine in cents.\n- Keep formants keeps the natural character of the voice; off moves the character with the pitch.\n- Formant moves the character independently of the pitch.\n- Mix blends the shifted voice with the original (for layers).",
                 "- Large shifts sound more artificial, especially downwards.\n- Formant up = smaller, brighter voice; down = bigger, darker voice.\n- Mix 50 % = octave layer; 100 % = only the shifted voice.",
                 "- Octave layer: Pitch -12 st, Keep formants on, Mix 40 to 50 %.\n- Chipmunk hook: Pitch +12 st, Keep formants off.",
-                "- Forgetting the latency: while Pitch is on it adds about 120 ms, which FL Studio and other DAWs compensate automatically. Live monitoring through the plugin is delayed.\n- Using it as pitch correction.",
+                "- Forgetting the latency: while Pitch is on it adds about 15 ms, which FL Studio and other DAWs compensate automatically. Live monitoring through the plugin is delayed.\n- Using it as pitch correction.",
                 "Place Pitch before Doubler / Choir to double the shifted voice, or after them to shift the whole stack. Effects after Pitch (reverb, delay) follow the new pitch."));
 
             p.push_back (modulePage ("chop", "Vocal chop",
