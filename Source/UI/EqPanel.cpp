@@ -221,7 +221,8 @@ namespace velvox::ui
         : proc (p), instance (eqInstance), spectrumView (spectrum)
     {
         spectrumView.setRange (-90.0f, 0.0f);
-        spectrumView.setIntensity (0.55f);
+        spectrumView.setIntensity (0.42f);
+        spectrumView.setShowLabels (false);   // the graph draws its own frequency labels below the plot
         addAndMakeVisible (spectrumView);
         setWantsKeyboardFocus (true);
         for (int i = 0; i < numPoints; ++i)
@@ -453,6 +454,14 @@ namespace velvox::ui
             g.drawText (dbLabels[i], juce::Rectangle<float> (r.getRight() - 30.0f, y - 13.0f, 28.0f, 12.0f), juce::Justification::right, false);
         }
 
+        // Frequency labels in the strip under the plot
+        static const juce::String hzLabels[] { "50", "100", "200", "500", "1k", "2k", "5k", "10k" };
+        static const float hzValues[] { 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f };
+        g.setColour (colours::textFaint);
+        for (int i = 0; i < 8; ++i)
+            g.drawText (hzLabels[i], juce::Rectangle<float> (xForFreq (hzValues[i]) - 20.0f, r.getBottom() + 5.0f, 40.0f, 14.0f),
+                        juce::Justification::centred, false);
+
         const float active = eqOn ? 1.0f : 0.4f;
         {
             juce::Graphics::ScopedSaveState clip (g);
@@ -466,7 +475,7 @@ namespace velvox::ui
                 const auto c = eqedit::bandColour (b);
                 const bool sel = b == selected;
                 const float on = shown[(size_t) b].band.on ? 1.0f : 0.35f;
-                g.setColour (c.withAlpha ((sel ? 0.13f : 0.06f) * on * active));
+                g.setColour (c.withAlpha ((sel ? 0.12f : 0.035f) * on * active));
                 g.fillPath (bandFill[(size_t) b]);
                 g.setColour (c.withAlpha ((sel ? 0.75f : 0.32f) * on * active));
                 g.strokePath (bandStroke[(size_t) b], juce::PathStrokeType (sel ? 1.4f : 1.0f));
