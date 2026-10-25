@@ -7,7 +7,7 @@
 namespace velvox::dsp
 {
     // Monophonic f0 tracker for the pitch shifter: YIN (de Cheveigne & Kawahara 2002) on a
-    // ~12 kHz decimated copy every 5 ms, refined on the full-rate signal (parabolic minimum of the
+    // ~8 kHz decimated copy every 5 ms, refined on the full-rate signal (parabolic minimum of the
     // difference function), so the period is exact to a small fraction of a sample.
     // Everything is allocated in prepare(); push() is real-time safe.
     class PitchTracker

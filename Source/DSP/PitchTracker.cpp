@@ -18,7 +18,7 @@ namespace velvox::dsp
     void PitchTracker::prepare (double sampleRate)
     {
         fs = sampleRate;
-        decimation = std::max (1, (int) std::lround (fs / 12000.0));
+        decimation = std::max (1, (int) std::lround (fs / 8000.0));
         const double fsDec = fs / decimation;
 
         // 4th-order Butterworth at 0.4 * the decimated rate

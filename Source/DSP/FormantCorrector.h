@@ -43,6 +43,40 @@ namespace velvox::dsp
             return f;
         }
 
+        // Both channels at once (same coefficients): two independent recursions interleaved
+        void processStereo (float& l, float& r, const float* kz, const float* kp) noexcept
+        {
+            auto& zl = zeroState[0];
+            auto& zr = zeroState[1];
+            float fl = l, bl = l, fr = r, br = r;
+            for (int i = 0; i < order; ++i)
+            {
+                const float k = kz[i];
+                const float ol = zl[(size_t) i], orr = zr[(size_t) i];
+                zl[(size_t) i] = bl;
+                zr[(size_t) i] = br;
+                const float nfl = fl + k * ol, nfr = fr + k * orr;
+                bl = k * fl + ol;
+                br = k * fr + orr;
+                fl = nfl;
+                fr = nfr;
+            }
+            auto& pl = poleState[0];
+            auto& pr = poleState[1];
+            for (int i = order - 1; i >= 0; --i)
+            {
+                const float k = kp[i];
+                fl -= k * pl[(size_t) i];
+                fr -= k * pr[(size_t) i];
+                pl[(size_t) i + 1] = k * fl + pl[(size_t) i];
+                pr[(size_t) i + 1] = k * fr + pr[(size_t) i];
+            }
+            pl[0] = fl;
+            pr[0] = fr;
+            l = fl;
+            r = fr;
+        }
+
         void reset() noexcept
         {
             for (auto& s : zeroState) s.fill (0.0f);
@@ -64,7 +98,7 @@ namespace velvox::dsp
     // Formant (spectral envelope) correction for a resampling pitch shifter.
     //
     // The shifter's output y has the input's envelope scaled in frequency by rho
-    // (E_y(f) = E_x(f / rho)). The corrector analyses the input x every 5 ms (frame centred
+    // (E_y(f) = E_x(f / rho)). The corrector analyses the input x every 10 ms (frame centred
     // `analysisDelay` samples behind the newest input, i.e. at the shifter's output time),
     // takes a cepstrally smoothed envelope (lifter tied to the period, so harmonics are
     // removed), warps it to the envelope y has and to the target (E_x(f / target)), fits an
@@ -100,11 +134,12 @@ namespace velvox::dsp
         std::vector<float> history;   // mono input, circular, power of 2
         int histMask = 0, histPos = 0;
 
-        std::vector<float> window, work, logEnv, logY, logT, powerY, powerT, autoc;
+        std::vector<float> window, work, logEnv, logY, logT, powerY, powerT, autoc, acTable;
         std::array<double, LatticePair::order + 1> lev {}, levTmp {};
 
         float rho = 1.0f, target = 1.0f;
-        bool identity = true, bypassed = true;
+        bool identity = true, bypassed = true, envValid = false;
+        float smoothing = 0.34f;   // per analysis hop
 
         std::array<float, LatticePair::order> kyCur {}, kyStep {}, ktCur {}, ktStep {};
         float gainCur = 1.0f, gainStep = 0.0f;

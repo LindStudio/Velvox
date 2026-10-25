@@ -1,6 +1,8 @@
 #include "FormantCorrector.h"
 
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 
 namespace velvox::dsp
 {
@@ -14,6 +16,33 @@ namespace velvox::dsp
         }
 
         constexpr float maxCorrectionLog = 2.7631f;   // ln (10^(24/20)): +-24 dB
+
+        // Fast natural log / exp (rel. error ~1e-4; plenty for a spectral envelope)
+        inline float fastLog (float x) noexcept
+        {
+            std::uint32_t bits;
+            std::memcpy (&bits, &x, 4);
+            const int e = (int) ((bits >> 23) & 0xff) - 127;
+            bits = (bits & 0x007fffffu) | 0x3f800000u;
+            float m;
+            std::memcpy (&m, &bits, 4);   // [1, 2)
+            const float t = m - 1.0f;
+            const float p = t * (1.4425449f + t * (-0.7181452f + t * (0.4575485f + t * (-0.2779042f + t * (0.1217970f + t * -0.0258411f)))));
+            return ((float) e + p) * 0.69314718f;
+        }
+
+        inline float fastExp (float x) noexcept
+        {
+            float y = x * 1.44269504f;
+            y = juce::jlimit (-126.0f, 126.0f, y);
+            const float fl = std::floor (y);
+            const float f = y - fl;
+            const float p = 1.0f + f * (0.6931472f + f * (0.2402265f + f * (0.0555041f + f * (0.0096181f + f * 0.0013334f))));
+            const std::uint32_t bits = (std::uint32_t) ((int) fl + 127) << 23;
+            float s;
+            std::memcpy (&s, &bits, 4);
+            return p * s;
+        }
     }
 
     FormantCorrector::FormantCorrector() = default;
@@ -32,21 +61,43 @@ namespace velvox::dsp
         order10 = 0;
         while ((1 << order10) < frameSize) ++order10;
         fft = std::make_unique<juce::dsp::FFT> (order10);
-        hop = std::max (1, (int) std::lround (0.005 * fs));
+        hop = std::max (1, (int) std::lround (0.010 * fs));   // 10 ms
+        smoothing = (float) (1.0 - std::exp (-hop / (0.012 * fs)));
 
         const int histLen = nextPow2 (delay + frameSize + 16);
         history.assign ((size_t) histLen, 0.0f);
         histMask = histLen - 1;
 
         window.resize ((size_t) frameSize);
+        // 4-term Blackman-Harris: sidelobes at -92 dB, so the envelope outside the partials is the
+        // (deterministic) floor and does not wobble with the phase of a steady tone in the frame
         for (int i = 0; i < frameSize; ++i)
-            window[(size_t) i] = 0.5f - 0.5f * std::cos (2.0f * juce::MathConstants<float>::pi * (float) i / (float) frameSize);
+        {
+            const double x = 2.0 * juce::MathConstants<double>::pi * i / frameSize;
+            window[(size_t) i] = (float) (0.35875 - 0.48829 * std::cos (x) + 0.14128 * std::cos (2.0 * x) - 0.01168 * std::cos (3.0 * x));
+        }
 
         const int bins = frameSize / 2 + 1;
         work.assign ((size_t) frameSize * 2, 0.0f);
         for (auto* v : { &logEnv, &logY, &logT, &powerY, &powerT })
             v->assign ((size_t) bins, 0.0f);
         autoc.assign ((size_t) LatticePair::order + 1, 0.0f);
+
+        // autocorrelation of an even power spectrum = cosine sums (only order + 1 lags needed),
+        // with the 1/N scaling and a Gaussian lag window (60 Hz bandwidth expansion: well-
+        // conditioned fits, no near-unit-circle poles that would ring or wander between frames)
+        acTable.assign ((size_t) (LatticePair::order + 1) * (size_t) bins, 0.0f);
+        for (int m = 0; m <= LatticePair::order; ++m)
+        {
+            const double x = 2.0 * juce::MathConstants<double>::pi * 60.0 * m / fs;
+            const double lag = std::exp (-0.5 * x * x) / frameSize;
+            for (int k = 0; k < bins; ++k)
+            {
+                const double w = (k == 0 || k == bins - 1) ? 1.0 : 2.0;
+                acTable[(size_t) m * (size_t) bins + (size_t) k]
+                    = (float) (w * lag * std::cos (2.0 * juce::MathConstants<double>::pi * (double) k * m / frameSize));
+            }
+        }
         reset();
     }
 
@@ -59,6 +110,7 @@ namespace velvox::dsp
         gainCur = 1.0f;
         gainStep = 0.0f;
         bypassed = true;
+        envValid = false;
         lattice.reset();
     }
 
@@ -85,18 +137,15 @@ namespace velvox::dsp
 
     float FormantCorrector::levinson (const std::vector<float>& power, float* k) noexcept
     {
-        // autocorrelation = inverse FFT of the (real, even) power spectrum
-        const int N = frameSize;
-        std::fill (work.begin(), work.end(), 0.0f);
-        for (int i = 0; i <= N / 2; ++i)
-        {
-            work[(size_t) i] = power[(size_t) i];
-            if (i > 0 && i < N / 2)
-                work[(size_t) (N - i)] = power[(size_t) i];
-        }
-        fft->performRealOnlyForwardTransform (work.data());
+        const int bins = frameSize / 2 + 1;
         for (int m = 0; m <= LatticePair::order; ++m)
-            autoc[(size_t) m] = work[(size_t) (2 * m)] / (float) N;
+        {
+            const float* row = acTable.data() + (size_t) m * (size_t) bins;
+            float acc = 0.0f;
+            for (int k = 0; k < bins; ++k)
+                acc += row[k] * power[(size_t) k];
+            autoc[(size_t) m] = acc;
+        }
 
         auto& a = lev;
         auto& t = levTmp;
@@ -146,13 +195,30 @@ namespace velvox::dsp
                 powerY[(size_t) k] = re * re + im * im;
                 maxP = std::max (maxP, powerY[(size_t) k]);
             }
-            const float floorP = maxP * 1.0e-7f + 1.0e-30f;
+            const float floorP = maxP * 1.0e-6f + 1.0e-30f;   // -60 dB
+
+            // Log magnitude; for voiced frames a peak hold over +-f0/2 so the curve runs through
+            // the harmonics and not through the (phase dependent) valleys between them
+            for (int k = 0; k <= half; ++k)
+                logY[(size_t) k] = 0.5f * fastLog (powerY[(size_t) k] + floorP);
+            const int hold = period > 0.0f ? (int) std::floor (0.5 * N / period) : 0;
+            if (hold >= 1)
+            {
+                for (int k = 0; k <= half; ++k)
+                {
+                    float m = -1.0e30f;
+                    for (int j = std::max (0, k - hold); j <= std::min (half, k + hold); ++j)
+                        m = std::max (m, logY[(size_t) j]);
+                    logT[(size_t) k] = m;
+                }
+                std::swap (logY, logT);
+            }
 
             // Real cepstrum of the log magnitude (even sequence: forward FFT / N)
             std::fill (work.begin(), work.end(), 0.0f);
             for (int k = 0; k <= half; ++k)
             {
-                const float l = 0.5f * std::log (powerY[(size_t) k] + floorP);
+                const float l = logY[(size_t) k];
                 work[(size_t) k] = l;
                 if (k > 0 && k < half)
                     work[(size_t) (N - k)] = l;
@@ -179,8 +245,11 @@ namespace velvox::dsp
                     work[(size_t) (N - n)] = cep[(size_t) n];
             }
             fft->performRealOnlyForwardTransform (work.data());
+            // ~12 ms smoothing over time: steady notes get a steady filter (no AM)
+            const float a = envValid ? smoothing : 1.0f;
             for (int k = 0; k <= half; ++k)
-                logEnv[(size_t) k] = work[(size_t) (2 * k)];
+                logEnv[(size_t) k] += a * (work[(size_t) (2 * k)] - logEnv[(size_t) k]);
+            envValid = true;
 
             // Envelope the shifted signal has, and the one it should have
             envelopeFrom (logEnv, rho, logY);
@@ -194,12 +263,12 @@ namespace velvox::dsp
             float maxY = 0.0f, maxT = 0.0f;
             for (int k = 0; k <= half; ++k)
             {
-                powerY[(size_t) k] = std::exp (2.0f * (logY[(size_t) k] - top));
-                powerT[(size_t) k] = std::exp (2.0f * (logT[(size_t) k] - top));
+                powerY[(size_t) k] = fastExp (2.0f * (logY[(size_t) k] - top));
+                powerT[(size_t) k] = fastExp (2.0f * (logT[(size_t) k] - top));
                 maxY = std::max (maxY, powerY[(size_t) k]);
                 maxT = std::max (maxT, powerT[(size_t) k]);
             }
-            const float white = 1.0e-6f * std::max (maxY, maxT);
+            const float white = 1.0e-5f * std::max (maxY, maxT);
             for (int k = 0; k <= half; ++k)
             {
                 powerY[(size_t) k] += white;
@@ -268,8 +337,15 @@ namespace velvox::dsp
             if (bypassed)
                 continue;
 
-            for (int ch = 0; ch < numChannels; ++ch)
-                io[ch][i] = gainCur * lattice.processAllPole (lattice.processAllZero (io[ch][i], kyCur.data(), ch), ktCur.data(), ch);
+            if (numChannels == 2)
+            {
+                float l = io[0][i], r = io[1][i];
+                lattice.processStereo (l, r, kyCur.data(), ktCur.data());
+                io[0][i] = gainCur * l;
+                io[1][i] = gainCur * r;
+            }
+            else
+                io[0][i] = gainCur * lattice.processAllPole (lattice.processAllZero (io[0][i], kyCur.data(), 0), ktCur.data(), 0);
         }
 
         if (! lattice.isFinite())

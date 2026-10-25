@@ -264,15 +264,18 @@ public:
         }
 
         beginTest ("Spurious energy on a shifted sine <= -60 dB");
-        for (float st : { 12.0f, -5.0f, 7.0f })
-        {
-            Harness h;
-            pitchOnly (h, st);
-            const auto out = h.run (h.sine (220.0, 0.25f, 2.5));
-            const double sp = spuriousDb (out, (int) h.fs, h.fs, 220.0 * std::pow (2.0, st / 12.0));
-            logMessage (juce::String (st, 0) + " st: spurious " + juce::String (sp, 1) + " dB");
-            expectLessThan (sp, -60.0);
-        }
+        for (bool keep : { true, false })
+            for (float st : { 12.0f, -5.0f, 7.0f })
+            {
+                Harness h;
+                pitchOnly (h, st);
+                h.set (pid::pitchPreserveFormants, keep ? 1.0f : 0.0f);
+                const auto out = h.run (h.sine (220.0, 0.25f, 2.5));
+                const double sp = spuriousDb (out, (int) h.fs, h.fs, 220.0 * std::pow (2.0, st / 12.0));
+                logMessage (juce::String (st, 0) + " st" + (keep ? " keep" : " move") + ": spurious " + juce::String (sp, 1) + " dB, level "
+                            + juce::String (rmsDb (out, (int) h.fs, (int) h.fs), 1) + " dB");
+                expectLessThan (sp, -60.0);
+            }
 
         beginTest ("Keep formants: F1/F2 stay within 1/3 octave at +-12 st");
         {
@@ -287,7 +290,11 @@ public:
                 const auto out = h.run (vowel (h.fs, 2.5, f0, F1, F2));
                 const auto s = spectrumOf (out, (int) h.fs, h.fs);
                 const double o1 = formantPeak (s, f0out, 350.0, 1150.0), o2 = formantPeak (s, f0out, 1250.0, 3000.0);
-                const double d1 = std::log2 (o1 / F1), d2 = std::log2 (o2 / F2);
+                // reference: the same vowel sung at the new pitch, measured the same way (the
+                // harmonic-peak estimate itself is coarse at 300 Hz spacing)
+                const auto ideal = spectrumOf (vowel (h.fs, 2.5, f0out, F1, F2), (int) h.fs, h.fs);
+                const double i1 = formantPeak (ideal, f0out, 350.0, 1150.0), i2 = formantPeak (ideal, f0out, 1250.0, 3000.0);
+                const double d1 = std::log2 (o1 / i1), d2 = std::log2 (o2 / i2);
                 logMessage (juce::String (st, 0) + " st: F1 " + juce::String (o1, 0) + " Hz (" + juce::String (d1, 2) + " oct), F2 "
                             + juce::String (o2, 0) + " Hz (" + juce::String (d2, 2) + " oct)");
                 expectLessThan (std::abs (d1), 1.0 / 3.0);
@@ -336,7 +343,17 @@ public:
         {
             Harness h;
             pitchOnly (h, 5.0f);
-            const auto in = h.noise (0.2f, 3.0, 5);
+            // breath-like noise (band-limited to ~6 kHz like a voice; white noise up to 24 kHz
+            // would lose its top through the shifter's anti-alias filter, which is correct)
+            auto in = h.noise (0.2f, 3.0, 5);
+            {
+                dsp::Biquad lp1, lp2;
+                lp1.setCoeffs (dsp::design::lowPass (h.fs, 6000.0, 0.54));
+                lp2.setCoeffs (dsp::design::lowPass (h.fs, 6000.0, 1.31));
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < in.getNumSamples(); ++i)
+                        in.setSample (ch, i, lp2.process (lp1.process (in.getSample (ch, i), ch), ch));
+            }
             const auto out = h.run (in);
             const double spread = envelopeSpreadDb (out, (int) h.fs, (int) (1.5 * h.fs), h.fs);
             const double level = rmsDb (out, (int) h.fs, (int) (1.5 * h.fs)) - rmsDb (in, (int) h.fs, (int) (1.5 * h.fs));
@@ -480,9 +497,12 @@ public:
             }
             const auto sp = spectrumOf (y, (int) (0.5 * fs), fs);
             const double o1 = formantPeak (sp, 150.0 * rho, 350.0, 1150.0), o2 = formantPeak (sp, 150.0 * rho, 1250.0, 3000.0);
-            logMessage ("rho " + juce::String (rho, 1) + ": F1 " + juce::String (o1, 0) + ", F2 " + juce::String (o2, 0));
-            expectLessThan (std::abs (std::log2 (o1 / F1)), 1.0 / 3.0);
-            expectLessThan (std::abs (std::log2 (o2 / F2)), 1.0 / 3.0);
+            const auto ideal = spectrumOf (vowel (fs, 2.0, 150.0 * rho, F1, F2), (int) (0.5 * fs), fs);
+            const double i1 = formantPeak (ideal, 150.0 * rho, 350.0, 1150.0), i2 = formantPeak (ideal, 150.0 * rho, 1250.0, 3000.0);
+            logMessage ("rho " + juce::String (rho, 1) + ": F1 " + juce::String (o1, 0) + " (ideal " + juce::String (i1, 0) + "), F2 "
+                        + juce::String (o2, 0) + " (ideal " + juce::String (i2, 0) + ")");
+            expectLessThan (std::abs (std::log2 (o1 / i1)), 1.0 / 3.0);
+            expectLessThan (std::abs (std::log2 (o2 / i2)), 1.0 / 3.0);
             expect (allFinite (y));
         }
     }

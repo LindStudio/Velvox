@@ -2,6 +2,9 @@
 // Signalsmith Stretch engine versus block size, used to choose the quality modes.
 
 #include "TestHelpers.h"
+#include "DSP/FormantCorrector.h"
+#include "DSP/PitchTracker.h"
+#include "DSP/SpliceShifter.h"
 #include <juce_dsp/juce_dsp.h>
 
 #if defined (_MSC_VER)
@@ -48,6 +51,36 @@ public:
 
         constexpr double fs = 48000.0;
         const int n = (int) (3.0 * fs);
+
+        // CPU per component of the 0.6 engine (10 s stereo harmonic tone, +7 st, preserve on)
+        {
+            using namespace velvox::dsp;
+            PitchTracker tr; SpliceShifter sh; FormantCorrector fc;
+            tr.prepare (fs); sh.prepare (fs, 512); fc.prepare (fs, sh.getLatency(), 512);
+            sh.setRatio (1.4983f); fc.setWarp (1.4983f, 1.0f);
+            std::vector<float> l (512), r (512), mono (512), per (512);
+            double tT = 0, tS = 0, tF = 0;
+            for (int b = 0; b < (int) (10.0 * fs / 512); ++b)
+            {
+                for (int i = 0; i < 512; ++i)
+                {
+                    const double t = (b * 512 + i) / fs;
+                    l[(size_t) i] = r[(size_t) i] = mono[(size_t) i] = (float) (0.2 * std::sin (2 * pi * 180 * t) + 0.1 * std::sin (2 * pi * 360 * t) + 0.05 * std::sin (2 * pi * 540 * t));
+                }
+                auto t0 = juce::Time::getHighResolutionTicks();
+                for (int i = 0; i < 512; ++i) { tr.push (mono[(size_t) i]); per[(size_t) i] = tr.getPeriod(); }
+                auto t1 = juce::Time::getHighResolutionTicks();
+                float* io[2] { l.data(), r.data() };
+                sh.process (io, 2, 512, per.data());
+                auto t2 = juce::Time::getHighResolutionTicks();
+                fc.process (mono.data(), io, 2, 512, per.data());
+                auto t3 = juce::Time::getHighResolutionTicks();
+                tT += (double) (t1 - t0); tS += (double) (t2 - t1); tF += (double) (t3 - t2);
+            }
+            const double tick = 1.0 / (double) juce::Time::getHighResolutionTicksPerSecond();
+            logMessage ("CPU share of real time: tracker " + juce::String (tT * tick * 10.0, 2) + " %, shifter " + juce::String (tS * tick * 10.0, 2)
+                        + " %, corrector " + juce::String (tF * tick * 10.0, 2) + " %");
+        }
 
         // Root-cause scan of the 0.5 configuration (120 ms / 15 ms): error per input frequency,
         // shift and formant setting, pure sine (one spectral peak)
