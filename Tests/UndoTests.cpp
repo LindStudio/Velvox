@@ -84,7 +84,10 @@ public:
         beginTest ("Undo during an open gesture does nothing");
         {
             Harness h;
+            juce::uint32 now = 1000;
+            h.proc.getUndo().setClockForTests ([&now] { return now; });
             gesture (h, pid::compRatio, 4.0f);
+            now += 1000;   // a separate drag later (a quick repeat would coalesce with the first step)
             auto* p = h.proc.getState().getParameter (pid::compRatio);
             p->beginChangeGesture();
             p->setValueNotifyingHost (p->convertTo0to1 (8.0f));
@@ -148,6 +151,67 @@ public:
             undo.clear();
             undo.perform ("nothing", [] {});
             expect (! undo.canUndo());
+        }
+
+        beginTest ("Wheel: 30 notches on a knob are one step (coalesced within 400 ms)");
+        {
+            Harness h;
+            juce::Slider knob (juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox);
+            juce::AudioProcessorValueTreeState::SliderAttachment attachment (h.proc.getState(), pid::compRatio, knob);
+            knob.setBounds (0, 0, 60, 60);
+            const float before = h.get (pid::compRatio);
+            const auto start = juce::Time::getCurrentTime();
+            for (int i = 0; i < 30; ++i)
+            {
+                const auto t = start + juce::RelativeTime::milliseconds (i + 1);   // JUCE drops duplicate wheel events
+                const juce::MouseEvent e (juce::Desktop::getInstance().getMainMouseSource(), { 30.0f, 30.0f }, {}, 0.0f, 0.0f, 0.0f,
+                                          0.0f, 0.0f, &knob, &knob, t, { 30.0f, 30.0f }, t, 0, false);
+                knob.mouseWheelMove (e, juce::MouseWheelDetails { 0.0f, 0.1f, false, false, false });
+            }
+            expectGreaterThan (h.get (pid::compRatio), before + 0.5f, "the wheel moved the knob");
+            expectEquals (h.proc.getUndo().getNumSteps(), 1, "one undo step");
+            expect (h.proc.getUndo().undo());
+            expectWithinAbsoluteError (h.get (pid::compRatio), before, 1.0e-3f, "undo restores the value before the first notch");
+            expect (h.proc.getUndo().redo());
+            expectGreaterThan (h.get (pid::compRatio), before + 0.5f, "redo restores the last notch");
+        }
+
+        beginTest ("Wheel: separated gestures stay separate steps");
+        {
+            Harness h;
+            auto& undo = h.proc.getUndo();
+            juce::uint32 now = 1000;
+            undo.setClockForTests ([&now] { return now; });
+            gesture (h, pid::compRatio, 4.0f);
+            now += 1000;   // a pause: a new step
+            gesture (h, pid::compRatio, 5.0f);
+            expectEquals (undo.getNumSteps(), 2, "a pause separates");
+
+            now += 100;
+            gesture (h, pid::compThreshold, -30.0f);   // another parameter between
+            now += 100;
+            gesture (h, pid::compRatio, 6.0f);
+            expectEquals (undo.getNumSteps(), 4, "another step between separates");
+
+            now += 100;
+            gesture (h, pid::compRatio, 7.0f);
+            expectEquals (undo.getNumSteps(), 4, "a quick repeat coalesces");
+            undo.undo();
+            expectWithinAbsoluteError (h.get (pid::compRatio), 5.0f, 1.0e-3f, "undo of the coalesced step");
+            now += 100;
+            gesture (h, pid::compRatio, 8.0f);   // after an undo: never merged into the undone step
+            expectEquals (undo.getNumSteps(), 4);
+            undo.undo();
+            expectWithinAbsoluteError (h.get (pid::compRatio), 5.0f, 1.0e-3f);
+
+            // A step whose start value is not the end value of the last one (automation between) stays separate
+            now += 100;
+            gesture (h, pid::compRatio, 9.0f);
+            h.set (pid::compRatio, 2.0f);
+            now += 100;
+            gesture (h, pid::compRatio, 10.0f);
+            expectEquals (undo.getNumSteps(), 5);
+            undo.setClockForTests (nullptr);
         }
 
         beginTest ("Loading a project clears the history");

@@ -67,6 +67,16 @@ namespace velvox
         struct Change { int index; float before, after; };
         ValueAction (UndoHistory& h, std::vector<Change> c) : owner (h), changes (std::move (c)) {}
 
+        // Coalescing: a single-parameter step that continues this one (same parameter, starting
+        // where this one ended) becomes part of it
+        bool extend (const Change& next)
+        {
+            if (changes.size() != 1 || changes[0].index != next.index || std::abs (changes[0].after - next.before) > 1.0e-6f)
+                return false;
+            changes[0].after = next.after;
+            return true;
+        }
+
         bool perform() override
         {
             if (first)
@@ -173,6 +183,8 @@ namespace velvox
         if (! juce::isPositiveAndBelow (index, params.size()))
             return;
         // Gestures that start while another one is open belong to it (one step)
+        if (openGestures == 0)
+            gestureStartMs = nowMs();
         if (gestureBefore.count (index) == 0)
         {
             gestureBefore[index] = params[index]->getValue();
@@ -205,11 +217,33 @@ namespace velvox
         gestureOrder.clear();
         if (changes.empty() || depth > 0 || ! isRecording())
             return;
-        addStep (std::make_unique<ValueAction> (*this, std::move (changes)), name);
+
+        // A quick repeat on the same parameter (wheel notches, arrow steps): part of the last step
+        if (coalesceCandidate != nullptr && changes.size() == 1 && gestureStartMs - lastStepMs <= coalesceMs
+            && manager.canUndo() && ! manager.canRedo() && coalesceCandidate->extend (changes[0]))
+        {
+            lastStepMs = nowMs();
+            sendChangeMessage();
+            return;
+        }
+
+        const bool single = changes.size() == 1;
+        auto action = std::make_unique<ValueAction> (*this, std::move (changes));
+        auto* raw = action.get();
+        addStep (std::move (action), name);
+        if (single)
+            coalesceCandidate = raw;
+    }
+
+    juce::uint32 UndoHistory::nowMs() const
+    {
+        return clockForTests != nullptr ? clockForTests() : juce::Time::getMillisecondCounter();
     }
 
     void UndoHistory::addStep (std::unique_ptr<juce::UndoableAction> action, const juce::String& name)
     {
+        coalesceCandidate = nullptr;   // a new step never extends an older one
+        lastStepMs = nowMs();
         manager.beginNewTransaction (name);
         manager.perform (action.release(), name);
         manager.beginNewTransaction();
@@ -221,6 +255,7 @@ namespace velvox
         // A drag in progress: finish it first (never undo half a gesture)
         if (openGestures > 0 || depth > 0)
             return false;
+        coalesceCandidate = nullptr;
         const bool done = manager.undo();
         if (done)
             sendChangeMessage();
@@ -231,6 +266,7 @@ namespace velvox
     {
         if (openGestures > 0 || depth > 0)
             return false;
+        coalesceCandidate = nullptr;
         const bool done = manager.redo();
         if (done)
             sendChangeMessage();
@@ -250,6 +286,7 @@ namespace velvox
     void UndoHistory::clear()
     {
         manager.clearUndoHistory();
+        coalesceCandidate = nullptr;
         gestureBefore.clear();
         gestureOrder.clear();
         openGestures = 0;

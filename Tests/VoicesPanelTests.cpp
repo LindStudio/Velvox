@@ -579,6 +579,8 @@ public:
             auto& v = st.view;
             auto& undo = h.proc.getUndo();
             undo.clear();
+            // Every action a second apart (quick repeats on one parameter coalesce, see UndoTests)
+            undo.setClockForTests ([t = juce::uint32 (0)]() mutable { return t += 1000; });
             HostLog log (h.proc);
             const auto from = v.leadPoint().translated (0.0f, -40.0f);
             drag (v, from, 44.0f, 0.0f);

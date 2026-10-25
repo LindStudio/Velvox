@@ -54,6 +54,9 @@ namespace velvox
         int getNumSteps() const;   // steps that can be undone (for tests)
         void clear();
 
+        // Clock (ms) for coalescing quick repeats; tests set their own, nullptr = the real one
+        void setClockForTests (std::function<juce::uint32()> clock) { clockForTests = std::move (clock); }
+
         // ---- Fed by the processor's AudioProcessorListener (message thread; ignored elsewhere)
         void gestureBegan (int parameterIndex);
         void gestureEnded (int parameterIndex);
@@ -76,6 +79,16 @@ namespace velvox
         int openGestures = 0;                 // gestures begun and not ended yet (nested ones included)
         std::map<int, float> gestureBefore;    // parameter index -> normalised value when its gesture began
         std::vector<int> gestureOrder;
+        std::function<juce::uint32()> clockForTests;
+        juce::uint32 nowMs() const;
+
+        // Wheel / step coalescing: JUCE's Slider::mouseWheelMove and ValueText::stepBy open and close
+        // a gesture per notch. A single-parameter step on the same parameter that starts within
+        // coalesceMs of the end of the last step (and continues from its value, with nothing
+        // recorded, undone or redone between) extends that step instead of adding one.
+        static constexpr juce::uint32 coalesceMs = 400;
+        ValueAction* coalesceCandidate = nullptr;   // the newest step, owned by `manager`
+        juce::uint32 lastStepMs = 0, gestureStartMs = 0;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UndoHistory)
     };

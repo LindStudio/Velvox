@@ -360,7 +360,7 @@ public:
             expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 1)), SmoothGraph::wheelGainDb, 0.01f, "wheel up");
             v.mouseWheelMove (mouseAt (v, p, p, false), wheel (-0.22f));
             expectWithinAbsoluteError (real (h, smoothedit::weightGainId (0, 1)), -SmoothGraph::wheelGainDb, 0.01f, "two notches down");
-            expectEquals (undo.getNumSteps(), 2);
+            expectEquals (undo.getNumSteps(), 1, "quick wheel notches on one point coalesce into one step");
         }
 
         beginTest ("Graph: low / high limit edges drag, reset, wheel; clamped to the parameter range");

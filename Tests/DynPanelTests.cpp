@@ -330,6 +330,8 @@ public:
             Live live (h);
             g.update (live.next());
             auto& undo = h.proc.getUndo();
+            // Every action a second apart (quick repeats on one parameter coalesce, see UndoTests)
+            undo.setClockForTests ([t = juce::uint32 (0)]() mutable { return t += 1000; });
             undo.clear();
             HostLog log (h.proc);
             const float dbPerPx = 60.0f / g.curveArea().getWidth();
