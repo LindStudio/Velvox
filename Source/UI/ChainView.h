@@ -77,6 +77,9 @@ namespace velvox::ui
 
         // Every parameter of one instance back to its default (on/off stays): one undo step
         static void resetInstance (VelvoxAudioProcessor& p, dsp::ModuleId id, int instance);
+        // Values a fresh instance (browser insert, reset) gets on top of the parameter defaults: (base ID, real value).
+        // De-esser: Relative detection. The parameter defaults themselves stay (old projects load as before).
+        static std::vector<std::pair<juce::String, float>> freshInstanceValues (dsp::ModuleId id);
 
         // The tile menu's actions (right-click), callable directly
         enum class TileAction { toggle, duplicate, remove, moveLeft, moveRight, reset, asSend, asInsert, undo, redo, help };

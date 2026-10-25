@@ -13,6 +13,7 @@
 #include "VocalCheckView.h"
 #include "TimePanels.h"
 #include "VoicesPanels.h"
+#include "DynPanels.h"
 
 namespace velvox::ui
 {
@@ -680,69 +681,6 @@ namespace velvox::ui
     //==========================================================================
     namespace
     {
-        float grFrom (const LiveData* live, const LiveData::History LiveData::* h) { return live != nullptr ? (live->*h).ago (0) : 0.0f; }
-
-
-        // COMPRESSOR: history + transfer curve, GR meter; Threshold, Ratio, Attack, Release
-        class CompPanel final : public DetailPanel
-        {
-        public:
-            explicit CompPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Compressor", help::shortDescription ((int) ModuleId::comp), pid::compOn)
-            {
-                auto& threshold = knob (pid::compThreshold, "Threshold");
-                auto& ratio = knob (pid::compRatio, "Ratio");
-                auto& attack = knob (pid::compAttack, "Attack");
-                auto& release = knob (pid::compRelease, "Release");
-                knob (pid::compKnee, "Knee");
-                knob (pid::compMakeup, "Makeup");
-                knob (pid::compScHpf, "SC Filter");
-                knob (pid::compMix, "Mix");
-                segments (pid::compDetector);
-                setMainControls ({ &threshold, &ratio, &attack, &release });
-                gr.setTooltip ("Gain Reduction (dB)");
-                placeInVisual ({ &gr });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                gr.push (grFrom (live, &LiveData::compGr));
-            }
-
-        private:
-            void layoutVisual (juce::Rectangle<int> area) override { placeMeter (gr, area); }
-            GainReductionMeter gr { colours::accent, "GR" };
-        };
-
-        // DE-ESSER: Frequency, Threshold, Range, Mode, Listen
-        class DeEssPanel final : public DetailPanel
-        {
-        public:
-            explicit DeEssPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "De-esser", help::shortDescription ((int) ModuleId::deess), pid::deessOn)
-            {
-                auto& mode = segments (pid::deessMode);
-                auto& listen = toggle (pid::deessListen, "Listen");
-                auto& freq = knob (pid::deessFreq, "Frequency");
-                auto& threshold = knob (pid::deessThreshold, "Threshold");
-                auto& range = knob (pid::deessRange, "Range");
-                setMainControls ({ &freq, &threshold, &range, &mode, &listen });
-                gr.setTooltip ("Gain Reduction (dB)");
-                placeInVisual ({ &gr });
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                gr.push (grFrom (live, &LiveData::deessGr));
-            }
-
-        private:
-            void layoutVisual (juce::Rectangle<int> area) override { placeMeter (gr, area); }
-            GainReductionMeter gr { colours::accent, "GR" };
-        };
-
         // OUTPUT: stereo image + loudness; Input Gain, Vocal Level, Width, Level Match;
         // Mehr: mono below, max correction, measure window, clip guard, mono listening
         class OutputPanel final : public DetailPanel
@@ -815,67 +753,6 @@ namespace velvox::ui
             juce::TextButton* monoButton = nullptr;
         };
 
-        // VOCAL SMASH: the big SMASH control in the visual next to the GR meter; Mix, Tone, Output
-        class SmashPanel final : public DetailPanel
-        {
-        public:
-            explicit SmashPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Vocal Smash", help::shortDescription ((int) ModuleId::smash), pid::smashOn)
-            {
-                amount = &knob (pid::smashAmount, "Smash");
-                knob (pid::smashAttack, "Attack");
-                knob (pid::smashRelease, "Release");
-                auto& tone = knob (pid::smashTone, "Tone");
-                auto& output = knob (pid::smashOutput, "Output");
-                auto& blend = knob (pid::smashBlend, "Mix");
-                setMainControls ({ &blend, &tone, &output });
-                placeInVisual ({ amount, &gr });
-                amount->setDialSize (120);
-                gr.setTooltip ("Gain Reduction des gequetschten Signals");
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                gr.push (grFrom (live, &LiveData::smashGr));
-            }
-
-        private:
-            void layoutVisual (juce::Rectangle<int> area) override
-            {
-                // Meter at the edge, the big SMASH control in its own column, the picture gets the rest
-                placeMeter (gr, area);
-                auto big = area.reduced (8).withTrimmedRight (44);
-                const int column = std::min (200, big.getWidth() / 3);
-                amount->setBounds (big.removeFromRight (column).withSizeKeepingCentre (column, std::min (big.getHeight(), 180)));
-                if (auto* v = getVisual())
-                    v->setBounds (area.withTrimmedRight (52 + column).reduced (1));
-            }
-
-            Knob* amount = nullptr;
-            GainReductionMeter gr { colours::accent, "GR" };
-        };
-
-        // LEVEL RIDE: Ausgleich (Amount), Target, Speed; limits and detection in Mehr
-        class RidePanel final : public DetailPanel
-        {
-        public:
-            explicit RidePanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Level Ride", help::shortDescription ((int) ModuleId::ride), pid::rideOn)
-            {
-                auto& target = knob (pid::rideTarget, "Target");
-                knob (pid::rideMaxBoost, "Max Boost");
-                knob (pid::rideMaxCut, "Max Cut");
-                auto& response = knob (pid::rideResponse, "Speed");
-                auto& amount = knob (pid::rideAmount, "Ausgleich");
-                knob (pid::ridePhrase, "Phrase");
-                knob (pid::rideTransient, "Transients");
-                knob (pid::rideSilence, "Gate Floor");
-                setMainControls ({ &amount, &target, &response });
-            }
-        };
-
-        //======================================================================
         // VOCAL CHECK module in the chain: its live picture (spectrum, balance) and a compact summary
         // (score, number of findings, link to the VOCAL CHECK tab, where the tiles with Ignorieren /
         // Anwenden live); analysis mode, Start / Stop, Reset as the main row
@@ -965,8 +842,8 @@ namespace velvox::ui
             switch (dsp::selectionModule (id))
             {
                 case ModuleId::eq:      panel = createEqPanel (p); break;
-                case ModuleId::comp:    panel = std::make_unique<CompPanel> (p); break;
-                case ModuleId::deess:   panel = std::make_unique<DeEssPanel> (p); break;
+                case ModuleId::comp:    panel = createDynPanel (p, ModuleId::comp); break;    // DynPanels.cpp
+                case ModuleId::deess:   panel = createDynPanel (p, ModuleId::deess); break;
                 case ModuleId::sat:     panel = createSatPanel (p); break;   // SatPanel.cpp
                 case ModuleId::doubler: panel = createVoicesModulePanel (p, ModuleId::doubler); break;
                 case ModuleId::pitch:   panel = createPitchPanel (p); break;
@@ -974,11 +851,11 @@ namespace velvox::ui
                 case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
                 case ModuleId::reverb:  panel = createReverbPanel (p); break;
                 case ModuleId::pulse:   panel = createTimeModulePanel (p, ModuleId::pulse); break;
-                case ModuleId::smash:   panel = std::make_unique<SmashPanel> (p); break;
+                case ModuleId::smash:   panel = createDynPanel (p, ModuleId::smash); break;
                 case ModuleId::choir:   panel = createVoicesModulePanel (p, ModuleId::choir); break;
                 case ModuleId::smooth:  panel = createSmoothPanel (p); break;
                 case ModuleId::check:   panel = std::make_unique<CheckPanel> (p); break;
-                case ModuleId::ride:    panel = std::make_unique<RidePanel> (p); break;
+                case ModuleId::ride:    panel = createDynPanel (p, ModuleId::ride); break;
             }
             if (panel == nullptr)
                 panel = std::make_unique<OutputPanel> (p);

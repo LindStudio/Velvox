@@ -938,6 +938,18 @@ namespace velvox::ui
             if (auto* param = apvts.getParameter (pidK))
                 setValue (apvts, pidK, param->convertFrom0to1 (param->getDefaultValue()));
         }
+        // Reset = like a module fresh from the browser
+        for (const auto& [base, value] : freshInstanceValues (id))
+            setValue (apvts, dsp::instanceParamId (base, instance), value);
+    }
+
+    std::vector<std::pair<juce::String, float>> ChainView::freshInstanceValues (ModuleId id)
+    {
+        // De-esser: relative detection (Pro-DS "Single Vocal") for new instances only; the parameter default
+        // stays Absolute, so loaded projects and the default chain of a new plugin keep the 0.5 behaviour
+        if (id == ModuleId::deess)
+            return { { pid::deessDetection, 1.0f } };
+        return {};
     }
 
     int ChainView::insertModule (ModuleId id, int index, bool asSend)
@@ -960,6 +972,8 @@ namespace velvox::ui
             if (auto* p = apvts.getParameter (pidK))
                 setValue (apvts, pidK, p->convertFrom0to1 (p->getDefaultValue()));
         }
+        for (const auto& [base, value] : freshInstanceValues (id))
+            setValue (apvts, dsp::instanceParamId (base, k), value);
         setValue (apvts, onId, 0.0f);
 
         auto r = routing;
