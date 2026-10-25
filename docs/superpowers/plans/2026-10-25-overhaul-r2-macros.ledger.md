@@ -73,3 +73,4 @@ Task 6: complete (AutoMixPlanner note text, Assistant without macro suggestions 
 Task 6: Ruling: the auto-mix keeps resetting the six positions to 0 (its plan) and plans from the module values as they are - a
   Simple move before the analysis is a module edit like an Advanced one. Cost if wrong: an auto-mix result after Simple moves can
   differ from one on an untouched instance in parameters the plan does not set.
+Final: full suite 30999 checks, 0 failed (baseline 30529); Velvox_VST3 target builds (not installed).
