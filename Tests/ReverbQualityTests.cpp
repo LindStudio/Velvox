@@ -78,6 +78,8 @@ public:
             {
                 const auto s = benchSettings (type, decay, size, damping);
                 const double t = reverbmetrics::broadbandT30 (renderImpulse (s, decay * 2.5 + 1.0), fs);
+                logMessage ("  " + typeName (type) + " " + juce::String (decay, 1) + " s damping " + juce::String (damping, 0) + " -> T30 "
+                            + juce::String (t, 2) + " s");
                 expect (std::abs (t - decay) / decay <= 0.10, typeName (type) + " decay " + juce::String (decay, 1) + " s, damping "
                                                                 + juce::String (damping, 0) + ": T30 " + juce::String (t, 2) + " s");
             }
@@ -105,6 +107,35 @@ public:
                             + " s, predicted " + juce::String (predicted, 2) + " s");
                 expect (std::abs (predicted - measured) / measured <= 0.15, typeName (type) + " " + juce::String (fc, 0) + " Hz: measured "
                                                                               + juce::String (measured, 2) + " predicted " + juce::String (predicted, 2));
+            }
+        }
+
+        beginTest ("Ringing: no metallic modes in the late tail, every type (bench settings)");
+        for (int type = 0; type < ReverbModule::numTypes; ++type)
+            for (auto [decay, size, damping] : { std::tuple { 1.8f, 0.6f, 9000.0f }, std::tuple { 2.6f, 0.7f, 6500.0f },
+                                                 std::tuple { 1.0f, 0.3f, 7000.0f } })
+            {
+                const auto s = benchSettings (type, decay, size, damping);
+                const double ring = reverbmetrics::modalRingingDb (renderImpulse (s, decay * 2.5 + 1.0), fs);
+                logMessage ("  " + typeName (type) + " " + juce::String (decay, 1) + " s size " + juce::String (size, 1)
+                            + ": ringing " + juce::String (ring, 1) + " dB");
+                // the bench's cases (1.8 / 2.6 s) against the gate with margin; the short, small room gets 1 dB more
+                expect (ring <= (decay < 1.5f ? 10.0 : 9.0), typeName (type) + " " + juce::String (decay, 1) + " s: ringing " + juce::String (ring, 1) + " dB");
+            }
+
+        beginTest ("Ringing: no band outlives its neighbours (octave T30 250 Hz - 2 kHz within 12 % of 1 kHz)");
+        for (int type = 0; type < ReverbModule::numTypes; ++type)
+        {
+            auto s = benchSettings (type, 2.6f, 0.6f, 20000.0f);
+            s.lowCutHz = 20.0f;
+            s.highCutHz = 20000.0f;
+            const auto ir = renderImpulse (s, 7.5);
+            const double ref = reverbmetrics::octaveT30 (ir, fs, 1000.0);
+            for (double fc : { 250.0, 500.0, 2000.0 })
+            {
+                const double t = reverbmetrics::octaveT30 (ir, fs, fc);
+                expect (std::abs (t - ref) / ref <= 0.12, typeName (type) + " " + juce::String (fc, 0) + " Hz: " + juce::String (t, 2)
+                                                           + " s vs " + juce::String (ref, 2) + " s at 1 kHz");
             }
         }
 

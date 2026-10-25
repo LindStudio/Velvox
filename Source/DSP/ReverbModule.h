@@ -27,7 +27,7 @@ namespace velvox::dsp
     // Algorithmic reverb (own design, 0.4):
     //
     //   input -> pre-delay -> low cut -> early reflections (stereo tap pattern of the character)
-    //                                 -> input diffusion (4 all-passes per channel)
+    //                                 -> input diffusion (6 all-passes per channel, incommensurate lengths)
     //                                 -> 16-line feedback delay network
     //   late network: every line = modulated delay (cubic interpolation) -> density all-pass
     //                 -> bass shelf (low decay x bassMultiplier) -> Jot absorption low-pass
@@ -42,7 +42,7 @@ namespace velvox::dsp
     {
     public:
         static constexpr int numLines = 16;
-        static constexpr int numDiffusers = 4;
+        static constexpr int numDiffusers = 6;
         static constexpr int numTypes = 8;
         static constexpr int maxEarlyTaps = 28;
         static constexpr float maxPreDelayMs = 250.0f;
@@ -82,7 +82,7 @@ namespace velvox::dsp
         static float decayCompensationFor (const ReverbSettings& s, double sampleRate) noexcept;
         float decayCompensation() const noexcept { return compensation.getTargetValue(); }
         static constexpr float maxCompensation = 1.6f;
-        static constexpr double dampingExponent = 0.6, buildUpWeight = 1.3;
+        static constexpr double dampingExponent = 0.5, buildUpWeight = 1.3;
 
     private:
         struct DelayLine
@@ -146,9 +146,9 @@ namespace velvox::dsp
         std::array<std::array<Allpass, 2>, maxChannels> earlySmear;   // softens the discrete reflections
 
         // Per line
-        std::array<float, numLines> baseDelay {}, gainMid {}, dampA {}, dampB {}, dampZ {}, bassK {}, bassZ {};
-        std::array<double, numLines> lfoPhase {};
-        std::array<double, numLines> lfoInc {};
+        std::array<float, numLines> baseDelay {}, gainMid {}, dampA {}, dampB {}, dampC {}, dampX {}, dampZ {}, bassK {}, bassZ {};
+        // Delay modulation: one slow sine per line, rates incommensurate (phase in cycles, 0..1)
+        std::array<double, numLines> lfoPhase {}, lfoInc {};
         std::array<float, numLines> modNow {}, modStep {};
         float bassCoeff = 0.0f;   // one-pole low-pass of the bass shelf crossover
 
