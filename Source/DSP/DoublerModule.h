@@ -117,13 +117,14 @@ namespace velvox::dsp
             double shift = 0.0;                   // splice shifter: offset of the playing tap (samples)
             double fadeShift = 0.0;               // offset of the tap that fades out
             int fadeLeft = 0;                     // samples left of the crossfade (0 = one tap)
+            double turn = 0.0;                    // |offset| where the sweep turns (= its landing point)
             float detune = 0.0f;
             bool started = false;
             juce::SmoothedValue<float> delayMs { 14.0f }, gain { 0.0f }, pan { 0.0f };
         };
 
         float tap (double delaySamples) const noexcept;
-        double findJump (double delayA, double direction) const noexcept;
+        double findJump (double delayA, double direction, double minJ, double maxJ) const noexcept;
         void updateFilters() noexcept;
         void updateModulation (Voice& v, int samples) noexcept;
 
@@ -132,8 +133,8 @@ namespace velvox::dsp
         int mask = 0;
         int writePos = 0;
         int fadeLength = 1440;                    // 30 ms
-        double shiftRange = 960.0;                // 20 ms
-        double minJump = 288.0, maxJump = 912.0;  // 6 .. 19 ms
+        double shiftLimit = 576.0;                // splice shifter: tap offset within +-12 ms
+        double minLanding = 96.0;                 // ... landing at least 2 ms from the centre
         double minDelaySamples = 48.0;            // 1 ms
         double maxModSamples = 480.0;             // 10 ms per walk
         int corrLength = 768;

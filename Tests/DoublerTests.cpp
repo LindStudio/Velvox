@@ -496,6 +496,33 @@ public:
                 }
         }
 
+        beginTest ("Doubler: a detuned voice keeps its set delay on average");
+        {
+            for (float c : { 8.0f, -8.0f, 30.0f, -3.0f })
+            {
+                Buffer in (2, (int) (16.0 * fs));
+                in.clear();
+                const int period = (int) (0.1 * fs);
+                for (int i = period; i < in.getNumSamples(); i += period)
+                    for (int ch = 0; ch < 2; ++ch)
+                        in.setSample (ch, i, 0.5f);
+                const auto out = monoOf (run (solo (0, 20.0f, c), in, fs));
+                double sum = 0.0;
+                int n = 0;
+                for (int i = period; i + period < (int) out.size(); i += period)
+                {
+                    int k = i;
+                    for (int j = i; j < i + period; ++j)
+                        if (std::abs (out[(size_t) j]) > std::abs (out[(size_t) k])) k = j;
+                    sum += (k - i) * 1000.0 / fs;
+                    ++n;
+                }
+                const double mean = sum / n;
+                logMessage (juce::String (c) + " ct: mean delay " + juce::String (mean, 2) + " ms (set 20)");
+                expectWithinAbsoluteError (mean, 20.0, 1.0);
+            }
+        }
+
         beginTest ("Doubler: a detuned voice has no splice artefacts");
         {
             for (float c : { 30.0f, -30.0f, 6.0f })

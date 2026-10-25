@@ -74,16 +74,15 @@ namespace velvox::dsp
     {
         fs = sampleRate;
         fadeLength = juce::jmax (16, (int) std::lround (0.030 * fs));
-        shiftRange = 0.020 * fs;
-        minJump = 0.006 * fs;
-        maxJump = 0.019 * fs;
+        shiftLimit = 0.012 * fs;
+        minLanding = 0.002 * fs;
         minDelaySamples = 0.001 * fs;
         maxModSamples = 0.010 * fs;
         corrLength = juce::jmax (64, (int) std::lround (0.016 * fs));
 
         // Longest read: delay + wobble (2 walks, 0..2A each) + shifter range, plus the
         // correlation window behind a splice candidate
-        const double longest = maxDelayMs * 0.001 * fs + 4.0 * maxModSamples + shiftRange + maxJump + corrLength + 16.0;
+        const double longest = maxDelayMs * 0.001 * fs + 4.0 * maxModSamples + 3.0 * shiftLimit + corrLength + 16.0;
         int size = 1;
         while (size < (int) longest)
             size <<= 1;
@@ -127,6 +126,7 @@ namespace velvox::dsp
             auto& vo = voices[(size_t) v];
             vo.shift = vo.fadeShift = 0.0;
             vo.fadeLeft = 0;
+            vo.turn = 0.0;
             // Fixed seeds: a render is reproducible; every voice and walk differs
             vo.walk1.rng.setSeed (0x5d0b1e + 7919 * v);
             vo.walk2.rng.setSeed (0x2c4a31 + 104729 * v);
@@ -234,7 +234,7 @@ namespace velvox::dsp
         return (float) y;
     }
 
-    double DoublerModule::findJump (double delayA, double direction) const noexcept
+    double DoublerModule::findJump (double delayA, double direction, double minJ, double maxJ) const noexcept
     {
         // The splice target is the candidate whose recent past looks most like the playing tap's
         // (normalised cross-correlation of the last ~16 ms): on a voiced note that is a whole
@@ -258,7 +258,7 @@ namespace velvox::dsp
             return c / std::sqrt (ea * eb + 1.0e-24);
         };
 
-        const int lo = (int) std::ceil (minJump), hi = (int) std::floor (maxJump);
+        const int lo = juce::jmax (1, (int) std::ceil (minJ)), hi = juce::jmax (lo, (int) std::floor (maxJ));
         double energy = 0.0, best = -2.0;
         int bestJ = (lo + hi) / 2;
         for (int j = lo; j <= hi; j += step)
@@ -307,7 +307,6 @@ namespace velvox::dsp
         }
 
         const double msToSamples = 0.001 * fs;
-        const double halfRange = 0.5 * shiftRange;
 
         for (int start = 0; start < numSamples; start += controlInterval)
         {
@@ -356,14 +355,27 @@ namespace velvox::dsp
                             vo.fadeShift += dr;
                         else
                         {
-                            const double lo = std::max (-halfRange, minDelaySamples - base), hi = lo + shiftRange;
-                            const double margin = fadeLength * std::abs (dr) + 4.0;
-                            const double dir = dr < 0.0 && vo.shift <= lo + margin ? 1.0
-                                             : dr > 0.0 && vo.shift >= hi - margin ? -1.0 : 0.0;
-                            if (dir != 0.0)
+                            // Symmetric sawtooth: the tap sweeps from its landing point +L to -L (or -L to +L
+                            // for a lower pitch) and is spliced there to a new landing in [2, 12] ms, chosen
+                            // by correlation - so the voice's delay averages its set value over every cycle.
+                            const double floorShift = minDelaySamples - base + fadeLength * std::abs (dr) + 4.0;
+                            if (dr < 0.0 && vo.shift <= std::max (-vo.turn, floorShift))
                             {
+                                const double jLo = std::max (1.0, minLanding - vo.shift), jHi = std::max (jLo, shiftLimit - vo.shift);
                                 vo.fadeShift = vo.shift;
-                                vo.shift += dir * findJump (base + vo.shift, dir);
+                                vo.shift += findJump (base + vo.shift, 1.0, jLo, jHi);
+                                vo.turn = vo.shift;
+                                vo.fadeLeft = fadeLength;
+                            }
+                            else if (dr > 0.0 && vo.shift >= vo.turn)
+                            {
+                                // the landing (shift - J) must stay above the shortest delay
+                                const double room = vo.shift - floorShift;
+                                const double jHi = std::max (1.0, std::min (vo.shift + shiftLimit, room));
+                                const double jLo = std::min (jHi, std::max (1.0, vo.shift + minLanding));
+                                vo.fadeShift = vo.shift;
+                                vo.shift -= findJump (base + vo.shift, -1.0, jLo, jHi);
+                                vo.turn = -vo.shift;
                                 vo.fadeLeft = fadeLength;
                             }
                         }
