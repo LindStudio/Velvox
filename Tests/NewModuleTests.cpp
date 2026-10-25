@@ -6,6 +6,7 @@
 #include "DSP/PulseModule.h"
 #include "DSP/SmashModule.h"
 #include "DSP/ChoirModule.h"
+#include "SyntheticVocal.h"
 #include "DSP/SmoothModule.h"
 #include "DSP/RideModule.h"
 #include "DSP/VocalAnalyzer.h"
@@ -454,6 +455,113 @@ public:
             runModule (m, b, [&] (int) { const float c = m.voiceCents[0].load(); minC = std::min (minC, c); maxC = std::max (maxC, c); });
             logMessage ("Voice 1 pitch drift over 4 s: " + juce::String (maxC - minC, 2) + " ct");
             expectGreaterThan (maxC - minC, 1.0f);
+        }
+
+        // 0.6 quality (QUALITY_BASELINE #7): the default choir was narrow (L/R 0.94 vs 0.79 Waves Doubler4)
+        // and rough (AM 2.12 vs 1.62 dB). Proxies of the bench metrics on a synthetic vocal / a 440 Hz tone.
+        beginTest ("CHOIR: wide image at the default settings (vocal)");
+        {
+            VocalSpec vs;
+            vs.seconds = 8.0;
+            const auto voice = makeVocal (vs);
+            ChoirModule m;
+            m.prepare (fs, chunk);
+            ChoirSettings s;
+            s.enabled = true;   // defaults: 4 voices, detune 10, timing 18, humanize 50 %, width 80 %, density 50 %, mix 35 %
+            m.setSettings (s);
+            juce::AudioBuffer<float> b (2, voice.numSamples());
+            for (int c = 0; c < 2; ++c)
+                b.copyFrom (c, 0, voice.vocal[0].data(), voice.numSamples());
+            runModule (m, b);
+            const double corr = correlation (b, 0, b, 1, (int) fs, b.getNumSamples() - (int) fs);
+            logMessage ("default choir on a vocal: L/R correlation " + juce::String (corr, 3));
+            expectLessThan (corr, 0.88);
+        }
+
+        beginTest ("CHOIR: low AM roughness at the default settings (6 tones)");
+        {
+            // One tone alone depends on the beat phases the voices happen to have (same levels: 0.7-3.1 dB),
+            // so the mean over six tones is pinned (0.5 engine: 2.02 dB in the bench, Doubler4 2.57 dB)
+            double total = 0.0;
+            for (double f : { 196.0, 262.0, 330.0, 523.0, 659.0, 880.0 })
+            {
+                ChoirModule m;
+                m.prepare (fs, chunk);
+                ChoirSettings s;
+                s.enabled = true;
+                m.setSettings (s);
+                juce::AudioBuffer<float> b (2, (int) (4.5 * fs));
+                for (int i = 0; i < b.getNumSamples(); ++i)
+                    for (int c = 0; c < 2; ++c)
+                        b.setSample (c, i, 0.25f * (float) std::sin (2.0 * pi * f * i / fs));
+                runModule (m, b);
+                std::vector<double> e;
+                const int w = (int) (0.02 * fs);
+                for (int st = (int) (0.5 * fs); st + w < b.getNumSamples(); st += w / 2)
+                {
+                    double sum = 0.0;
+                    for (int i = st; i < st + w; ++i)
+                    {
+                        const double mono = 0.5 * (b.getSample (0, i) + b.getSample (1, i));
+                        sum += mono * mono;
+                    }
+                    e.push_back (10.0 * std::log10 (sum / w + 1e-20));
+                }
+                double mean = 0.0, q = 0.0;
+                for (auto x : e) mean += x;
+                mean /= (double) e.size();
+                for (auto x : e) q += (x - mean) * (x - mean);
+                total += std::sqrt (q / (double) e.size());
+            }
+            const double rough = total / 6.0;
+            logMessage ("default choir: AM roughness " + juce::String (rough, 3) + " dB (mean of 6 tones)");
+            expectLessThan (rough, 2.0);
+        }
+
+        beginTest ("CHOIR: a solo voice is a clean detune (no shifter AM)");
+        {
+            ChoirModule m;
+            m.prepare (fs, chunk);
+            ChoirSettings s;
+            s.enabled = true; s.voices = 2; s.detuneCents = 20.0f; s.humanize = 0.0f; s.width = 0.0f; s.mix = 1.0f; s.density = 1.0f;
+            m.setSettings (s);
+            juce::AudioBuffer<float> b (2, (int) (4.0 * fs));
+            for (int i = 0; i < b.getNumSamples(); ++i)
+                for (int c = 0; c < 2; ++c)
+                    b.setSample (c, i, 0.25f * (float) std::sin (2.0 * pi * 440.0 * i / fs));
+            runModule (m, b);
+            // Each voice's tone must keep its level (a dual-tap shifter's crossfade combs it up and down)
+            const double fLo = 440.0 * std::pow (2.0, -20.0 / 1200.0), fHi = 440.0 * std::pow (2.0, 18.0 / 1200.0);
+            for (double f : { fLo, fHi })
+            {
+                double lo = 1.0e9, hi = 0.0;
+                for (int st = (int) (0.5 * fs); st + (int) fs <= b.getNumSamples(); st += (int) (0.125 * fs))
+                {
+                    const double a = toneLevel (b, st, (int) fs, f, fs);
+                    lo = std::min (lo, a);
+                    hi = std::max (hi, a);
+                }
+                logMessage ("voice at " + juce::String (f, 2) + " Hz: level " + juce::String (lo, 4) + " .. " + juce::String (hi, 4));
+                expectLessThan (hi / lo, 1.15, "steady voice level");
+            }
+        }
+
+        beginTest ("CHOIR: UI positions follow the voices (half-circle stage)");
+        {
+            ChoirSettings s;
+            s.voices = 4; s.width = 0.5f; s.timingMs = 30.0f;
+            for (int v = 0; v < 4; ++v)
+            {
+                const auto p = ChoirModule::voicePosition (v, s);
+                expectWithinAbsoluteError (p.pan, ChoirModule::stagePan (ChoirModule::shapes()[(size_t) v].pan, 0.5f), 1.0e-6f);
+                expect (p.pan * ChoirModule::shapes()[(size_t) v].pan > 0.0f, "on its own side");
+                expectGreaterOrEqual (p.depth, 0.0f);
+                expectLessOrEqual (p.depth, 1.0f);
+                expectGreaterThan (p.level, 0.0f);
+            }
+            expectEquals (ChoirModule::voicePosition (5, s).level, 0.0f, "voices beyond the count are silent");
+            expect (std::abs (ChoirModule::shapes()[0].pan) >= 0.95f && std::abs (ChoirModule::shapes()[1].pan) >= 0.95f, "outer voices at the edges");
+            expect (ChoirModule::shapes()[0].pan * ChoirModule::shapes()[1].pan < 0.0f, "alternating sides");
         }
 
         beginTest ("CHOIR: voice count changes during playback without clicks");

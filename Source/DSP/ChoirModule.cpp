@@ -4,52 +4,88 @@ namespace velvox::dsp
 {
     namespace
     {
-        constexpr double twoPi = 6.283185307179586;
         constexpr float baseDelayMs = 6.0f;       // nobody sings exactly on top of the lead
-        constexpr float windowMs = 40.0f;         // pitch shifter grain length
         constexpr float maxDriftMs = 4.0f;
         constexpr float maxDriftCents = 6.0f;
         constexpr int controlInterval = 32;
+        // Humanize: every voice drifts at its own, unrelated speeds (Hz)
+        constexpr double pitchRates[ChoirModule::maxVoices] { 0.23, 0.31, 0.17, 0.41, 0.27, 0.13, 0.37, 0.21 };
+        constexpr double timeRates[ChoirModule::maxVoices]  { 0.11, 0.19, 0.29, 0.15, 0.23, 0.09, 0.17, 0.27 };
     }
 
     const std::array<ChoirModule::VoiceShape, ChoirModule::maxVoices>& ChoirModule::shapes()
     {
-        // detune (x Detune), timing (x Timing), pan (x Width). Alternating sides,
-        // uneven amounts: pairs never mirror each other exactly.
+        // detune (x Detune), timing (x Timing), pan (x Width), level (dB). Alternating sides, the
+        // first pair at the edges; uneven amounts and levels so pairs never mirror each other and
+        // no two equal voices beat against each other.
         static const std::array<VoiceShape, maxVoices> s { {
-            { -1.00f, 0.35f, -0.95f }, { +0.90f, 0.60f, +0.90f },
-            { -0.55f, 0.15f, -0.45f }, { +0.60f, 0.85f, +0.55f },
-            { -0.80f, 0.50f, -0.75f }, { +0.35f, 1.00f, +0.70f },
-            { -0.25f, 0.25f, -0.20f }, { +0.75f, 0.70f, +0.25f },
+            { -1.00f, 0.35f, -1.00f,  0.0f }, { +0.90f, 0.60f, +1.00f, -0.8f },
+            { -0.55f, 0.15f, -0.85f, -1.6f }, { +0.60f, 0.85f, +0.90f, -0.4f },
+            { -0.80f, 0.50f, -0.95f, -1.2f }, { +0.35f, 1.00f, +0.80f, -2.0f },
+            { -0.25f, 0.25f, -0.70f, -0.6f }, { +0.75f, 0.70f, +0.75f, -1.4f },
         } };
         return s;
+    }
+
+    float ChoirModule::stagePan (float shapePan, float width) noexcept
+    {
+        // Width scales the position; the curve keeps the voices near the sides they stand on
+        // (little crosstalk into the other channel) instead of pulling them towards the lead
+        const float p = juce::jlimit (-1.0f, 1.0f, shapePan * juce::jlimit (0.0f, 1.0f, width));
+        const float a = 1.0f - std::abs (p);
+        return std::copysign (1.0f - a * a, p);
+    }
+
+    namespace
+    {
+        // Level of voice v among n: its dB offset, normalised so the voices together keep the
+        // energy of equal voices (the Density law sets the overall level)
+        float shapedGain (int v, int n) noexcept
+        {
+            const auto& sh = ChoirModule::shapes();
+            double sum = 0.0;
+            for (int k = 0; k < n; ++k)
+                sum += std::pow (10.0, sh[(size_t) k].gainDb / 10.0);
+            return (float) (std::pow (10.0, sh[(size_t) v].gainDb / 20.0) / std::sqrt (sum / n));
+        }
+
+        float densityGain (int n, float density) noexcept
+        {
+            // Density: 0 -> the voices together carry the energy of one voice (soft, behind the
+            // lead); 1 -> each voice close to full level
+            return std::pow ((float) n, -0.5f + 0.32f * juce::jlimit (0.0f, 1.0f, density));
+        }
+    }
+
+    ChoirModule::VoicePosition ChoirModule::voicePosition (int voice, const ChoirSettings& s) noexcept
+    {
+        VoicePosition p;
+        const int n = juce::jlimit (2, maxVoices, s.voices);
+        if (voice < 0 || voice >= maxVoices)
+            return p;
+        const auto& sh = shapes()[(size_t) voice];
+        p.pan = stagePan (sh.pan, s.width);
+        p.depth = juce::jlimit (0.0f, 1.0f, sh.timing * juce::jlimit (0.0f, maxTimingMs, s.timingMs) / maxTimingMs);
+        p.level = voice < n ? shapedGain (voice, n) * densityGain (n, s.density) : 0.0f;
+        return p;
     }
 
     void ChoirModule::prepare (double sampleRate, int)
     {
         fs = sampleRate;
-        windowSamples = (float) (windowMs * 0.001 * sampleRate);
-
-        const double longest = (baseDelayMs + maxTimingMs + maxDriftMs + windowMs) * 0.001 * sampleRate + 8.0;
-        int size = 1;
-        while (size < (int) longest)
-            size <<= 1;
-        buffer.assign ((size_t) size, 0.0f);
-        mask = size - 1;
+        splice = SpliceConfig::forRate (fs);
+        line.setSize ((int) ((baseDelayMs + maxTimingMs + maxDriftMs) * 0.001 * fs + splice.headroom()));
 
         sourceHpf.setCoeffs (design::highPass (fs, 150.0, 0.7071));
         sourceLpf.setCoeffs (design::lowPass (fs, std::min (11000.0, fs * 0.45), 0.7071));
 
-        juce::Random rnd (1234);
-        for (auto& v : voices)
+        for (int v = 0; v < maxVoices; ++v)
         {
-            // Slow, unrelated drift rates (0.05 .. 0.3 Hz)
-            v.driftIncA = twoPi * (0.05 + 0.25 * rnd.nextDouble()) / sampleRate;
-            v.driftIncB = twoPi * (0.04 + 0.20 * rnd.nextDouble()) / sampleRate;
-            v.driftPhaseA = twoPi * rnd.nextDouble();
-            v.driftPhaseB = twoPi * rnd.nextDouble();
-            v.level.reset (sampleRate, 0.05);
-            v.delayMs.reset (sampleRate, 0.25);
+            auto& vo = voices[(size_t) v];
+            vo.pitchRate = pitchRates[v];
+            vo.timeRate = timeRates[v];
+            vo.level.reset (sampleRate, 0.05);
+            vo.delayMs.reset (sampleRate, 0.25);
         }
         for (auto* s : { &enabled, &mix, &width, &voiceGain })
             s->reset (sampleRate, 0.05);
@@ -61,12 +97,18 @@ namespace velvox::dsp
 
     void ChoirModule::reset()
     {
-        std::fill (buffer.begin(), buffer.end(), 0.0f);
-        writePos = 0;
+        line.clear();
         sourceHpf.reset();
         sourceLpf.reset();
-        for (int i = 0; i < maxVoices; ++i)
-            voices[(size_t) i].shiftPhase = (float) i / (float) maxVoices; // staggered grains
+        for (int v = 0; v < maxVoices; ++v)
+        {
+            auto& vo = voices[(size_t) v];
+            vo.shifter.reset();
+            // Fixed seeds: reproducible renders, independent voices
+            vo.pitchWalk.reset (0x3a17 + 7919 * v, v % 2 == 0, 0.5 * fs / vo.pitchRate);
+            vo.timeWalk.reset (0x6c02 + 104729 * v, v % 3 == 0, 0.5 * fs / vo.timeRate);
+            vo.driftCents = vo.driftMs = 0.0f;
+        }
         sumLR = sumLL = sumRR = 0.0;
         updateCounter = 0;
     }
@@ -80,17 +122,14 @@ namespace velvox::dsp
         {
             auto& v = voices[(size_t) i];
             v.level.setTargetValue (i < n ? 1.0f : 0.0f);
+            v.gain = i < n ? shapedGain (i, n) : v.gain;
             v.delayMs.setTargetValue (baseDelayMs + juce::jlimit (0.0f, maxTimingMs, s.timingMs) * sh[(size_t) i].timing);
         }
 
         enabled.setTargetValue (s.enabled ? 1.0f : 0.0f);
         mix.setTargetValue (juce::jlimit (0.0f, 1.0f, s.mix));
         width.setTargetValue (juce::jlimit (0.0f, 1.0f, s.width));
-
-        // Density: 0 -> the voices together carry the energy of one voice
-        // (soft, behind the lead); 1 -> each voice close to full level
-        const float d = juce::jlimit (0.0f, 1.0f, s.density);
-        voiceGain.setTargetValue (std::pow ((float) n, -0.5f + 0.32f * d));
+        voiceGain.setTargetValue (densityGain (n, s.density));
 
         if (snapNext)
         {
@@ -103,19 +142,6 @@ namespace velvox::dsp
             for (auto* sv : { &enabled, &mix, &width, &voiceGain })
                 sv->setCurrentAndTargetValue (sv->getTargetValue());
         }
-    }
-
-    float ChoirModule::readHermite (float delay) const noexcept
-    {
-        const float pos = (float) writePos - delay;
-        const int i1 = (int) std::floor (pos);
-        const float t = pos - (float) i1;
-        const float y0 = buffer[(size_t) ((i1 - 1) & mask)], y1 = buffer[(size_t) (i1 & mask)];
-        const float y2 = buffer[(size_t) ((i1 + 1) & mask)], y3 = buffer[(size_t) ((i1 + 2) & mask)];
-        const float c1 = 0.5f * (y2 - y0);
-        const float c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
-        const float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
-        return ((c3 * t + c2) * t + c1) * t + y1;
     }
 
     void ChoirModule::process (float* const* ch, int numChannels, int n) noexcept
@@ -135,6 +161,7 @@ namespace velvox::dsp
         const auto& sh = shapes();
         const float detune = juce::jlimit (0.0f, maxDetuneCents, settings.detuneCents);
         const float human = juce::jlimit (0.0f, 1.0f, settings.humanize);
+        const double msToSamples = 0.001 * fs;
 
         for (int i = 0; i < n; ++i)
         {
@@ -145,16 +172,14 @@ namespace velvox::dsp
                 for (int v = 0; v < maxVoices; ++v)
                 {
                     auto& vo = voices[(size_t) v];
-                    vo.driftPhaseA += vo.driftIncA * controlInterval;
-                    vo.driftPhaseB += vo.driftIncB * controlInterval;
-                    const float a = (float) std::sin (vo.driftPhaseA), b = (float) std::sin (vo.driftPhaseB);
-                    vo.driftCents = human * maxDriftCents * (0.6f * a + 0.4f * b);
-                    vo.driftMs = human * maxDriftMs * (0.5f * b - 0.5f * a);
+                    vo.pitchWalk.advance (controlInterval, 0.5 * fs / vo.pitchRate);
+                    vo.timeWalk.advance (controlInterval, 0.5 * fs / vo.timeRate);
+                    vo.driftCents = human * maxDriftCents * (float) vo.pitchWalk.value();
+                    vo.driftMs = human * maxDriftMs * (float) vo.timeWalk.value();
 
                     const float cents = detune * sh[(size_t) v].detune + vo.driftCents;
                     voiceCents[(size_t) v].store (cents, std::memory_order_relaxed);
-                    // Read pointer speed = pitch ratio; the window phase moves by (ratio - 1) / window
-                    shiftInc[(size_t) v] = (std::pow (2.0f, cents / 1200.0f) - 1.0f) / windowSamples;
+                    vo.drift = 1.0 - std::pow (2.0, (double) cents / 1200.0);
                 }
             }
 
@@ -163,7 +188,7 @@ namespace velvox::dsp
             for (int c = 0; c < numChannels; ++c)
                 mono += ch[c][i];
             mono /= (float) numChannels;
-            buffer[(size_t) writePos] = sourceLpf.process (sourceHpf.process (mono, 0), 0);
+            line.write (sourceLpf.process (sourceHpf.process (mono, 0), 0));
 
             const float w = width.getNextValue();
             const float g = voiceGain.getNextValue();
@@ -173,26 +198,20 @@ namespace velvox::dsp
             {
                 auto& vo = voices[(size_t) v];
                 const float level = vo.level.getNextValue();
-                const float base = (vo.delayMs.getNextValue() + vo.driftMs) * 0.001f * (float) fs;
+                const double base = (vo.delayMs.getNextValue() + vo.driftMs) * msToSamples;
                 if (level <= 0.0f)
                     continue;
 
-                // Two read heads half a window apart, complementary Hann gains
-                vo.shiftPhase -= shiftInc[(size_t) v];
-                vo.shiftPhase -= std::floor (vo.shiftPhase);
-                const float pA = vo.shiftPhase;
-                const float pB = pA + 0.5f >= 1.0f ? pA - 0.5f : pA + 0.5f;
-                const float gA = 0.5f - 0.5f * std::cos ((float) twoPi * pA);
-                const float s = gA * readHermite (base + pA * windowSamples)
-                              + (1.0f - gA) * readHermite (base + pB * windowSamples);
+                const float s = vo.shifter.process (line, std::max (splice.minDelay, base), vo.drift, splice);
 
                 // Constant-power pan
-                const float pan = juce::jlimit (-1.0f, 1.0f, sh[(size_t) v].pan * w);
+                const float pan = stagePan (sh[(size_t) v].pan, w);
                 const float angle = (pan + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
-                const float vg = s * level * g;
+                const float vg = s * level * g * vo.gain;
                 wetL += vg * std::cos (angle);
                 wetR += vg * std::sin (angle);
             }
+            line.advance();
 
             const float m = mix.getNextValue();
             const float on = enabled.getNextValue();
@@ -212,8 +231,14 @@ namespace velvox::dsp
                 sumLL = sumLL * 0.99995 + outL * outL;
                 sumRR = sumRR * 0.99995 + outR * outR;
             }
+        }
 
-            writePos = (writePos + 1) & mask;
+        const float w = width.getCurrentValue(), g = voiceGain.getCurrentValue();
+        for (int v = 0; v < maxVoices; ++v)
+        {
+            const auto& vo = voices[(size_t) v];
+            voicePan[(size_t) v].store (stagePan (sh[(size_t) v].pan, w), std::memory_order_relaxed);
+            voiceLevel[(size_t) v].store (vo.level.getCurrentValue() * g * vo.gain, std::memory_order_relaxed);
         }
 
         if (sumLL > 1.0e-9 && sumRR > 1.0e-9)

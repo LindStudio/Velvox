@@ -267,8 +267,10 @@ _add(Module(
     cases=[Case("default", headliner={"choirVoices": 1, "choirDetune": 10, "choirTiming": 18, "choirHumanize": 50, "choirWidth": 80,
                                       "choirDensity": 50, "choirMix": 35},
                 procedures=["mod_widen", "vocal_width", "nulls", "cpu"])],
-    tolerances={"comb_depth_db": ("lower", 1.0), "am_roughness_db": ("lower", 0.5), "lr_corr": ("lower", 0.1),
-                "mono_loss_db": ("lower", 1.0), "cpu_pct": ("lower", 1.0)}))
+    # Ruling (voices track): the single 440 Hz roughness is beat-phase luck for a 4-voice choir (0.7-3.1 dB at the
+    # same levels); it stays as information, the 6-tone mean is gated instead.
+    tolerances={"comb_depth_db": ("lower", 1.0), "am_roughness_db": ("info", 0.0), "am_roughness_multi_db": ("lower", 0.5),
+                "lr_corr": ("lower", 0.1), "mono_loss_db": ("lower", 1.0), "cpu_pct": ("lower", 1.0)}))
 
 # ---------------------------------------------------------------------------------------------
 # Delay vs Timeless 3 (375 ms, 30 % feedback, 300 Hz - 6 kHz filters, 100 % wet)

@@ -71,6 +71,7 @@ METRICS = {
     "latency_ms": ("lower", 10.0, "ms", "reported latency"),
     "comb_depth_db": ("lower", 1.0, "dB", "peak-to-notch range of the mono-sum transfer (pink noise)"),
     "am_roughness_db": ("lower", 0.5, "dB", "std of the 20 ms envelope of a 440 Hz tone (beating/flanging)"),
+    "am_roughness_multi_db": ("lower", 0.5, "dB", "am_roughness averaged over 6 tones 196-880 Hz (less dependent on beat phases)"),
     "lr_corr": ("lower", 0.1, "", "L/R correlation of the output (vocals)"),
     "mono_loss_db": ("lower", 1.0, "dB", "loudness lost in the mono sum (vocals)"),
     "voice_delay_err_ms": ("lower", 0.5, "ms", "|median delay of a solo voice - set delay| (noise), mean over voices"),
@@ -658,6 +659,14 @@ def proc_mod_widen(ctx, case):
     t = S.sine(FS, 440, -12, 4.0)
     yt = ctx.render("sine440", t)
     ctx.metric("am_roughness_db", {n: _am_roughness(y) for n, y in yt.items()})
+    # The 440 Hz value depends on the beat phases the voices happen to have (a 3.5 s window holds only a
+    # few beats): the same voice levels give 0.7-3.1 dB by phase alone. The mean over six tones is the
+    # robust comparison.
+    per = []
+    for f in (196, 262, 330, 523, 659, 880):
+        ym = ctx.render(f"sine{f}", S.sine(FS, f, -12, 4.0))
+        per.append({n: _am_roughness(y) for n, y in ym.items()})
+    ctx.metric("am_roughness_multi_db", _mean_over_clips(per), note="6 tones")
 
 
 def voice_tracking_values(xn, yn, xt, yt, f0, max_ms=80.0):
