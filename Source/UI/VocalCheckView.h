@@ -42,6 +42,7 @@ namespace velvox::ui
         std::function<juce::String()> tooltipFn;
         Style style;
         juce::Colour accent;   // the Vocal Check colour
+        int chevron = 0;       // link style: 0 none, 1 right (collapsed), 2 down (expanded)
     };
 
     class VocalCheckView final : public juce::Component

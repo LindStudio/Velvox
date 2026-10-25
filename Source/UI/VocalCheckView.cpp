@@ -95,7 +95,7 @@ namespace velvox::ui
         if (withCaption)
         {
             g.setColour (colours::textFaint);
-            g.setFont (semiBold (8.5f, 1.5f));
+            g.setFont (semiBold (8.5f, 0.15f));
             g.drawText ("SCORE", text.withY (text.getBottom() + 1.0f).withHeight (11.0f), juce::Justification::centred, false);
         }
     }
@@ -164,13 +164,32 @@ namespace velvox::ui
                 break;
             case Style::link:
                 text = ! enabled ? colours::textFaint : highlighted ? colours::text : colours::textMuted;
-                f = semiBold (11.0f, 0.5f);
+                f = semiBold (11.0f, 0.04f);
                 break;
         }
 
         g.setColour (text);
         g.setFont (f);
-        g.drawText (getButtonText(), getLocalBounds(), style == Style::link ? juce::Justification::centredLeft : juce::Justification::centred, false);
+        if (style != Style::link)
+        {
+            g.drawText (getButtonText(), getLocalBounds(), juce::Justification::centred, false);
+            return;
+        }
+        if (chevron == 0)
+        {
+            g.drawText (getButtonText(), getLocalBounds(), juce::Justification::centredRight, false);
+            return;
+        }
+        // "2 ignoriert" + a small chevron (drawn: the fonts have no triangle glyphs)
+        g.drawText (getButtonText(), getLocalBounds(), juce::Justification::centredLeft, false);
+        const float x = juce::GlyphArrangement::getStringWidth (f, getButtonText()) + 8.0f;
+        const float cy = (float) getHeight() * 0.5f;
+        juce::Path p;
+        if (chevron == 1)
+            p.addTriangle (x, cy - 4.0f, x, cy + 4.0f, x + 4.5f, cy);
+        else
+            p.addTriangle (x - 1.0f, cy - 2.5f, x + 7.0f, cy - 2.5f, x + 3.0f, cy + 2.5f);
+        g.fillPath (p);
     }
 
     //==========================================================================
@@ -576,7 +595,9 @@ namespace velvox::ui
         applyAll.setButtonText (applicable > 0 ? "Alles anwenden (" + juce::String (applicable) + ")" : juce::String ("Alles anwenden"));
         applyAll.setEnabled (applicable > 0);
 
-        ignoredToggle.setButtonText (juce::String ((int) ignored.size()) + " ignoriert " + juce::String::fromUTF8 (ignoredExpanded ? "\xe2\x96\xbe" : "\xe2\x96\xb8"));
+        ignoredToggle.setButtonText (juce::String ((int) ignored.size()) + " ignoriert");
+        ignoredToggle.chevron = ignoredExpanded ? 2 : 1;
+        ignoredToggle.repaint();
         ignoredToggle.setVisible (! ignored.empty());
         restoreAll.setVisible (ignoredExpanded && ! ignored.empty());
 
@@ -662,7 +683,7 @@ namespace velvox::ui
 
         const float x = (float) (pad + ringSize + 20);
         g.setColour (colours::textStrong);
-        g.setFont (semiBold (15.0f, 2.5f));
+        g.setFont (semiBold (15.0f, 2.5f / 15.0f));
         g.drawText ("VOCAL CHECK", juce::Rectangle<float> (x + 30.0f, 14.0f, 260.0f, 26.0f), juce::Justification::centredLeft, false);
         g.setColour (colours::textMuted);
         g.setFont (font (12.5f));
@@ -671,7 +692,7 @@ namespace velvox::ui
         // Genre segment bar
         const auto rx = (float) (getWidth() - pad - rightW);
         g.setColour (colours::textFaint);
-        g.setFont (semiBold (9.5f, 1.5f));
+        g.setFont (semiBold (9.5f, 0.2f));
         g.drawText ("GENRE", juce::Rectangle<float> (rx, 14.0f, (float) rightW, 12.0f), juce::Justification::centredLeft, false);
         g.setColour (colours::control);
         g.fillRoundedRectangle ({ rx, 30.0f, (float) rightW, 28.0f }, 7.0f);

@@ -1162,7 +1162,7 @@ namespace velvox::ui
                 : DetailPanel (p, "Vocal Check", help::shortDescription ((int) ModuleId::check), pid::checkOn),
                   findings (p)
             {
-                auto& mode = segments (pid::checkMode);
+                auto& mode = segments (pid::checkMode, { "Laufend", "Capture" });   // as on the VOCAL CHECK tab
                 setCaption (mode, "Analyse");
                 auto& startStop = own (std::make_unique<juce::TextButton> ("Start"));
                 auto& resetButton = own (std::make_unique<juce::TextButton> ("Reset"));
