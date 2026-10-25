@@ -42,6 +42,9 @@ namespace velvox::automix::autoeq
     // `spectrumDb`: VocalProfiler::spectrumDb (power density per 1/12-octave band from 40 Hz,
     // -200 = empty). `bands`: EQ bands applied on top (only those switched on count).
     Levels levelsOf (const std::vector<float>& spectrumDb, const std::vector<dsp::EqBand>& bands);
+    // The objective's tonal + harshness terms for these levels (the target curve as one number;
+    // a high voice - lowest notes above 250 Hz - only pays for too much body)
+    float tonalPenalty (const Levels& levels, bool highVoice, float margin = 0.0f);   // margin: windows narrowed by it
     // Total magnitude (dB) of `bands` at `freq`
     float responseDb (const std::vector<dsp::EqBand>& bands, float freq);
 

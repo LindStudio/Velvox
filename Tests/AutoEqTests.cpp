@@ -340,7 +340,9 @@ public:
                 const auto moves = autoeq::planMoves (ctxFor (p));
                 checkLimits (moves, autoeq::maxBands - 1, "muddy");
                 const auto* m = find (moves, dsp::EqRole::autoMix);
-                expect (m != nullptr && m->band.gain < 0.0f && m->band.freq >= 200.0f && m->band.freq <= 500.0f, "low-mid cut");
+                juce::String all;
+                for (auto& mv : moves) all << mv.title << "; ";
+                expect (m != nullptr && m->band.gain < 0.0f && m->band.freq >= 200.0f && m->band.freq <= 500.0f, "low-mid cut: " + all);
             }
 
             // Dark: lift the highs (+ presence) - never beyond +4 dB broad
