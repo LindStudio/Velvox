@@ -95,7 +95,9 @@ namespace velvox
         void setAll (const std::map<juce::String, float>& values);
         float get (const juce::String& id) const;
 
-        dsp::ChainSettings read (const dsp::Routing& routing) const noexcept { return dsp::applyMacros (reader.read (routing, false), reader.readMacros()); }
+        // The settings the DSP gets (0.6.1: the macros are slider positions, nothing is layered on top)
+        dsp::ChainSettings read (const dsp::Routing& routing) const noexcept { return reader.read (routing, false); }
+        dsp::MacroValues readMacros() const noexcept { return reader.readMacros(); }
 
     private:
         std::map<juce::String, std::unique_ptr<std::atomic<float>>> store;

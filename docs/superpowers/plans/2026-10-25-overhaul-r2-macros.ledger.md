@@ -19,3 +19,13 @@ Task 2: Ruling: down moves only reduce modules that are ON and never create band
   stays at 0). Up moves switch on what they need, like 0.6.0. Cost if wrong: after SPACE up/down across separate gestures a reverb that
   was off with Mix 18 % ends off with Mix 0 % (inaudible either way; the gesture-anchored mapper of Task 4 restores the 18 % whenever
   nothing else changed in between).
+Task 3: complete (Source/Parameters/MacroBake.*: touchedParamIds, readSettings/readMacros on an eqbands::Access, writeMacroFields
+  (values first, on-switches last), keepDry, bake; OfflineParameters::read no longer applies macros; tests red (header missing) ->
+  green: bake on value maps of all 12 old cases == applyMacros within 1e-4 (the % round trip), positions kept; keepDry cases;
+  "Headliner macro bake" 142 checks)
+Task 3: Ruling: the 0.6.0 macro "lawMix" (a macro adds wet but the dry follows the user's own Mix) is expressed with existing
+  parameters: an additive insert whose Mix the macros pushed past the point where the true law starts to fade the dry moves to the
+  legacy law (dry at unity, out = dry + wet * mix - exactly what 0.6.0 played); a Doubler already above 50 % also gets its Dry
+  level lowered by the dry it had (exact). Delay / Reverb inserts with their own Mix above 50 % have no Dry parameter: legacy law is
+  the closest match (residual, see Task 5). The same rule runs for new Simple moves (Task 4), so WIDTH / SPACE never take the
+  original away (mixlaw-track ruling kept). Cost if wrong: the panel shows "Alte Mix-Kurve - umstellen" on such an instance.

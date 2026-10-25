@@ -12,6 +12,8 @@
 #include "SyntheticVocal.h"
 #include "MixLawFixtures.h"
 #include "StateKeys.h"
+#include "MacroTestHelpers.h"
+#include "Parameters/MacroBake.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -200,7 +202,96 @@ public:
 
     void runTest() override
     {
+        valueMapTests();
         baselineAgainstOtherBuild();
+    }
+
+    static Values allValues (Harness& h)
+    {
+        Values v;
+        for (auto* p : h.proc.getParameters())
+            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+                v[rp->getParameterID()] = rp->convertFrom0to1 (rp->getValue());
+        return v;
+    }
+
+    void valueMapTests()
+    {
+        beginTest ("Bake on a value map: the parameters alone are what applyMacros produced; positions stay");
+        for (const auto& c : oldCases())
+        {
+            Harness h;
+            c.configure (h);
+            settle();
+            auto values = allValues (h);
+            for (const auto& [id, v] : c.macros)
+                values[id] = v;
+            const auto routing = h.proc.getRouting();
+            auto laws = h.proc.getMixLaws();
+            const auto access = eqbands::accessFor (values);
+
+            const auto base = macrobake::readSettings (access, routing);
+            auto expected = dsp::applyMacros (base, macrobake::readMacros (access));
+            auto expectedLaws = laws;
+            macrobake::keepDry (base, expected, routing, expectedLaws);
+
+            expect (macrobake::bake (access, routing, &laws), c.name);
+            const auto diff = macroFieldDifference (macrobake::readSettings (access, routing), expected, 1.0e-4f);
+            expect (diff.isEmpty(), c.name + ": " + diff);
+            expect (laws == expectedLaws, c.name);
+            for (const auto& [id, v] : c.macros)
+                expectEquals (values[id], v, c.name + ": position " + id);
+            auto noMacros = allValues (h);
+            const auto before = noMacros;
+            expect (! macrobake::bake (eqbands::accessFor (noMacros), routing, &laws), "all macros at 0: nothing to bake");
+            expect (noMacros == before);
+        }
+
+        beginTest ("keepDry: the 0.6.0 macros never took the dry of an additive insert away");
+        {
+            using dsp::ModuleId;
+            const auto inserts = dsp::Routing::fromString ("v2,doubler,delay:insert,reverb:insert");
+            const auto sends = dsp::Routing::fromString ("v2,doubler,delay:send,reverb:send");
+            dsp::ChainSettings before;
+            before.doubler.enabled = true;  before.doubler.mix = 0.3f;
+            before.reverbOn = true;         before.reverbMix = 0.4f;
+            before.delayOn = false;         before.delayMix = 0.2f;
+
+            // Doubler 30 % -> 90 %, reverb insert 40 % -> 70 %, delay off -> 15 %: the first two need the additive law
+            auto after = before;
+            after.doubler.mix = 0.9f;
+            after.reverbMix = 0.7f;
+            after.delayOn = true; after.delayMix = 0.15f;
+            auto laws = dsp::MixLaws::allTrue();
+            expect (macrobake::keepDry (before, after, inserts, laws));
+            expect (laws.isLegacy (ModuleId::doubler, 0) && laws.isLegacy (ModuleId::reverb, 0) && ! laws.isLegacy (ModuleId::delay, 0));
+            expectEquals (after.doubler.dryDb, 0.0f, "the dry was at unity");
+
+            // As sends the Delay / Reverb have no dry of their own
+            auto afterSends = before;
+            afterSends.reverbMix = 0.7f;
+            auto lawsSends = dsp::MixLaws::allTrue();
+            expect (! macrobake::keepDry (before, afterSends, sends, lawsSends));
+            expect (lawsSends == dsp::MixLaws::allTrue());
+
+            // A Doubler already above 50 % (dry 0.6): the additive law plus its Dry level keep that dry
+            auto b70 = before;
+            b70.doubler.mix = 0.7f;
+            auto a70 = b70;
+            a70.doubler.mix = 1.0f;
+            auto laws70 = dsp::MixLaws::allTrue();
+            expect (macrobake::keepDry (b70, a70, inserts, laws70));
+            expect (laws70.isLegacy (ModuleId::doubler, 0));
+            expectWithinAbsoluteError (a70.doubler.dryDb, juce::Decibels::gainToDecibels (0.6f), 1.0e-4f);
+
+            // Nothing to keep: up to 50 %, lowered Mix, legacy instances
+            auto small = before;
+            small.doubler.mix = 0.5f;
+            auto lawsSmall = dsp::MixLaws::allTrue();
+            expect (! macrobake::keepDry (before, small, inserts, lawsSmall));
+            auto legacy = dsp::MixLaws::allLegacy();
+            expect (! macrobake::keepDry (before, after, inserts, legacy));
+        }
     }
 
     void baselineAgainstOtherBuild()
