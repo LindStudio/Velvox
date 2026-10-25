@@ -1,6 +1,6 @@
 #include "ModuleViews.h"
 #include "../PluginProcessor.h"
-#include "../DSP/SaturationModule.h"
+#include "SatPanel.h"
 #include "../DSP/ChopModule.h"
 
 namespace velvox::ui
@@ -568,136 +568,6 @@ namespace velvox::ui
             dsp::DeEssSettings s;
             bool on = true;
             Smoothed gr;
-        };
-
-        //======================================================================
-        // Saturation: transfer curve with a travelling signal, and the harmonics it adds
-        class SatView final : public ModuleView
-        {
-        public:
-            void update (const LiveData& d) override
-            {
-                const auto& st = d.settings.sat;
-                if (st.driveDb != drive || st.mix != mix || st.character != character || st.enabled != on)
-                {
-                    drive = st.driveDb;
-                    mix = st.mix;
-                    character = st.character;
-                    on = st.enabled;
-                    computeHarmonics();
-                }
-                time = d.time;
-                level = d.level();
-                repaint();
-            }
-
-            void paint (juce::Graphics& g) override
-            {
-                auto r = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
-                const float alpha = on ? 1.0f : 0.4f;
-                auto curveArea = r.removeFromLeft (r.getHeight() * 1.25f);
-                r.removeFromLeft (24.0f);
-
-                // Transfer curve
-                label (g, "Transfer", curveArea.withHeight (12.0f));
-                const auto t = curveArea.withTrimmedTop (18.0f);
-                g.setColour (juce::Colours::black.withAlpha (0.25f));
-                g.fillRoundedRectangle (t, 10.0f);
-                const auto plot = t.reduced (12.0f);
-                g.setColour (colours::accent.withAlpha (0.05f));
-                g.fillRect (juce::Rectangle<float> (plot.getCentreX(), plot.getY(), 1.0f, plot.getHeight()));
-                g.fillRect (juce::Rectangle<float> (plot.getX(), plot.getCentreY(), plot.getWidth(), 1.0f));
-                g.setColour (colours::accent.withAlpha (0.08f));
-                g.drawLine (plot.getX(), plot.getBottom(), plot.getRight(), plot.getY(), 1.0f);
-
-                const auto map = [&] (float x) { return juce::Point<float> (juce::jmap (x, -1.0f, 1.0f, plot.getX(), plot.getRight()),
-                                                                            juce::jmap (juce::jlimit (-1.2f, 1.2f, transfer (x)), -1.2f, 1.2f, plot.getBottom(), plot.getY())); };
-                juce::Path p;
-                for (int i = 0; i <= 96; ++i)
-                {
-                    const auto pt = map (-1.0f + 2.0f * (float) i / 96.0f);
-                    if (i == 0) p.startNewSubPath (pt); else p.lineTo (pt);
-                }
-                glowStroke (g, p, plot, 2.0f, alpha);
-
-                // A signal riding the curve, its swing follows the output level
-                const float swing = 0.35f + 0.6f * level;
-                for (int k = 6; k >= 0; --k)
-                {
-                    const float x = swing * std::sin ((float) (time - k * 0.03) * twoPi * 0.4f);
-                    const auto pt = map (x);
-                    drawGlow (g, pt, 10.0f - (float) k, (k == 0 ? 0.7f : 0.12f) * alpha, colours::teal);
-                }
-                g.setColour (juce::Colours::white.withAlpha (alpha));
-                g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre (map (swing * std::sin ((float) time * twoPi * 0.4f))));
-
-                // Harmonics
-                label (g, "Harmonics (sine at -6 dBFS)", r.withHeight (12.0f));
-                label (g, "THD " + juce::String (thd, thd < 1.0f ? 2 : 1) + " %", r.withHeight (12.0f), juce::Justification::topRight, colours::text);
-                auto bars = r.withTrimmedTop (22.0f).withTrimmedBottom (16.0f);
-                hGrid (g, bars, { -20.0f, -40.0f, -60.0f }, -80.0f, 0.0f, " dB");
-                const int n = (int) harmonics.size();
-                const float slot = (bars.getWidth() - 44.0f) / (float) n;
-                for (int i = 0; i < n; ++i)
-                {
-                    const float x = bars.getX() + slot * (float) i + slot * 0.2f;
-                    const float top = yFor (harmonics[(size_t) i], -80.0f, 0.0f, bars);
-                    const auto bar = juce::Rectangle<float> (x, top, slot * 0.6f, bars.getBottom() - top);
-                    const auto c = aurora ((float) i / (float) (n - 1));
-                    if (bar.getHeight() > 1.0f)
-                    {
-                        drawGlow (g, { bar.getCentreX(), top }, slot * 0.7f, 0.25f * alpha, c);
-                        g.setGradientFill (juce::ColourGradient (c.withAlpha (0.9f * alpha), 0.0f, bar.getY(), c.withAlpha (0.15f * alpha), 0.0f, bar.getBottom(), false));
-                        g.fillRoundedRectangle (bar, 3.0f);
-                    }
-                    g.setColour (colours::textFaint);
-                    g.setFont (medium (10.5f));
-                    g.drawText (juce::String (i + 1), juce::Rectangle<float> (x - 4.0f, bars.getBottom() + 3.0f, slot * 0.6f + 8.0f, 12.0f), juce::Justification::centred, false);
-                }
-            }
-
-        private:
-            float transfer (float x) const
-            {
-                const float driveLin = juce::Decibels::decibelsToGain (drive);
-                const float wet = dsp::SaturationModule::shape (x, driveLin, character) * dsp::SaturationModule::compensationFor (driveLin, character);
-                return x + (wet - x) * mix;
-            }
-
-            void computeHarmonics()
-            {
-                constexpr int N = 512;
-                std::array<float, N> y {};
-                for (int i = 0; i < N; ++i)
-                    y[(size_t) i] = transfer (0.5f * std::sin (twoPi * (float) i / (float) N));
-
-                std::array<float, 12> mags {};
-                for (int k = 1; k <= 12; ++k)
-                {
-                    double re = 0.0, im = 0.0;
-                    for (int i = 0; i < N; ++i)
-                    {
-                        const double ph = twoPi * k * i / (double) N;
-                        re += y[(size_t) i] * std::cos (ph);
-                        im += y[(size_t) i] * std::sin (ph);
-                    }
-                    mags[(size_t) k - 1] = (float) (2.0 * std::sqrt (re * re + im * im) / N);
-                }
-                double distortion = 0.0;
-                for (int k = 0; k < 12; ++k)
-                {
-                    harmonics[(size_t) k] = k == 0 ? 0.0f : juce::Decibels::gainToDecibels (mags[(size_t) k] / std::max (1.0e-9f, mags[0]), -100.0f);
-                    if (k > 0)
-                        distortion += mags[(size_t) k] * mags[(size_t) k];
-                }
-                thd = (float) (100.0 * std::sqrt (distortion) / std::max (1.0e-9f, mags[0]));
-            }
-
-            float drive = -100.0f, mix = -1.0f, thd = 0.0f, level = 0.0f;
-            int character = -1;
-            bool on = false;
-            double time = 0.0;
-            std::array<float, 12> harmonics {};
         };
 
         //======================================================================
@@ -1908,7 +1778,7 @@ namespace velvox::ui
             case ModuleId::eq:      return std::make_unique<EqView> (p, spectrum, instance);
             case ModuleId::comp:    return std::make_unique<CompView>();
             case ModuleId::deess:   return std::make_unique<DeEssView> (spectrum);
-            case ModuleId::sat:     return std::make_unique<SatView>();
+            case ModuleId::sat:     return createSatView (p, instance);
             case ModuleId::doubler: return std::make_unique<DoublerView>();
             case ModuleId::pitch:   return std::make_unique<PitchView>();
             case ModuleId::chop:    return std::make_unique<ChopView>();

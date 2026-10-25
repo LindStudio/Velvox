@@ -15,3 +15,18 @@ the band drives; SatPanelTests 23 checks)
   every UI edit (drag, wheel, typed value, reset, paste, the band handles in the strip) because they all run as gestures, while host
   automation (no gesture, possibly audio thread) never links. Cost: edits from a host's generic editor while the panel is open link
   too (they are gestures as well); with the panel closed nothing links.
+
+Task 2: complete (SatView: log strip 20 Hz - 20 kHz, three band areas + two crossover handles as child components with the
+shared gesture set, band on/off switches in the band headers, live drive meter, mini transfer curve + H2..H8 + THD; old SatView
+removed from ModuleViews.cpp; SatPanelTests 61 checks. TDD note: the view tests were written first and failed to compile; the
+first build after the implementation passed.)
+
+- Ruling: the band "drive meter" shows band input RMS + the band's effective drive (dBFS, −42 … +6 dB), i.e. how hard the band
+  hits its curve, rising from the band's floor (fast up, slow down) — why: the output level of a level-compensated band barely moves
+  with drive, the input + drive is what the user changes. Cost: it is a level, not a measured THD.
+- Ruling: the band areas are drag handles for their drive (vertical, 220 px = full range like every knob; click selects) — why:
+  spec 2.6 graph handles; the strip is the biggest target for the main edit. Crossover handles stop at high / 1.5 (and low × 1.5)
+  instead of pushing the other crossover — why: one gesture never writes a second parameter. Cost: to widen a narrow mid band the
+  user moves both handles.
+- Ruling: harmonics are shown for a −12 dBFS sine (harmonicProfile), with THD over H2..H8 — a typical vocal peak level; the old
+  view used −6 dBFS. Cost: none (display only).
