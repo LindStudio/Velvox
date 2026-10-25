@@ -390,6 +390,65 @@ public:
             expectEquals (h.proc.getChain().getLatencyFor (h.proc.getRouting(), false), twoSat);
         }
 
+        beginTest ("Combined latency: Sat + Smooth + Ride + Pitch + EQ in one chain (44.1 / 192 kHz)");
+        {
+            for (double rate : { 44100.0, 192000.0 })
+            {
+                Harness h (rate);
+                h.neutral();
+                h.set (pid::eqOn, 1.0f);
+                h.set (pid::satOn, 1.0f);
+                h.set (pid::satDrive, 3.0f);
+                h.set (pid::smoothOn, 1.0f);
+                h.set (pid::smoothAmount, 0.0f);
+                h.set (pid::rideOn, 1.0f);
+                h.set (pid::rideAmount, 0.0f);
+                h.set (pid::pitchOn, 1.0f);
+                h.set (pid::pitchSemitones, 0.0f);
+                h.set (pid::pitchCents, 0.0f);
+                h.set (pid::pitchMix, 100.0f);
+                h.proc.updateHostLatency();
+                const auto& r = h.proc.getRouting();
+                for (auto m : { ModuleId::eq, ModuleId::sat, ModuleId::smooth, ModuleId::ride, ModuleId::pitch })
+                    expect (r.contains (m), juce::String (dsp::moduleKey (m)) + " in the chain");
+                const int reported = h.proc.getLatencySamples();
+                expectEquals (reported, h.proc.getChain().getLatencyFor (r, true));
+                const juce::String at = " at " + juce::String (rate / 1000.0, 1) + " kHz";
+
+                // Impulse after a settling time: where does it come out?
+                const int settle = (int) (0.5 * rate), pos = settle;
+                const auto impulseRun = [&]
+                {
+                    auto sig = h.silence (1.0 + (double) reported / rate);
+                    for (int ch = 0; ch < sig.getNumChannels(); ++ch)
+                        sig.setSample (ch, pos, 0.5f);
+                    return h.run (sig);
+                };
+                const auto out = impulseRun();
+                int peakAt = 0;
+                float peak = 0.0f;
+                for (int i = 0; i < out.getNumSamples(); ++i)
+                    if (std::abs (out.getSample (0, i)) > peak)
+                    {
+                        peak = std::abs (out.getSample (0, i));
+                        peakAt = i;
+                    }
+                logMessage ("reported " + juce::String (reported) + " samples, impulse delayed by " + juce::String (peakAt - pos) + at);
+                expectGreaterThan (peak, 0.1f, "the impulse comes through" + at);
+                expectLessOrEqual (std::abs ((peakAt - pos) - reported), 2, "reported latency == measured delay" + at);
+
+                // Global bypass: the input delayed by exactly the reported latency
+                h.set (pid::bypass, 1.0f);
+                h.run (h.silence (0.2));   // the bypass crossfade
+                const auto in = h.noise (0.3f, 0.5 + (double) reported / rate, 5);
+                const auto byp = h.run (in);
+                double worst = 0.0;
+                for (int i = reported + (int) (0.1 * rate); i < in.getNumSamples(); ++i)
+                    worst = std::max (worst, (double) std::abs (byp.getSample (0, i) - in.getSample (0, i - reported)));
+                expectLessThan (worst, 1.0e-4, "bypass path aligned" + at);
+            }
+        }
+
         beginTest ("Migration: a v0.1 project resets newer parameters, routing keeps what is audible");
         {
             // Build a state exactly like v0.1 wrote it: no stateVersion, no routing,

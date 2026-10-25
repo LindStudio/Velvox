@@ -64,3 +64,12 @@ suspended by A and its edit did not reach the role band).
 
 Task 6: complete (`git rm --cached tools/refhost/tests/__pycache__/*.pyc`; `__pycache__/` was already in .gitignore).
 Check: `git ls-files | grep pycache` is empty. No unit test (repository hygiene, Ruling: nothing to execute).
+
+Task 7: complete (combined latency test). RoutingTests "Combined latency: Sat + Smooth + Ride + Pitch + EQ in one chain
+(44.1 / 192 kHz)": all five modules in the chain (amount 0 / shift 0, Sat drive 3 dB), reported latency == the chain's
+getLatencyFor, impulse peak delay == reported (± 2 samples), global bypass == input delayed by exactly the reported latency.
+Measured: 44.1 kHz reported 5203 / impulse 5204; 192 kHz reported 22220 / impulse 22220. The code was already correct, so the
+test passed on first run; mutation check instead of a red run: reporting latency + 3 samples made 6 of its checks fail
+(reported vs chain, impulse at 192 kHz, bypass alignment at both rates) — reverted.
+- Ruling: ± 2 samples for the impulse peak (the linear-phase sat FIR and the pitch splicer put the peak within one sample of
+  the nominal delay at 44.1 kHz); the bypass check is exact (1e-4).
