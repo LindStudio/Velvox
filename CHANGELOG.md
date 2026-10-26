@@ -63,6 +63,11 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
   Band-Rolle hat vier neue Werte (am Ende angehängt, alte Werte unverändert). Ein neuer Auto-Mix-Lauf ersetzt die
   Auto-Mix-Bänder eines früheren Laufs.
 
+### Behoben
+- **Host-Kompatibilität beim Laden:** Ein Schalter (z. B. Reverb On), dem der Host einen Zwischenwert geschickt hatte
+  (0,37 = „aus“), meldete dem Host nach dem Laden eines Projekts weiter 0,37 statt des geladenen Werts, wenn der Schalter
+  schon auf der geladenen Seite stand. pluginval (Strenge 10, „Plugin state restoration“) bemängelte das; Klang unverändert.
+
 ## [0.6.0] – Branch `feature/automix` („Pro-Overhaul“, Entwicklungsstand, FL-Studio-Test ausstehend)
 
 ### Neu – Oberfläche
