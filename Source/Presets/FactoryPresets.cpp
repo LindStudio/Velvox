@@ -57,6 +57,7 @@ namespace velvox
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 12 }, { reverbDecay, 1.2f }, { reverbPreDelay, 25 },
                       { reverbSize, 45 }, { reverbDamping, 7000 }, { reverbLowCut, 300 }, { reverbWidth, 85 },
                       { reverbDuckAmount, 3 }, { reverbDuckThreshold, -32 },
+                      { outputGain, 0.0f },
                   }),
 
             make ("Hypertechno Lead", "Punchy",
@@ -78,7 +79,7 @@ namespace velvox
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 24 }, { reverbDecay, 2.4f }, { reverbPreDelay, 35 },
                       { reverbSize, 70 }, { reverbDamping, 9000 }, { reverbLowCut, 400 }, { reverbWidth, 100 },
                       { reverbDuckAmount, 8 }, { reverbDuckThreshold, -30 }, { reverbDuckRelease, 400 },
-                      { delayToReverb, 30 }, { stereoWidth, 115 }, { monoBelow, 150 }, { outputGain, -1.0f },
+                      { delayToReverb, 30 }, { stereoWidth, 115 }, { monoBelow, 150 }, { outputGain, 6.5f },
                   }),
 
             make ("Aggressive Party Vocal", "Aggressive",
@@ -98,7 +99,7 @@ namespace velvox
                       { reverbOn, 1 }, { reverbType, room }, { reverbMix, 10 }, { reverbDecay, 0.9f }, { reverbPreDelay, 10 },
                       { reverbSize, 35 }, { reverbDamping, 7000 }, { reverbLowCut, 350 }, { reverbWidth, 80 },
                       { reverbDuckAmount, 6 }, { reverbDuckThreshold, -32 },
-                      { stereoWidth, 110 }, { outputGain, -2.0f },
+                      { stereoWidth, 110 }, { outputGain, 5.5f },
                   }),
 
             make ("Wide Festival Vocal", "Wide",
@@ -121,6 +122,7 @@ namespace velvox
                       { reverbSize, 85 }, { reverbDamping, 8000 }, { reverbLowCut, 300 }, { reverbWidth, 100 },
                       { reverbDuckAmount, 7 }, { reverbDuckThreshold, -30 }, { reverbDuckRelease, 600 },
                       { delayToReverb, 40 }, { stereoWidth, 130 }, { monoBelow, 180 },
+                      { outputGain, -0.5f },
                   }),
 
             // =================== 0.3 presets (use the new modules) ===================
@@ -144,7 +146,7 @@ namespace velvox
                       { reverbSize, 65 }, { reverbLowCut, 400 }, { reverbDuckAmount, 8 },
                       { pulseOn, 1 }, { pulseRate, 2 }, { pulseDepth, 30 }, { pulseTension, 10 }, { pulseRelease, 20 },
                       { checkOn, 1 },
-                      { stereoWidth, 115 }, { monoBelow, 150 }, { outputGain, -1.0f },
+                      { stereoWidth, 115 }, { monoBelow, 150 }, { outputGain, 3.0f },
                   }),
 
             make ("Festival Choir Hook", "Wide",
@@ -161,6 +163,7 @@ namespace velvox
                       { reverbSize, 85 }, { reverbLowCut, 300 }, { reverbDuckAmount, 6 },
                       { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 30 }, { delayMix, 14 }, { delayPingPong, 1 },
                       { stereoWidth, 120 }, { monoBelow, 180 },
+                      { outputGain, 5.0f },
                   }),
 
             make ("Pumping Party Vocal", "Creative",
@@ -177,7 +180,7 @@ namespace velvox
                       { pulseX[0], 0.0f }, { pulseX[1], 0.04f }, { pulseX[2], 0.35f }, { pulseX[3], 0.6f }, { pulseX[4], 0.8f }, { pulseX[5], 0.97f },
                       { pulseY[0], 0.0f }, { pulseY[1], 0.0f }, { pulseY[2], 0.8f }, { pulseY[3], 1.0f }, { pulseY[4], 1.0f }, { pulseY[5], 1.0f },
                       { reverbOn, 1 }, { reverbType, room }, { reverbMix, 12 }, { reverbDecay, 1.0f },
-                      { outputGain, -1.0f },
+                      { outputGain, 4.0f },
                   }),
 
             make ("Bright Pop Vocal", "Clean",
@@ -196,6 +199,7 @@ namespace velvox
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 15 }, { reverbDecay, 1.6f }, { reverbPreDelay, 30 },
                       { reverbSize, 55 }, { reverbDamping, 8000 }, { reverbLowCut, 300 }, { reverbDuckAmount, 4 },
                       { stereoWidth, 105 },
+                      { outputGain, 4.5f },
                   }),
 
             make ("Telephone Vocal", "Creative",
@@ -210,7 +214,7 @@ namespace velvox
                       { satOn, 1 }, { satCharacter, hard }, { satDrive, 10 }, { satMix, 60 },
                       { reverbOn, 1 }, { reverbType, room }, { reverbMix, 8 }, { reverbDecay, 0.6f }, { reverbSize, 25 },
                       { reverbLowCut, 500 }, { reverbWidth, 0 },
-                      { stereoWidth, 0 }, { outputGain, 2.0f },
+                      { stereoWidth, 0 }, { outputGain, 5.0f },
                   }),
 
             make ("Vocal Chop", "Creative",
@@ -226,6 +230,7 @@ namespace velvox
                       { delayPingPong, 1 }, { delayLowCut, 500 }, { delayHighCut, 7000 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 18 }, { reverbDecay, 1.8f }, { reverbSize, 60 },
                       { reverbLowCut, 400 }, { reverbDuckAmount, 6 },
+                      { outputGain, 7.5f },
                   }),
 
             make ("Octave Down Layer", "Creative",
@@ -238,6 +243,7 @@ namespace velvox
                       { pitchOn, 1 }, { pitchSemitones, -12 }, { pitchPreserveFormants, 1 }, { pitchMix, 35 },
                       { satOn, 1 }, { satCharacter, tube }, { satDrive, 8 }, { satMix, 45 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 16 }, { reverbDecay, 2.0f }, { reverbDuckAmount, 5 },
+                      { outputGain, 6.0f },
                   }),
 
             make ("Chipmunk Hook", "Creative",
@@ -250,6 +256,7 @@ namespace velvox
                       { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 30 }, { delayMix, 16 },
                       { delayPingPong, 1 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 20 }, { reverbDecay, 1.8f }, { reverbDuckAmount, 6 },
+                      { outputGain, 4.0f },
                   }),
 
             make ("Wide Adlibs", "Wide",
@@ -267,7 +274,7 @@ namespace velvox
                       { delayPingPong, 1 }, { delayDuckAmount, 6 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 30 }, { reverbDecay, 2.4f }, { reverbSize, 75 },
                       { reverbWidth, 100 }, { reverbDuckAmount, 6 },
-                      { stereoWidth, 150 }, { monoBelow, 200 }, { outputGain, -3.0f },
+                      { stereoWidth, 150 }, { monoBelow, 200 }, { outputGain, 4.0f },
                   }),
 
             make ("Heavy Parallel Compression", "Punchy",
@@ -279,6 +286,7 @@ namespace velvox
                       { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 6 },
                       { satOn, 1 }, { satCharacter, warm }, { satDrive, 6 }, { satMix, 30 },
                       { reverbOn, 1 }, { reverbType, room }, { reverbMix, 8 }, { reverbDecay, 1.0f },
+                      { outputGain, 3.0f },
                   }),
 
             // =================== v0.1 presets (kept unchanged) ===================
@@ -296,6 +304,7 @@ namespace velvox
                       { delayOn, 0 },
                       { reverbOn, 1 }, { reverbType, room }, { reverbMix, 10 }, { reverbDecay, 1.0f }, { reverbPreDelay, 15 },
                       { reverbSize, 40 }, { reverbDamping, 6500 }, { reverbLowCut, 250 }, { reverbWidth, 80 },
+                      { outputGain, 3.0f },
                   }),
 
             make ("Modern Pop", "Classic (v0.1)",
@@ -313,6 +322,7 @@ namespace velvox
                       { delayMix, 12 }, { delayLowCut, 400 }, { delayHighCut, 5000 }, { delayPingPong, 0 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 15 }, { reverbDecay, 1.6f }, { reverbPreDelay, 30 },
                       { reverbSize, 55 }, { reverbDamping, 8000 }, { reverbLowCut, 300 }, { reverbWidth, 100 },
+                      { outputGain, 4.0f },
                   }),
 
             make ("Hypertechno Lead v0.1", "Classic (v0.1)",
@@ -330,7 +340,7 @@ namespace velvox
                       { delayMix, 18 }, { delayLowCut, 500 }, { delayHighCut, 7000 }, { delayPingPong, 1 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 22 }, { reverbDecay, 2.4f }, { reverbPreDelay, 40 },
                       { reverbSize, 70 }, { reverbDamping, 9000 }, { reverbLowCut, 400 }, { reverbWidth, 100 },
-                      { outputGain, -1.0f },
+                      { outputGain, 6.5f },
                   }),
 
             make ("Aggressive Vocal", "Classic (v0.1)",
@@ -347,7 +357,7 @@ namespace velvox
                       { delayOn, 0 },
                       { reverbOn, 1 }, { reverbType, room }, { reverbMix, 8 }, { reverbDecay, 0.8f }, { reverbPreDelay, 10 },
                       { reverbSize, 35 }, { reverbDamping, 7000 }, { reverbLowCut, 300 }, { reverbWidth, 70 },
-                      { outputGain, -2.0f },
+                      { outputGain, 5.0f },
                   }),
 
             make ("Wide Vocal", "Classic (v0.1)",
@@ -365,6 +375,7 @@ namespace velvox
                       { delayMix, 20 }, { delayLowCut, 400 }, { delayHighCut, 6000 }, { delayPingPong, 1 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 25 }, { reverbDecay, 2.2f }, { reverbPreDelay, 25 },
                       { reverbSize, 80 }, { reverbDamping, 8000 }, { reverbLowCut, 300 }, { reverbWidth, 100 },
+                      { outputGain, 2.5f },
                   }),
         };
 

@@ -91,6 +91,11 @@ public:
             expect (! parse (pid::outputGain, "abc").has_value(), "garbage is refused");
             expect (! parse (pid::outputGain, "   ").has_value(), "empty is refused");
             expect (! parse (pid::delayDivision, "1/7").has_value(), "unknown choice is refused");
+
+            // Display: a ratio of 10:1 and more shows whole numbers (String (x, 0) would print every digit)
+            auto& ratio = param (h, pid::compRatio);
+            expectEquals (ratio.getText (ratio.convertTo0to1 (12.37f), 32), juce::String ("12:1"));
+            expectEquals (ratio.getText (ratio.convertTo0to1 (4.0f), 32), juce::String ("4.0:1"));
         }
 
         beginTest ("Knob: the value text accepts units; garbage keeps the value");

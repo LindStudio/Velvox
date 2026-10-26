@@ -37,6 +37,9 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
   High Shelf/High Cut: alles darüber), ohne seine Verstärkung, lautheitsangeglichen (Spitzen höchstens −1 dBFS).
   Klick = an bis zum nächsten Klick, gedrückt halten = nur solange gehalten. Wechsel zwischen Bändern blendet Bereich in
   Bereich über (15 ms), ohne Knackser.
+- **Sweepen während des Solos (wie Pro-Q):** den Kopfhörer am Punkt gedrückt halten und ziehen – links/rechts verschiebt
+  die Frequenz, hoch/runter ändert die Güte (Q), das Mausrad ebenso Q; Shift/Strg fein. Ein Sweep ist ein Undo-Schritt.
+  Aus einem frischen Druck endet das Solo beim Loslassen, ein eingerastetes Solo bleibt an.
 - **Sättigung: einzelne Bänder hören** (Multiband): Kopfhörer oben rechts in jedem Band, man hört nur dieses Band so,
   wie es das Modul verlässt (die drei Solos ergeben zusammen genau den normalen Klang).
 - Beide sind Abhör-Zustände: kein Parameter, nicht gespeichert, nicht automatisierbar, kein Undo-Schritt; sie enden mit
@@ -63,7 +66,18 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
   Band-Rolle hat vier neue Werte (am Ende angehängt, alte Werte unverändert). Ein neuer Auto-Mix-Lauf ersetzt die
   Auto-Mix-Bänder eines früheren Laufs.
 
+### Geändert – Werks-Presets
+- **Alle Werks-Presets (außer Init) halten die Lautheit** eines normal ausgesteuerten Vocals (−18 LUFS): bisher wurden sie
+  dort 3–8 LU leiser, sodass beim Durchschalten Lautstärke statt Klang verglichen wurde. Kalibriert über Output Gain auf
+  echten Stimmen (VocalSet), jetzt innerhalb ±1 LU, Spitzen unter 0 dBFS. Gespeicherte Projekte bleiben unverändert;
+  eigene Presets auch.
+
+### Geändert – Oberfläche
+- Beschriftungen in Output- und Vocal-Check-Panel auf Deutsch (Stereobild, Lautheit, Eingang/Ausgang, Mittleres Spektrum
+  der Stimme, Spitze, Pegelumfang …); Level Match: Aus / Wie Bypass / Auto-Gain (vorher abgeschnitten „Bypass mat…“).
+
 ### Behoben
+- Ratio ab 10:1 und THD ab 10 % zeigten alle Nachkommastellen („12.3456:1“) statt einer ganzen Zahl.
 - **Host-Kompatibilität beim Laden:** Ein Schalter (z. B. Reverb On), dem der Host einen Zwischenwert geschickt hatte
   (0,37 = „aus“), meldete dem Host nach dem Laden eines Projekts weiter 0,37 statt des geladenen Werts, wenn der Schalter
   schon auf der geladenen Seite stand. pluginval (Strenge 10, „Plugin state restoration“) bemängelte das; Klang unverändert.

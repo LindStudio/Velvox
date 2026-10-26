@@ -829,8 +829,8 @@ namespace velvox::ui
 
         auto hb = harmonicsBox;
         auto head = hb.removeFromTop (14.0f);
-        drawCaption (g, "Harmonics", head, juce::Justification::centredLeft, colours::textFaint, 8.0f);
-        drawCaption (g, "THD " + juce::String (thdPercent, thdPercent < 10.0f ? 1 : 0) + " %", head, juce::Justification::centredRight, colours::textDim, 8.0f);
+        drawCaption (g, juce::String::fromUTF8 ("Obertöne"), head, juce::Justification::centredLeft, colours::textFaint, 8.0f);
+        drawCaption (g, "THD " + (thdPercent < 10.0f ? juce::String (thdPercent, 1) : juce::String (juce::roundToInt (thdPercent))) + " %", head, juce::Justification::centredRight, colours::textDim, 8.0f);
         hb.removeFromTop (4.0f);
         auto labels = hb.removeFromBottom (13.0f);
         const int nBars = 7;   // H2 .. H8

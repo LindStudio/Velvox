@@ -709,7 +709,7 @@ namespace velvox::ui
             explicit OutputPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Output", help::shortDescription (-1), nullptr)
             {
-                auto& mode = segments (pid::levelMatchMode);
+                auto& mode = segments (pid::levelMatchMode, { "Aus", "Wie Bypass", "Auto-Gain" });
                 setCaption (mode, "Level Match");
                 segments (pid::levelMatchWindow);
                 toggle (pid::safetyClip, "Clip Guard");

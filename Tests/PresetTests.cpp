@@ -2,6 +2,8 @@
 
 #include "TestHelpers.h"
 #include "StateKeys.h"
+#include "SyntheticVocal.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 
 using namespace velvox;
 using namespace velvox::test;
@@ -158,6 +160,81 @@ public:
             logMessage ("Switched through " + juce::String (preset) + " presets, output peak " + juce::String (peak, 3));
             expectEquals (preset, pm.getEntries().size());
             expectLessOrEqual (peak, 1.0f);
+        }
+
+        beginTest ("Factory presets keep the loudness of a vocal recorded at a usual level (-18 LUFS)");
+        {
+            // A preset is compared by its sound, not its level: switching presets on a well-recorded vocal
+            // (about -18 LUFS, peaks near -6 dBFS) keeps the loudness. Synthetic takes always; real takes from
+            // VELVOX_LOUDNESS_VOCALS (';'-separated wav files) when set - the presets were calibrated on VocalSet.
+            const auto lufs = [] (const juce::AudioBuffer<float>& b, int skip)
+            {
+                return dsp::LoudnessMeter::integratedLufs (b.getArrayOfReadPointers(), b.getNumChannels(), b.getNumSamples(), 48000.0, skip);
+            };
+            constexpr float inputLufs = -18.0f;
+            const int skip = 48000 / 2;
+            std::vector<std::pair<juce::String, juce::AudioBuffer<float>>> takes;
+            const auto add = [&] (const juce::String& name, juce::AudioBuffer<float> b)
+            {
+                b.applyGain (juce::Decibels::decibelsToGain (inputLufs - lufs (b, skip)));
+                takes.emplace_back (name, std::move (b));
+            };
+            for (float f0 : { 140.0f, 330.0f })
+            {
+                VocalSpec spec;
+                spec.f0 = f0;
+                spec.seconds = 10.0;
+                const auto v = makeVocal (spec);
+                juce::AudioBuffer<float> b (2, v.numSamples());
+                for (int ch = 0; ch < 2; ++ch)
+                    b.copyFrom (ch, 0, v.vocal[0].data(), v.numSamples());
+                add ("synthetic " + juce::String (f0, 0) + " Hz", std::move (b));
+            }
+            juce::AudioFormatManager formats;
+            formats.registerBasicFormats();
+            for (const auto& path : juce::StringArray::fromTokens (juce::SystemStats::getEnvironmentVariable ("VELVOX_LOUDNESS_VOCALS", {}), ";", {}))
+                if (std::unique_ptr<juce::AudioFormatReader> r (formats.createReaderFor (juce::File (path.trim()))); r != nullptr)
+                {
+                    const int n = (int) std::min<juce::int64> (r->lengthInSamples, (juce::int64) (r->sampleRate * 20.0));
+                    juce::AudioBuffer<float> b (2, n);
+                    r->read (&b, 0, n, 0, true, true);
+                    add (juce::File (path).getFileNameWithoutExtension(), std::move (b));
+                }
+
+            const auto& entries = getFactoryPresets();
+            juce::String table;
+            for (int i = 0; i < (int) entries.size(); ++i)
+            {
+                const auto& preset = entries[(size_t) i];
+                double realSum = 0.0, synthSum = 0.0;
+                int real = 0, synth = 0;
+                float peak = 0.0f;
+                juce::String row = preset.name + ":";
+                for (const auto& [name, in] : takes)
+                {
+                    Harness h;
+                    h.proc.getPresetManager().loadPreset (i);
+                    const auto out = h.run (in);
+                    const float d = lufs (out, skip) - inputLufs;
+                    const bool synthetic = name.startsWith ("synthetic");
+                    (synthetic ? synthSum : realSum) += d;
+                    ++(synthetic ? synth : real);
+                    peak = std::max (peak, out.getMagnitude (0, out.getNumSamples()));
+                    row << "  " << name << " " << juce::String (d, 1);
+                }
+                row << "  | real " << (real > 0 ? juce::String (realSum / real, 2) : juce::String ("-"))
+                    << ", synthetic " << juce::String (synthSum / synth, 2) << " LU, peak "
+                    << juce::String (juce::Decibels::gainToDecibels (peak), 1) << " dBFS";
+                table << row << juce::newLine;
+                if (preset.name == "Init")
+                    continue;   // the parameter defaults, a starting point (logged only)
+                // Calibrated on real voices; the synthetic take compresses about 3 LU harder (higher crest factor)
+                if (real > 0)
+                    expectWithinAbsoluteError ((float) (realSum / real), 0.0f, 1.0f, preset.name + ": real takes");
+                expectWithinAbsoluteError ((float) (synthSum / synth), -2.0f, 3.0f, preset.name + ": synthetic takes");
+                expectLessOrEqual (peak, 1.0f, preset.name + ": no overs");
+            }
+            logMessage (table);
         }
     }
 };

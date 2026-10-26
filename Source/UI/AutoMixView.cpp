@@ -215,9 +215,8 @@ namespace velvox::ui
         density = std::make_unique<Knob> (p.getState(), pid::macroDensity, "Density", colours::blue);
         density->setDialSize (dialsize::macro);
         addAndMakeVisible (*density);
-        juce::StringArray matchLabels { "Off", "Bypass match", "Auto gain" };
-        if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (p.getState().getParameter (pid::levelMatchMode)))
-            matchLabels = c->choices;
+        // Off / Bypass match / Auto gain (the host sees the English choice names)
+        const juce::StringArray matchLabels { "Aus", "Wie Bypass", "Auto-Gain" };
         levelMatch = std::make_unique<Segments> (p.getState(), pid::levelMatchMode, matchLabels, colours::blue);
         addAndMakeVisible (*levelMatch);
 

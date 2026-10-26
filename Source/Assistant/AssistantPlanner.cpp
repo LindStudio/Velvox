@@ -163,7 +163,7 @@ namespace velvox::assistant
                     float hpfExtra = 0.0f;
                     if (ctx.analysisValid)
                     {
-                        measuredText = de (" Gemessen (Vocal Check, ") + juce::String (ctx.voicedSeconds, 0) + de (" s Stimme): 40-100 Hz liegen bei ")
+                        measuredText = de (" Gemessen (Vocal Check, ") + juce::String (juce::roundToInt (ctx.voicedSeconds)) + de (" s Stimme): 40-100 Hz liegen bei ")
                                        + num (ctx.bandDb[0]) + de (" dB, 100-300 Hz bei ") + num (ctx.bandDb[1]) + de (" dB gegenüber dem Kern der Stimme.");
                         measured = true;
                         if (ctx.bandDb[0] > -10.0f)

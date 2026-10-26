@@ -569,7 +569,7 @@ namespace velvox
         if (unit == "x")
             return juce::String (value, 2) + "x";
         if (unit == ":1")
-            return juce::String (value, value < 10.0f ? 1 : 0) + ":1";
+            return (value < 10.0f ? juce::String (value, 1) : juce::String (juce::roundToInt (value))) + ":1";
 
         return juce::String (value, 2);
     }
