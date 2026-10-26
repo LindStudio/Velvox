@@ -16,7 +16,7 @@ Stand: **2026-10-26**, Branch `feature/automix`, Version **0.6.1** (Beta). Diese
 | Arbeitskopie Plugin | `%USERPROFILE%\dev\velvox` (Branch `feature/automix`) |
 | GitHub (Quelle der Wahrheit, privat) | https://github.com/LindStudio/Velvox – Push funktioniert auf diesem PC |
 | Drive-Sicherung | `scripts\backup-to-drive.ps1` → `G:\Meine Ablage\MUSIC\Plugin\_git-backup\velvox.bundle` (Remote `drive-backup`) |
-| Website (eigenes Git, **ohne Remote**) | `%USERPROFILE%\dev\lind-audio-web` |
+| Website (eigenes Git, Branch `master`) | `%USERPROFILE%\dev\lind-audio-web`; Drive: Bundle `_git-backup\lind-audio-web.bundle` (Remote `drive-backup`) + Kopie `G:\Meine Ablage\MUSIC\Plugin\Website\` (Anleitung `LIESMICH.md`). Sichern: `python backup_to_drive.py` |
 | Website-Vorschau (privat) | https://claude.ai/artifact/Ma28n9mFG74Zqd3nb2KKQr |
 | Website-Design des Nutzers (Canvas) | https://claude.ai/artifact/E4diYCZugWuH1BCQybhotF |
 | Testdaten | `%USERPROFILE%\dev\velvox-data` (VocalSet CC BY 4.0, Sonovox-Demo nur intern) |
@@ -92,7 +92,7 @@ Anderer PC („Shadow"): zuerst `git fetch origin` bzw. `git fetch drive-backup 
    (Default-Änderung betrifft Presets ohne `compMakeup` und Auto-Mix-Goldens).
 6. FL-Studio-Test (Pops, Latenz alter Projekte mit Pitch/Smooth/Ride, Undo im Host), Hörtest der 0.6-Module
    (`velvox-bench\2026-10-25\modules-after\<modul>\listen\`), zweiter Auto-Mix-Hörtest (`velvox-bench\2026-10-24\hoertest2_0.3_vs_neu`).
-7. Website-Repo hat keinen GitHub-Remote (kein `gh` CLI) – Jakob ein privates Repo anlegen lassen, dann pushen.
+7. Website-Repo hat keinen GitHub-Remote (nur Drive-Bundle) – wenn Jakob ein privates GitHub-Repo anlegt, dort pushen.
 8. Mac/AU-Version (auf der Website als „geplant" angekündigt).
 
 ## Weiterführende Doku im Repo
