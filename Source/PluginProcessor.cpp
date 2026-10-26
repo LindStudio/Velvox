@@ -610,6 +610,14 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
     // 0.1 - 0.3 routings list every module: keep only what can be heard (sound unchanged)
     apvts.state.setProperty (statekeys::routing, migrateRoutingString (savedRouting, apvts), nullptr);
 
+    // A host writes raw normalised values (a switch can hold 0.37) and JUCE's bool parameter keeps them;
+    // replaceState only writes a parameter whose snapped value changes. The host reads the normalised
+    // value back after a load (VST3 setComponentState): it must be the loaded one, not the raw leftover.
+    for (auto* p : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+            if (const float snapped = rp->convertTo0to1 (rp->convertFrom0to1 (rp->getValue())); snapped != rp->getValue())
+                rp->setValue (snapped);   // same plain value: nothing to notify
+
     syncRoutingFromState();
     syncMixLawFromState();
     macroMapper.syncPositions();   // the loaded positions are where the sliders stand; nothing to map
