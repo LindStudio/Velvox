@@ -622,11 +622,11 @@ public:
             const auto freqBefore = ui::eqedit::parameterBand (h.proc, 0, a).freq;
             press (*g, icon);
             expectEquals (eq.getAuditionBand(), a, "on at the press");
-            g->mouseDrag (mouseOn (*g, icon.translated (40.0f, -30.0f)));
+            g->mouseDrag (mouseOn (*g, icon.translated (1.0f, -1.0f)));
             now += ui::AuditionPress::holdMs + 50;
             release (*g, icon);
             expectEquals (eq.getAuditionBand(), -1, "held: ends at release");
-            expectEquals (ui::eqedit::parameterBand (h.proc, 0, a).freq, freqBefore, "pressing the hot spot never moves the band");
+            expectEquals (ui::eqedit::parameterBand (h.proc, 0, a).freq, freqBefore, "a jitter of the hand is no sweep");
             expectEquals (h.proc.getUndo().getNumSteps(), stepsBefore, "no undo step");
 
             clickAt (*g, icon);
@@ -636,6 +636,73 @@ public:
             g->performMenu (a, ui::EqGraph::menuDelete);
             g->update (*std::make_unique<ui::LiveData>());
             expectEquals (eq.getAuditionBand(), -1, "deleted band: solo ends");
+        }
+
+        beginTest ("EQ graph: sweep while soloed (Pro-Q) - drag the headphone: sideways = frequency, up / down = Q, wheel = Q");
+        {
+            Harness h;
+            auto panel = openEq (h, 0);
+            const int a = ui::eqedit::addBand (h.proc, 0, 800.0f, 4.0f);
+            panel->refresh();
+            auto* g = panel->getGraph();
+            expect (g != nullptr);
+            if (g == nullptr)
+                return;
+            g->update (*std::make_unique<ui::LiveData>());
+            auto& eq = h.proc.getChain().getEqualizer (0);
+            juce::uint32 now = 5000;
+            g->clock = [&] { return now; };
+            const auto bandNow = [&] { return ui::eqedit::parameterBand (h.proc, 0, a); };
+            const auto start = bandNow();
+
+            // Fresh solo, press - sweep right and up - release: the band moved, the solo was only held
+            g->mouseMove (mouseOn (*g, g->pointFor (a)));
+            auto icon = g->auditionIconArea (a).getCentre();
+            g->mouseMove (mouseOn (*g, icon));
+            const int stepsBefore = h.proc.getUndo().getNumSteps();
+            press (*g, icon);
+            expectEquals (eq.getAuditionBand(), a);
+            g->mouseDrag (mouseOn (*g, icon.translated (30.0f, -20.0f)));
+            g->mouseDrag (mouseOn (*g, icon.translated (60.0f, -40.0f)));
+            expectEquals (eq.getAuditionBand(), a, "still soloed while sweeping");
+            g->update (*std::make_unique<ui::LiveData>());
+            expect (g->isHoverCardShown(), "the values show while sweeping");
+            expect (bandNow().freq > start.freq * 1.2f, "sideways: higher frequency (" + juce::String (bandNow().freq) + " Hz)");
+            expect (bandNow().q > start.q * 1.2f, "up: narrower (Q " + juce::String (bandNow().q) + ")");
+            expectWithinAbsoluteError (bandNow().gain, start.gain, 1.0e-4f, "the gain stays");
+            now += 100;   // quicker than a hold: a sweep never latches
+            release (*g, icon.translated (60.0f, -40.0f));
+            expectEquals (eq.getAuditionBand(), -1, "a sweep from a fresh press ends with the release");
+            expectEquals (h.proc.getUndo().getNumSteps(), stepsBefore + 1, "one undo step for the sweep");
+            h.proc.getUndo().undo();
+            expectWithinAbsoluteError (bandNow().freq, start.freq, 0.01f, "undo: frequency back");
+            expectWithinAbsoluteError (bandNow().q, start.q, 1.0e-3f, "undo: Q back");
+
+            // Latched solo (click), then sweep: stays latched; down = wider
+            panel->refresh();
+            g->update (*std::make_unique<ui::LiveData>());
+            g->mouseMove (mouseOn (*g, g->pointFor (a)));
+            icon = g->auditionIconArea (a).getCentre();
+            g->mouseMove (mouseOn (*g, icon));
+            clickAt (*g, icon);
+            expectEquals (eq.getAuditionBand(), a, "click: latched");
+            press (*g, icon);
+            g->mouseDrag (mouseOn (*g, icon.translated (-40.0f, 30.0f)));
+            now += ui::AuditionPress::holdMs + 50;
+            release (*g, icon.translated (-40.0f, 30.0f));
+            expectEquals (eq.getAuditionBand(), a, "a latched solo stays after a sweep");
+            expect (bandNow().freq < start.freq * 0.85f, "left: lower frequency");
+            expect (bandNow().q < start.q * 0.85f, "down: wider");
+
+            // Wheel on the soloed band's headphone: Q
+            g->update (*std::make_unique<ui::LiveData>());
+            icon = g->auditionIconArea (a).getCentre();
+            const float qBefore = bandNow().q;
+            juce::MouseWheelDetails wheel {};
+            wheel.deltaY = 0.3f;
+            g->mouseWheelMove (mouseOn (*g, icon), wheel);
+            expect (bandNow().q > qBefore, "wheel on the headphone changes Q");
+            expectEquals (eq.getAuditionBand(), a);
         }
 
         beginTest ("EQ: closing the panel ends the solo");

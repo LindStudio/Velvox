@@ -104,8 +104,8 @@ namespace velvox::ui
         const eqedit::ShownBands& getShown() const noexcept { return shown; }
 
         // ---- Band solo (0.6.1): the headphone hot spot beside the hovered (or soloed) point. Click =
-        //      solo on / off, press longer than AuditionPress::holdMs = only while held. A monitoring
-        //      state in the DSP (EqualizerModule::setAuditionBand), ended when the graph goes away.
+        //      solo on / off, press longer than AuditionPress::holdMs = only while held; drag it = sweep
+        //      (sideways frequency, up / down Q, wheel Q). A monitoring state in the DSP (EqualizerModule::setAuditionBand), ended when the graph goes away.
         int getAuditionBand() const;            // -1: none
         void setAuditionBand (int band);        // -1: off
         juce::Rectangle<float> auditionIconArea (int band) const;
@@ -151,6 +151,13 @@ namespace velvox::ui
         // Band solo
         AuditionPress auditionPress;
         int auditionPressBand = -1;   // hot spot being pressed
+        // Sweep (Pro-Q): dragging the pressed hot spot moves the soloed band - sideways frequency,
+        // up / down Q - in one undo step; a sweep from a fresh press ends the solo at the release
+        juce::Point<float> sweepStart;
+        bool sweeping = false;
+        float sweepQ = 1.0f;
+        void beginSweep (int band);
+        void endSweep();
         int shownAudition = -1;       // last state read from the DSP (repaints when it changes)
     };
 

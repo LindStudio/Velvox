@@ -449,7 +449,7 @@ namespace velvox::ui
         }
 
         // Hover card: after 600 ms on a point, at once while dragging
-        int card = dragged >= 0 ? dragged : -1;
+        int card = dragged >= 0 ? dragged : (sweeping ? auditionPressBand : -1);
         if (card < 0 && hovered >= 0 && juce::Time::getMillisecondCounter() - hoverSince >= (juce::uint32) motion::hoverInfoDelayMs)
             card = hovered;
         if (card >= 0)
@@ -726,6 +726,7 @@ namespace velvox::ui
     {
         endWheelGesture();
         endDrag();
+        endSweep();
         if (isShowing())
             grabKeyboardFocus();
 
@@ -735,6 +736,7 @@ namespace velvox::ui
             const bool wasActive = getAuditionBand() == icon;
             auditionPress.press (wasActive, clock());
             auditionPressBand = icon;
+            sweepStart = dragLast = e.position;
             if (! wasActive)
                 setAuditionBand (icon);
             repaint();
@@ -800,9 +802,64 @@ namespace velvox::ui
             f->endChangeGesture();
     }
 
+    void EqGraph::beginSweep (int band)
+    {
+        sweeping = true;
+        const auto& s = shown[(size_t) band];
+        dragFreq = s.band.freq;
+        sweepQ = s.band.q;
+        // Frequency outermost (like a point drag): its end records the step
+        if (auto* f = paramFor (proc, instance, band, pid::eqband::freq))
+            f->beginChangeGesture();
+        if (auto* q = paramFor (proc, instance, band, pid::eqband::q))
+            q->beginChangeGesture();
+        if (s.macroOnly)
+            eqedit::materialise (proc, instance, band);   // inside the open gesture: same undo step
+    }
+
+    void EqGraph::endSweep()
+    {
+        if (! sweeping)
+            return;
+        sweeping = false;
+        if (auditionPressBand < 0)
+            return;
+        if (auto* q = paramFor (proc, instance, auditionPressBand, pid::eqband::q))
+            q->endChangeGesture();
+        if (auto* f = paramFor (proc, instance, auditionPressBand, pid::eqband::freq))
+            f->endChangeGesture();
+    }
+
     void EqGraph::mouseDrag (const juce::MouseEvent& e)
     {
-        if (dragged < 0 || auditionPressBand >= 0)
+        if (auditionPressBand >= 0)
+        {
+            // Sweep: beyond a hand's jitter the pressed headphone moves its band while it plays
+            if (! sweeping)
+            {
+                if (e.position.getDistanceFrom (sweepStart) < 4.0f)
+                    return;
+                beginSweep (auditionPressBand);
+            }
+            const auto delta = e.position - dragLast;
+            dragLast = e.position;
+            if (delta.isOrigin())
+                return;
+            const float scale = e.mods.isShiftDown() || e.mods.isCtrlDown() ? 0.1f : 1.0f;
+            const int band = auditionPressBand;
+            dragFreq = freqForX (xForFreq (dragFreq) + delta.x * scale);
+            setReal (paramFor (proc, instance, band, pid::eqband::freq), dragFreq);
+            if (auto* q = paramFor (proc, instance, band, pid::eqband::q); q != nullptr && eqedit::hasQ (shown[(size_t) band].band.type))
+            {
+                // Up = narrower: x 2 per 60 px (fine: per 600 px)
+                const auto range = q->getNormalisableRange();
+                sweepQ = juce::jlimit (range.start, range.end, sweepQ * std::pow (2.0f, -delta.y * scale / 60.0f));
+                setReal (q, sweepQ);
+            }
+            refreshCurves();
+            return;
+        }
+        if (dragged < 0)
             return;
         // Relative movement: Shift / Ctrl switch to fine (1/10) at any moment without a jump
         const auto delta = e.position - dragLast;
@@ -834,9 +891,14 @@ namespace velvox::ui
         if (auditionPressBand >= 0)
         {
             const int band = auditionPressBand;
+            const bool swept = sweeping;
+            endSweep();
             auditionPressBand = -1;
-            if (! auditionPress.release (clock()) && getAuditionBand() == band)
+            // A sweep never latches: from a fresh press it was a held solo, a latched one stays
+            const bool keep = swept ? ! auditionPress.turnedOn : auditionPress.release (clock());
+            if (! keep && getAuditionBand() == band)
                 setAuditionBand (-1);
+            refreshCurves();
             repaint();
             return;
         }
@@ -874,7 +936,10 @@ namespace velvox::ui
 
     void EqGraph::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel)
     {
-        const int b = bandAt (e.position);
+        // On a point, or on the headphone being pressed / hovered: that band (Q while it plays)
+        int b = bandAt (e.position);
+        if (b < 0)
+            b = auditionPressBand >= 0 ? auditionPressBand : auditionIconAt (e.position);
         const float dy = wheel.deltaY * (wheel.isReversed ? -1.0f : 1.0f);
         const int type = b >= 0 ? shown[(size_t) b].band.type : -1;
         const bool usable = b >= 0 && (eqedit::hasQ (type) || shown[(size_t) b].band.isCut());
@@ -1032,7 +1097,8 @@ namespace velvox::ui
         addChildComponent (noBand);
 
         // Band solo of the selected band (monitoring only: the DSP atomic, no parameter)
-        soloButton.setDescription (de ("Nur dieses Band hören. Klick: an / aus, gedrückt halten: solange gehalten."));
+        soloButton.setDescription (de ("Nur dieses Band hören. Klick: an / aus, gedrückt halten: solange gehalten. "
+                                        "Im Graphen den Kopfhörer am Punkt ziehen: links / rechts = Frequenz, hoch / runter = Q."));
         soloButton.onChange = [this] (bool on)
         {
             auto& eq = proc.getChain().getEqualizer (getInstance());
