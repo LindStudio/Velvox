@@ -48,12 +48,15 @@ namespace velvox::ui
         class SegmentButton;
         void showValue (float denormalisedValue);
         void showOverflowMenu();
+        juce::String choiceText (int choice) const;   // a choice's name in the interface language
+        juce::String shownValueText() const;           // the value for the info card
 
         juce::String paramId;
         juce::RangedAudioParameter* parameter = nullptr;
         juce::StringArray allChoices;
         juce::OwnedArray<juce::TextButton> buttons;
         juce::TextButton* overflow = nullptr;   // owned by buttons (last)
+        int overflowChoice = -1;                 // the choice the overflow segment shows (-1: none)
         std::vector<int> choiceIndex;
         std::unique_ptr<juce::ParameterAttachment> attachment;
         int selectedSegment = -1;

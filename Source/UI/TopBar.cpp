@@ -9,6 +9,7 @@ namespace velvox::ui
     DialogOverlay::DialogOverlay()
     {
         setWantsKeyboardFocus (true);
+        cancelButton.setButtonText (i18n::tr ("Abbrechen", "Cancel"));
         input.setFont (font (15.0f));
         input.setIndents (10, 7);
         input.onReturnKey = [this] { confirm(); };
@@ -217,17 +218,15 @@ namespace velvox::ui
                 g.fillPath (gear);
             }
         };
-
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
     }
 
     TopBar::TopBar (VelvoxAudioProcessor& p, DialogOverlay& d)
         : proc (p), dialog (d), bypass (p.getState(), pid::bypass, "Bypass")
     {
-        modeButtons.add (new ModeButton ("SIMPEL", true));
+        modeButtons.add (new ModeButton (i18n::tr ("SIMPEL", "SIMPLE"), true));
         modeButtons.add (new ModeButton ("ADVANCED", false));
-        modeButtons[0]->setTooltip (de ("Simpel: Spektrum, „Vocal analysieren“ und sechs Makros"));
-        modeButtons[1]->setTooltip (de ("Advanced: die Modul-Kette mit dem Panel des gewählten Moduls"));
+        modeButtons[0]->setTooltip (i18n::tr ("Simpel: Spektrum, „Vocal analysieren“ und sechs Makros", "Simple: spectrum, \"Analyze vocal\" and six macros"));
+        modeButtons[1]->setTooltip (i18n::tr ("Advanced: die Modul-Kette mit dem Panel des gewählten Moduls", "Advanced: the module chain with the panel of the selected module"));
         for (int i = 0; i < 2; ++i)
         {
             const auto m = i == 0 ? Mode::simple : Mode::advanced;
@@ -237,8 +236,8 @@ namespace velvox::ui
 
         tabs.add (new TabButton ("AUTO MIX", colours::blue));
         tabs.add (new TabButton ("VOCAL CHECK", colours::violet));
-        tabs[0]->setTooltip (de ("Der Mix: im Modus Simpel die Makros, in Advanced die Kette"));
-        tabs[1]->setTooltip (de ("Vocal Check: Diagnose der Aufnahme mit Vorschlägen"));
+        tabs[0]->setTooltip (i18n::tr ("Der Mix: im Modus Simpel die Makros, in Advanced die Kette", "The mix: the macros in Simple mode, the chain in Advanced"));
+        tabs[1]->setTooltip (i18n::tr ("Vocal Check: Diagnose der Aufnahme mit Vorschlägen", "Vocal Check: diagnosis of the recording with suggestions"));
         for (int i = 0; i < 2; ++i)
         {
             const auto t = i == 0 ? Tab::autoMix : Tab::vocalCheck;
@@ -258,15 +257,15 @@ namespace velvox::ui
 
         presetButton.setTooltip ("Presets");
         presetButton.onClick = [this] { if (onPresetList) onPresetList(); else showPresetMenu(); };
-        prev.setTooltip ("Vorheriges Preset");
-        next.setTooltip (de ("Nächstes Preset"));
+        prev.setTooltip (i18n::tr ("Vorheriges Preset", "Previous preset"));
+        next.setTooltip (i18n::tr ("Nächstes Preset", "Next preset"));
         prev.onClick = [this] { proc.getPresetManager().loadPrevious(); };
         next.onClick = [this] { proc.getPresetManager().loadNext(); };
 
-        bypass.setTooltip (de ("Unbearbeitete Vocal hören (latenzkompensiert)"));
+        bypass.setTooltip (i18n::tr ("Unbearbeitete Vocal hören (latenzkompensiert)", "Hear the unprocessed vocal (latency-compensated)"));
         bypass.getProperties().set ("danger", true);   // drawn in the bypass colour while on
 
-        help.setTooltip ("Hilfe");
+        help.setTooltip (i18n::tr ("Hilfe", "Help"));
         help.onClick = [this] { if (onHelp) onHelp(); };
 
         settingsButton = std::make_unique<GearButton>();
@@ -286,9 +285,11 @@ namespace velvox::ui
         modeButtons[0]->setToggleState (m == Mode::simple, juce::dontSendNotification);
         modeButtons[1]->setToggleState (m == Mode::advanced, juce::dontSendNotification);
         // The first tab names what it shows: the macros (AUTO MIX) in Simple, the module chain in Advanced
-        tabs[0]->setButtonText (m == Mode::simple ? "AUTO MIX" : "MODULE");
-        tabs[0]->setTooltip (m == Mode::simple ? de ("Auto Mix: Spektrum, „Vocal analysieren“ und die Makros")
-                                               : de ("Module: die Kette mit dem Panel des gewählten Moduls (Auto Mix: Modus Simpel)"));
+        tabs[0]->setButtonText (m == Mode::simple ? juce::String ("AUTO MIX") : i18n::tr ("MODULE", "MODULES"));
+        tabs[0]->setTooltip (m == Mode::simple ? i18n::tr ("Auto Mix: Spektrum, „Vocal analysieren“ und die Makros",
+                                                                 "Auto Mix: spectrum, \"Analyze vocal\" and the macros")
+                                               : i18n::tr ("Module: die Kette mit dem Panel des gewählten Moduls (Auto Mix: Modus Simpel)",
+                                                           "Modules: the chain with the panel of the selected module (Auto Mix: Simple mode)"));
     }
 
     void TopBar::selectMode (Mode m)
@@ -335,7 +336,7 @@ namespace velvox::ui
             shownPreset = name;
             shownModified = false;
             modifiedCheck = 6;   // re-check right away
-            presetButton.setButtonText (name.isEmpty() ? juce::String ("Kein Preset") : name);
+            presetButton.setButtonText (name.isEmpty() ? i18n::tr ("Kein Preset", "No preset") : name);
         }
 
         // "edited" marker: comparing every parameter is cheap, but 10 times a second is plenty
@@ -348,7 +349,7 @@ namespace velvox::ui
                 shownModified = modified;
                 if (shownPreset.isNotEmpty())
                     presetButton.setButtonText (modified ? shownPreset + " *" : shownPreset);
-                presetButton.setTooltip (modified ? de ("Presets - das aktuelle wurde verändert") : juce::String ("Presets"));
+                presetButton.setTooltip (modified ? i18n::tr ("Presets - das aktuelle wurde verändert", "Presets - the current one was changed") : juce::String ("Presets"));
             }
         }
     }
@@ -360,15 +361,17 @@ namespace velvox::ui
         const auto suggestion = idx >= 0 && ! pm.getEntries()[idx].isFactory ? pm.getCurrentPresetName() : juce::String();
 
         juce::Component::SafePointer<TopBar> safe (this);
-        dialog.show ("Preset speichern", de ("Gespeichert in ") + pm.getUserPresetDirectory().getFullPathName(),
-                     true, suggestion, "Speichern",
+        dialog.show (i18n::tr ("Preset speichern", "Save preset"),
+                     i18n::format (i18n::tr ("Gespeichert in {0}", "Saved in {0}"), { pm.getUserPresetDirectory().getFullPathName() }),
+                     true, suggestion, i18n::tr ("Speichern", "Save"),
                      [safe] (const juce::String& presetName)
                      {
                          if (safe == nullptr)
                              return;
                          if (! safe->proc.getPresetManager().saveUserPreset (presetName))
-                             safe->dialog.show ("Preset nicht gespeichert",
-                                                de ("Gib einen Namen ein und prüfe, ob der Preset-Ordner beschreibbar ist."),
+                             safe->dialog.show (i18n::tr ("Preset nicht gespeichert", "Preset not saved"),
+                                                i18n::tr ("Gib einen Namen ein und prüfe, ob der Preset-Ordner beschreibbar ist.",
+                                                          "Enter a name and check that the preset folder is writable."),
                                                 false, {}, "OK", nullptr);
                          safe->refresh();
                      });

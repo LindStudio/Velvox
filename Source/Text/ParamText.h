@@ -14,4 +14,7 @@ namespace velvox::i18n
     juce::String paramName (const juce::String& paramId, const juce::String& english);
     juce::String paramDescription (const juce::String& paramId, const juce::String& english);
     juce::String choiceName (const juce::String& paramId, int choiceIndex, const juce::String& english);
+
+    // The German choice name whatever the current language (typed values accept both languages)
+    juce::String germanChoiceName (const juce::String& paramId, int choiceIndex, const juce::String& english);
 }

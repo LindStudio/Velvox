@@ -2,6 +2,7 @@
 #include "../PluginProcessor.h"
 #include "HelpContent.h"
 #include "Icons.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
@@ -9,8 +10,6 @@ namespace velvox::ui
 
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-
         constexpr int cardW = 108, cardH = 76, cardGap = 8, groupGap = 22, captionH = 18, lineGap = 14;
 
         // Display order: by category (spec 2.7), the usual order of a vocal chain inside each
@@ -24,26 +23,26 @@ namespace velvox::ui
             ModuleId::check                                           // Analysis
         };
 
-        // A few extra words people search for
+        // A few extra words people search for, in English and German (the search finds both languages)
         const char* keywordsFor (ModuleId id)
         {
             switch (id)
             {
-                case ModuleId::eq:      return "equalizer filter low cut high cut tone presence air mud";
-                case ModuleId::comp:    return "compressor dynamics level punch";
-                case ModuleId::deess:   return "deesser sibilance s t harsh zischlaute";
-                case ModuleId::sat:     return "saturation drive distortion warmth tape tube harmonics";
-                case ModuleId::doubler: return "double width stereo thick";
-                case ModuleId::pitch:   return "pitch shift transpose formant";
-                case ModuleId::chop:    return "stutter chop gate rhythm trance";
-                case ModuleId::delay:   return "delay echo ping pong tempo space";
-                case ModuleId::reverb:  return "reverb hall room plate space depth atmosphere";
-                case ModuleId::pulse:   return "pulse pump volume shaper sidechain rhythm kickstart";
-                case ModuleId::smash:   return "smash parallel compression density loud";
-                case ModuleId::choir:   return "choir voices unison wide";
-                case ModuleId::smooth:  return "smooth resonance harsh soothe";
-                case ModuleId::check:   return "check analysis diagnose meter";
-                case ModuleId::ride:    return "ride level rider gain automation";
+                case ModuleId::eq:      return "equalizer filter low cut high cut tone presence air mud entzerrer klang höhen tiefen präsenz luft mulmig";
+                case ModuleId::comp:    return "compressor dynamics level punch kompressor dynamik pegel";
+                case ModuleId::deess:   return "deesser sibilance s t harsh zischlaute s-laute scharf";
+                case ModuleId::sat:     return "saturation drive distortion warmth tape tube harmonics sättigung verzerrung wärme band röhre obertöne";
+                case ModuleId::doubler: return "double width stereo thick dopplung breite dick";
+                case ModuleId::pitch:   return "pitch shift transpose formant tonhöhe transponieren formanten";
+                case ModuleId::chop:    return "stutter chop gate rhythm trance rhythmus";
+                case ModuleId::delay:   return "delay echo ping pong tempo space raum";
+                case ModuleId::reverb:  return "reverb hall room plate space depth atmosphere raum tiefe atmosphäre";
+                case ModuleId::pulse:   return "pulse pump volume shaper sidechain rhythm kickstart pumpen lautstärke rhythmus";
+                case ModuleId::smash:   return "smash parallel compression density loud kompression dichte laut";
+                case ModuleId::choir:   return "choir voices unison wide chor stimmen breit";
+                case ModuleId::smooth:  return "smooth resonance harsh soothe resonanz scharf glätten";
+                case ModuleId::check:   return "check analysis diagnose meter analyse messen";
+                case ModuleId::ride:    return "ride level rider gain automation pegel ausgleich";
             }
             return "";
         }
@@ -82,26 +81,34 @@ namespace velvox::ui
         return Category::cleanUp;
     }
 
-    juce::String ModuleBrowser::categoryName (Category c)
+    // German and English name of a category
+    static std::pair<const char*, const char*> categoryTexts (ModuleBrowser::Category c)
     {
+        using Category = ModuleBrowser::Category;
         switch (c)
         {
-            case Category::cleanUp:     return "Clean-up";
-            case Category::dynamics:    return "Dynamics";
-            case Category::colour:      return "Colour";
-            case Category::widthVoices: return "Width / Voices";
-            case Category::space:       return "Space";
-            case Category::rhythm:      return "Rhythm";
-            case Category::analysis:    return "Analysis";
+            case Category::cleanUp:     return { "Aufräumen", "Clean-up" };
+            case Category::dynamics:    return { "Dynamik", "Dynamics" };
+            case Category::colour:      return { "Farbe", "Color" };
+            case Category::widthVoices: return { "Breite / Stimmen", "Width / Voices" };
+            case Category::space:       return { "Raum", "Space" };
+            case Category::rhythm:      return { "Rhythmus", "Rhythm" };
+            case Category::analysis:    return { "Analyse", "Analysis" };
         }
-        return {};
+        return { "", "" };
+    }
+
+    juce::String ModuleBrowser::categoryName (Category c)
+    {
+        const auto [german, english] = categoryTexts (c);
+        return i18n::tr (german, english);
     }
 
     ModuleBrowser::ModuleBrowser (VelvoxAudioProcessor& p) : proc (p)
     {
         setWantsKeyboardFocus (true);
         search = std::make_unique<SearchField> (*this);
-        search->setTextToShowWhenEmpty (de ("Suchen - z. B. reverb, harsh, width"), colours::textFaint);
+        search->setTextToShowWhenEmpty (i18n::tr ("Suchen - z. B. Hall, scharf, Breite", "Search - e.g. reverb, harsh, width"), colours::textFaint);
         search->setFont (font (14.0f));
         search->setIndents (12, 0);
         search->setJustification (juce::Justification::centredLeft);
@@ -139,7 +146,8 @@ namespace velvox::ui
         if (freeInstances (id) > 0)
             return {};
         const int limit = dsp::maxInstances (id);
-        return limit == 1 ? de ("Schon in der Kette (nur einmal möglich)") : de ("Alle ") + juce::String (limit) + de (" sind in der Kette");
+        return limit == 1 ? i18n::tr ("Schon in der Kette (nur einmal möglich)", "Already in the chain (only once possible)")
+                          : i18n::format (i18n::tr ("Alle {0} sind in der Kette", "All {0} are in the chain"), { juce::String (limit) });
     }
 
     void ModuleBrowser::setSearchText (const juce::String& text)
@@ -154,8 +162,11 @@ namespace velvox::ui
         const auto words = juce::StringArray::fromTokens (search->getText().toLowerCase(), " ", "");
         for (auto id : browserOrder)
         {
+            // The category in both languages (the search finds German and English words)
+            const auto [categoryDe, categoryEn] = categoryTexts (categoryOf (id));
+            const auto category = juce::String::fromUTF8 (categoryDe) + " " + categoryEn;
             const auto haystack = (juce::String (dsp::moduleDisplayName (id)) + " " + help::shortDescription ((int) id) + " "
-                                   + keywordsFor (id) + " " + categoryName (categoryOf (id))).toLowerCase();
+                                   + juce::String::fromUTF8 (keywordsFor (id)) + " " + category).toLowerCase();
             bool match = true;
             for (const auto& w : words)
                 match = match && haystack.contains (w);
@@ -226,7 +237,7 @@ namespace velvox::ui
         const int shown = hoveredCard >= 0 ? hoveredCard : highlighted;
         if (! juce::isPositiveAndBelow (shown, (int) cards.size()))
         {
-            infoText = cards.empty() ? de ("Kein Modul passt zu „") + search->getText() + de ("“.") : juce::String();
+            infoText = cards.empty() ? i18n::format (i18n::tr ("Kein Modul passt zu „{0}“.", "No module matches \"{0}\"."), { search->getText() }) : juce::String();
             return;
         }
         const auto id = cards[(size_t) shown].id;
@@ -234,7 +245,7 @@ namespace velvox::ui
         if (const auto reason = reasonUnavailable (id); reason.isNotEmpty())
             infoText << "  (" << reason << ")";
         else if (categoryOf (id) == Category::analysis)
-            infoText << de (". Verändert den Klang nie.");
+            infoText << i18n::tr (". Verändert den Klang nie.", ". Never changes the sound.");
     }
 
     void ModuleBrowser::relayout()
@@ -303,8 +314,9 @@ namespace velvox::ui
         auto p = panelBounds().reduced (space::xl, 0);
         g.setColour (colours::text);
         g.setFont (font (18.0f, true));
-        const auto where = atEnd ? de ("am Ende der Kette") : de ("an Position ") + juce::String (insertIndex + 1);
-        g.drawText (de ("Modul hinzufügen"), p.withY (p.getY() + 14).withHeight (28), juce::Justification::centredLeft, false);
+        const auto where = atEnd ? i18n::tr ("am Ende der Kette", "at the end of the chain")
+                                 : i18n::format (i18n::tr ("an Position {0}", "at position {0}"), { juce::String (insertIndex + 1) });
+        g.drawText (i18n::tr ("Modul hinzufügen", "Add module"), p.withY (p.getY() + 14).withHeight (28), juce::Justification::centredLeft, false);
         drawCaption (g, where, p.withY (p.getY() + 14).withHeight (28).toFloat(), juce::Justification::centredRight, colours::textFaint, 9.5f);
 
         // Category captions
@@ -343,7 +355,7 @@ namespace velvox::ui
             {
                 g.setColour (full ? colours::textFaint : hue.withAlpha (0.8f));
                 g.setFont (font (9.5f));
-                g.drawText (full ? juce::String ("voll") : juce::String (used) + " / " + juce::String (dsp::maxInstances (c.id)),
+                g.drawText (full ? i18n::tr ("voll", "full") : juce::String (used) + " / " + juce::String (dsp::maxInstances (c.id)),
                             juce::Rectangle<float> (r.getX(), r.getBottom() - 15.0f, r.getWidth(), 12.0f), juce::Justification::centred, false);
             }
         }

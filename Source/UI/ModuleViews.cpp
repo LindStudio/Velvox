@@ -9,6 +9,7 @@
 #include "TimePanels.h"
 #include "VoicesPanels.h"
 #include "DynPanels.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
@@ -111,12 +112,15 @@ namespace velvox::ui
                 if (live == nullptr)
                     return;
                 auto r = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
-                auto scope = r.removeFromLeft (r.getHeight());
+                // The goniometer gives way so the loudness history keeps room for its title (Mehr open: narrow)
+                auto scope = r.removeFromLeft (std::max (80.0f, std::min (r.getHeight(), r.getWidth() - 24.0f - 120.0f)));
                 r.removeFromLeft (24.0f);
 
                 // Goniometer: mid up, side across
-                label (g, "Stereobild", scope.withHeight (12.0f));
-                const auto sq = scope.withTrimmedTop (16.0f).reduced (6.0f);
+                label (g, i18n::tr ("Stereobild", "Stereo image"), scope.withHeight (12.0f));
+                const auto box = scope.withTrimmedTop (16.0f).reduced (6.0f);
+                const float side = std::min (box.getWidth(), box.getHeight());
+                const auto sq = box.withSizeKeepingCentre (side, side);
                 const auto c = sq.getCentre();
                 const float half = sq.getWidth() * 0.5f;
                 juce::Path diamond;
@@ -152,9 +156,12 @@ namespace velvox::ui
                 }
 
                 // Loudness history
-                label (g, "Lautheit", r.withHeight (12.0f));
-                label (g, "Eingang", r.withHeight (12.0f).withTrimmedRight (90.0f), juce::Justification::topRight, colours::textFaint);
-                label (g, "Ausgang", r.withHeight (12.0f), juce::Justification::topRight, colours::teal);
+                label (g, i18n::tr ("Lautheit", "Loudness"), r.withHeight (12.0f));
+                if (r.getWidth() >= 260.0f)   // the legend only where it fits beside the title (Mehr open: narrow)
+                {
+                    label (g, i18n::tr ("Eingang", "Input"), r.withHeight (12.0f).withTrimmedRight (90.0f), juce::Justification::topRight, colours::textFaint);
+                    label (g, i18n::tr ("Ausgang", "Output"), r.withHeight (12.0f), juce::Justification::topRight, colours::teal);
+                }
                 auto plot = r.withTrimmedTop (18.0f);
                 hGrid (g, plot, { -12.0f, -18.0f, -24.0f, -30.0f, -36.0f }, -42.0f, -6.0f, " LUFS");
                 const auto in = historyPath (live->inputLufs, plot, -42.0f, -6.0f);
@@ -193,7 +200,7 @@ namespace velvox::ui
                 area.removeFromRight (18.0f);
 
                 // Long-term spectrum of the voice
-                label (g, "Mittleres Spektrum der Stimme", area.withHeight (12.0f));
+                label (g, i18n::tr ("Mittleres Spektrum der Stimme", "Average spectrum of the voice"), area.withHeight (12.0f));
                 auto plot = area.withTrimmedTop (18.0f).withTrimmedBottom (14.0f);
                 SpectrumView::drawFrequencyGrid (g, plot.withTrimmedBottom (-14.0f), true);
                 if (! r.spectrumDb.empty())
@@ -228,11 +235,11 @@ namespace velvox::ui
                 }
                 else
                 {
-                    label (g, on ? "Listening ..." : "Switch VOCAL CHECK on to analyse", plot, juce::Justification::centred, colours::textDim);
+                    label (g, on ? i18n::tr ("Hört zu …", "Listening …") : i18n::tr ("VOCAL CHECK einschalten, um zu analysieren", "Switch VOCAL CHECK on to analyze"), plot, juce::Justification::centred, colours::textDim);
                 }
 
                 // Balance bars (relative to the 300 Hz - 2 kHz core) and key numbers
-                label (g, "Balance zum Kern", stats.withHeight (12.0f));
+                label (g, i18n::tr ("Balance zum Kern", "Balance to the core"), stats.withHeight (12.0f));
                 auto bars = stats.withTrimmedTop (18.0f).removeFromTop (stats.getHeight() * 0.55f);
                 const char* names[] { "Low", "Body", "Core", "Pres", "S", "Air" };
                 const float bw = bars.getWidth() / 6.0f;
@@ -263,10 +270,10 @@ namespace velvox::ui
                     g.setFont (medium (11.0f));
                     g.drawText (v, row, juce::Justification::centredRight, false);
                 };
-                line ("Stimme analysiert", juce::String (r.voicedSeconds, 1) + " s");
-                line ("Spitze", r.peakDb <= -99.0f ? juce::String ("-") : juce::String (r.peakDb, 1) + " dBFS");
-                line ("Pegelumfang", r.loudnessRangeDb > 0.0f ? juce::String (r.loudnessRangeDb, 1) + " dB" : juce::String ("-"));
-                line ("S zu Vokalen", r.sibilanceVsVowelDb > -99.0f ? juce::String (r.sibilanceVsVowelDb, 1) + " dB" : juce::String ("-"));
+                line (i18n::tr ("Stimme analysiert", "Voice analyzed"), juce::String (r.voicedSeconds, 1) + " s");
+                line (i18n::tr ("Spitze", "Peak"), r.peakDb <= -99.0f ? juce::String ("-") : juce::String (r.peakDb, 1) + " dBFS");
+                line (i18n::tr ("Pegelumfang", "Loudness range"), r.loudnessRangeDb > 0.0f ? juce::String (r.loudnessRangeDb, 1) + " dB" : juce::String ("-"));
+                line (i18n::tr ("S zu Vokalen", "S to vowels"), r.sibilanceVsVowelDb > -99.0f ? juce::String (r.sibilanceVsVowelDb, 1) + " dB" : juce::String ("-"));
 
                 if (on)
                     drawGlow (g, { stats.getRight() - 4.0f, stats.getY() + 5.0f }, 8.0f, 0.3f + 0.4f * pulse, colours::teal);

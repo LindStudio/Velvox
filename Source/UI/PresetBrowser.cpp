@@ -1,12 +1,12 @@
 #include "PresetBrowser.h"
 #include "TopBar.h"
 #include "UserSettings.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
         constexpr int categoryW = 150, catRowH = 26;
 
         void drawStar (juce::Graphics& g, juce::Rectangle<float> r, bool filled, juce::Colour c)
@@ -40,20 +40,26 @@ namespace velvox::ui
     {
         setWantsKeyboardFocus (true);
         search = std::make_unique<SearchField> (*this);
-        search->setTextToShowWhenEmpty ("Presets suchen", colours::textFaint);
+        search->setTextToShowWhenEmpty (i18n::tr ("Presets suchen", "Search presets"), colours::textFaint);
         search->setFont (font (13.5f));
         search->setIndents (10, 0);
         search->setJustification (juce::Justification::centredLeft);
         search->addListener (this);
         addAndMakeVisible (*search);
 
-        saveButton.setTooltip (de ("Das geladene eigene Preset überschreiben (sonst: neuer Name)"));
+        saveButton.setButtonText (i18n::tr ("Speichern", "Save"));
+        saveAsButton.setButtonText (i18n::tr ("Speichern als …", "Save as …"));
+        renameButton.setButtonText (i18n::tr ("Umbenennen …", "Rename …"));
+        deleteButton.setButtonText (i18n::tr ("Löschen", "Delete"));
+        saveButton.setTooltip (i18n::tr ("Das geladene eigene Preset überschreiben (sonst: neuer Name)",
+                                         "Overwrite the loaded user preset (otherwise: a new name)"));
         saveButton.onClick = [this] { saveCurrent(); };
         saveAsButton.onClick = [this]
         {
             juce::Component::SafePointer<PresetBrowser> safe (this);
-            dialog.show ("Preset speichern", de ("Gespeichert in ") + pm.getUserPresetDirectory().getFullPathName(), true,
-                         pm.getCurrentPresetName(), "Speichern",
+            dialog.show (i18n::tr ("Preset speichern", "Save preset"),
+                         i18n::format (i18n::tr ("Gespeichert in {0}", "Saved in {0}"), { pm.getUserPresetDirectory().getFullPathName() }), true,
+                         pm.getCurrentPresetName(), i18n::tr ("Speichern", "Save"),
                          [safe] (const juce::String& name) { if (safe != nullptr) safe->saveAs (name); });
         };
         renameButton.onClick = [this]
@@ -61,7 +67,7 @@ namespace velvox::ui
             if (! juce::isPositiveAndBelow (selected, pm.getEntries().size()))
                 return;
             juce::Component::SafePointer<PresetBrowser> safe (this);
-            dialog.show ("Preset umbenennen", {}, true, pm.getEntries()[selected].name, "Umbenennen",
+            dialog.show (i18n::tr ("Preset umbenennen", "Rename preset"), {}, true, pm.getEntries()[selected].name, i18n::tr ("Umbenennen", "Rename"),
                          [safe] (const juce::String& name) { if (safe != nullptr) safe->renameSelected (name); });
         };
         deleteButton.onClick = [this]
@@ -69,8 +75,10 @@ namespace velvox::ui
             if (! juce::isPositiveAndBelow (selected, pm.getEntries().size()))
                 return;
             juce::Component::SafePointer<PresetBrowser> safe (this);
-            dialog.show (de ("Preset löschen"), de ("„") + pm.getEntries()[selected].name + de ("“ löschen? Die Datei wird entfernt."), false, {},
-                         de ("Löschen"), [safe] (const juce::String&) { if (safe != nullptr) safe->deleteSelected(); });
+            dialog.show (i18n::tr ("Preset löschen", "Delete preset"),
+                         i18n::format (i18n::tr ("„{0}“ löschen? Die Datei wird entfernt.", "Delete \"{0}\"? The file is removed."),
+                                       { pm.getEntries()[selected].name }), false, {},
+                         i18n::tr ("Löschen", "Delete"), [safe] (const juce::String&) { if (safe != nullptr) safe->deleteSelected(); });
         };
         for (auto* b : { &saveButton, &saveAsButton, &renameButton, &deleteButton })
             addAndMakeVisible (b);
@@ -78,6 +86,24 @@ namespace velvox::ui
     }
 
     PresetBrowser::~PresetBrowser() = default;
+
+    juce::String PresetBrowser::allCategory()        { return i18n::tr ("Alle", "All"); }
+    juce::String PresetBrowser::userCategory()       { return i18n::tr ("Eigene", "User"); }
+    juce::String PresetBrowser::favouritesCategory() { return i18n::tr ("Favoriten", "Favorites"); }
+
+    juce::String PresetBrowser::categoryLabel (const juce::String& c)
+    {
+        // Factory categories are English data (the preset files); shown in the interface language
+        static const std::pair<const char*, const char*> names[] {
+            { "Utility", "Basis" }, { "Clean", "Klar" }, { "Punchy", "Druckvoll" }, { "Aggressive", "Aggressiv" },
+            { "Wide", "Breit" }, { "Creative", "Kreativ" }, { "Classic (v0.1)", "Klassisch (v0.1)" }, { "Other", "Andere" },
+        };
+        if (i18n::isGerman())
+            for (const auto& [english, german] : names)
+                if (c == english)
+                    return juce::String::fromUTF8 (german);
+        return c;
+    }
 
     void PresetBrowser::open()
     {
@@ -162,7 +188,7 @@ namespace velvox::ui
             const auto cat = e.isFactory ? (e.category.isEmpty() ? juce::String ("Other") : e.category) : userCategory();
             bool show = category == allCategory() || category == cat
                         || (category == favouritesCategory() && favs.contains ((e.isFactory ? "f:" : "u:") + e.name));
-            const auto haystack = (e.name + " " + cat + " " + e.description).toLowerCase();
+            const auto haystack = (e.name + " " + cat + " " + categoryLabel (cat) + " " + e.description).toLowerCase();   // packed: both languages
             for (const auto& w : words)
                 show = show && haystack.contains (w);
             if (show)
@@ -255,11 +281,19 @@ namespace velvox::ui
         selectEntry (rows[(size_t) pos]);
     }
 
+    bool PresetBrowser::loadEntry (int i)
+    {
+        if (! juce::isPositiveAndBelow (i, pm.getEntries().size()))
+            return false;
+        // The loaded preset again: nothing to do (a click must not throw away the changes made to it)
+        if (i == pm.getCurrentIndex())
+            return true;
+        return pm.loadPreset (i);
+    }
+
     bool PresetBrowser::loadSelected()
     {
-        if (! juce::isPositiveAndBelow (selected, pm.getEntries().size()))
-            return false;
-        const bool ok = pm.loadPreset (selected);
+        const bool ok = loadEntry (selected);
         if (ok)
             close();
         return ok;
@@ -269,9 +303,9 @@ namespace velvox::ui
     {
         const int shown = hovered >= 0 ? hovered : selected;
         if (! juce::isPositiveAndBelow (shown, pm.getEntries().size()))
-            return rows.empty() ? de ("Kein Preset gefunden.") : juce::String();
+            return rows.empty() ? i18n::tr ("Kein Preset gefunden.", "No preset found.") : juce::String();
         const auto& e = pm.getEntries()[shown];
-        return e.description.isNotEmpty() ? e.description : (e.isFactory ? e.category : userCategory());
+        return e.description.isNotEmpty() ? i18n::show (e.description) : (e.isFactory ? categoryLabel (e.category) : userCategory());
     }
 
     bool PresetBrowser::saveAs (const juce::String& name)
@@ -354,7 +388,7 @@ namespace velvox::ui
             }
             g.setColour (active ? colours::textStrong : colours::textDim);
             g.setFont (medium (12.5f));
-            g.drawText (c, r.reduced (10.0f, 0.0f), juce::Justification::centredLeft, false);
+            g.drawText (categoryLabel (c), r.reduced (10.0f, 0.0f), juce::Justification::centredLeft, false);
         }
 
         // Rows
@@ -385,7 +419,7 @@ namespace velvox::ui
                 g.drawText (e.name, text, juce::Justification::centredLeft, true);
                 g.setColour (colours::textFaint);
                 g.setFont (font (11.0f));
-                g.drawText (e.isFactory ? e.category : userCategory(), text, juce::Justification::centredRight, false);
+                g.drawText (e.isFactory ? categoryLabel (e.category) : userCategory(), text, juce::Justification::centredRight, false);
             }
         }
 
@@ -448,17 +482,15 @@ namespace velvox::ui
             toggleFavourite (r);
             return;
         }
+        // One click loads the preset; the list stays open to try the next one (Esc, Enter or a click outside close it)
         selectEntry (r);
+        loadEntry (r);
+        repaint();
     }
 
-    void PresetBrowser::mouseDoubleClick (const juce::MouseEvent& e)
+    void PresetBrowser::mouseDoubleClick (const juce::MouseEvent&)
     {
-        const int r = rowAt (e.getPosition());
-        if (r >= 0 && ! starBounds (r).contains (e.getPosition()))
-        {
-            selectEntry (r);
-            loadSelected();
-        }
+        // The first click has loaded the preset already; the list stays open
     }
 
     void PresetBrowser::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)

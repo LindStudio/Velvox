@@ -12,7 +12,8 @@ namespace velvox::ui
     //   top     search field
     //   list    one row per preset: star (favourite, kept in the user settings), name, category;
     //           hover / selection shows the preset's description at the bottom
-    //   keys    Up / Down select, Enter or double-click loads (one undo step), Esc closes
+    //   click   loads the preset (one undo step), the list stays open
+    //   keys    Up / Down select, Enter loads the selection and closes, Esc or a click outside closes
     //   bottom  Speichern, Speichern als …, Umbenennen …, Löschen (user presets)
     class PresetBrowser final : public juce::Component, private juce::TextEditor::Listener
     {
@@ -24,9 +25,11 @@ namespace velvox::ui
         void close();
         bool isOpen() const noexcept { return isVisible(); }
 
-        static juce::String allCategory()        { return "Alle"; }
-        static juce::String userCategory()       { return "Eigene"; }
-        static juce::String favouritesCategory() { return "Favoriten"; }
+        // Category keys of the list (in the interface language); factory categories are their English names
+        static juce::String allCategory();
+        static juce::String userCategory();
+        static juce::String favouritesCategory();
+        static juce::String categoryLabel (const juce::String& category);   // a category as shown
         juce::StringArray getCategories() const;
         void setCategory (const juce::String& c);
         juce::String getCategory() const noexcept { return category; }
@@ -44,7 +47,8 @@ namespace velvox::ui
         void selectEntry (int entryIndex);
         int getSelectedEntry() const noexcept { return selected; }
         void moveSelection (int steps);
-        bool loadSelected();
+        bool loadEntry (int entryIndex);   // loads it (unless it is the loaded preset), the list stays open
+        bool loadSelected();               // loads the selection and closes the list
         juce::String getInfoText() const;
 
         // Saving (user presets only for rename / delete)
@@ -83,8 +87,7 @@ namespace velvox::ui
         PresetManager& pm;
         DialogOverlay& dialog;
         std::unique_ptr<SearchField> search;
-        juce::TextButton saveButton { "Speichern" }, saveAsButton { juce::String::fromUTF8 ("Speichern als …") },
-                         renameButton { juce::String::fromUTF8 ("Umbenennen …") }, deleteButton { juce::String::fromUTF8 ("Löschen") };
+        juce::TextButton saveButton, saveAsButton, renameButton, deleteButton;   // texts set in the constructor
         juce::String category = allCategory();
         std::vector<int> rows;
         int selected = -1, hovered = -1;

@@ -1,6 +1,7 @@
 #include "FactoryPresets.h"
 #include "../Parameters/ParameterIDs.h"
 #include "../Parameters/EqBands.h"
+#include "../Text/I18n.h"
 
 namespace velvox
 {
@@ -20,7 +21,8 @@ namespace velvox
             float value;
         };
 
-        ParameterSnapshot make (const char* name, const char* category, const char* description,
+        // Names and categories stay English (data, shown translated); the description holds both languages
+        ParameterSnapshot make (const char* name, const char* category, const juce::String& description,
                                 std::initializer_list<Value> values)
         {
             ParameterSnapshot s;
@@ -41,11 +43,11 @@ namespace velvox
 
         static const std::vector<ParameterSnapshot> presets
         {
-            make ("Init", "Utility", "Neutral default settings.", {}),
+            make ("Init", "Utility", i18n::both ("Neutrale Grundeinstellung.", "Neutral default settings."), {}),
 
             // =================== v0.2 presets ===================
             make ("Clean Lead", "Clean",
-                  "Natural, controlled lead: low cut, de-boxing, light compression, a short ducked plate.",
+                  i18n::both ("Natürlicher, kontrollierter Lead: Low Cut, weniger Pappigkeit, leichte Kompression, eine kurze, geduckte Plate.", "Natural, controlled lead: low cut, de-boxing, light compression, a short ducked plate."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
                       { lowFreq, 180 }, { lowGain, -1.0f },
@@ -61,7 +63,7 @@ namespace velvox
                   }),
 
             make ("Hypertechno Lead", "Punchy",
-                  "Bright, dense lead that cuts through hard kicks: tube drive, doubled edges, ping-pong eighths and a big ducked plate.",
+                  i18n::both ("Heller, dichter Lead, der sich gegen harte Kicks durchsetzt: Röhren-Drive, gedoppelte Kanten, Ping-Pong-Achtel und eine große, geduckte Plate.", "Bright, dense lead that cuts through hard kicks: tube drive, doubled edges, ping-pong eighths and a big ducked plate."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 160 }, { hpfSlope, slope24 },
                       { lowFreq, 300 }, { lowGain, -3.0f },
@@ -83,7 +85,7 @@ namespace velvox
                   }),
 
             make ("Aggressive Party Vocal", "Aggressive",
-                  "In-your-face hype vocal: upper-mid bite, fast heavy compression, hard drive, short slap and tight room.",
+                  i18n::both ("Vocal direkt ins Gesicht: Biss in den oberen Mitten, schnelle starke Kompression, harter Drive, kurzes Slap-Echo und ein enger Raum.", "In-your-face hype vocal: upper-mid bite, fast heavy compression, hard drive, short slap and tight room."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 130 }, { hpfSlope, slope24 },
                       { lowFreq, 250 }, { lowGain, -2.0f },
@@ -103,7 +105,7 @@ namespace velvox
                   }),
 
             make ("Wide Festival Vocal", "Wide",
-                  "Huge, open festival lead: doubled takes, dotted ping-pong, long plate fed by the delay, wide but mono-safe low end.",
+                  i18n::both ("Riesiger, offener Festival-Lead: gedoppelte Takes, punktiertes Ping-Pong, lange Plate aus dem Delay gespeist, breit, aber mono-sicher im Bass.", "Huge, open festival lead: doubled takes, dotted ping-pong, long plate fed by the delay, wide but mono-safe low end."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 100 }, { hpfSlope, slope24 },
                       { lowFreq, 200 }, { lowGain, -1.0f },
@@ -127,7 +129,7 @@ namespace velvox
 
             // =================== 0.3 presets (use the new modules) ===================
             make ("Hard Dance Lead", "Aggressive",
-                  "Level-ridden, resonance-free hard dance lead with parallel density and a quarter-note pump against the kick. VOCAL CHECK listens at the end.",
+                  i18n::both ("Im Pegel ausgeglichener Hard-Dance-Lead ohne Resonanzen, mit paralleler Dichte und Viertel-Pumpen gegen die Kick. VOCAL CHECK hört am Ende mit.", "Level-ridden, resonance-free hard dance lead with parallel density and a quarter-note pump against the kick. VOCAL CHECK listens at the end."),
                   {
                       { rideOn, 1 }, { rideAmount, 70 }, { rideResponse, 50 }, { ridePhrase, 40 },
                       { hpfOn, 1 }, { hpfFreq, 140 }, { hpfSlope, slope24 },
@@ -150,7 +152,7 @@ namespace velvox
                   }),
 
             make ("Festival Choir Hook", "Wide",
-                  "A single vocal turned into a wide, lush choir for drops and sing-along hooks.",
+                  i18n::both ("Eine einzelne Stimme wird zum breiten, satten Chor für Drops und Mitsing-Hooks.", "A single vocal turned into a wide, lush choir for drops and sing-along hooks."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 110 }, { hpfSlope, slope24 },
                       { highFreq, 11000 }, { highGain, 3.0f },
@@ -167,7 +169,7 @@ namespace velvox
                   }),
 
             make ("Pumping Party Vocal", "Creative",
-                  "Hard sidechain-style pumping and a smashed parallel layer - the vocal breathes with the kick.",
+                  i18n::both ("Hartes Pumpen wie mit Sidechain und eine zerquetschte Parallel-Ebene - die Vocal atmet mit der Kick.", "Hard sidechain-style pumping and a smashed parallel layer - the vocal breathes with the kick."),
                   {
                       { rideOn, 1 }, { rideAmount, 60 },
                       { hpfOn, 1 }, { hpfFreq, 150 },
@@ -184,7 +186,7 @@ namespace velvox
                   }),
 
             make ("Bright Pop Vocal", "Clean",
-                  "Polished radio-pop vocal: presence and air, firm smooth compression, tape colour, synced quarter delay, ducked plate.",
+                  i18n::both ("Polierte Radio-Pop-Vocal: Präsenz und Luft, feste, weiche Kompression, Tape-Färbung, synchrones Viertel-Delay, geduckte Plate.", "Polished radio-pop vocal: presence and air, firm smooth compression, tape colour, synced quarter delay, ducked plate."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 100 }, { hpfSlope, slope24 },
                       { lowFreq, 220 }, { lowGain, -2.0f },
@@ -203,7 +205,7 @@ namespace velvox
                   }),
 
             make ("Telephone Vocal", "Creative",
-                  "Lo-fi phone / radio effect: narrow band-pass, nasal mid push, hard clipping, small dry room, mono.",
+                  i18n::both ("Lo-Fi-Telefon- / Radio-Effekt: enger Band Pass, nasale Mitten, hartes Clipping, kleiner trockener Raum, mono.", "Lo-fi phone / radio effect: narrow band-pass, nasal mid push, hard clipping, small dry room, mono."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 400 }, { hpfSlope, slope24 },
                       { lpfOn, 1 }, { lpfFreq, 3400 }, { lpfSlope, slope24 },
@@ -218,7 +220,7 @@ namespace velvox
                   }),
 
             make ("Vocal Chop", "Creative",
-                  "Rhythmic hypertechno chop: 16th gate with stutters, ping-pong sixteenths and a ducked plate.",
+                  i18n::both ("Rhythmischer Hypertechno-Chop: Gate in Sechzehnteln mit Stutters, Ping-Pong-Sechzehntel und eine geduckte Plate.", "Rhythmic hypertechno chop: 16th gate with stutters, ping-pong sixteenths and a ducked plate."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 120 }, { hpfSlope, slope24 },
                       { highFreq, 10000 }, { highGain, 3.0f },
@@ -234,7 +236,7 @@ namespace velvox
                   }),
 
             make ("Octave Down Layer", "Creative",
-                  "Dark hypertechno layer: an octave-down copy blended under the lead (adds about 15 ms latency).",
+                  i18n::both ("Dunkle Hypertechno-Ebene: eine Kopie eine Oktave tiefer unter dem Lead (etwa 15 ms zusätzliche Latenz).", "Dark hypertechno layer: an octave-down copy blended under the lead (adds about 15 ms latency)."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
                       { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 5 }, { compRelease, 90 },
@@ -247,7 +249,7 @@ namespace velvox
                   }),
 
             make ("Chipmunk Hook", "Creative",
-                  "Pitched-up hook (+12, formants moving with the pitch) for drops and vocal chops (adds about 15 ms latency).",
+                  i18n::both ("Hochgepitchte Hook (+12, Formanten wandern mit) für Drops und Vocal Chops (etwa 15 ms zusätzliche Latenz).", "Pitched-up hook (+12, formants moving with the pitch) for drops and vocal chops (adds about 15 ms latency)."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 200 }, { hpfSlope, slope24 },
                       { compOn, 1 }, { compThreshold, -22 }, { compRatio, 4 }, { compMakeup, 3 },
@@ -260,7 +262,7 @@ namespace velvox
                   }),
 
             make ("Wide Adlibs", "Wide",
-                  "Adlibs and backings that frame the lead: thinner lows, strong doubles, very wide, set back in level.",
+                  i18n::both ("Adlibs und Backings, die den Lead einrahmen: schlankere Tiefen, kräftige Dopplungen, sehr breit, leiser im Hintergrund.", "Adlibs and backings that frame the lead: thinner lows, strong doubles, very wide, set back in level."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 200 }, { hpfSlope, slope24 },
                       { lowFreq, 300 }, { lowGain, -3.0f },
@@ -278,7 +280,7 @@ namespace velvox
                   }),
 
             make ("Heavy Parallel Compression", "Punchy",
-                  "Crushed compressor blended under the natural voice: thick and loud, transients stay alive.",
+                  i18n::both ("Stark gequetschter Compressor unter der natürlichen Stimme: dick und laut, die Transienten bleiben lebendig.", "Crushed compressor blended under the natural voice: thick and loud, transients stay alive."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
                       { compOn, 1 }, { compThreshold, -40 }, { compRatio, 12 }, { compAttack, 3 }, { compRelease, 80 },
@@ -291,7 +293,7 @@ namespace velvox
 
             // =================== v0.1 presets (kept unchanged) ===================
             make ("Clean Vocal", "Classic (v0.1)",
-                  "Natural, controlled vocal: gentle low cut, de-boxing, light compression, short room.",
+                  i18n::both ("Natürliche, kontrollierte Vocal: sanfter Low Cut, weniger Pappigkeit, leichte Kompression, kurzer Raum.", "Natural, controlled vocal: gentle low cut, de-boxing, light compression, short room."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
                       { lowFreq, 180 }, { lowGain, -1.0f },
@@ -308,7 +310,7 @@ namespace velvox
                   }),
 
             make ("Modern Pop", "Classic (v0.1)",
-                  "Polished, forward pop vocal: presence and air, firm compression, synced quarter delay, plate.",
+                  i18n::both ("Polierte, präsente Pop-Vocal: Präsenz und Luft, feste Kompression, synchrones Viertel-Delay, Plate.", "Polished, forward pop vocal: presence and air, firm compression, synced quarter delay, plate."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 100 }, { hpfSlope, slope24 },
                       { lowFreq, 220 }, { lowGain, -2.0f },
@@ -326,7 +328,7 @@ namespace velvox
                   }),
 
             make ("Hypertechno Lead v0.1", "Classic (v0.1)",
-                  "Bright, dense lead vocal that cuts through loud kicks: heavy low cut, hard compression, drive, ping-pong 1/8, big plate.",
+                  i18n::both ("Helle, dichte Lead-Vocal, die sich gegen laute Kicks durchsetzt: starker Low Cut, harte Kompression, Drive, Ping-Pong 1/8, große Plate.", "Bright, dense lead vocal that cuts through loud kicks: heavy low cut, hard compression, drive, ping-pong 1/8, big plate."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 150 }, { hpfSlope, slope24 },
                       { lowFreq, 300 }, { lowGain, -3.0f },
@@ -344,7 +346,7 @@ namespace velvox
                   }),
 
             make ("Aggressive Vocal", "Classic (v0.1)",
-                  "In-your-face vocal: upper-mid bite, fast heavy compression, strong saturation, tight room.",
+                  i18n::both ("Vocal direkt ins Gesicht: Biss in den oberen Mitten, schnelle starke Kompression, kräftige Sättigung, enger Raum.", "In-your-face vocal: upper-mid bite, fast heavy compression, strong saturation, tight room."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 120 }, { hpfSlope, slope24 },
                       { lowFreq, 250 }, { lowGain, -2.0f },
@@ -361,7 +363,7 @@ namespace velvox
                   }),
 
             make ("Wide Vocal", "Classic (v0.1)",
-                  "Open, wide vocal: airy top end, ping-pong dotted-eighth delay and a large, full-width plate.",
+                  i18n::both ("Offene, breite Vocal: luftige Höhen, punktiertes Achtel-Delay im Ping-Pong und eine große Plate in voller Breite.", "Open, wide vocal: airy top end, ping-pong dotted-eighth delay and a large, full-width plate."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
                       { lowFreq, 200 }, { lowGain, -1.0f },

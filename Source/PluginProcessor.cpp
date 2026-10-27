@@ -5,6 +5,7 @@
 #include "Parameters/RoutingMigration.h"
 #include "DSP/Solo.h"
 #include "Parameters/MacroBake.h"
+#include "Text/I18n.h"
 
 using namespace velvox;
 
@@ -54,7 +55,7 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
     {
         if (asStep)
         {
-            if (starting) undoHistory.beginTransaction (juce::String::fromUTF8 ("Auto-Mix"));
+            if (starting) undoHistory.beginTransaction (i18n::tr ("Auto-Mix", "Auto Mix"));
             else          undoHistory.endTransaction();
         }
         else
@@ -201,16 +202,20 @@ void VelvoxAudioProcessor::refreshAnalysis()
             if (after)
             {
                 f.handling = dsp::Finding::Handling::handledLater;
-                f.handlingText = name + " is on after VOCAL CHECK - it already works on this (not visible in this measurement).";
+                // Stored with the finding and shown later: both languages (i18n::show picks one)
+                f.handlingText = i18n::both (i18n::format (juce::String::fromUTF8 ("{0} liegt hinter VOCAL CHECK - es bearbeitet das schon (in dieser Messung nicht sichtbar)."), { name }),
+                                             i18n::format ("{0} is on after VOCAL CHECK - it already works on this (not visible in this measurement).", { name }));
                 break;
             }
             f.handling = dsp::Finding::Handling::appliedBefore;
-            f.handlingText = name + " is on before VOCAL CHECK - this is measured after it, so it may need more.";
+            f.handlingText = i18n::both (i18n::format (juce::String::fromUTF8 ("{0} liegt vor VOCAL CHECK - gemessen wird danach, es braucht also eventuell mehr."), { name }),
+                                         i18n::format ("{0} is on before VOCAL CHECK - this is measured after it, so it may need more.", { name }));
         }
         if (f.handling == dsp::Finding::Handling::notHandled && report.valid && report.changedModules.contains (dsp::moduleKey (m)))
         {
             f.handling = dsp::Finding::Handling::autoMix;
-            f.handlingText = "The automatic mix set up " + name + ".";
+            f.handlingText = i18n::both (i18n::format (juce::String::fromUTF8 ("Der Auto Mix hat {0} eingestellt."), { name }),
+                                         i18n::format ("The automatic mix set up {0}.", { name }));
         }
     }
 }
@@ -324,7 +329,7 @@ void VelvoxAudioProcessor::setLegacyMixLaw (dsp::ModuleId id, int instance, bool
 void VelvoxAudioProcessor::switchToTrueMixLaw (dsp::ModuleId id, int instance)
 {
     // A user command that changes the sound: one undo step (the law is part of every snapshot)
-    undoHistory.perform (juce::String::fromUTF8 ("Mix-Kurve umstellen"), [&] { setLegacyMixLaw (id, instance, false); });
+    undoHistory.perform (i18n::tr ("Mix-Kurve umstellen", "Switch mix curve"), [&] { setLegacyMixLaw (id, instance, false); });
 }
 
 void VelvoxAudioProcessor::markFreshInstances (const dsp::Routing& before, const dsp::Routing& after)

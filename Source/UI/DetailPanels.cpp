@@ -16,6 +16,8 @@
 #include "DynPanels.h"
 #include "SoloButton.h"
 #include "../DSP/Solo.h"
+#include "../Text/I18n.h"
+#include "../Text/ParamText.h"
 
 namespace velvox::ui
 {
@@ -23,8 +25,6 @@ namespace velvox::ui
 
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-
         // Frame of the module panel (design units)
         constexpr int headerHeight = 44;
         constexpr int padding = 14;
@@ -75,7 +75,7 @@ namespace velvox::ui
             g.drawRoundedRectangle (r.reduced (0.5f), 10.0f, 1.0f);
             g.setColour (colours::textFaint);
             g.setFont (semiBold (9.5f, 0.2f));
-            g.drawText ("MEHR", getLocalBounds().reduced (14, 0).removeFromTop (24), juce::Justification::centredLeft, false);
+            g.drawText (i18n::tr ("MEHR", "MORE"), getLocalBounds().reduced (14, 0).removeFromTop (24), juce::Justification::centredLeft, false);
             for (const auto& [c, text] : captionsToDraw)
                 if (c->isVisible())
                 {
@@ -150,23 +150,25 @@ namespace velvox::ui
         if (onParamId.isNotEmpty())
         {
             power = std::make_unique<PowerButton> (apvts, onParamId.toRawUTF8());
-            power->setTooltip ("Ein / Aus");
+            power->setTooltip (i18n::tr ("Ein / Aus", "On / Off"));
             addAndMakeVisible (*power);
         }
 
         drawer = std::make_unique<MoreDrawer>();
         addChildComponent (*drawer);
 
-        helpButton.setTooltip ("Hilfe zu diesem Modul");
+        helpButton.setTooltip (i18n::tr ("Hilfe zu diesem Modul", "Help for this module"));
         helpButton.onClick = [this] { if (onHelp) onHelp (moduleId == -2 ? -1 : moduleId); };
         addAndMakeVisible (helpButton);
 
+        moreButton.setButtonText (i18n::tr ("Mehr", "More"));
         moreButton.setClickingTogglesState (false);
-        moreButton.setTooltip (de ("Alle weiteren Regler dieses Moduls"));
+        moreButton.setTooltip (i18n::tr ("Alle weiteren Regler dieses Moduls", "All other controls of this module"));
         moreButton.onClick = [this] { setMoreOpen (! moreOpen); };
         addAndMakeVisible (moreButton);
 
-        presetsButton.setTooltip (de ("Startpunkte nur für dieses Modul, eigene Modul-Presets speichern"));
+        presetsButton.setTooltip (i18n::tr ("Startpunkte nur für dieses Modul, eigene Modul-Presets speichern",
+                                           "Starting points for this module only, save your own module presets"));
         presetsButton.onClick = [this] { showModulePresets(); };
     }
 
@@ -241,9 +243,11 @@ namespace velvox::ui
             // Old-law instances (0.5 projects): "Alte Mix-Kurve – umstellen" in Mehr
             if (dsp::Routing::canBeSend ((ModuleId) id) || id == (int) ModuleId::doubler || id == (int) ModuleId::smash)
             {
-                legacyButton = std::make_unique<juce::TextButton> (de ("Alte Mix-Kurve – umstellen"));
-                legacyButton->setTooltip (de ("Dieses Modul nutzt noch die Mix-Kurve von 0.5 (Mix legt den Effekt zum vollen Original). "
-                                              "Umstellen: echtes Dry/Wet - bis 50 % klingt es gleich, darüber wird das Original leiser."));
+                legacyButton = std::make_unique<juce::TextButton> (i18n::tr ("Alte Mix-Kurve – umstellen", "Old mix curve – switch"));
+                legacyButton->setTooltip (i18n::tr ("Dieses Modul nutzt noch die Mix-Kurve von 0.5 (Mix legt den Effekt zum vollen Original). "
+                                                    "Umstellen: echtes Dry/Wet - bis 50 % klingt es gleich, darüber wird das Original leiser.",
+                                                    "This module still uses the mix curve of 0.5 (Mix adds the effect to the full original). "
+                                                    "Switch: true dry/wet - up to 50 % it sounds the same, above that the original gets quieter."));
                 legacyButton->onClick = [this] { proc.switchToTrueMixLaw ((ModuleId) moduleId, instance); refresh(); };
                 drawer->addChildComponent (*legacyButton);
             }
@@ -291,13 +295,13 @@ namespace velvox::ui
             if (auto* c = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (id)))
                 labels = c->choices;
             else
-                labels = { "Off", "On" };
+                labels = { i18n::tr ("Aus", "Off"), i18n::tr ("An", "On") };
         }
         auto s = std::make_unique<Segments> (apvts, id.toRawUTF8(), labels, colours::teal, withOverflow);
         auto& ref = *s;
         segmentGroups.push_back (s.get());
         if (auto* p = apvts.getParameter (id))
-            captions[&ref] = p->getName (32);
+            captions[&ref] = i18n::paramName (id, p->getName (32));
         adopt (std::move (s));
         return ref;
     }
@@ -382,7 +386,7 @@ namespace velvox::ui
         const bool on = onParamId.isEmpty() || apvts.getRawParameterValue (onParamId)->load() > 0.5f;
         if (isSend())
             return "SEND";
-        return on ? juce::String() : juce::String ("AUS");
+        return on ? juce::String() : i18n::tr ("AUS", "OFF");
     }
 
     void DetailPanel::updateSendState()
@@ -395,9 +399,12 @@ namespace velvox::ui
             mixKnob->setLabel (send ? juce::String ("SEND") : mixLabel);
             // Tooltip text by routing and law (the parameter's own text describes the 0.5 send)
             const bool legacy = proc.usesLegacyMixLaw ((ModuleId) moduleId, instance);
-            mixKnob->setDescription (send ? de ("Send-Pegel: 100 % = voller Send. Das Original bleibt immer voll.")
-                                          : legacy ? de ("Alte Mix-Kurve: der Effekt wird zum vollen Original addiert.")
-                                                   : de ("Dry/Wet: 0 % nur Original, 100 % nur Effekt."));
+            mixKnob->setDescription (send ? i18n::tr ("Send-Pegel: 100 % = voller Send. Das Original bleibt immer voll.",
+                                                    "Send level: 100 % = full send. The original always stays at full level.")
+                                          : legacy ? i18n::tr ("Alte Mix-Kurve: der Effekt wird zum vollen Original addiert.",
+                                                               "Old mix curve: the effect is added to the full original.")
+                                                   : i18n::tr ("Dry/Wet: 0 % nur Original, 100 % nur Effekt.",
+                                                               "Dry/wet: 0 % original only, 100 % effect only."));
         }
         if (legacyButton != nullptr)
             legacyButton->setVisible (showsLegacyMixLawAction());
@@ -406,19 +413,20 @@ namespace velvox::ui
     void DetailPanel::addPanelItems (juce::PopupMenu& menu)
     {
         juce::Component::SafePointer<DetailPanel> safe (this);
-        menu.addItem (de ("Modul zurücksetzen"), moduleId >= 0, false, [safe] { if (safe != nullptr) safe->resetModule(); });
-        menu.addItem (de ("Modul-Preset speichern …"), moduleId >= 0, false, [safe]
+        menu.addItem (i18n::tr ("Modul zurücksetzen", "Reset module"), moduleId >= 0, false, [safe] { if (safe != nullptr) safe->resetModule(); });
+        menu.addItem (i18n::tr ("Modul-Preset speichern …", "Save module preset …"), moduleId >= 0, false, [safe]
         {
             if (safe == nullptr)
                 return;
-            const auto fallback = "Eigenes " + juce::String ((int) userModulePresets ((ModuleId) safe->moduleId).size() + 1);
+            const auto fallback = i18n::format (i18n::tr ("Eigenes {0}", "Custom {0}"),
+                                                { juce::String ((int) userModulePresets ((ModuleId) safe->moduleId).size() + 1) });
             if (safe->askForName)
-                safe->askForName (de ("Modul-Preset speichern"), [safe] (const juce::String& name) { if (safe != nullptr) safe->saveModulePreset (name); });
+                safe->askForName (i18n::tr ("Modul-Preset speichern", "Save module preset"), [safe] (const juce::String& name) { if (safe != nullptr) safe->saveModulePreset (name); });
             else
                 safe->saveModulePreset (fallback);
         });
         if (showsLegacyMixLawAction())
-            menu.addItem (de ("Alte Mix-Kurve – umstellen"), [safe] { if (safe != nullptr) { safe->proc.switchToTrueMixLaw ((ModuleId) safe->moduleId, safe->instance); safe->refresh(); } });
+            menu.addItem (i18n::tr ("Alte Mix-Kurve – umstellen", "Old mix curve – switch"), [safe] { if (safe != nullptr) { safe->proc.switchToTrueMixLaw ((ModuleId) safe->moduleId, safe->instance); safe->refresh(); } });
     }
 
     void DetailPanel::resetModule()
@@ -472,7 +480,7 @@ namespace velvox::ui
             {
                 if (safe == nullptr)
                     return;
-                safe->proc.getUndo().perform ("Modul-Preset: " + preset.name,
+                safe->proc.getUndo().perform (i18n::format (i18n::tr ("Modul-Preset: {0}", "Module preset: {0}"), { preset.name }),
                                               [&] { applyModulePreset (preset, safe->apvts, safe->instance); });
             };
         };
@@ -483,7 +491,7 @@ namespace velvox::ui
             menu.addItem (p.name, apply (p));
         if (! user.empty())
         {
-            menu.addSectionHeader ("Eigene");
+            menu.addSectionHeader (i18n::tr ("Eigene", "User"));
             for (const auto& p : user)
                 menu.addItem (p.name, apply (p));
         }
@@ -709,34 +717,41 @@ namespace velvox::ui
             explicit OutputPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Output", help::shortDescription (-1), nullptr)
             {
-                auto& mode = segments (pid::levelMatchMode, { "Aus", "Wie Bypass", "Auto-Gain" });
+                // Labels by position (Off, Bypass match, Auto gain)
+                auto& mode = segments (pid::levelMatchMode, { i18n::tr ("Aus", "Off"), i18n::tr ("Wie Bypass", "Like bypass"), "Auto-Gain" });
                 setCaption (mode, "Level Match");
                 segments (pid::levelMatchWindow);
                 toggle (pid::safetyClip, "Clip Guard");
                 auto& inGain = knob (pid::inputGain, "Input Gain");
                 auto& level = knob (pid::outputGain, "Vocal Level");
                 auto& width = knob (pid::stereoWidth, "Width");
-                knob (pid::monoBelow, "Mono Below");
-                knob (pid::levelMatchRange, "Max Correction");
+                knob (pid::monoBelow, i18n::tr ("Mono unter", "Mono Below"));
+                knob (pid::levelMatchRange, i18n::tr ("Max. Korrektur", "Max Correction"));
                 auto& mono = own (std::make_unique<juce::TextButton> ("Mono"));
                 mono.setClickingTogglesState (true);
-                mono.setTooltip (juce::String::fromUTF8 ("In Mono abhören (wird nicht mit dem Projekt gespeichert)"));
+                mono.setTooltip (i18n::tr ("In Mono abhören (wird nicht mit dem Projekt gespeichert)", "Listen in mono (not saved with the project)"));
                 mono.setToggleState (p.isMonoMonitor(), juce::dontSendNotification);
                 mono.onClick = [this, &mono] { proc.setMonoMonitor (mono.getToggleState()); };
                 monoButton = &mono;
                 setMainControls ({ &inGain, &level, &width, &mode });
 
-                correlation.setTooltip ("Phasenkorrelation: +1 = monokompatibel, unter 0 = Anteile löschen sich in Mono aus");
+                correlation.setTooltip (i18n::tr ("Phasenkorrelation: +1 = monokompatibel, unter 0 = Anteile löschen sich in Mono aus",
+                                                  "Phase correlation: +1 = mono-compatible, below 0 = parts cancel out in mono"));
+                correlationCaption.setText (i18n::tr ("KORRELATION", "CORRELATION"), juce::dontSendNotification);
+                correlationCaption.setFont (caps (8.5f));
+                correlationCaption.setColour (juce::Label::textColourId, colours::textFaint);
+                correlationCaption.setJustificationType (juce::Justification::centredLeft);
+                correlationCaption.setInterceptsMouseClicks (false, false);
                 for (auto* l : { &inValue, &procValue, &matchValue })
                 {
                     l->setFont (monoFont (13.0f));
                     l->setColour (juce::Label::textColourId, colours::text);
                     l->setJustificationType (juce::Justification::centredRight);
                 }
-                inValue.setTooltip ("Eingang (LUFS)");
-                procValue.setTooltip ("Bearbeitet (LUFS)");
-                matchValue.setTooltip ("Level Match (dB)");
-                placeInVisual ({ &correlation, &inValue, &procValue, &matchValue });
+                inValue.setTooltip (i18n::tr ("Eingang (LUFS)", "Input (LUFS)"));
+                procValue.setTooltip (i18n::tr ("Bearbeitet (LUFS)", "Processed (LUFS)"));
+                matchValue.setTooltip (i18n::tr ("Level Match (dB)", "Level match (dB)"));
+                placeInVisual ({ &correlation, &correlationCaption, &inValue, &procValue, &matchValue });
             }
 
             void refresh() override
@@ -744,12 +759,12 @@ namespace velvox::ui
                 DetailPanel::refresh();
                 const auto& m = proc.getChain().meters;
                 correlation.push (m.correlation.load());
-                const auto fmt = [] (float lufs) { return lufs <= -99.0f ? juce::String ("-") : juce::String (lufs, 1); };
+                const auto fmt = [] (float lufs) { return lufs <= -99.0f ? juce::String ("- LUFS") : juce::String (lufs, 1) + " LUFS"; };
                 const auto set = [] (juce::Label& l, const juce::String& t) { if (l.getText() != t) l.setText (t, juce::dontSendNotification); };
                 set (inValue, "IN " + fmt (m.inputLufs.load()));
                 set (procValue, "FX " + fmt (m.processedLufs.load()));
                 const float match = m.levelMatchDb.load();
-                set (matchValue, "MATCH " + juce::String (match > 0.05f ? "+" : "") + juce::String (match, 1));
+                set (matchValue, "MATCH " + juce::String (match > 0.05f ? "+" : "") + juce::String (match, 1) + " dB");
                 if (monoButton != nullptr && monoButton->getToggleState() != proc.isMonoMonitor())
                     monoButton->setToggleState (proc.isMonoMonitor(), juce::dontSendNotification);
             }
@@ -766,9 +781,11 @@ namespace velvox::ui
                 procValue.setBounds (r.removeFromTop (20));
                 matchValue.setBounds (r.removeFromTop (20));
                 correlation.setBounds (r.removeFromBottom (18));
+                correlationCaption.setBounds (r.removeFromBottom (16));
             }
 
             CorrelationView correlation;
+            juce::Label correlationCaption;
             juce::Label inValue, procValue, matchValue;
             juce::TextButton* monoButton = nullptr;
         };
@@ -783,8 +800,8 @@ namespace velvox::ui
                 : DetailPanel (p, "Vocal Check", help::shortDescription ((int) ModuleId::check), pid::checkOn),
                   findings (p)
             {
-                auto& mode = segments (pid::checkMode, { "Laufend", "Capture" });   // as on the VOCAL CHECK tab
-                setCaption (mode, "Analyse");
+                auto& mode = segments (pid::checkMode, { "Continuous", "Capture" });   // shown as on the VOCAL CHECK tab ("Laufend")
+                setCaption (mode, i18n::tr ("Analyse", "Analysis"));
                 auto& startStop = own (std::make_unique<juce::TextButton> ("Start"));
                 auto& resetButton = own (std::make_unique<juce::TextButton> ("Reset"));
                 start = &startStop;
@@ -795,14 +812,14 @@ namespace velvox::ui
                 statusLabel.setColour (juce::Label::textColourId, colours::textDim);
                 statusLabel.setJustificationType (juce::Justification::centredLeft);
 
-                startStop.setTooltip (juce::String::fromUTF8 ("Capture: analysiert alles zwischen Start und Stop"));
+                startStop.setTooltip (i18n::tr ("Capture: analysiert alles zwischen Start und Stop", "Capture: analyzes everything between Start and Stop"));
                 startStop.onClick = [this]
                 {
                     auto& a = proc.getAnalyzer();
                     if (a.isCapturing()) a.stopCapture(); else a.startCapture();
                     proc.refreshAnalysis();
                 };
-                resetButton.setTooltip (juce::String::fromUTF8 ("Alles bisher Analysierte vergessen (auch Spitzen und Clips)"));
+                resetButton.setTooltip (i18n::tr ("Alles bisher Analysierte vergessen (auch Spitzen und Clips)", "Forget everything analyzed so far (also peaks and clips)"));
                 resetButton.onClick = [this] { proc.getAnalyzer().clear(); proc.refreshAnalysis(); };
                 findings.onOpenTab = [this] { if (onShowVocalCheck) onShowVocalCheck(); };
             }
@@ -819,10 +836,12 @@ namespace velvox::ui
                 reset->setEnabled (on);
 
                 const auto& r = proc.getLatestAnalysis();
-                const juce::String text = ! on ? juce::String ("Aus")
-                                        : capture ? (a.isCapturing() ? "Capture " + juce::String (r.analysedSeconds, 1) + " s"
-                                                                     : "Gestoppt, " + juce::String (r.analysedSeconds, 1) + " s")
-                                                  : "Laufend, letzte " + juce::String (juce::roundToInt (std::min (30.0f, r.analysedSeconds))) + " s";
+                const auto seconds = i18n::number (r.analysedSeconds, 1);
+                const juce::String text = ! on ? i18n::tr ("Aus", "Off")
+                                        : capture ? (a.isCapturing() ? i18n::format ("Capture {0} s", { seconds })
+                                                                     : i18n::format (i18n::tr ("Gestoppt, {0} s", "Stopped, {0} s"), { seconds }))
+                                                  : i18n::format (i18n::tr ("Laufend, letzte {0} s", "Continuous, last {0} s"),
+                                                                  { juce::String (juce::roundToInt (std::min (30.0f, r.analysedSeconds))) });
                 if (statusLabel.getText() != text)
                     statusLabel.setText (text, juce::dontSendNotification);
                 if (++summaryTick % 6 == 0)

@@ -1,12 +1,12 @@
 #include "ValueText.h"
 #include "../Parameters/ParameterLayout.h"
+#include "../Text/I18n.h"
+#include "../Text/ParamText.h"
 
 namespace velvox::ui
 {
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-
         // Units a typed value may carry (after the number and an optional k)
         bool isKnownUnit (const juce::String& u)
         {
@@ -22,12 +22,13 @@ namespace velvox::ui
             return std::nullopt;
         const auto lower = t.toLowerCase();
 
-        // Choices by name ("1/8", "Plate"), case and spaces ignored
+        // Choices by name ("1/8", "Plate"), case and spaces ignored; the English and the German name
         if (auto* c = dynamic_cast<const juce::AudioParameterChoice*> (&p))
         {
             const auto squeezed = lower.removeCharacters (" ");
+            const auto matches = [&squeezed] (const juce::String& name) { return name.toLowerCase().removeCharacters (" ") == squeezed; };
             for (int i = 0; i < c->choices.size(); ++i)
-                if (c->choices[i].toLowerCase().removeCharacters (" ") == squeezed)
+                if (matches (c->choices[i]) || matches (i18n::germanChoiceName (p.getParameterID(), i, c->choices[i])))
                     return (float) i;
             return std::nullopt;
         }
@@ -160,12 +161,12 @@ namespace velvox::ui
         {
             auto* param = &p;
             juce::PopupMenu m;
-            m.addSectionHeader (p.getName (48));
-            m.addItem (de ("Standardwert"), [param] { resetToDefault (*param); });
-            m.addItem (de ("Wert eingeben …"), enterValue != nullptr, false, [enterValue] { if (enterValue) enterValue(); });
+            m.addSectionHeader (i18n::paramName (p.getParameterID(), p.getName (48)));
+            m.addItem (i18n::tr ("Standardwert", "Default value"), [param] { resetToDefault (*param); });
+            m.addItem (i18n::tr ("Wert eingeben …", "Enter value …"), enterValue != nullptr, false, [enterValue] { if (enterValue) enterValue(); });
             m.addSeparator();
-            m.addItem (de ("Wert kopieren"), [param] { copyValue (*param); });
-            m.addItem (de ("Wert einfügen") + (canPaste (p) ? "  (" + clipboard() + ")" : juce::String()), canPaste (p), false,
+            m.addItem (i18n::tr ("Wert kopieren", "Copy value"), [param] { copyValue (*param); });
+            m.addItem (i18n::tr ("Wert einfügen", "Paste value") + (canPaste (p) ? "  (" + clipboard() + ")" : juce::String()), canPaste (p), false,
                        [param] { pasteValue (*param); });
             if (panel != nullptr)
             {

@@ -1,6 +1,7 @@
 #include "Segments.h"
 #include "ValueText.h"
 #include "../Parameters/ParameterLayout.h"
+#include "../Text/ParamText.h"
 
 namespace velvox::ui
 {
@@ -83,10 +84,12 @@ namespace velvox::ui
 
         for (int i = 0; i < labels.size(); ++i)
         {
+            // Labels are matched as data (the English choice names); a matched label is shown in the
+            // interface language, any other label as given
             const int byName = allChoices.indexOf (labels[i]);
             choiceIndex.push_back (byName >= 0 ? byName : i);
 
-            auto* b = buttons.add (new SegmentButton (*this, labels[i]));
+            auto* b = buttons.add (new SegmentButton (*this, byName >= 0 ? i18n::choiceName (paramId, byName, labels[i]) : labels[i]));
             b->onClick = [this, i] { clickSegment (i); };
         }
         if (withOverflow && allChoices.size() > labels.size())
@@ -108,14 +111,28 @@ namespace velvox::ui
             attachment->sendInitialUpdate();
 
             const auto* spec = findParameterSpec (paramId);
-            const juce::String description = spec != nullptr ? juce::String (spec->description) : juce::String();
-            info = std::make_unique<HoverInfo> (*this, [this] { return parameter->getName (48); },
-                                                [this] { return parameter->getCurrentValueAsText(); },
+            const juce::String description = spec != nullptr ? i18n::paramDescription (paramId, spec->description) : juce::String();
+            info = std::make_unique<HoverInfo> (*this, [this] { return i18n::paramName (paramId, parameter->getName (48)); },
+                                                [this] { return shownValueText(); },
                                                 [description] { return description; });
         }
     }
 
     Segments::~Segments() = default;
+
+    juce::String Segments::choiceText (int choice) const
+    {
+        return juce::isPositiveAndBelow (choice, allChoices.size()) ? i18n::choiceName (paramId, choice, allChoices[choice]) : juce::String();
+    }
+
+    juce::String Segments::shownValueText() const
+    {
+        if (parameter == nullptr)
+            return {};
+        if (allChoices.isEmpty())
+            return parameter->getCurrentValueAsText();
+        return choiceText (juce::roundToInt (parameter->convertFrom0to1 (parameter->getValue())));
+    }
 
     int Segments::getChoiceForSegment (int segment) const
     {
@@ -171,9 +188,9 @@ namespace velvox::ui
     {
         juce::PopupMenu menu;
         const int current = selectedSegment >= 0 && selectedSegment < (int) choiceIndex.size() ? choiceIndex[(size_t) selectedSegment]
-                                                                                             : allChoices.indexOf (overflow->getButtonText());
+                                                                                             : overflowChoice;
         for (int i = 0; i < allChoices.size(); ++i)
-            menu.addItem (i + 1, allChoices[i], true, i == current);
+            menu.addItem (i + 1, choiceText (i), true, i == current);
         juce::Component::SafePointer<Segments> safe (this);
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (overflow),
                             [safe] (int result) { if (safe != nullptr && result > 0) safe->chooseFromOverflow (result - 1); });
@@ -205,7 +222,8 @@ namespace velvox::ui
         {
             // A value without its own segment: the overflow segment carries its name
             const bool inOverflow = selectedSegment < 0 && juce::isPositiveAndBelow (v, allChoices.size());
-            overflow->setButtonText (inOverflow ? allChoices[v] : overflowLabel);
+            overflowChoice = inOverflow ? v : -1;
+            overflow->setButtonText (inOverflow ? choiceText (v) : overflowLabel);
             if (inOverflow)
                 selectedSegment = getOverflowSegment();
         }
