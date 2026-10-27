@@ -38,6 +38,8 @@ def parse_args():
     p.add_argument("--tex-hue", type=float, default=0.008, help="hue shift on the colour texture (+ = towards orange)")
     p.add_argument("--tex-sat", type=float, default=1.35, help="saturation factor on the colour texture")
     p.add_argument("--gloss", type=float, default=0.7, help="roughness factor (<1 = shinier vinyl)")
+    p.add_argument("--coat", type=float, default=0.0, help="clear-coat weight (vinyl-toy shine)")
+    p.add_argument("--coat-rough", type=float, default=0.15)
     p.add_argument("--rate", type=int, default=60, help="output fps; above 30 renders in-between subframes")
     p.add_argument("--smooth", type=int, default=1, help="passes of [1 2 1] smoothing on the motion curves")
     return p.parse_args(argv)
@@ -134,7 +136,7 @@ def import_model(path):
     return arm, meshes
 
 
-def tweak_materials(meshes, value, sat, gloss, hue=0.0):
+def tweak_materials(meshes, value, sat, gloss, hue=0.0, coat=0.0, coat_rough=0.15):
     """Optional grading of the baked Meshy textures inside the shader (texture files stay untouched)."""
     for m in meshes:
         for slot in m.material_slots:
@@ -151,6 +153,9 @@ def tweak_materials(meshes, value, sat, gloss, hue=0.0):
                 hsv.inputs["Value"].default_value = value
                 nt.links.new(link.from_socket, hsv.inputs["Color"])
                 nt.links.new(hsv.outputs["Color"], bsdf.inputs["Base Color"])
+            if coat > 0.0:
+                bsdf.inputs["Coat Weight"].default_value = coat
+                bsdf.inputs["Coat Roughness"].default_value = coat_rough
             if gloss != 1.0:
                 rough = bsdf.inputs["Roughness"]
                 mul = nt.nodes.new("ShaderNodeMath")
@@ -273,7 +278,7 @@ def main():
     args = parse_args()
     scene = setup_scene(args.size, args.samples, args.light, args.view, args.exposure)
     arm, meshes = import_model(os.path.abspath(args.glb))
-    tweak_materials(meshes, args.tex_value, args.tex_sat, args.gloss, args.tex_hue)
+    tweak_materials(meshes, args.tex_value, args.tex_sat, args.gloss, args.tex_hue, args.coat, args.coat_rough)
 
     if args.mode == "list":
         for act in actions():
