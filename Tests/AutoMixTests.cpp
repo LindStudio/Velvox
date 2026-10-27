@@ -1018,6 +1018,20 @@ public:
             expect (h.proc.getAutoMix().getPhase() == AutoMixController::Phase::idle);
         }
 
+        beginTest ("0.7: the report never mentions the removed creative effects");
+        {
+            Harness h;
+            VocalSpec s; s.seconds = 14.0;
+            h.proc.getAutoMix().applyResult (h.proc.getAutoMix().runSynchronously (makeVocal (s)));
+            const auto& report = h.proc.getAutoMix().getReport();
+            juce::StringArray texts (report.notes);
+            for (auto& st : report.steps)
+                texts.add (st.title + " " + st.reason);
+            for (const auto& t : texts)
+                for (auto* word : { "Kreativ", "Creative", "Pitch", "Stutter", "Pulse", "Choir" })
+                    expect (! t.contains (word), "report mentions " + juce::String (word) + ": " + t);
+        }
+
         beginTest ("Editor: the overview lists exactly the applied steps; a step opens its module");
         {
             Harness h;

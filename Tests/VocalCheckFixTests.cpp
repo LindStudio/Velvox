@@ -274,6 +274,22 @@ public:
                 x = -x;
             const auto ri = analyseVocal (inverted, fs);
             expectGreaterThan (ri.monoLossDb, 20.0f, "anti-phase channels cancel in mono");
+            // 0.7: Choir is gone - the mono finding points at the Doubler and only writes existing parameters
+            auto rules = ri;
+            rules.enoughMaterial = true;   // the rule's mapping is tested here, not the material threshold
+            check::evaluate (rules, check::Genre::pop);
+            const dsp::Finding* mono = nullptr;
+            for (const auto& f : rules.findings)
+                if (f.id == "mono")
+                    mono = &f;
+            expect (mono != nullptr, "anti-phase vocal gets the mono finding");
+            if (mono != nullptr)
+            {
+                expect (mono->module == ModuleId::doubler, "mono points at the Doubler");
+                Harness ph;
+                for (const auto& p : mono->action.params)
+                    expect (ph.proc.getState().getParameter (p.paramId) != nullptr, "existing parameter " + p.paramId);
+            }
 
             CheckModule check;
             VocalAnalyzer analyzer (check);

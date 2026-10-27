@@ -17,6 +17,16 @@ namespace
                 return &p;
         return nullptr;
     }
+
+    // -1 when the preset or the value is missing (no exception in a red test)
+    float presetValue (const juce::String& name, const char* id)
+    {
+        const auto* p = findPreset (name);
+        if (p == nullptr)
+            return -1.0f;
+        const auto it = p->values.find (id);
+        return it != p->values.end() ? it->second : -1.0f;
+    }
 }
 
 class PresetTests final : public juce::UnitTest
@@ -70,21 +80,21 @@ public:
             expectLessThan (high - mid, -25.0f);
         }
 
-        beginTest ("Vocal Chop really chops");
+        beginTest ("0.7: presets rebuilt without Pitch, Stutter, Pulse and Choir");
         {
-            Harness h;
-            findPreset ("Vocal Chop")->applyTo (h.proc.getState());
-            const auto out = h.run (h.sine (300.0, 0.2f, 2.0));
-            float minWin = 0.0f, maxWin = -200.0f;
-            minWin = 200.0f;
-            for (int s = 24000; s + 1200 < out.getNumSamples(); s += 1200) // 25 ms windows
-            {
-                const float l = rmsDb (out, s, 1200);
-                minWin = std::min (minWin, l);
-                maxWin = std::max (maxWin, l);
-            }
-            logMessage ("Chop windows: loudest " + juce::String (maxWin, 1) + " dB, quietest " + juce::String (minWin, 1) + " dB");
-            expectGreaterThan (maxWin - minWin, 20.0f);
+            for (auto& p : getFactoryPresets())
+                for (auto& [id, v] : p.values)
+                    for (auto* prefix : { "pitch", "chop", "pulse", "choir" })
+                        expect (! id.startsWith (prefix), p.name + " sets " + id);
+            for (auto* gone : { "Vocal Chop", "Octave Down Layer", "Chipmunk Hook" })
+                expect (findPreset (gone) == nullptr, juce::String ("renamed: ") + gone);
+            expectEquals (presetValue ("Festival Choir Hook", pid::doublerOn), 1.0f, "the choir is a 4-voice double now");
+            expectEquals (presetValue ("Festival Choir Hook", pid::doublerVoices), 2.0f);
+            expectEquals (presetValue ("Deep Double", pid::doublerOn), 1.0f);
+            expectEquals (presetValue ("Bright Hook", pid::doublerOn), 1.0f);
+            expectEquals (presetValue ("Tight Rap Vocal", pid::smashOn), 1.0f);
+            expectEquals (presetValue ("Pumping Party Vocal", pid::delayDivision), 9.0f, "quarter delay, ducked");
+            expectGreaterThan (presetValue ("Pumping Party Vocal", pid::delayDuckAmount), 6.0f);
         }
 
         beginTest ("Presets never touch input gain or the level-match preference");

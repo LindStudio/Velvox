@@ -128,7 +128,7 @@ namespace velvox
 
             // =================== 0.3 presets (use the new modules) ===================
             make ("Hard Dance Lead", "Aggressive",
-                  i18n::both ("Im Pegel ausgeglichener Hard-Dance-Lead ohne Resonanzen, mit paralleler Dichte und Viertel-Pumpen gegen die Kick. VOCAL CHECK hört am Ende mit.", "Level-ridden, resonance-free hard dance lead with parallel density and a quarter-note pump against the kick. VOCAL CHECK listens at the end."),
+                  i18n::both ("Im Pegel ausgeglichener Hard-Dance-Lead ohne Resonanzen, mit paralleler Dichte und Ping-Pong-Achteln. VOCAL CHECK hört am Ende mit.", "Level-ridden, resonance-free hard dance lead with parallel density and ping-pong eighths. VOCAL CHECK listens at the end."),
                   {
                       { rideOn, 1 }, { rideAmount, 70 }, { rideResponse, 50 }, { ridePhrase, 40 },
                       { hpfOn, 1 }, { hpfFreq, 140 }, { hpfSlope, slope24 },
@@ -150,23 +150,23 @@ namespace velvox
                   }),
 
             make ("Festival Choir Hook", "Wide",
-                  i18n::both ("Eine einzelne Stimme wird zum breiten, satten Chor für Drops und Mitsing-Hooks.", "A single vocal turned into a wide, lush choir for drops and sing-along hooks."),
+                  i18n::both ("Eine einzelne Stimme wird mit vier Doppelungen breit und satt, für Drops und Mitsing-Hooks.", "A single vocal made wide and lush with four doubles, for drops and sing-along hooks."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 110 }, { hpfSlope, slope24 },
                       { highFreq, 11000 }, { highGain, 3.0f },
                       { compOn, 1 }, { compThreshold, -22 }, { compRatio, 3 }, { compAttack, 8 }, { compRelease, 120 }, { compMakeup, 3 },
                       { smashOn, 1 }, { smashAmount, 40 }, { smashBlend, 25 },
                       { deessOn, 1 }, { deessThreshold, -32 }, { deessRange, 6 },
-                      
+                      { doublerOn, 1 }, { doublerVoices, 2 }, { doublerMix, 45 }, { doublerWidth, 100 }, { doublerModDepth, 14 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 30 }, { reverbDecay, 3.2f }, { reverbPreDelay, 40 },
                       { reverbSize, 85 }, { reverbLowCut, 300 }, { reverbDuckAmount, 6 },
                       { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 30 }, { delayMix, 14 }, { delayPingPong, 1 },
-                      { stereoWidth, 120 }, { monoBelow, 180 },
+                      { stereoWidth, 130 }, { monoBelow, 180 },
                       { outputGain, 5.0f },
                   }),
 
             make ("Pumping Party Vocal", "Creative",
-                  i18n::both ("Hartes Pumpen wie mit Sidechain und eine zerquetschte Parallel-Ebene - die Vocal atmet mit der Kick.", "Hard sidechain-style pumping and a smashed parallel layer - the vocal breathes with the kick."),
+                  i18n::both ("Zerquetschte Parallel-Ebene, dazu Viertel-Delay und Raum, die geduckt unter der Stimme pumpen.", "A smashed parallel layer with a quarter delay and room that pump, ducked under the voice."),
                   {
                       { rideOn, 1 }, { rideAmount, 60 },
                       { hpfOn, 1 }, { hpfFreq, 150 },
@@ -174,9 +174,9 @@ namespace velvox
                       { compOn, 1 }, { compThreshold, -26 }, { compRatio, 5 }, { compAttack, 2 }, { compRelease, 60 }, { compMakeup, 5 },
                       { smashOn, 1 }, { smashAmount, 85 }, { smashBlend, 50 }, { smashAttack, 0.8f }, { smashRelease, 50 }, { smashTone, 40 },
                       { deessOn, 1 }, { deessThreshold, -34 }, { deessRange, 8 },
-                      
-                      
-                      { reverbOn, 1 }, { reverbType, room }, { reverbMix, 12 }, { reverbDecay, 1.0f },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_4 }, { delayFeedback, 25 }, { delayMix, 18 },
+                      { delayLowCut, 400 }, { delayHighCut, 6000 }, { delayDuckAmount, 10 },
+                      { reverbOn, 1 }, { reverbType, room }, { reverbMix, 20 }, { reverbDecay, 1.0f }, { reverbDuckAmount, 10 },
                       { outputGain, 4.0f },
                   }),
 
@@ -214,42 +214,48 @@ namespace velvox
                       { stereoWidth, 0 }, { outputGain, 5.0f },
                   }),
 
-            make ("Vocal Chop", "Creative",
-                  i18n::both ("Rhythmischer Hypertechno-Chop: Gate in Sechzehnteln mit Stutters, Ping-Pong-Sechzehntel und eine geduckte Plate.", "Rhythmic hypertechno chop: 16th gate with stutters, ping-pong sixteenths and a ducked plate."),
+            make ("Tight Rap Vocal", "Punchy",
+                  i18n::both ("Straffe, nahe Rap-Stimme: feste Kompression, etwas Parallel-Dichte, ein kurzes punktiertes Achtel-Echo.", "Tight, close rap vocal: firm compression, a little parallel density, a short dotted-eighth echo."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 120 }, { hpfSlope, slope24 },
                       { highFreq, 10000 }, { highGain, 3.0f },
                       { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 3 }, { compRelease, 70 },
                       { compMakeup, 4 },
+                      { smashOn, 1 }, { smashAmount, 50 }, { smashBlend, 25 }, { smashAttack, 2 }, { smashRelease, 80 },
                       { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 6 },
-                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_16 }, { delayFeedback, 30 }, { delayMix, 15 },
-                      { delayPingPong, 1 }, { delayLowCut, 500 }, { delayHighCut, 7000 },
-                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 18 }, { reverbDecay, 1.8f }, { reverbSize, 60 },
+                      { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 15 }, { delayMix, 8 },
+                      { delayLowCut, 500 }, { delayHighCut, 6000 }, { delayDuckAmount, 8 },
+                      { reverbOn, 1 }, { reverbType, room }, { reverbMix, 8 }, { reverbDecay, 0.8f }, { reverbSize, 35 },
                       { reverbLowCut, 400 }, { reverbDuckAmount, 6 },
-                      { outputGain, 7.5f },
+                      { outputGain, 6.0f },
                   }),
 
-            make ("Octave Down Layer", "Creative",
-                  i18n::both ("Dunkle Hypertechno-Ebene: eine Kopie eine Oktave tiefer unter dem Lead (etwa 15 ms zusätzliche Latenz).", "Dark hypertechno layer: an octave-down copy blended under the lead (adds about 15 ms latency)."),
+            make ("Deep Double", "Wide",
+                  i18n::both ("Dunkle, warme Doppelung für Hypertechno: zwei Stimmen hinter dem Lead, mehr Körper, Röhren-Wärme.", "Dark, warm double for hypertechno: two voices behind the lead, more body, tube warmth."),
                   {
                       { hpfOn, 1 }, { hpfFreq, 90 }, { hpfSlope, slope24 },
                       { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 5 }, { compRelease, 90 },
                       { compMakeup, 4 },
                       { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 6 },
-                      { satOn, 1 }, { satCharacter, tube }, { satDrive, 8 }, { satMix, 45 },
+                      { lowFreq, 220 }, { lowGain, 2.5f },
+                      { highFreq, 10000 }, { highGain, -1.5f },
+                      { satOn, 1 }, { satCharacter, tube }, { satDrive, 8 }, { satMix, 20 },
+                      { doublerOn, 1 }, { doublerVoices, 1 }, { doublerMix, 50 }, { doublerWidth, 80 }, { doublerTone, 5000 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 16 }, { reverbDecay, 2.0f }, { reverbDuckAmount, 5 },
                       { outputGain, 6.0f },
                   }),
 
-            make ("Chipmunk Hook", "Creative",
-                  i18n::both ("Hochgepitchte Hook (+12, Formanten wandern mit) für Drops und Vocal Chops (etwa 15 ms zusätzliche Latenz).", "Pitched-up hook (+12, formants moving with the pitch) for drops and vocal chops (adds about 15 ms latency)."),
+            make ("Bright Hook", "Clean",
+                  i18n::both ("Helle, offene Hook für Drops: viel Luft, eine leichte Doppelung, punktiertes Achtel-Echo und Plate.", "Bright, open hook for drops: lots of air, a light double, dotted-eighth echo and plate."),
                   {
-                      { hpfOn, 1 }, { hpfFreq, 200 }, { hpfSlope, slope24 },
+                      { hpfOn, 1 }, { hpfFreq, 150 }, { hpfSlope, slope24 },
+                      { midFreq, 3000 }, { midGain, 1.5f }, { highFreq, 11000 }, { highGain, 5.0f },
                       { compOn, 1 }, { compThreshold, -22 }, { compRatio, 4 }, { compMakeup, 3 },
                       { deessOn, 1 }, { deessFreq, 8000 }, { deessThreshold, -30 }, { deessRange, 8 },
+                      { doublerOn, 1 }, { doublerVoices, 1 }, { doublerMix, 30 },
                       { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 30 }, { delayMix, 16 },
                       { delayPingPong, 1 },
-                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 20 }, { reverbDecay, 1.8f }, { reverbDuckAmount, 6 },
+                      { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 18 }, { reverbDecay, 1.8f }, { reverbDuckAmount, 6 },
                       { outputGain, 4.0f },
                   }),
 
