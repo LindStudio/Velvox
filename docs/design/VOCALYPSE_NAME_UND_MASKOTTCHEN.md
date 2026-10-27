@@ -143,6 +143,17 @@ Bewegungen bleiben; (b) neues Bild ohne Hut → Meshy neu (Modell, Rig, alle 12 
 Empfehlung: zuerst (a) probieren. Falls Jakob schon ein neues Modell ohne Hut gemacht hat, das nehmen und die
 Bewegungsliste oben gleich halten. Auch die Canvas-Freisteller (Artboards 8–12) zeigen noch den Hut.
 
+## Stand 2026-10-27, später Abend (PC „jakob“)
+- **Neues Modell „Ember Imp“ ohne Hut** ersetzt Little Fire King (Jakob bestätigt): `art/mascot/devil-3d/Ember_Imp_All_Animations.glb`
+  (Modell + Rig + 11 Bewegungen in einer Datei; Drive `Character\3d\`). Gleiches Mixamo-Rig.
+  Bewegungen: All_Night_Dance, Arm_Circle_Shuffle, Call_Gesture, Cardio_Dance, Running, Short_Breathe_and_Look_Around,
+  **Stand_Talking_Angry (neu)**, Stand_and_Chat, Wake_Up_and_Look_Up, Walking, _360_Power_Spin_Jump.
+  **Fehlen gegenüber der Tabelle oben:** Joyful_Dance_with_Hand_Sway, Hip_Hop_Dance → Zuordnung „Okay“/„Gut“ mit Jakob neu klären.
+- Blender 5.2.3 LTS auf diesem PC installiert (`C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`), RTX 4060 Ti.
+- **Render-Skript fertig:** `tools/mascot/render_mascot.py` (Modi `list`, `sheet`, `loop`; EEVEE, Alpha, 30 fps, Bühnenlicht).
+  800 px, 64 Samples ≈ 0,2 s/Bild. Kontaktbogen + `All_Night_Dance` (246 Bilder) in `velvox-bench\2026-10-27\mascot\`.
+  Hände gehen in der Stichprobe nicht durch den Kopf. `_360_Power_Spin_Jump` verlässt das Bild → eigener Ausschnitt nötig.
+
 ## Nächste Schritte (am PC mit Blender)
 1. `git fetch origin` und Branch `feature/i18n` holen (enthält diese Datei und `art/mascot/`).
 2. ZIP `art/mascot/devil-3d/devil_rig_allmoves.zip` in einen eigenen leeren Ordner entpacken.
