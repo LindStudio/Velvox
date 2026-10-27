@@ -6,6 +6,7 @@ Run headless with Blender 5.x:
 Modes:
     sheet   one still per animation (middle frame) -> <out>/sheet/<anim>.png
     loop    PNG sequence with alpha for one animation -> <out>/<anim>/####.png
+    all     PNG sequences for every animation
     list    print the animations and their frame ranges
 """
 
@@ -19,14 +20,18 @@ from mathutils import Vector
 
 FPS = 30
 
+# Played once, not looped: keep the last frame, no wrap-around smoothing, and pin travel in place.
+ONE_SHOTS = {"Wake_Up_and_Look_Up", "_360_Power_Spin_Jump"}
 
-# Defaults = look "H" (closest to concepts/RedDevil.png), 60 fps, one smoothing pass; chosen 2026-10-27.
+
+# Defaults = look "H" (closest to concepts/RedDevil.png) + soft clear coat "M", 60 fps, one smoothing pass;
+# chosen by Jakob 2026-10-27.
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     p = argparse.ArgumentParser()
     p.add_argument("--glb", required=True)
     p.add_argument("--out", required=True)
-    p.add_argument("--mode", choices=["sheet", "loop", "list"], default="sheet")
+    p.add_argument("--mode", choices=["sheet", "loop", "all", "list"], default="sheet")
     p.add_argument("--anim", default="All_Night_Dance")
     p.add_argument("--size", type=int, default=800)
     p.add_argument("--step", type=int, default=1, help="render every n-th frame (loop mode)")
@@ -37,9 +42,9 @@ def parse_args():
     p.add_argument("--tex-value", type=float, default=0.75, help="brightness factor on the colour texture")
     p.add_argument("--tex-hue", type=float, default=0.008, help="hue shift on the colour texture (+ = towards orange)")
     p.add_argument("--tex-sat", type=float, default=1.35, help="saturation factor on the colour texture")
-    p.add_argument("--gloss", type=float, default=0.7, help="roughness factor (<1 = shinier vinyl)")
-    p.add_argument("--coat", type=float, default=0.0, help="clear-coat weight (vinyl-toy shine)")
-    p.add_argument("--coat-rough", type=float, default=0.15)
+    p.add_argument("--gloss", type=float, default=0.5, help="roughness factor (<1 = shinier vinyl)")
+    p.add_argument("--coat", type=float, default=0.7, help="clear-coat weight (vinyl-toy shine)")
+    p.add_argument("--coat-rough", type=float, default=0.25)
     p.add_argument("--rate", type=int, default=60, help="output fps; above 30 renders in-between subframes")
     p.add_argument("--smooth", type=int, default=1, help="passes of [1 2 1] smoothing on the motion curves")
     return p.parse_args(argv)
@@ -298,18 +303,34 @@ def main():
             scene.frame_set((start + end) // 2)
             render_to(os.path.join(out, "sheet", act.name + ".png"))
     else:
-        act = find_action(args.anim)
-        start, end = assign(arm, act)
-        if args.smooth:
-            smooth_action(act, args.smooth, wrap=True)
-        folder = os.path.join(out, args.anim)
-        # Meshy loops repeat the first pose on the last frame; drop it so playback has no hitch.
-        # Above 30 fps, in-between poses come from the linear key interpolation (subframes).
-        sub = max(1, args.rate // FPS)
-        steps = range(0, (end - start) * sub, args.step)
-        for i, k in enumerate(steps):
-            scene.frame_set(start + k // sub, subframe=(k % sub) / sub)
-            render_to(os.path.join(folder, f"{i:04d}.png"))
+        todo = actions() if args.mode == "all" else [find_action(args.anim)]
+        for act in todo:
+            render_sequence(scene, arm, act, out, args)
+
+
+def render_sequence(scene, arm, act, out, args):
+    start, end = assign(arm, act)
+    once = act.name in ONE_SHOTS
+    if args.smooth:
+        smooth_action(act, args.smooth, wrap=not once)
+    folder = os.path.join(out, act.name)
+    # Meshy loops repeat the first pose on the last frame; drop it so playback has no hitch.
+    # Above 30 fps, in-between poses come from the linear key interpolation (subframes).
+    sub = max(1, args.rate // FPS)
+    last = (end - start) * sub + (1 if once else 0)
+    hips = arm.pose.bones["mixamorig:Hips"]
+    base = arm.location.copy()
+    origin = None
+    for i, k in enumerate(range(0, last, args.step)):
+        arm.location = base
+        scene.frame_set(start + k // sub, subframe=(k % sub) / sub)
+        if once:
+            # Cancel horizontal travel (the spin jump moves towards the camera) so he stays in frame.
+            pos = arm.matrix_world @ hips.head
+            origin = origin or pos.copy()
+            arm.location = base - Vector((pos.x - origin.x, pos.y - origin.y, 0.0))
+        render_to(os.path.join(folder, f"{i:04d}.png"))
+    arm.location = base
 
 
 main()
