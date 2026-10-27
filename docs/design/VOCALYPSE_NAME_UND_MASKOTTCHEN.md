@@ -154,6 +154,28 @@ Bewegungsliste oben gleich halten. Auch die Canvas-Freisteller (Artboards 8–12
   800 px, 64 Samples ≈ 0,2 s/Bild. Kontaktbogen + `All_Night_Dance` (246 Bilder) in `velvox-bench\2026-10-27\mascot\`.
   Hände gehen in der Stichprobe nicht durch den Kopf. `_360_Power_Spin_Jump` verlässt das Bild → eigener Ausschnitt nötig.
 
+### Zuordnung Ember Imp (Claude, von Jakob delegiert: „wähle selbst“) – ersetzt die Tabelle oben
+| Zustand | Bewegung | Art |
+|---|---|---|
+| Plugin öffnet sich | `Wake_Up_and_Look_Up` | einmal, dann Ruhe |
+| Ruhe / kein Signal | `Short_Breathe_and_Look_Around` | Schleife |
+| Schlecht | `Stand_and_Chat` (telefoniert, ignoriert den Gesang) | Schleife |
+| Problem gefunden (Assistent erklärt) | `Stand_Talking_Angry` | Schleife |
+| Okay | `Arm_Circle_Shuffle` | Schleife |
+| Gut | `All_Night_Dance` | Schleife |
+| Super | `Cardio_Dance` | Schleife |
+| Top-Ergebnis Vocal Check | `_360_Power_Spin_Jump` | einmal (wandert nach vorn → eigener Ausschnitt) |
+| Auto Mix rechnet | `Running` (auf der Stelle) | Schleife |
+| Tutorial | `Walking` (reinlaufen), dann `Call_Gesture` | einmal + Schleife |
+Okay → Gut → Super steigt auch messbar in der Bewegungsenergie (mittlere Geschwindigkeit 0,011 → 0,013 → 0,015).
+
+### Look + Flüssigkeit (Jakob: „ruckelt“, „wirkt überbelichtet“)
+- Meshy liefert 30 fps. Jetzt Ausgabe **60 fps** (Zwischenbilder aus den Keyframes) + 1 Glättungsdurchgang, Schleife nahtlos.
+- Look „H“ als Standard: Licht `deep` (wenig Umgebungslicht, schwache Aufhellung), Darstellung „Khronos PBR Neutral“,
+  Belichtung −1,5, Textur Farbton +0,008 (Richtung Orange-Rot), Sättigung 1,35, Helligkeit 0,75, Glanz 0,7.
+  Vergleich: `velvox-bench\2026-10-27\mascot\ton3_*.png`. AgX macht das Rot lachsrosa, Standard schneidet es flach ab.
+- PNGs haben echten Alphakanal; Hintergrund in Vorschau-Videos ist nur zur Ansicht.
+
 ## Nächste Schritte (am PC mit Blender)
 1. `git fetch origin` und Branch `feature/i18n` holen (enthält diese Datei und `art/mascot/`).
 2. ZIP `art/mascot/devil-3d/devil_rig_allmoves.zip` in einen eigenen leeren Ordner entpacken.

@@ -20,6 +20,7 @@ from mathutils import Vector
 FPS = 30
 
 
+# Defaults = look "H" (closest to concepts/RedDevil.png), 60 fps, one smoothing pass; chosen 2026-10-27.
 def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     p = argparse.ArgumentParser()
@@ -30,9 +31,15 @@ def parse_args():
     p.add_argument("--size", type=int, default=800)
     p.add_argument("--step", type=int, default=1, help="render every n-th frame (loop mode)")
     p.add_argument("--samples", type=int, default=32)
-    p.add_argument("--light", choices=sorted(LIGHTS), default="warm")
-    p.add_argument("--view", choices=["standard", "agx-punchy"], default="standard")
-    p.add_argument("--exposure", type=float, default=-1.25)
+    p.add_argument("--light", choices=sorted(LIGHTS), default="deep")
+    p.add_argument("--view", choices=["standard", "agx-punchy", "pbr-neutral"], default="pbr-neutral")
+    p.add_argument("--exposure", type=float, default=-1.5)
+    p.add_argument("--tex-value", type=float, default=0.75, help="brightness factor on the colour texture")
+    p.add_argument("--tex-hue", type=float, default=0.008, help="hue shift on the colour texture (+ = towards orange)")
+    p.add_argument("--tex-sat", type=float, default=1.35, help="saturation factor on the colour texture")
+    p.add_argument("--gloss", type=float, default=0.7, help="roughness factor (<1 = shinier vinyl)")
+    p.add_argument("--rate", type=int, default=60, help="output fps; above 30 renders in-between subframes")
+    p.add_argument("--smooth", type=int, default=1, help="passes of [1 2 1] smoothing on the motion curves")
     return p.parse_args(argv)
 
 
@@ -55,6 +62,15 @@ LIGHTS = {
             ("Key", (-1.0, -1.6, 1.4), (1.0, 0.92, 0.82), 150, 1.6),
             ("Fill", (1.4, -1.2, 0.7), (0.8, 0.88, 1.0), 40, 2.0),
             ("Rim", (0.6, 1.4, 1.5), (1.0, 0.95, 0.9), 130, 0.8),
+        ],
+    },
+    # Low ambient, strong key, weak fill: more modelling on the face, deeper red.
+    "deep": {
+        "world": ((0.45, 0.47, 0.55), 0.08),
+        "rigs": [
+            ("Key", (-1.0, -1.6, 1.4), (1.0, 0.93, 0.85), 170, 1.4),
+            ("Fill", (1.4, -1.2, 0.7), (0.8, 0.88, 1.0), 15, 2.0),
+            ("Rim", (0.6, 1.4, 1.5), (1.0, 0.95, 0.9), 110, 0.8),
         ],
     },
     # Neutral front light, a single cyan edge to tie in with the plugin palette.
@@ -86,6 +102,10 @@ def setup_scene(size, samples, light, view, exposure):
     if view == "standard":
         scene.view_settings.view_transform = "Standard"
         scene.view_settings.look = "None"
+    elif view == "pbr-neutral":
+        # Made for product colours: keeps hue, rolls off highlights instead of clipping them.
+        scene.view_settings.view_transform = "Khronos PBR Neutral"
+        scene.view_settings.look = "None"
     else:
         scene.view_settings.view_transform = "AgX"
         scene.view_settings.look = "AgX - Punchy"
@@ -112,6 +132,68 @@ def import_model(path):
     for track in list(arm.animation_data.nla_tracks):
         arm.animation_data.nla_tracks.remove(track)
     return arm, meshes
+
+
+def tweak_materials(meshes, value, sat, gloss, hue=0.0):
+    """Optional grading of the baked Meshy textures inside the shader (texture files stay untouched)."""
+    for m in meshes:
+        for slot in m.material_slots:
+            mat = slot.material
+            if mat is None or not mat.use_nodes:
+                continue
+            nt = mat.node_tree
+            bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+            if value != 1.0 or sat != 1.0 or hue != 0.0:
+                link = bsdf.inputs["Base Color"].links[0]
+                hsv = nt.nodes.new("ShaderNodeHueSaturation")
+                hsv.inputs["Hue"].default_value = 0.5 + hue
+                hsv.inputs["Saturation"].default_value = sat
+                hsv.inputs["Value"].default_value = value
+                nt.links.new(link.from_socket, hsv.inputs["Color"])
+                nt.links.new(hsv.outputs["Color"], bsdf.inputs["Base Color"])
+            if gloss != 1.0:
+                rough = bsdf.inputs["Roughness"]
+                mul = nt.nodes.new("ShaderNodeMath")
+                mul.operation = "MULTIPLY"
+                mul.inputs[1].default_value = gloss
+                if rough.links:
+                    nt.links.new(rough.links[0].from_socket, mul.inputs[0])
+                else:
+                    mul.inputs[0].default_value = rough.default_value
+                nt.links.new(mul.outputs[0], rough)
+
+
+def fcurves(act):
+    if hasattr(act, "layers"):
+        for layer in act.layers:
+            for strip in layer.strips:
+                for bag in strip.channelbags:
+                    yield from bag.fcurves
+    else:
+        yield from act.fcurves
+
+
+def smooth_action(act, passes, wrap):
+    """[1 2 1]/4 smoothing of every key value; wrap = the action is a loop (first key == last key)."""
+    for fc in fcurves(act):
+        kp = fc.keyframe_points
+        n = len(kp)
+        if n < 3:
+            continue
+        vals = [k.co[1] for k in kp]
+        for _ in range(passes):
+            if wrap:
+                core = vals[:-1]
+                m = len(core)
+                core = [(core[i - 1] + 2 * core[i] + core[(i + 1) % m]) / 4 for i in range(m)]
+                vals = core + [core[0]]
+            else:
+                vals = [vals[0]] + [(vals[i - 1] + 2 * vals[i] + vals[i + 1]) / 4 for i in range(1, n - 1)] + [vals[-1]]
+        for k, v in zip(kp, vals):
+            k.co[1] = v
+            k.handle_left[1] = v
+            k.handle_right[1] = v
+        fc.update()
 
 
 def actions():
@@ -191,6 +273,7 @@ def main():
     args = parse_args()
     scene = setup_scene(args.size, args.samples, args.light, args.view, args.exposure)
     arm, meshes = import_model(os.path.abspath(args.glb))
+    tweak_materials(meshes, args.tex_value, args.tex_sat, args.gloss, args.tex_hue)
 
     if args.mode == "list":
         for act in actions():
@@ -210,11 +293,17 @@ def main():
             scene.frame_set((start + end) // 2)
             render_to(os.path.join(out, "sheet", act.name + ".png"))
     else:
-        start, end = assign(arm, find_action(args.anim))
+        act = find_action(args.anim)
+        start, end = assign(arm, act)
+        if args.smooth:
+            smooth_action(act, args.smooth, wrap=True)
         folder = os.path.join(out, args.anim)
         # Meshy loops repeat the first pose on the last frame; drop it so playback has no hitch.
-        for i, f in enumerate(range(start, end, args.step)):
-            scene.frame_set(f)
+        # Above 30 fps, in-between poses come from the linear key interpolation (subframes).
+        sub = max(1, args.rate // FPS)
+        steps = range(0, (end - start) * sub, args.step)
+        for i, k in enumerate(steps):
+            scene.frame_set(start + k // sub, subframe=(k % sub) / sub)
             render_to(os.path.join(folder, f"{i:04d}.png"))
 
 
