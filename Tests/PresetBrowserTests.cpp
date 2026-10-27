@@ -5,6 +5,7 @@
 #include "PluginEditor.h"
 #include "UI/PresetBrowser.h"
 #include "UI/UserSettings.h"
+#include "Text/I18n.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -107,18 +108,28 @@ public:
             expect (f.browser->visibleEntries().empty(), "un-starred");
         }
 
-        beginTest ("Hover shows the description; double-click and Enter load (one undo step)");
+        beginTest ("Hover shows the description; one click loads and keeps the list open (one undo step), Enter loads and closes");
         {
             Fixture f;
             const int hd = indexOf (*f.pm, "Hard Dance Lead", true);
             expect (hd >= 0);
             const auto row = f.browser->rowBounds (hd);
             f.browser->mouseMove (mouseAt (*f.browser, row.getCentre()));
-            expect (f.browser->getInfoText().isNotEmpty() && f.browser->getInfoText() == f.pm->getEntries()[hd].description, "description");
-            f.browser->mouseDoubleClick (mouseAt (*f.browser, row.getCentre(), 2));
-            expectEquals (f.pm->getCurrentPresetName(), juce::String ("Hard Dance Lead"), "double-click loads");
-            expect (! f.browser->isOpen(), "and closes");
+            expect (f.browser->getInfoText().isNotEmpty() && f.browser->getInfoText() == i18n::show (f.pm->getEntries()[hd].description), "description");
+            {
+                i18n::ScopedLanguage en (i18n::Language::english);
+                expect (f.browser->getInfoText().startsWith ("Level-ridden"), "the English description: " + f.browser->getInfoText());
+            }
+            f.browser->mouseDown (mouseAt (*f.browser, row.getCentre()));
+            expectEquals (f.pm->getCurrentPresetName(), juce::String ("Hard Dance Lead"), "one click loads");
+            expect (f.browser->isOpen(), "and the list stays open");
             expectEquals (f.h.proc.getUndo().getNumSteps(), 1, "one undo step");
+            f.browser->mouseDown (mouseAt (*f.browser, row.getCentre()));
+            f.browser->mouseDoubleClick (mouseAt (*f.browser, row.getCentre(), 2));
+            expect (f.browser->isOpen(), "a double-click keeps it open too");
+            expectEquals (f.h.proc.getUndo().getNumSteps(), 1, "the loaded preset is not loaded again");
+            f.browser->mouseDown (mouseAt (*f.browser, { 2, 2 }));
+            expect (! f.browser->isOpen(), "a click outside closes");
 
             f.browser->open();
             f.browser->moveSelection (1);

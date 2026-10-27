@@ -5,6 +5,7 @@
 #include "Icons.h"
 #include "SoloButton.h"
 #include "../DSP/Solo.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
@@ -12,8 +13,6 @@ namespace velvox::ui
 
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-
         constexpr float corner = 10.0f;
         constexpr float plusR = 9.0f;
         constexpr float tileGap = 4.0f;
@@ -82,7 +81,7 @@ namespace velvox::ui
             return ids;
         }
 
-        const juce::String chainEdit = de ("Kette bearbeiten");
+        juce::String chainEdit() { return i18n::tr ("Kette bearbeiten", "Edit chain"); }
     }
 
     const char* ChainView::onParamFor (ModuleId id)
@@ -1048,7 +1047,9 @@ namespace velvox::ui
             if (canBeSend (t.id))
                 r.setInsert (t.id, t.instance, false);
             else
-                showHint (cardName (routing, t.id, t.instance) + de (" bleibt in der Kette - nur Delay und Reverb laufen als Send."));
+                showHint (i18n::format (i18n::tr ("{0} bleibt in der Kette - nur Delay und Reverb laufen als Send.",
+                                                  "{0} stays in the chain - only Delay and Reverb run as a send."),
+                                        { cardName (routing, t.id, t.instance) }));
         }
         else
         {
@@ -1064,7 +1065,7 @@ namespace velvox::ui
         dragging = false;
         if (r != routing)
         {
-            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit());
             applyRouting (r);
         }
         scrollToShow (t.id, t.instance);
@@ -1095,8 +1096,9 @@ namespace velvox::ui
                 hoveredGap = -1;
                 hoveredSolo = false;
                 setMouseCursor (juce::MouseCursor::PointingHandCursor);
-                setTooltip (arrow != 0 ? de ("Weitere Module - Kette scrollen (auch Mausrad, Shift+Ziehen)")
-                                       : de ("Kette scrollen: ziehen"));
+                setTooltip (arrow != 0 ? i18n::tr ("Weitere Module - Kette scrollen (auch Mausrad, Shift+Ziehen)",
+                                                  "More modules - scroll the chain (also mouse wheel, Shift+drag)")
+                                       : i18n::tr ("Kette scrollen: ziehen", "Scroll the chain: drag"));
                 repaint();
             }
             return;
@@ -1113,16 +1115,19 @@ namespace velvox::ui
         const bool clickable = g >= 0 || i >= 0 || i == hitOutput || i == hitAddCard;
         setMouseCursor (clickable ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
         if (overSolo)
-            setTooltip (de ("Solo: nur dieses Modul hören, alle anderen umgangen (nochmal klicken: aus)"));
+            setTooltip (i18n::tr ("Solo: nur dieses Modul hören, alle anderen umgangen (nochmal klicken: aus)",
+                                  "Solo: hear only this module, all others bypassed (click again: off)"));
         else if (i >= 0)
             setTooltip (juce::String (dsp::moduleDisplayName (tiles[(size_t) i].id))
-                        + (dsp::canSolo (tiles[(size_t) i].id) ? de (" - Klick öffnet, Ziehen ordnet um, S oder Alt+Klick: Solo, Rechtsklick: Menü")
-                                                               : de (" - Klick öffnet, Ziehen ordnet um, Rechtsklick: Menü")));
+                        + (dsp::canSolo (tiles[(size_t) i].id) ? i18n::tr (" - Klick öffnet, Ziehen ordnet um, S oder Alt+Klick: Solo, Rechtsklick: Menü",
+                                                                          " - click opens, drag reorders, S or Alt+click: solo, right-click: menu")
+                                                               : i18n::tr (" - Klick öffnet, Ziehen ordnet um, Rechtsklick: Menü",
+                                                                          " - click opens, drag reorders, right-click: menu")));
         else if (i == hitAddCard || g >= 0)
-            setTooltip (de ("Modul hinzufügen"));
+            setTooltip (i18n::tr ("Modul hinzufügen", "Add module"));
         else if (i == hitOutput)
-            setTooltip (proc.isSoloActive() ? de ("Ausgang - SOLO aktiv: Klick auf SOLO hebt es auf")
-                                            : de ("Ausgang: Eingangs-Gain, Stereo, Level Match, Clip Guard"));
+            setTooltip (proc.isSoloActive() ? i18n::tr ("Ausgang - SOLO aktiv: Klick auf SOLO hebt es auf", "Output - SOLO active: click SOLO to end it")
+                                            : i18n::tr ("Ausgang: Eingangs-Gain, Stereo, Level Match, Clip Guard", "Output: input gain, stereo, level match, clip guard"));
         else
             setTooltip ({});
         repaint();
@@ -1169,7 +1174,7 @@ namespace velvox::ui
         r.moveTo (id, instance, from < routingIndex ? routingIndex - 1 : routingIndex);
         if (r == routing)
             return false;
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit());
         applyRouting (r);
         scrollToShow (id, instance);
         return true;
@@ -1198,7 +1203,7 @@ namespace velvox::ui
     {
         auto& apvts = p.getState();
         const auto onBase = juce::String (onParamFor (id));
-        UndoHistory::ScopedTransaction undoStep (p.getUndo(), juce::String (dsp::moduleDisplayName (id)) + de (" zurücksetzen"));
+        UndoHistory::ScopedTransaction undoStep (p.getUndo(), i18n::format (i18n::tr ("{0} zurücksetzen", "Reset {0}"), { dsp::moduleDisplayName (id) }));
         for (const auto& base : moduleBaseIds (id))
         {
             if (base == onBase)
@@ -1227,10 +1232,11 @@ namespace velvox::ui
         const int k = routing.nextFreeInstance (id);
         if (k < 0)
         {
-            showHint (de ("Alle ") + juce::String (dsp::maxInstances (id)) + " " + dsp::moduleDisplayName (id) + de (" sind schon in der Kette."));
+            showHint (i18n::format (i18n::tr ("Alle {0} {1} sind schon in der Kette.", "All {0} {1} are already in the chain."),
+                                   { juce::String (dsp::maxInstances (id)), dsp::moduleDisplayName (id) }));
             return -1;
         }
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String (dsp::moduleDisplayName (id)) + de (" hinzufügen"));
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), i18n::format (i18n::tr ("{0} hinzufügen", "Add {0}"), { dsp::moduleDisplayName (id) }));
 
         // A fresh instance: default settings, still off while it joins the chain
         auto& apvts = proc.getState();
@@ -1266,10 +1272,11 @@ namespace velvox::ui
         const int k = routing.nextFreeInstance (id);
         if (k < 0 || ! routing.contains (id, instance))
         {
-            showHint (de ("Alle ") + juce::String (dsp::maxInstances (id)) + " " + dsp::moduleDisplayName (id) + de (" sind schon in der Kette."));
+            showHint (i18n::format (i18n::tr ("Alle {0} {1} sind schon in der Kette.", "All {0} {1} are already in the chain."),
+                                   { juce::String (dsp::maxInstances (id)), dsp::moduleDisplayName (id) }));
             return -1;
         }
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String (dsp::moduleDisplayName (id)) + " duplizieren");
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), i18n::format (i18n::tr ("{0} duplizieren", "Duplicate {0}"), { dsp::moduleDisplayName (id) }));
 
         auto& apvts = proc.getState();
         const auto onBase = juce::String (onParamFor (id));
@@ -1297,7 +1304,7 @@ namespace velvox::ui
         routing = proc.getRouting();
         if (! routing.contains (id, instance))
             return false;
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), juce::String (dsp::moduleDisplayName (id)) + " entfernen");
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), i18n::format (i18n::tr ("{0} entfernen", "Remove {0}"), { dsp::moduleDisplayName (id) }));
 
         // Off first (automation of an instance outside the chain would add it back)
         setValue (proc.getState(), onParamId (id, instance), 0.0f);
@@ -1321,7 +1328,7 @@ namespace velvox::ui
         auto r = proc.getRouting();
         if (! r.moveTo (id, instance, newIndex))
             return false;
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit());
         applyRouting (r);
         return true;
     }
@@ -1331,7 +1338,7 @@ namespace velvox::ui
         auto r = proc.getRouting();
         if (! r.setInsert (id, instance, ! send))
             return false;
-        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), send ? de ("Als Send") : de ("Als Insert"));
+        UndoHistory::ScopedTransaction undoStep (proc.getUndo(), send ? i18n::tr ("Als Send", "As send") : i18n::tr ("Als Insert", "As insert"));
         applyRouting (r);
         return true;
     }
@@ -1367,7 +1374,7 @@ namespace velvox::ui
                     sorted.insertAt (sorted.size(), slot.id, slot.instance, slot.insert);
         if (sorted != current)
         {
-            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit());
             applyRouting (sorted);
         }
     }
@@ -1375,7 +1382,7 @@ namespace velvox::ui
     void ChainView::saveLayoutAsDefault()
     {
         settings::set (settings::myLayoutOrder, proc.getRouting().toString());
-        showHint (de ("Kette als dein Standard gespeichert."));
+        showHint (i18n::tr ("Kette als dein Standard gespeichert.", "Chain saved as your default."));
     }
 
     bool ChainView::loadDefaultLayout()
@@ -1386,7 +1393,7 @@ namespace velvox::ui
         const auto r = dsp::Routing::fromString (dsp::Routing::fromString (order).toString());
         if (r != proc.getRouting())
         {
-            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit);
+            UndoHistory::ScopedTransaction undoStep (proc.getUndo(), chainEdit());
             applyRouting (r);
         }
         return true;
@@ -1449,26 +1456,26 @@ namespace velvox::ui
 
         juce::PopupMenu menu;
         menu.addSectionHeader (cardName (routing, id, k));
-        menu.addItem (on ? "Bypass" : "Einschalten", act (TileAction::toggle));
+        menu.addItem (on ? juce::String ("Bypass") : i18n::tr ("Einschalten", "Turn on"), act (TileAction::toggle));
         if (dsp::canSolo (id))
-            menu.addItem (de ("Solo (Alt+Klick)"), true, proc.isSoloed (code), act (TileAction::solo));
-        menu.addItem (de ("Duplizieren"), routing.nextFreeInstance (id) >= 0, false, act (TileAction::duplicate));
-        menu.addItem (de ("Entfernen"), act (TileAction::remove));
+            menu.addItem (i18n::tr ("Solo (Alt+Klick)", "Solo (Alt+click)"), true, proc.isSoloed (code), act (TileAction::solo));
+        menu.addItem (i18n::tr ("Duplizieren", "Duplicate"), routing.nextFreeInstance (id) >= 0, false, act (TileAction::duplicate));
+        menu.addItem (i18n::tr ("Entfernen", "Remove"), act (TileAction::remove));
         menu.addSeparator();
-        menu.addItem (de ("Nach links"), insert && serialPos > 0, false, act (TileAction::moveLeft));
-        menu.addItem (de ("Nach rechts"), insert && serialPos >= 0 && serialPos < serialCount - 1, false, act (TileAction::moveRight));
-        menu.addItem (de ("Zurücksetzen"), act (TileAction::reset));
+        menu.addItem (i18n::tr ("Nach links", "Move left"), insert && serialPos > 0, false, act (TileAction::moveLeft));
+        menu.addItem (i18n::tr ("Nach rechts", "Move right"), insert && serialPos >= 0 && serialPos < serialCount - 1, false, act (TileAction::moveRight));
+        menu.addItem (i18n::tr ("Zurücksetzen", "Reset"), act (TileAction::reset));
         if (canBeSend (id))
         {
             menu.addSeparator();
-            menu.addItem ("Als Send", true, ! insert, act (TileAction::asSend));
-            menu.addItem ("Als Insert", true, insert, act (TileAction::asInsert));
+            menu.addItem (i18n::tr ("Als Send", "As send"), true, ! insert, act (TileAction::asSend));
+            menu.addItem (i18n::tr ("Als Insert", "As insert"), true, insert, act (TileAction::asInsert));
         }
         menu.addSeparator();
-        menu.addItem (de ("Rückgängig") + (canUndo() ? "  (" + proc.getUndo().getUndoName() + ")" : juce::String()), canUndo(), false, act (TileAction::undo));
-        menu.addItem (de ("Wiederholen"), canRedo(), false, act (TileAction::redo));
+        menu.addItem (i18n::tr ("Rückgängig", "Undo") + (canUndo() ? "  (" + proc.getUndo().getUndoName() + ")" : juce::String()), canUndo(), false, act (TileAction::undo));
+        menu.addItem (i18n::tr ("Wiederholen", "Redo"), canRedo(), false, act (TileAction::redo));
         menu.addSeparator();
-        menu.addItem ("Hilfe: " + juce::String (dsp::moduleDisplayName (id)), act (TileAction::help));
+        menu.addItem (i18n::format (i18n::tr ("Hilfe: {0}", "Help: {0}"), { dsp::moduleDisplayName (id) }), act (TileAction::help));
         return menu;
     }
 
@@ -1482,14 +1489,14 @@ namespace velvox::ui
     {
         juce::Component::SafePointer<ChainView> safe (this);
         juce::PopupMenu menu;
-        menu.addSectionHeader ("Kette");
-        menu.addItem (de ("Modul hinzufügen …"), [safe] { if (safe != nullptr && safe->onAddModule) safe->onAddModule (safe->numSerial, true); });
-        menu.addItem (de ("Rückgängig"), canUndo(), false, [safe] { if (safe != nullptr) safe->undo(); });
-        menu.addItem (de ("Wiederholen"), canRedo(), false, [safe] { if (safe != nullptr) safe->redo(); });
+        menu.addSectionHeader (i18n::tr ("Kette", "Chain"));
+        menu.addItem (i18n::tr ("Modul hinzufügen …", "Add module …"), [safe] { if (safe != nullptr && safe->onAddModule) safe->onAddModule (safe->numSerial, true); });
+        menu.addItem (i18n::tr ("Rückgängig", "Undo"), canUndo(), false, [safe] { if (safe != nullptr) safe->undo(); });
+        menu.addItem (i18n::tr ("Wiederholen", "Redo"), canRedo(), false, [safe] { if (safe != nullptr) safe->redo(); });
         menu.addSeparator();
-        menu.addItem (de ("In die übliche Reihenfolge sortieren"), [safe] { if (safe != nullptr) safe->restoreDefaultChain(); });
-        menu.addItem (de ("Diese Kette als meinen Standard speichern"), [safe] { if (safe != nullptr) safe->saveLayoutAsDefault(); });
-        menu.addItem (de ("Meine Standard-Kette laden"), settings::getString (settings::myLayoutOrder).isNotEmpty(), false,
+        menu.addItem (i18n::tr ("In die übliche Reihenfolge sortieren", "Sort into the usual order"), [safe] { if (safe != nullptr) safe->restoreDefaultChain(); });
+        menu.addItem (i18n::tr ("Diese Kette als meinen Standard speichern", "Save this chain as my default"), [safe] { if (safe != nullptr) safe->saveLayoutAsDefault(); });
+        menu.addItem (i18n::tr ("Meine Standard-Kette laden", "Load my default chain"), settings::getString (settings::myLayoutOrder).isNotEmpty(), false,
                       [safe] { if (safe != nullptr) safe->loadDefaultLayout(); });
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (220));
     }

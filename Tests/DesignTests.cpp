@@ -10,6 +10,13 @@
 #include "UI/SimpleView.h"
 #include "UI/HelpContent.h"
 #include "UI/TutorialOverlay.h"
+#include "UI/DetailPanels.h"
+#include "UI/ModuleBrowser.h"
+#include "UI/PresetBrowser.h"
+#include "UI/TopBar.h"
+#include "UI/ValueText.h"
+#include "Text/I18n.h"
+#include "Text/ParamText.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -543,6 +550,145 @@ public:
             }
             for (auto& [id, v] : values)
                 expectWithinAbsoluteError (h2.get (id), v, std::abs (v) * 0.01f + 0.01f, juce::String ("unchanged: ") + id);
+        }
+
+        beginTest ("Language (1.0): parameter texts in German for the interface, the host keeps English");
+        {
+            Harness h;
+            auto* inGain = h.proc.getState().getParameter (pid::inputGain);
+            expect (i18n::isGerman(), "tests run in German");
+            expectEquals (inGain->getName (32), juce::String ("Input Gain"), "the host sees the English name in a German interface");
+            expectEquals (i18n::paramName (pid::inputGain, "Input Gain"), juce::String ("Eingangspegel"));
+            expectEquals (i18n::choiceName (pid::levelMatchMode, 1, "Bypass match"), juce::String ("Wie Bypass"));
+            expectEquals (i18n::choiceName (pid::checkMode, 0, "Continuous"), juce::String ("Laufend"));
+            expect (i18n::paramDescription (pid::compThreshold, "x") != juce::String ("x"), "descriptions are translated");
+            expectEquals (i18n::paramName ("compOn_2", "Compressor 2: On"), juce::String ("Compressor 2: An"), "extra instances keep their name");
+            {
+                i18n::ScopedLanguage en (i18n::Language::english);
+                expectEquals (i18n::paramName (pid::inputGain, "Input Gain"), juce::String ("Input Gain"));
+                expectEquals (i18n::choiceName (pid::levelMatchMode, 1, "Bypass match"), juce::String ("Bypass match"));
+                expectEquals (inGain->getName (32), juce::String ("Input Gain"));
+                // Typed choices: both languages
+                auto& mode = *h.proc.getState().getParameter (pid::checkMode);
+                expect (ui::parseValueText ("Laufend", mode) == std::optional<float> (0.0f), "German choice name typed in English");
+                expect (ui::parseValueText ("capture", mode) == std::optional<float> (1.0f));
+            }
+            auto& mode = *h.proc.getState().getParameter (pid::checkMode);
+            expect (ui::parseValueText ("Continuous", mode) == std::optional<float> (0.0f), "English choice name typed in German");
+        }
+
+        beginTest ("Language (1.0): header, chain menus, value menu, panels and lists in English");
+        {
+            i18n::ScopedLanguage en (i18n::Language::english);
+            Harness h;
+            const auto noGerman = [this] (const juce::String& text, const juce::String& where)
+            {
+                bool clean = ! text.containsAnyOf (juce::String::fromUTF8 ("äöüÄÖÜß„“"));
+                for (auto* w : { "Einschalten", "Entfernen", "Kette", "zurücksetzen", "Wert ", "Modul", "Eigene", "Alle", "Mehr", " und " })
+                    clean = clean && ! text.contains (juce::String::fromUTF8 (w));
+                expect (clean, where + ": " + text);
+            };
+
+            // Header
+            {
+                ui::DialogOverlay dialog;
+                ui::TopBar top (h.proc, dialog);
+                expectEquals (top.getModeButton (ui::TopBar::Mode::simple).getButtonText(), juce::String ("SIMPLE"));
+                top.setMode (ui::TopBar::Mode::advanced);
+                expectEquals (top.getTabButton (ui::TopBar::Tab::autoMix).getButtonText(), juce::String ("MODULES"));
+                noGerman (top.getPrevButton().getTooltip() + top.getNextButton().getTooltip() + top.getHelpButton().getTooltip()
+                              + top.getModeButton (ui::TopBar::Mode::simple).getTooltip(), "header tooltips");
+            }
+
+            // Chain tile menu and chain menu
+            {
+                ui::ChainView view (h.proc);
+                view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
+                view.refresh();
+                juce::StringArray items;
+                const auto menu = view.buildTileMenu ((int) ModuleId::delay);
+                for (juce::PopupMenu::MenuItemIterator it (menu); it.next();)
+                    items.add (it.getItem().text);
+                const auto all = items.joinIntoString ("|");
+                for (auto* t : { "Duplicate", "Remove", "Move left", "Move right", "Reset", "As send", "As insert", "Undo", "Redo", "Help: Delay" })
+                    expect (all.contains (t), juce::String (t) + " in the menu: " + all);
+                noGerman (all, "tile menu");
+
+                h.set (pid::compRatio, 9.0f);
+                expect (view.performTileAction ((int) ModuleId::comp, ui::ChainView::TileAction::reset));
+                expectEquals (h.proc.getUndo().getUndoName(), juce::String ("Reset Compressor"));
+            }
+
+            // Value menu (right-click on any control)
+            {
+                auto& thr = *h.proc.getState().getParameter (pid::compThreshold);
+                juce::StringArray texts;
+                const auto m = ui::gestures::buildMenu (thr, nullptr, [] {});
+                for (juce::PopupMenu::MenuItemIterator it (m); it.next();)
+                    texts.add (it.getItem().text);
+                for (auto* t : { "Default value", "Enter value", "Copy value", "Paste value" })
+                    expect (texts.joinIntoString ("|").contains (t), juce::String (t) + " in " + texts.joinIntoString ("|"));
+                noGerman (texts.joinIntoString ("|"), "value menu");
+            }
+
+            // Output panel: segment labels by position, read-outs with units, More
+            {
+                auto panel = ui::createDetailPanel (h.proc, -1);
+                panel->setBounds (0, 0, 984, 440);
+                panel->refresh();
+                juce::StringArray labels;
+                std::function<void (juce::Component&)> collectLabels = [&] (juce::Component& c)
+                {
+                    for (auto* child : c.getChildren())
+                    {
+                        if (auto* s = dynamic_cast<ui::Segments*> (child); s != nullptr && s->getParamId() == pid::levelMatchMode)
+                            for (auto* b : s->getChildren())
+                                if (auto* tb = dynamic_cast<juce::TextButton*> (b))
+                                    labels.add (tb->getButtonText());
+                        if (auto* l = dynamic_cast<juce::Label*> (child))
+                            labels.add (l->getText());
+                        collectLabels (*child);
+                    }
+                };
+                collectLabels (*panel);
+                const auto all = labels.joinIntoString ("|");
+                expect (all.contains ("Off|Like bypass|Auto-Gain"), "Level Match segments: " + all);
+                expect (all.contains (" LUFS") && all.contains (" dB") && all.contains ("CORRELATION"), "read-outs with units: " + all);
+            }
+
+            // Preset list and module browser
+            {
+                ui::DialogOverlay dialog;
+                ui::PresetBrowser presets (h.proc.getPresetManager(), dialog);
+                const auto cats = presets.getCategories();
+                expect (cats.contains ("All") && cats.contains ("User") && cats.contains ("Favorites"), cats.joinIntoString (","));
+                expectEquals (ui::PresetBrowser::categoryLabel ("Creative"), juce::String ("Creative"));
+                {
+                    i18n::ScopedLanguage de (i18n::Language::german);
+                    expectEquals (ui::PresetBrowser::categoryLabel ("Creative"), juce::String ("Kreativ"));
+                }
+                expectEquals (ui::ModuleBrowser::categoryName (ui::ModuleBrowser::Category::colour), juce::String ("Color"));
+
+                ui::ModuleBrowser browser (h.proc);
+                browser.setBounds (0, 0, 1000, 600);
+                browser.open (0, true);
+                browser.setSearchText ("hall");   // a German word finds Reverb in English too
+                expect (browser.cardBoundsFor (ModuleId::reverb).getWidth() > 0, "German search word in English");
+                browser.setSearchText ("reverb");
+                expect (browser.cardBoundsFor (ModuleId::reverb).getWidth() > 0, "English search word");
+            }
+        }
+
+        beginTest ("Fix (1.0): VOCAL CHECK on does not mark the preset as changed");
+        {
+            Harness h;
+            auto& pm = h.proc.getPresetManager();
+            expect (pm.loadPreset (0));
+            expect (! pm.isCurrentPresetModified(), "fresh preset");
+            h.set (pid::checkOn, h.get (pid::checkOn) > 0.5f ? 0.0f : 1.0f);
+            expect (! pm.isCurrentPresetModified(), "analysis only: not a change of the sound");
+            h.set (pid::compRatio, 9.0f);
+            expect (pm.isCurrentPresetModified(), "a real change still counts");
         }
     }
 };

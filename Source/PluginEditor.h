@@ -123,6 +123,7 @@ private:
         void hideInfoIfAnchorGone();
 
         bool bypassed = false;  // amber frame and label while the global bypass is on
+        float bypassLabelY = 70.0f;   // vertical centre of that label (set by the view, see applyView)
         velvox::ui::InfoPopup info;
 
     private:

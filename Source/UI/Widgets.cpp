@@ -3,6 +3,8 @@
 #include "Spectrum.h"
 #include "../Parameters/ParameterLayout.h"
 #include "ValueText.h"
+#include "../Text/I18n.h"
+#include "../Text/ParamText.h"
 
 namespace velvox::ui
 {
@@ -268,7 +270,7 @@ namespace velvox::ui
 
         // Hover card: name, short description, value with unit (the gestures are in the help)
         if (const auto* spec = findParameterSpec (paramId))
-            description = spec->description;
+            description = i18n::paramDescription (paramId, spec->description);
 
         shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
         slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
@@ -441,7 +443,7 @@ namespace velvox::ui
         attachment = std::make_unique<APVTS::SliderAttachment> (state, id, slider);
         slider.bindParameter (state.getParameter (id));
         if (const auto* spec = findParameterSpec (id))
-            description = spec->description;
+            description = i18n::paramDescription (id, spec->description);
         info = std::make_unique<HoverInfo> (*this, [this] { return label; },
                                             [this] { return slider.getTextFromValue (slider.getValue()); },
                                             [this] { return description; });
@@ -477,7 +479,7 @@ namespace velvox::ui
             setColour (juce::ToggleButton::tickColourId, accent);
         attachment = std::make_unique<APVTS::ButtonAttachment> (state, paramId, *this);
         if (const auto* spec = findParameterSpec (paramId))
-            setTooltip (spec->description);
+            setTooltip (i18n::paramDescription (paramId, spec->description));
     }
 
     //==========================================================================
@@ -485,10 +487,11 @@ namespace velvox::ui
     {
         this->paramId = paramId;
         if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (state.getParameter (paramId)))
-            box.addItemList (p->choices, 1);
+            for (int i = 0; i < p->choices.size(); ++i)   // shown in the interface language, chosen by index
+                box.addItem (i18n::choiceName (paramId, i, p->choices[i]), i + 1);
         attachment = std::make_unique<APVTS::ComboBoxAttachment> (state, paramId, box);
         if (const auto* spec = findParameterSpec (paramId))
-            box.setTooltip (spec->description);
+            box.setTooltip (i18n::paramDescription (paramId, spec->description));
         box.setRepaintsOnMouseActivity (true);
         addAndMakeVisible (box);
 
@@ -517,7 +520,7 @@ namespace velvox::ui
     PowerButton::PowerButton (APVTS& state, const char* paramId, juce::Colour)
     {
         attachment = std::make_unique<APVTS::ButtonAttachment> (state, paramId, *this);
-        setTooltip ("Switch this module on or off");
+        setTooltip (i18n::tr ("Modul ein- oder ausschalten", "Switch this module on or off"));
     }
 
     void PowerButton::paintButton (juce::Graphics& g, bool highlighted, bool)
@@ -886,38 +889,67 @@ namespace velvox::ui
     //==========================================================================
     juce::String autoMixRole (const juce::String& id)
     {
-        static const std::map<juce::String, const char*> roles {
-            { pid::hpfFreq,        "Auto-Mix: knapp unter den tiefsten gesungenen Ton gesetzt (gemessen)." },
-            { pid::lowGain,        "Auto-Mix: nur bei dröhnender oder sehr dünner Stimme verändert." },
-            { pid::midGain,        "Auto-Mix: schneidet eine gemessene Resonanz oder Mulmigkeit unter 1,2 kHz." },
-            { pid::midFreq,        "Auto-Mix: Frequenz der gemessenen Resonanz bzw. der Tiefmitten." },
-            { pid::highGain,       "Auto-Mix: hebt nur dunkle Aufnahmen an, nie scharfe." },
-            { pid::rideTarget,     "Auto-Mix: auf den mittleren Pegel der analysierten Stimme gesetzt." },
-            { pid::rideAmount,     "Auto-Mix: richtet sich nach dem gemessenen Lautheitsumfang." },
-            { pid::rideMaxBoost,   "Auto-Mix: bei Rauschen begrenzt, damit Pausen nicht lauter werden." },
-            { pid::compThreshold,  "Auto-Mix: aus dem Stimmpegel berechnet und am Ergebnis nachgeprüft (Ziel: wenige dB Reduktion)." },
-            { pid::compRatio,      "Auto-Mix: 3:1 als Standard, sanfter bei bereits komprimierten Aufnahmen." },
-            { pid::compMakeup,     "Auto-Mix: gleicht die gemessene Reduktion aus (Gain-Staging)." },
-            { pid::deessThreshold, "Auto-Mix: zwischen Vokal- und S-Pegel gesetzt, damit nur S-Laute reduziert werden." },
-            { pid::deessFreq,      "Auto-Mix: aus dem gemessenen Schwerpunkt der S-Laute." },
-            { pid::deessRange,     "Auto-Mix: richtet sich nach der Stärke der S-Laute." },
-            { pid::smoothAmount,   "Auto-Mix: nur bei gemessener Schärfe oder Resonanz eingeschaltet." },
-            { pid::satDrive,       "Auto-Mix: dezent; aus bei bereits verzerrten Aufnahmen." },
-            { pid::satMix,         "Auto-Mix: dezent; aus bei bereits verzerrten Aufnahmen." },
-            { pid::smashBlend,     "Auto-Mix: kleiner Anteil für Dichte; aus bei bereits komprimierten Aufnahmen." },
-            { pid::doublerMix,     "Auto-Mix: dezent und mono-sicher; aus bei bereits breiten Aufnahmen." },
-            { pid::reverbMix,      "Auto-Mix: weniger oder kein Hall, wenn die Aufnahme schon Raum hat." },
-            { pid::delayMix,       "Auto-Mix: tempo-synchron und geduckt; aus bei verhallten Aufnahmen." },
-            { pid::outputGain,     "Auto-Mix: gleicht die Lautheit an das Original an (fairer Vergleich) und hält 1 dB Reserve." },
-            { pid::macroPresence,  "Feinschliff nach dem Auto-Mix: stellt EQ-Höhen und De-Esser ein." },
-            { pid::macroWarmth,    "Feinschliff nach dem Auto-Mix: stellt Tiefen, Höhen und Sättigung ein." },
-            { pid::macroAggression,"Feinschliff nach dem Auto-Mix: stellt Kompressor und Sättigung ein." },
-            { pid::macroWidth,     "Feinschliff nach dem Auto-Mix: stellt Doubler und Stereobreite ein." },
-            { pid::macroSpace,     "Feinschliff nach dem Auto-Mix: stellt Hall, Delay und deren Ducking ein." },
-            { pid::macroDensity,   "Feinschliff nach dem Auto-Mix: stellt Kompressor und Sättigung ein." },
+        // German and English per parameter (built once; the language is picked when it is shown)
+        static const std::map<juce::String, std::pair<const char*, const char*>> roles {
+            { pid::hpfFreq,        { "Auto-Mix: knapp unter den tiefsten gesungenen Ton gesetzt (gemessen).",
+                                    "Auto Mix: set just below the lowest sung note (measured)." } },
+            { pid::lowGain,        { "Auto-Mix: nur bei dröhnender oder sehr dünner Stimme verändert.",
+                                    "Auto Mix: changed only for a boomy or very thin voice." } },
+            { pid::midGain,        { "Auto-Mix: schneidet eine gemessene Resonanz oder Mulmigkeit unter 1,2 kHz.",
+                                    "Auto Mix: cuts a measured resonance or muddiness below 1.2 kHz." } },
+            { pid::midFreq,        { "Auto-Mix: Frequenz der gemessenen Resonanz bzw. der Tiefmitten.",
+                                    "Auto Mix: frequency of the measured resonance or of the low mids." } },
+            { pid::highGain,       { "Auto-Mix: hebt nur dunkle Aufnahmen an, nie scharfe.",
+                                    "Auto Mix: lifts only dark recordings, never harsh ones." } },
+            { pid::rideTarget,     { "Auto-Mix: auf den mittleren Pegel der analysierten Stimme gesetzt.",
+                                    "Auto Mix: set to the average level of the analyzed voice." } },
+            { pid::rideAmount,     { "Auto-Mix: richtet sich nach dem gemessenen Lautheitsumfang.",
+                                    "Auto Mix: follows the measured loudness range." } },
+            { pid::rideMaxBoost,   { "Auto-Mix: bei Rauschen begrenzt, damit Pausen nicht lauter werden.",
+                                    "Auto Mix: limited with noise, so pauses do not get louder." } },
+            { pid::compThreshold,  { "Auto-Mix: aus dem Stimmpegel berechnet und am Ergebnis nachgeprüft (Ziel: wenige dB Reduktion).",
+                                    "Auto Mix: calculated from the vocal level and checked on the result (goal: a few dB of reduction)." } },
+            { pid::compRatio,      { "Auto-Mix: 3:1 als Standard, sanfter bei bereits komprimierten Aufnahmen.",
+                                    "Auto Mix: 3:1 by default, gentler for recordings that are already compressed." } },
+            { pid::compMakeup,     { "Auto-Mix: gleicht die gemessene Reduktion aus (Gain-Staging).",
+                                    "Auto Mix: makes up for the measured reduction (gain staging)." } },
+            { pid::deessThreshold, { "Auto-Mix: zwischen Vokal- und S-Pegel gesetzt, damit nur S-Laute reduziert werden.",
+                                    "Auto Mix: set between the vowel and the sibilance level, so only sibilance is reduced." } },
+            { pid::deessFreq,      { "Auto-Mix: aus dem gemessenen Schwerpunkt der S-Laute.",
+                                    "Auto Mix: from the measured center of the sibilance." } },
+            { pid::deessRange,     { "Auto-Mix: richtet sich nach der Stärke der S-Laute.",
+                                    "Auto Mix: follows how strong the sibilance is." } },
+            { pid::smoothAmount,   { "Auto-Mix: nur bei gemessener Schärfe oder Resonanz eingeschaltet.",
+                                    "Auto Mix: switched on only for measured harshness or resonance." } },
+            { pid::satDrive,       { "Auto-Mix: dezent; aus bei bereits verzerrten Aufnahmen.",
+                                    "Auto Mix: subtle; off for recordings that are already distorted." } },
+            { pid::satMix,         { "Auto-Mix: dezent; aus bei bereits verzerrten Aufnahmen.",
+                                    "Auto Mix: subtle; off for recordings that are already distorted." } },
+            { pid::smashBlend,     { "Auto-Mix: kleiner Anteil für Dichte; aus bei bereits komprimierten Aufnahmen.",
+                                    "Auto Mix: a small amount for density; off for recordings that are already compressed." } },
+            { pid::doublerMix,     { "Auto-Mix: dezent und mono-sicher; aus bei bereits breiten Aufnahmen.",
+                                    "Auto Mix: subtle and mono-safe; off for recordings that are already wide." } },
+            { pid::reverbMix,      { "Auto-Mix: weniger oder kein Hall, wenn die Aufnahme schon Raum hat.",
+                                    "Auto Mix: less or no reverb when the recording already has room." } },
+            { pid::delayMix,       { "Auto-Mix: tempo-synchron und geduckt; aus bei verhallten Aufnahmen.",
+                                    "Auto Mix: tempo-synced and ducked; off for reverberant recordings." } },
+            { pid::outputGain,     { "Auto-Mix: gleicht die Lautheit an das Original an (fairer Vergleich) und hält 1 dB Reserve.",
+                                    "Auto Mix: matches the loudness of the original (a fair comparison) and keeps 1 dB of headroom." } },
+            { pid::macroPresence,  { "Feinschliff nach dem Auto-Mix: stellt EQ-Höhen und De-Esser ein.",
+                                    "Fine-tuning after the Auto Mix: sets the EQ highs and the De-Esser." } },
+            { pid::macroWarmth,    { "Feinschliff nach dem Auto-Mix: stellt Tiefen, Höhen und Sättigung ein.",
+                                    "Fine-tuning after the Auto Mix: sets lows, highs and saturation." } },
+            { pid::macroAggression, { "Feinschliff nach dem Auto-Mix: stellt Kompressor und Sättigung ein.",
+                                    "Fine-tuning after the Auto Mix: sets the compressor and saturation." } },
+            { pid::macroWidth,     { "Feinschliff nach dem Auto-Mix: stellt Doubler und Stereobreite ein.",
+                                    "Fine-tuning after the Auto Mix: sets the Doubler and the stereo width." } },
+            { pid::macroSpace,     { "Feinschliff nach dem Auto-Mix: stellt Hall, Delay und deren Ducking ein.",
+                                    "Fine-tuning after the Auto Mix: sets reverb, delay and their ducking." } },
+            { pid::macroDensity,   { "Feinschliff nach dem Auto-Mix: stellt Kompressor und Sättigung ein.",
+                                    "Fine-tuning after the Auto Mix: sets the compressor and saturation." } },
         };
         auto it = roles.find (id);
-        return it != roles.end() ? juce::String::fromUTF8 (it->second) : juce::String();
+        return it != roles.end() ? i18n::tr (it->second.first, it->second.second) : juce::String();
     }
 
     float eqWheelQ (float currentQ, float wheelDeltaY, bool fine, float minQ, float maxQ) noexcept

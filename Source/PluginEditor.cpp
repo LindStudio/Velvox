@@ -2,6 +2,7 @@
 #include "StateKeys.h"
 #include "UI/UserSettings.h"
 #include "UI/HelpContent.h"
+#include "Text/I18n.h"
 
 using namespace velvox;
 using namespace velvox::ui;
@@ -82,9 +83,9 @@ void HeadlinerView::Canvas::paintOverChildren (juce::Graphics& g)
     g.setColour (colours::bypass.withAlpha (0.8f));
     g.drawRoundedRectangle (border, 6.0f, 2.0f);
 
-    const auto text = juce::String::fromUTF8 ("Bypass - du hörst die unbearbeitete Vocal");
+    const auto text = i18n::tr ("Bypass - du hörst die unbearbeitete Vocal", "Bypass - you hear the unprocessed vocal");
     const float w = (float) juce::GlyphArrangement::getStringWidthInt (caps (captionSize (9.0f)), text) + 36.0f;
-    const auto pill = juce::Rectangle<float> (w, 22.0f).withCentre ({ baseWidth * 0.5f, (float) baseHeight - 18.0f });
+    const auto pill = juce::Rectangle<float> (w, 22.0f).withCentre ({ baseWidth * 0.5f, bypassLabelY });
     g.setColour (colours::background);
     g.fillRoundedRectangle (pill, 11.0f);
     g.setColour (colours::bypass.withAlpha (0.18f));
@@ -119,7 +120,7 @@ HeadlinerView::DetailsOverlay::DetailsOverlay (AutoMixView& v) : view (v)
 {
     setWantsKeyboardFocus (true);
     addAndMakeVisible (view);
-    close.setTooltip (juce::String::fromUTF8 ("Schließen"));
+    close.setTooltip (i18n::tr ("Schließen", "Close"));
     close.onClick = [this] { setVisible (false); };
     addAndMakeVisible (close);
     setVisible (false);
@@ -189,7 +190,8 @@ HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
 
     chainView.setLiveData (&live);
 
-    meters.setTooltip (juce::String::fromUTF8 ("Pegel und Lautheit (LUFS) am Eingang und Ausgang. Die rote Lampe zeigt Übersteuerungen - Klick setzt sie zurück."));
+    meters.setTooltip (i18n::tr ("Pegel und Lautheit (LUFS) am Eingang und Ausgang. Die rote Lampe zeigt Übersteuerungen - Klick setzt sie zurück.",
+                                 "Level and loudness (LUFS) at the input and output. The red lamp shows clipping - click to reset it."));
     meters.setStacked (true);
 
     topBar.onModeChange = [this] (Mode m) { setMode (m); };
@@ -436,6 +438,9 @@ void HeadlinerView::applyView (bool animate)
 
     chainView.setSelected (advanced ? selected : -2);
     select (selected);
+    // Bypass label where it hides nothing: Advanced on the panel's title row (between title and buttons),
+    // otherwise along the top edge of the body (never over the IN/OUT meter at the bottom)
+    canvas.bypassLabelY = advanced ? (float) panelArea().getY() + 21.0f : (float) bodyArea().getY() + 14.0f;
     canvas.repaint();
 }
 
@@ -475,7 +480,8 @@ void HeadlinerView::select (int id)
         detail->onHelp = [this] (int moduleId) { showHelp (help::keyForModule (moduleId)); };
         detail->askForName = [this] (const juce::String& title, std::function<void (const juce::String&)> onName)
         {
-            dialog.show (title, juce::String::fromUTF8 ("Gilt für dieses Modul in allen Projekten."), true, {}, "Speichern", std::move (onName));
+            dialog.show (title, i18n::tr ("Gilt für dieses Modul in allen Projekten.", "Applies to this module in all projects."), true, {},
+                         i18n::tr ("Speichern", "Save"), std::move (onName));
             raiseOverlays();
         };
         canvas.addAndMakeVisible (*detail);

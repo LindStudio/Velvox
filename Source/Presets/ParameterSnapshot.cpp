@@ -1,6 +1,7 @@
 #include "ParameterSnapshot.h"
 #include "../Parameters/ParameterLayout.h"
 #include "../DSP/Routing.h"
+#include "../DSP/Instances.h"
 #include "../DSP/MixLaw.h"
 #include "../StateKeys.h"
 #include "../Parameters/RoutingMigration.h"
@@ -26,6 +27,21 @@ namespace velvox
         {
             return id == pid::bypass || id == pid::inputGain
                 || id == pid::levelMatchMode || id == pid::levelMatchWindow || id == pid::levelMatchRange;
+        }
+
+        // Analysis only (VOCAL CHECK): never changes the sound, so switching it never marks a preset as
+        // changed ("Init *"). Presets still store it.
+        bool isAnalysisOnly (const juce::String& id)
+        {
+            const auto base = dsp::splitInstanceParamId (id).first;
+            return base == pid::checkOn || base == pid::checkMode;
+        }
+
+        dsp::Routing withoutAnalysis (dsp::Routing r)
+        {
+            for (int k = 0; k < dsp::maxInstances (dsp::ModuleId::check); ++k)
+                r.remove (dsp::ModuleId::check, k);
+            return r;
         }
 
         bool containsFixedEqBands (const std::map<juce::String, float>& values)
@@ -170,7 +186,7 @@ namespace velvox
         for (auto* p : apvts.processor.getParameters())
         {
             auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p);
-            if (rp == nullptr || isExcludedFromSnapshots (rp->getParameterID()))
+            if (rp == nullptr || isExcludedFromSnapshots (rp->getParameterID()) || isAnalysisOnly (rp->getParameterID()))
                 continue;
 
             const auto it = values.find (rp->getParameterID());
@@ -181,8 +197,8 @@ namespace velvox
                 return true;
         }
 
-        const auto expectedRouting = dsp::Routing::fromString (migrateRoutingString (routing, apvts));
-        const auto current = dsp::Routing::fromString (apvts.state.getProperty (statekeys::routing).toString());
+        const auto expectedRouting = withoutAnalysis (dsp::Routing::fromString (migrateRoutingString (routing, apvts)));
+        const auto current = withoutAnalysis (dsp::Routing::fromString (apvts.state.getProperty (statekeys::routing).toString()));
         return expectedRouting != current;
     }
 
