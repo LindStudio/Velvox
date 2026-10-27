@@ -55,6 +55,24 @@ public:
 
     void runTest() override
     {
+        beginTest ("0.7: latency depends only on the chain - no on/off switch changes it");
+        {
+            Harness h;
+            h.proc.setRouting (dsp::Routing::fromString ("v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send,check"));
+            h.proc.updateHostLatency();
+            const int inChain = h.proc.getLatencySamples();
+            expectEquals (inChain, h.proc.getChain().getLatencyFor (h.proc.getRouting()));
+            for (auto* id : { pid::eqOn, pid::rideOn, pid::compOn, pid::smashOn, pid::deessOn, pid::smoothOn, pid::satOn,
+                              pid::doublerOn, pid::delayOn, pid::reverbOn, pid::checkOn })
+                for (float on : { 1.0f, 0.0f })
+                {
+                    h.set (id, on);
+                    h.proc.updateHostLatency();
+                    h.run (h.sine (220.0, 0.2f, 0.05));
+                    expectEquals (h.proc.getLatencySamples(), inChain, juce::String (id) + (on > 0.5f ? " on" : " off"));
+                }
+        }
+
         beginTest ("0.7: Pitch, Stutter, Pulse and Choir are gone");
         {
             expectEquals (dsp::numModules, 11);
