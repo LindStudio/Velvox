@@ -156,3 +156,15 @@ namespace velvox::i18n
         return both (number (value, decimals, Language::german), number (value, decimals, Language::english));
     }
 }
+
+namespace velvox::i18n
+{
+    juce::String upper (const juce::String& text)
+    {
+        // juce::String::toUpperCase leaves German umlauts lowercase on Windows ("SCHäRFE")
+        return text.toUpperCase()
+                   .replace (juce::String::fromUTF8 ("ä"), juce::String::fromUTF8 ("Ä"))
+                   .replace (juce::String::fromUTF8 ("ö"), juce::String::fromUTF8 ("Ö"))
+                   .replace (juce::String::fromUTF8 ("ü"), juce::String::fromUTF8 ("Ü"));
+    }
+}

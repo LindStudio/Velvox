@@ -301,7 +301,7 @@ namespace velvox::ui
         slider.setVelocityModeParameters (0.9, 1, 0.08, false);     // fine mode is handled by FineSlider
         addAndMakeVisible (slider);
 
-        name.setText (label.toUpperCase(), juce::dontSendNotification);
+        name.setText (i18n::upper (label), juce::dontSendNotification);
         addAndMakeVisible (name);
         applyLabelStyle();
 
@@ -467,7 +467,7 @@ namespace velvox::ui
         g.fillEllipse (dot);
         g.setColour (colours::textSoft);
         g.setFont (semiBold (10.0f, 0.12f));
-        g.drawText (label.toUpperCase(), nameArea.withTrimmedLeft (14), juce::Justification::centredLeft, true);
+        g.drawText (i18n::upper (label), nameArea.withTrimmedLeft (14), juce::Justification::centredLeft, true);
     }
 
     //==========================================================================
@@ -495,7 +495,7 @@ namespace velvox::ui
         box.setRepaintsOnMouseActivity (true);
         addAndMakeVisible (box);
 
-        caption.setText (captionText.toUpperCase(), juce::dontSendNotification);
+        caption.setText (i18n::upper (captionText), juce::dontSendNotification);
         addAndMakeVisible (styleCaption (caption));
         caption.setVisible (captionText.isNotEmpty());
     }

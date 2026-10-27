@@ -453,7 +453,7 @@ namespace velvox::ui
         {
             const auto& s = shown[(size_t) card];
             const auto& b = s.band;
-            juce::String title = "BAND " + juce::String (card + 1) + "  " + eqedit::typeName (b.type).toUpperCase();
+            juce::String title = "BAND " + juce::String (card + 1) + "  " + i18n::upper (eqedit::typeName (b.type));
             if (const auto tag = eqedit::roleTag (b.role); tag.isNotEmpty())
                 title << "  " << juce::String::charToString ((juce::juce_wchar) 0x00b7) << "  " << tag;
             juce::String values = hzText (b.freq);

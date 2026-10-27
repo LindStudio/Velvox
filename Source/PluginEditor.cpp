@@ -534,6 +534,18 @@ void HeadlinerView::startTutorial (bool withWelcome)
 
 juce::Rectangle<int> HeadlinerView::tutorialTarget (const juce::String& key)
 {
+    // The tour shows each step in the view it explains: SIMPLE for the analysis and the macros,
+    // ADVANCED for the chain and the module panels
+    const bool wantsSimple = key == "analyse" || key == "macros";
+    const bool wantsAdvanced = key == "chain" || key == "chainAndModules" || key == "body";
+    if ((wantsSimple && (mode != Mode::simple || tab != Tab::autoMix))
+        || (wantsAdvanced && (mode != Mode::advanced || tab != Tab::autoMix)))
+    {
+        mode = wantsSimple ? Mode::simple : Mode::advanced;
+        tab = Tab::autoMix;
+        applyView (false);
+    }
+
     // Top bar sits at the canvas origin, so its child bounds are canvas coordinates
     if (key == "presets") return topBar.getPresetArea();
     if (key == "modes")   return topBar.getModeArea();

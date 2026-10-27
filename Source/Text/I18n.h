@@ -58,6 +58,9 @@ namespace velvox::i18n
     juce::String number (double value, int decimals, Language);
     juce::String numberBoth (double value, int decimals);   // packed
 
+    // Capitals for labels drawn in upper case (also ä / ö / ü)
+    juce::String upper (const juce::String& text);
+
     // Sets a language for the lifetime of the object (tests, snapshots)
     struct ScopedLanguage
     {

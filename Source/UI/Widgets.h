@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "Theme.h"
+#include "../Text/I18n.h"
 #include "../DSP/EqualizerModule.h"
 
 namespace velvox::ui
@@ -122,7 +123,7 @@ namespace velvox::ui
         const juce::String& getDescription() const noexcept { return description; }
         const juce::String& getParamId() const noexcept { return paramId; }
         // The caption under the dial (e.g. "MIX", or "SEND" while a delay runs as a send)
-        void setLabel (const juce::String& text) { name.setText (text.toUpperCase(), juce::dontSendNotification); }
+        void setLabel (const juce::String& text) { name.setText (i18n::upper (text), juce::dontSendNotification); }
         juce::String getLabel() const { return name.getText(); }
 
         // Returns the processed value in parameter units; empty = no marker

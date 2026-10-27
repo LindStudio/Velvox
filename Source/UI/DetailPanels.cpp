@@ -80,7 +80,7 @@ namespace velvox::ui
                 if (c->isVisible())
                 {
                     g.setFont (semiBold (9.0f, 0.12f));
-                    g.drawText (text.toUpperCase(), c->getBounds().translated (0, -captionH).withHeight (captionH), juce::Justification::centredLeft, false);
+                    g.drawText (i18n::upper (text), c->getBounds().translated (0, -captionH).withHeight (captionH), juce::Justification::centredLeft, false);
                 }
         }
 
@@ -537,7 +537,7 @@ namespace velvox::ui
             icon->drawWithin (g, iconArea, juce::RectanglePlacement::centred, on ? 1.0f : 0.4f);
             header.removeFromLeft (10);
         }
-        const auto shownTitle = title.toUpperCase();
+        const auto shownTitle = i18n::upper (title);
         const auto titleFont = semiBold (13.0f, 2.0f / 13.0f);
         g.setColour (on ? colours::textStrong : colours::textMuted);
         g.setFont (titleFont);
@@ -572,7 +572,7 @@ namespace velvox::ui
             {
                 g.setColour (colours::knobName);
                 g.setFont (semiBold (9.0f, 0.06f));
-                g.drawText (captions[c].toUpperCase(), c->getBounds().translated (0, c->getHeight() + 4).withHeight (14),
+                g.drawText (i18n::upper (captions[c]), c->getBounds().translated (0, c->getHeight() + 4).withHeight (14),
                             juce::Justification::centred, false);
             }
     }

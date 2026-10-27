@@ -666,7 +666,7 @@ namespace velvox::ui
         const auto nameArea = nameBounds (shifted);
         g.setColour ((on ? colours::textStrong : colours::textMuted));
         g.setFont (semiBold (9.5f, 0.12f));
-        g.drawFittedText (cardName (routing, t.id, t.instance).toUpperCase(), nameArea.toNearestInt(), juce::Justification::centred, 1, 0.7f);
+        g.drawFittedText (i18n::upper (cardName (routing, t.id, t.instance)), nameArea.toNearestInt(), juce::Justification::centred, 1, 0.7f);
 
         // 2) Icon (with a SEND badge on sends)
         const auto iconArea = iconBounds (shifted);
