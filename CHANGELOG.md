@@ -2,6 +2,36 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/i18n`
+
+### Neu – Sprache Deutsch / English
+- **Die ganze Oberfläche gibt es auf Deutsch und Englisch:** Bedienelemente, Infokarten, Menüs, Hilfe, Tour,
+  Auto-Mix-Bericht, Vocal Check, Preset-Beschreibungen. Modul- und Preset-Namen bleiben Englisch, übliche
+  Audio-Fachbegriffe (Threshold, Ratio, Attack …) auch. Regeln und Glossar: `docs/I18N.md`.
+- **Standard ist die Sprache des Computers** (Windows auf Deutsch → Deutsch, sonst Englisch).
+- **Erster Start:** Willkommenskarte mit Deutsch | English (vorausgewählt: Computersprache) und
+  „Vocal analysieren“ / „Kurze Tour“ / „Direkt zum Plugin“.
+- **Einstellungen (Zahnrad in der Kopfzeile):** Sprache Automatisch | Deutsch | English, Ansicht beim Öffnen,
+  Fenstergröße, Analyse-Popup bei neuen Instanzen, Infokarten, Tour. Ein Sprachwechsel gilt sofort.
+- Der Auto-Mix-Bericht wird in beiden Sprachen gespeichert und folgt dem Wechsel; Berichte älterer Projekte
+  bleiben deutsch.
+
+### Geändert – Bedienung
+- Tour beginnt mit „Vocal analysieren“ und schaltet für Kette und Module selbst auf ADVANCED.
+- Nach einem Mix heißt der Knopf „Neu analysieren“; die Fertig-Karte bleibt, bis man klickt, und nennt den
+  Vergleich wie das Bedienelement („Vorher / Nachher“).
+- Erfassen: Pegel als eigener Segment-Pegelmesser (sah vorher wie ein Fortschrittsbalken aus); Hinweise
+  DAW-neutral statt „FL Studio“.
+- Presets laden mit einem Klick, die Liste bleibt offen (Enter lädt und schließt, Esc schließt).
+- Vocal Check einschalten markiert das Preset nicht mehr als geändert.
+- Output: Einheiten an IN/FX/MATCH, Beschriftung der Korrelation; Bypass-Hinweis verdeckt den OUT-Pegel nicht mehr.
+- De-Esser zeigt Range als Absenkung (−9 dB); Frequenzachsen mit 20 Hz / 20 kHz; Compressor-Skala ohne Lücke.
+- Vocal Check: klarer Leerzustand („Spiel die Vocal ab …“), „Anwenden“ nicht mehr als lautestes Element.
+
+### Alte Projekte
+- Klingen unverändert; Parameter-IDs, Plugin-Codes und die für den Host sichtbaren (englischen) Parameternamen
+  bleiben gleich, Automationen bleiben gültig. Die Sprache ist eine Einstellung des Nutzers, nicht des Projekts.
+
 ## [0.6.1] – Branch `feature/automix` (Feedback-Runde, Entwicklungsstand)
 
 ### Geändert – Simpel stellt die Module ein
