@@ -1,5 +1,23 @@
 # HEADLINER – Übergabe für die nächste Session
 
+## STAND 2026-10-27 ABEND – HIER WEITERMACHEN
+Branch **`feature/modules-0.7`** (baut auf `feature/i18n` auf). Jakob hat unterbrochen („ich mach morgen weiter“).
+- **Fertig + committet:**
+  - Plan A `docs/superpowers/plans/2026-10-27-remove-creative-modules.md`: Pitch, Stutter, Pulse, Choir komplett raus,
+    6 Presets umgebaut (3 umbenannt: Tight Rap Vocal, Deep Double, Bright Hook). Gate war grün (36.896 Checks, pluginval 10).
+  - Plan B `docs/superpowers/plans/2026-10-27-denoise-breath-modules.md`, alle 5 Tasks: Raumrauschen (`denoise`,
+    „Room Noise“) und Atem-Absenker (`breath`, „Breath Control“) mit DSP, Panels, Hilfe, Auto Mix. Einzel-Suites grün.
+  - Vorher (auch hier drin): Maskottchen-Teufel in SIMPEL, SIMPEL-Regler zeigen nach dem Auto Mix seine Einstellung.
+- **Noch offen (in dieser Reihenfolge):**
+  1. Voller Lauf `scripts\build.ps1` + pluginval 10 nach Plan B (wurde abgebrochen, bevor er fertig war).
+  2. Finales Whole-Branch-Review (Paket: `.superpowers/sdd/2026-10-27-denoise-breath-modules/review-91e1fa1..181e15a.diff`,
+     Rulings stehen in den `progress.md`-Ledgern beider Pläne unter `.superpowers/sdd/`).
+  3. Jakob fragen: Modulnamen Englisch lassen (Regel docs/I18N.md) oder deutsch („Raumrauschen“, „Atem-Absenker“)?
+     Latenz: Raumrauschen 1024 Samples, Atem-Absenker 90 ms – nur solange das Modul in der Kette ist.
+  4. Installieren (FL schließen) + Changelog-Eintrag für Plan B ergänzen.
+  5. Danach: Beat als Sidechain (eigener Plan; `CapturedAudio` hat schon ein `beat`-Feld).
+  6. Maskottchen neu (Meteor / Ghettoblaster / Kassette, 3D-Comic) – Jakob erzeugt Bilder mit den Prompts.
+
 Stand: **2026-10-26**, Branch `feature/automix`, Version **0.6.1** (Beta). Diese Datei zuerst lesen.
 
 ## Auf einen Blick
