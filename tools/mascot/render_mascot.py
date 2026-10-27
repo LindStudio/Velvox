@@ -30,10 +30,46 @@ def parse_args():
     p.add_argument("--size", type=int, default=800)
     p.add_argument("--step", type=int, default=1, help="render every n-th frame (loop mode)")
     p.add_argument("--samples", type=int, default=32)
+    p.add_argument("--light", choices=sorted(LIGHTS), default="warm")
+    p.add_argument("--view", choices=["standard", "agx-punchy"], default="standard")
+    p.add_argument("--exposure", type=float, default=-1.25)
     return p.parse_args(argv)
 
 
-def setup_scene(size, samples):
+# Light rigs: (name, position as (side, front, up) in character heights, colour, power, size).
+# side +x = character's left (camera right), front -y = towards camera.
+LIGHTS = {
+    # Neutral softbox studio: true texture colours, like a product shot of a vinyl toy.
+    "studio": {
+        "world": ((0.5, 0.5, 0.5), 0.35),
+        "rigs": [
+            ("Key", (-1.0, -1.6, 1.4), (1.0, 1.0, 1.0), 140, 1.6),
+            ("Fill", (1.4, -1.2, 0.7), (1.0, 1.0, 1.0), 45, 2.0),
+            ("Rim", (0.6, 1.4, 1.5), (1.0, 1.0, 1.0), 120, 0.8),
+        ],
+    },
+    # Warm key, cool fill: Pixar-like, slightly more mood.
+    "warm": {
+        "world": ((0.45, 0.47, 0.55), 0.3),
+        "rigs": [
+            ("Key", (-1.0, -1.6, 1.4), (1.0, 0.92, 0.82), 150, 1.6),
+            ("Fill", (1.4, -1.2, 0.7), (0.8, 0.88, 1.0), 40, 2.0),
+            ("Rim", (0.6, 1.4, 1.5), (1.0, 0.95, 0.9), 130, 0.8),
+        ],
+    },
+    # Neutral front light, a single cyan edge to tie in with the plugin palette.
+    "cyan": {
+        "world": ((0.5, 0.5, 0.5), 0.3),
+        "rigs": [
+            ("Key", (-1.0, -1.6, 1.4), (1.0, 1.0, 1.0), 140, 1.6),
+            ("Fill", (1.4, -1.2, 0.7), (1.0, 1.0, 1.0), 40, 2.0),
+            ("Rim", (1.1, 1.2, 1.3), (0.35, 0.9, 1.0), 200, 0.6),
+        ],
+    },
+}
+
+
+def setup_scene(size, samples, light, view, exposure):
     scene = bpy.context.scene
     for obj in list(bpy.data.objects):
         bpy.data.objects.remove(obj, do_unlink=True)
@@ -46,14 +82,21 @@ def setup_scene(size, samples):
     scene.render.film_transparent = True
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGBA"
-    scene.view_settings.view_transform = "AgX"
-    scene.view_settings.look = "AgX - Medium High Contrast"
+    # Plain AgX pulls saturated red towards salmon pink; Standard keeps the texture's red.
+    if view == "standard":
+        scene.view_settings.view_transform = "Standard"
+        scene.view_settings.look = "None"
+    else:
+        scene.view_settings.view_transform = "AgX"
+        scene.view_settings.look = "AgX - Punchy"
+    scene.view_settings.exposure = exposure
     world = bpy.data.worlds.new("Stage") if scene.world is None else scene.world
     scene.world = world
     world.use_nodes = True
     bg = world.node_tree.nodes.get("Background")
-    bg.inputs["Color"].default_value = (0.03, 0.02, 0.06, 1.0)
-    bg.inputs["Strength"].default_value = 0.6
+    color, strength = LIGHTS[light]["world"]
+    bg.inputs["Color"].default_value = (*color, 1.0)
+    bg.inputs["Strength"].default_value = strength
     return scene
 
 
@@ -117,7 +160,7 @@ def area_light(name, loc, target, color, power, size):
     return obj
 
 
-def setup_camera_and_lights(lo, hi):
+def setup_camera_and_lights(lo, hi, light):
     """Front camera, slightly below the face; stage light like concepts/RedDevilWerbung.png."""
     height = hi.z - lo.z
     center = (lo + hi) / 2
@@ -135,11 +178,8 @@ def setup_camera_and_lights(lo, hi):
     cam.rotation_euler = (look - cam.location).to_track_quat("-Z", "Y").to_euler()
 
     h = height
-    # Near-white key keeps the devil red; colour comes from fill and rims.
-    area_light("Key", (center.x - h * 1.2, center.y - h * 1.6, lo.z + h * 1.6), look, (1.0, 0.9, 0.85), 160 * h * h, h * 1.2)
-    area_light("Fill", (center.x + h * 1.5, center.y - h * 1.2, lo.z + h * 0.8), look, (0.6, 0.4, 1.0), 50 * h * h, h * 1.5)
-    area_light("RimCyan", (center.x + h * 1.1, center.y + h * 1.2, lo.z + h * 1.3), look, (0.2, 0.9, 1.0), 260 * h * h, h * 0.6)
-    area_light("RimPink", (center.x - h * 1.1, center.y + h * 1.0, lo.z + h * 1.1), look, (1.0, 0.25, 0.6), 160 * h * h, h * 0.6)
+    for name, (sx, sy, sz), color, power, size in LIGHTS[light]["rigs"]:
+        area_light(name, (center.x + h * sx, center.y + h * sy, lo.z + h * sz), look, color, power * h * h, h * size)
 
 
 def render_to(path):
@@ -149,7 +189,7 @@ def render_to(path):
 
 def main():
     args = parse_args()
-    scene = setup_scene(args.size, args.samples)
+    scene = setup_scene(args.size, args.samples, args.light, args.view, args.exposure)
     arm, meshes = import_model(os.path.abspath(args.glb))
 
     if args.mode == "list":
@@ -161,7 +201,7 @@ def main():
     start, _ = assign(arm, find_action("Short_Breathe"))
     scene.frame_set(start)
     lo, hi = world_bbox(meshes)
-    setup_camera_and_lights(lo, hi)
+    setup_camera_and_lights(lo, hi, args.light)
 
     out = os.path.abspath(args.out)
     if args.mode == "sheet":
@@ -172,7 +212,8 @@ def main():
     else:
         start, end = assign(arm, find_action(args.anim))
         folder = os.path.join(out, args.anim)
-        for i, f in enumerate(range(start, end + 1, args.step)):
+        # Meshy loops repeat the first pose on the last frame; drop it so playback has no hitch.
+        for i, f in enumerate(range(start, end, args.step)):
             scene.frame_set(f)
             render_to(os.path.join(folder, f"{i:04d}.png"))
 
