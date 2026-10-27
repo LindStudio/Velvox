@@ -175,6 +175,16 @@ Okay → Gut → Super steigt auch messbar in der Bewegungsenergie (mittlere Ges
   Belichtung −1,5, Textur Farbton +0,008 (Richtung Orange-Rot), Sättigung 1,35, Helligkeit 0,75, Glanz 0,7.
   Vergleich: `velvox-bench\2026-10-27\mascot\ton3_*.png`. AgX macht das Rot lachsrosa, Standard schneidet es flach ab.
 - PNGs haben echten Alphakanal; Hintergrund in Vorschau-Videos ist nur zur Ansicht.
+- Glanz: Jakob wählt „Klarlack weich“ (Coat 0,7, Coat-Rauheit 0,25, Rauheit ×0,5) = Standard im Skript.
+- Alle 11 Bewegungen gerendert (60 fps, 800 px, ohne Mund): `velvox-bench\2026-10-27\mascot\states\`, Videos in `videos\`.
+  1,7 GB → fürs Plugin später verkleinern (400 px, ggf. 30 fps bei ruhigen Zuständen, komprimiertes Format).
+
+### Mund (Aufkleber statt Textur)
+- Meshy-Mund ist nur ein feiner Strich in der verzerrten Gesichts-UV → wird im Skript übermalt (`erase_painted_mouth`).
+- Mund = Bild auf einem Gitter, per Shrinkwrap (nächster Oberflächenpunkt) aufs Gesicht gelegt und an `mixamorig:Head` gehängt.
+  Lage aus der UV-Position des alten Strichs (`MOUTH_TEX`). Bilder: `tools/mascot/make_mouths.py` → `art/mascot/mouths/`
+  (zu / halb / offen mit Zunge + Reißzähnen). `--mouths zu,halb,offen` rendert jede Pose einmal pro Mund (Unterordner).
+- Test: `velvox-bench\2026-10-27\mascot\mund_test.png`.
 
 ## Nächste Schritte (am PC mit Blender)
 1. `git fetch origin` und Branch `feature/i18n` holen (enthält diese Datei und `art/mascot/`).
