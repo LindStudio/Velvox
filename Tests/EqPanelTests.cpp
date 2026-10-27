@@ -449,7 +449,7 @@ public:
             expectEquals (air, 1, "the Presence band is shown next to the user band");
             if (air < 0)
                 return;
-            expectEquals (ui::eqedit::roleTag (g.getShown()[(size_t) air].band.role), juce::String ("AIR"), "role tag");
+            expectEquals (ui::eqedit::roleTag (g.getShown()[(size_t) air].band.role), juce::String ("LUFT"), "role tag");
             expectEquals (ui::eqedit::roleTag (g.getShown()[0].band.role), juce::String(), "user bands carry no tag");
             const auto ap = g.pointFor (air);
             expectWithinAbsoluteError (ap.y, g.yForGain (3.0f), 0.5f, "drawn at the processed gain (+3 dB at 60 %)");

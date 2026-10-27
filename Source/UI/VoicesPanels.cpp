@@ -1,6 +1,8 @@
 #include "VoicesPanels.h"
 #include "../PluginProcessor.h"
 #include "HelpContent.h"
+#include "../Text/I18n.h"
+#include "../Text/ParamText.h"
 
 namespace velvox::ui
 {
@@ -9,7 +11,15 @@ namespace velvox::ui
 
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
+        using i18n::tr;
+
+        // Upper case including ä / ö / ü (juce::String::toUpperCase leaves them as they are)
+        juce::String capitals (const juce::String& s)
+        {
+            return s.toUpperCase().replace (juce::String::fromUTF8 ("ä"), juce::String::fromUTF8 ("Ä"))
+                                  .replace (juce::String::fromUTF8 ("ö"), juce::String::fromUTF8 ("Ö"))
+                                  .replace (juce::String::fromUTF8 ("ü"), juce::String::fromUTF8 ("Ü"));
+        }
 
         juce::String idFor (const char* base, int instance)
         {
@@ -54,17 +64,23 @@ namespace velvox::ui
 
         constexpr Field allFields[] { Field::on, Field::delay, Field::detune, Field::gain, Field::pan };
 
-        const char* fieldName (Field f) noexcept
+        juce::String fieldName (Field f)
         {
             switch (f)
             {
-                case Field::on:     return "On";
+                case Field::on:     return tr ("An", "On");
                 case Field::delay:  return "Delay";
                 case Field::detune: return "Detune";
                 case Field::gain:   return "Gain";
                 case Field::pan:    break;
             }
             return "Pan";
+        }
+
+        // Undo step name: "Doubler: Stimme 2 Delay"
+        juce::String stepName (int v, const juce::String& what)
+        {
+            return "Doubler: " + i18n::format (tr ("Stimme {0}", "Voice {0}"), { juce::String (v + 1) }) + " " + what;
         }
 
         // Live pictures repaint at 30 Hz (the editor frame runs at 60)
@@ -152,7 +168,7 @@ namespace velvox::ui
         {
             switch (f)
             {
-                case Field::on:     return v > 0.5f ? "On" : "Off";
+                case Field::on:     return v > 0.5f ? tr ("An", "On") : tr ("Aus", "Off");
                 case Field::delay:  return juce::String (v, 1) + " ms";
                 case Field::detune: return std::abs (v) < 0.05f ? juce::String ("0.0 ct") : (v > 0.0f ? "+" : "") + juce::String (v, 1) + " ct";
                 case Field::gain:   return std::abs (v) < 0.05f ? juce::String ("0.0 dB") : (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB";
@@ -226,11 +242,6 @@ namespace velvox::ui
             write (param (proc, instance, voiceIndex, f), realValue);
         }
 
-        namespace
-        {
-            juce::String stepName (int v, const char* what) { return "Doubler: Stimme " + juce::String (v + 1) + " " + de (what); }
-        }
-
         void setValue (VelvoxAudioProcessor& proc, int instance, int v, Field f, float realValue)
         {
             Edit e (proc, instance, v, { f }, stepName (v, fieldName (f)));
@@ -240,20 +251,20 @@ namespace velvox::ui
         void toggleOn (VelvoxAudioProcessor& proc, int instance, int v)
         {
             const bool wasOn = voice (proc, instance, v).on;
-            Edit e (proc, instance, v, { Field::on }, stepName (v, wasOn ? "aus" : "an"));
+            Edit e (proc, instance, v, { Field::on }, stepName (v, wasOn ? tr ("aus", "off") : tr ("an", "on")));
             e.set (Field::on, wasOn ? 0.0f : 1.0f);
         }
 
         void resetVoice (VelvoxAudioProcessor& proc, int instance, int v)
         {
-            Edit e (proc, instance, v, { Field::on, Field::delay, Field::detune, Field::gain, Field::pan }, stepName (v, "zurücksetzen"));
+            Edit e (proc, instance, v, { Field::on, Field::delay, Field::detune, Field::gain, Field::pan }, stepName (v, tr ("zurücksetzen", "reset")));
             for (auto f : allFields)
                 e.set (f, defaultOf (param (proc, instance, v, f)));
         }
 
         void resetPosition (VelvoxAudioProcessor& proc, int instance, int v)
         {
-            Edit e (proc, instance, v, { Field::pan, Field::gain }, stepName (v, "Position zurücksetzen"));
+            Edit e (proc, instance, v, { Field::pan, Field::gain }, stepName (v, tr ("Position zurücksetzen", "position reset")));
             for (auto f : { Field::pan, Field::gain })
                 e.set (f, defaultOf (param (proc, instance, v, f)));
         }
@@ -311,9 +322,9 @@ namespace velvox::ui
             getProperties().set ("paramId", doubleredit::paramId (stage.instance, voice, field));
             setMouseCursor (field == Field::on ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::UpDownResizeCursor);
             const auto* spec = findParameterSpec (doubleredit::paramId (0, voice, field));
-            description = spec != nullptr ? spec->description : juce::String();
+            description = spec != nullptr ? i18n::paramDescription (spec->id, spec->description) : juce::String();
             info = std::make_unique<HoverInfo> (*this,
-                                                [this] { return "Stimme " + juce::String (voice + 1) + juce::String::fromUTF8 (" · ") + fieldName (field); },
+                                                [this] { return tr ("Stimme ", "Voice ") + juce::String (voice + 1) + juce::String::fromUTF8 (" · ") + fieldName (field); },
                                                 [this] { return text; },
                                                 [this] { return description; });
         }
@@ -394,7 +405,7 @@ namespace velvox::ui
                 return;
             if (edit == nullptr)
                 edit = std::make_unique<doubleredit::Edit> (stage.proc, stage.instance, voice, std::initializer_list<Field> { field },
-                                                            "Doubler: Stimme " + juce::String (voice + 1) + " " + fieldName (field));
+                                                            stepName (voice, fieldName (field)));
             moved = true;
             const float pixels = (float) FineSlider::normalPixels * (isFine (e.mods) ? (float) FineSlider::fineFactor : 1.0f);
             proportion = juce::jlimit (0.0f, 1.0f, proportion + diff / pixels);
@@ -518,8 +529,8 @@ namespace velvox::ui
         {
             juce::PopupMenu m;
             juce::Component::SafePointer<ValueField> safe (this);
-            m.addItem (de ("Standardwert"), field != Field::on, false, [safe] { if (safe != nullptr) safe->resetField(); });
-            m.addItem (de ("Wert eingeben …"), field != Field::on, false, [safe] { if (safe != nullptr) safe->showEditor(); });
+            m.addItem (tr ("Standardwert", "Default value"), field != Field::on, false, [safe] { if (safe != nullptr) safe->resetField(); });
+            m.addItem (tr ("Wert eingeben …", "Enter value …"), field != Field::on, false, [safe] { if (safe != nullptr) safe->showEditor(); });
             m.addSeparator();
             const auto voiceMenu = stage.buildMenu (voice);
             for (juce::PopupMenu::MenuItemIterator it (voiceMenu); it.next();)
@@ -607,9 +618,9 @@ namespace velvox::ui
         Handle (DoublerStage& s, int v) : stage (s), voice (v)
         {
             setMouseCursor (juce::MouseCursor::DraggingHandCursor);
-            info = std::make_unique<HoverInfo> (*this, [this] { return "Stimme " + juce::String (voice + 1); },
+            info = std::make_unique<HoverInfo> (*this, [this] { return tr ("Stimme ", "Voice ") + juce::String (voice + 1); },
                                                 [this] { return stage.cardValue (voice); },
-                                                [] { return de ("Ziehen: Panorama und Pegel · Mausrad: Detune"); });
+                                                [] { return tr ("Ziehen: Panorama und Pegel · Mausrad: Detune", "Drag: pan and level · Wheel: detune"); });
         }
         void refreshInfo() { info->refresh(); }
 
@@ -655,7 +666,7 @@ namespace velvox::ui
     {
         const auto& vv = values[(size_t) juce::jlimit (0, 3, v)];
         if (! vv.on)
-            return "Off";
+            return tr ("Aus", "Off");
         const juce::String dot = juce::String::fromUTF8 (" · ");
         return doubleredit::valueText (Field::delay, vv.delayMs) + dot + doubleredit::valueText (Field::detune, vv.detuneCents) + dot
              + doubleredit::valueText (Field::gain, vv.gainDb) + dot + doubleredit::valueText (Field::pan, vv.panPercent);
@@ -693,7 +704,7 @@ namespace velvox::ui
         if (focus >= 0 && focus < n)
             text = juce::String (focus + 1) + "   " + cardValue (focus);
         else if (classic)
-            text = "CLASSIC   " + doubleredit::valueText (Field::delay, values[0].delayMs) + " / " + doubleredit::valueText (Field::delay, values[1].delayMs);
+            text = capitals (i18n::choiceName (pid::doublerVoices, 0, "Classic")) + "   " + doubleredit::valueText (Field::delay, values[0].delayMs) + " / " + doubleredit::valueText (Field::delay, values[1].delayMs);
         if (text != readout)
         {
             readout = text;
@@ -952,7 +963,7 @@ namespace velvox::ui
             const auto cols = rowColumns (rowsArea.withHeight (captionHeight));
             g.setFont (semiBold (8.5f, 0.12f));
             g.setColour (colours::textFaint);
-            g.drawText ("ON", cols.on.toFloat(), juce::Justification::centred, false);
+            g.drawText (tr ("AN", "ON"), cols.on.toFloat(), juce::Justification::centred, false);
             for (size_t i = 0; i < 4; ++i)
                 g.drawText (rowCaptions[i], cols.fields[i].toFloat(), juce::Justification::centred, false);
         }
@@ -965,10 +976,10 @@ namespace velvox::ui
     {
         juce::Component::SafePointer<DoublerStage> safe (this);
         juce::PopupMenu m;
-        m.addSectionHeader ("Stimme " + juce::String (v + 1));
-        m.addItem (values[(size_t) juce::jlimit (0, 3, v)].on ? "Stimme aus" : "Stimme an",
+        m.addSectionHeader (tr ("Stimme ", "Voice ") + juce::String (v + 1));
+        m.addItem (values[(size_t) juce::jlimit (0, 3, v)].on ? tr ("Stimme aus", "Turn voice off") : tr ("Stimme an", "Turn voice on"),
                    [safe, v] { if (safe != nullptr) { doubleredit::toggleOn (safe->proc, safe->instance, v); safe->readParameters(); } });
-        m.addItem (de ("Stimme zurücksetzen"),
+        m.addItem (tr ("Stimme zurücksetzen", "Reset voice"),
                    [safe, v] { if (safe != nullptr) { doubleredit::resetVoice (safe->proc, safe->instance, v); safe->readParameters(); } });
         addPanelItems (*this, m);
         return m;
@@ -1040,7 +1051,7 @@ namespace velvox::ui
             return;
         if (edit == nullptr)
             edit = std::make_unique<doubleredit::Edit> (proc, instance, dragVoice, std::initializer_list<Field> { Field::pan, Field::gain },
-                                                        "Doubler: Stimme " + juce::String (dragVoice + 1) + " Position");
+                                                        stepName (dragVoice, tr ("Position", "position")));
         const float scale = isFine (e.mods) ? 0.1f : 1.0f;
         const float pxPerPan = std::max (1.0f, xForPan (100.0f) - xForPan (0.0f)) / 100.0f;
         const float pxPerDb = std::max (1.0f, yForGain (-24.0f) - yForGain (6.0f)) / 30.0f;
@@ -1100,9 +1111,9 @@ namespace velvox::ui
     ChoirStage::ChoirStage (VelvoxAudioProcessor& p, int k) : proc (p), instance (k)
     {
         info = std::make_unique<HoverInfo> (*this,
-                                            [this] { return hovered >= 0 ? "Stimme " + juce::String (hovered + 1) : juce::String ("Width"); },
+                                            [this] { return hovered >= 0 ? tr ("Stimme ", "Voice ") + juce::String (hovered + 1) : juce::String ("Width"); },
                                             [this] { return hovered >= 0 ? cardValue (hovered) : juce::String (juce::roundToInt (settings.width * 100.0f)) + " %"; },
-                                            [this] { return hovered >= 0 ? juce::String() : de ("Ziehen: Breite des Chors"); });
+                                            [this] { return hovered >= 0 ? juce::String() : tr ("Ziehen: Breite des Chors", "Drag: width of the choir"); });
         dsp::ChoirSettings s;
         s.voices = dsp::ChoirModule::voiceCountForIndex (juce::roundToInt (realValue (proc, pid::choirVoices, instance)));
         s.detuneCents = realValue (proc, pid::choirDetune, instance);
@@ -1125,7 +1136,7 @@ namespace velvox::ui
         settings.voices = juce::jlimit (2, dsp::ChoirModule::maxVoices, s.voices);
         on = s.enabled;
         const juce::String dot = juce::String::fromUTF8 (" · ");
-        auto text = juce::String (settings.voices) + " VOICES" + dot + juce::String::fromUTF8 ("±") + juce::String (juce::roundToInt (settings.detuneCents))
+        auto text = juce::String (settings.voices) + tr (" STIMMEN", " VOICES") + dot + juce::String::fromUTF8 ("±") + juce::String (juce::roundToInt (settings.detuneCents))
                   + " ct" + dot + juce::String (juce::roundToInt (settings.timingMs)) + " ms";
         if (text != readout)
         {
@@ -1344,7 +1355,7 @@ namespace velvox::ui
             ignoreDrag = true;
             juce::PopupMenu m;
             juce::Component::SafePointer<ChoirStage> safe (this);
-            m.addItem (de ("Width zurücksetzen"), [safe] { if (safe != nullptr) if (auto* p = safe->widthParam()) gestures::resetToDefault (*p); });
+            m.addItem (tr ("Width zurücksetzen", "Reset width"), [safe] { if (safe != nullptr) if (auto* p = safe->widthParam()) gestures::resetToDefault (*p); });
             addPanelItems (*this, m);
             m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (190));
             return;
@@ -1428,17 +1439,17 @@ namespace velvox::ui
                 : DetailPanel (p, "Doubler", help::shortDescription ((int) ModuleId::doubler), pid::doublerOn)
             {
                 voices = &segments (pid::doublerVoices);
-                setCaption (*voices, "Stimmen");
+                setCaption (*voices, tr ("Stimmen", "Voices"));
                 mix = &knob (pid::doublerMix, "Mix");
-                mix->setDescription (de ("Anteil der Dopplungen am Signal."));
+                mix->setDescription (tr ("Anteil der Dopplungen am Signal.", "How much of the doubled voices is in the signal."));
                 detune = &knob (pid::doublerDetune, "Detune");
-                modDepth = &knob (pid::doublerModDepth, "Mod Depth");
+                modDepth = &knob (pid::doublerModDepth, tr ("Mod-Tiefe", "Mod Depth"));
                 dry = &knob (pid::doublerDry, "Dry");
                 knob (pid::doublerWidth, "Width");
-                knob (pid::doublerMonoSafe, "Mono Safe");
+                knob (pid::doublerMonoSafe, tr ("Mono-Schutz", "Mono Safe"));
                 knob (pid::doublerTone, "Tone");
                 knob (pid::doublerLowCut, "Low Cut");
-                knob (pid::doublerModRate, "Mod Rate");
+                knob (pid::doublerModRate, tr ("Mod-Rate", "Mod Rate"));
                 delay = &knob (pid::doublerDelay, "Delay");
                 showMode (classicNow());
                 setMixKnob (mix);
@@ -1491,12 +1502,12 @@ namespace velvox::ui
                 : DetailPanel (p, "Choir", help::shortDescription ((int) ModuleId::choir), pid::choirOn)
             {
                 auto& voices = segments (pid::choirVoices);
-                setCaption (voices, "Stimmen");
+                setCaption (voices, tr ("Stimmen", "Voices"));
                 auto& detune = knob (pid::choirDetune, "Detune");
                 knob (pid::choirTiming, "Timing");
                 knob (pid::choirHumanize, "Humanize");
                 auto& width = knob (pid::choirWidth, "Width");
-                knob (pid::choirDensity, "Density");
+                knob (pid::choirDensity, tr ("Dichte", "Density"));
                 auto& mix = knob (pid::choirMix, "Mix");
                 setMainControls ({ &voices, &detune, &width, &mix });
             }

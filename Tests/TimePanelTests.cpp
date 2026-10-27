@@ -638,7 +638,7 @@ private:
             expectEquals ((int) main.size(), 4);
             expect (findMain<ui::Segments> (*panel, pid::chopRate) != nullptr, "Rate");
             auto* depth = findMain<ui::Knob> (*panel, pid::chopDepth);
-            expect (depth != nullptr && depth->getLabel() == "DEPTH", "Depth");
+            expect (depth != nullptr && depth->getLabel() == "TIEFE", "Depth");
             expect (findMain<ui::Knob> (*panel, pid::chopSmooth) != nullptr, "Smooth");
             expect (findMain<ui::Choice> (*panel, pid::chopPattern) != nullptr, "Pattern dropdown");
             bool hasWave = false;

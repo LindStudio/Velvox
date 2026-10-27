@@ -649,7 +649,7 @@ public:
             const auto s = juce::Point<float> (p.x, bars.targetY());
             bars.mouseDown (mouseAt (bars, s, s, false));
             bars.mouseDrag (mouseAt (bars, s.translated (0.0f, 3.0f), s, true));
-            expect (bars.isCardShown() && bars.getCardTitle() == "TARGET", bars.getCardTitle());
+            expect (bars.isCardShown() && bars.getCardTitle() == "ZIEL", bars.getCardTitle());
             bars.mouseUp (mouseAt (bars, s.translated (0.0f, 3.0f), s, true));
         }
 

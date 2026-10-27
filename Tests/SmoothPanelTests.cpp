@@ -217,9 +217,9 @@ public:
                 auto* sharp = dynamic_cast<Knob*> (main[1]);
                 auto* speed = dynamic_cast<SpeedKnob*> (main[2]);
                 auto* delta = dynamic_cast<Toggle*> (main[3]);
-                expect (depth != nullptr && depth->getParamId() == pid::smoothAmount && depth->getLabel() == "DEPTH", "Depth");
-                expect (sharp != nullptr && sharp->getParamId() == pid::smoothSensitivity && sharp->getLabel() == "SHARPNESS", "Sharpness");
-                expect (speed != nullptr && speed->getLabel() == "SPEED" && speed->getDialSize() >= 50, "Speed (linked, large)");
+                expect (depth != nullptr && depth->getParamId() == pid::smoothAmount && depth->getLabel() == "TIEFE", "Depth");
+                expect (sharp != nullptr && sharp->getParamId() == pid::smoothSensitivity && sharp->getLabel() == juce::String::fromUTF8 ("SCHÄRFE"), "Sharpness: " + (sharp != nullptr ? sharp->getLabel() : juce::String()));
+                expect (speed != nullptr && speed->getLabel() == "TEMPO" && speed->getDialSize() >= 50, "Speed (linked, large)");
                 expect (delta != nullptr && delta->getParamId() == pid::smoothDelta, "Delta");
             }
             juce::StringArray more;
