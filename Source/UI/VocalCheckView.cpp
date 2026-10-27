@@ -1,19 +1,22 @@
 #include "VocalCheckView.h"
 #include "../PluginProcessor.h"
 #include "../DSP/Instances.h"
+#include "../Text/ParamText.h"
 
+// The finding texts (problem, fix, detail, why) hold both languages (i18n::both, see
+// CheckRules.cpp): they are shown with i18n::show.
 namespace velvox::ui
 {
     using dsp::ModuleId;
+    using i18n::tr;
 
     namespace
     {
         const juce::Colour amber { 0xfff59e0b };       // medium findings, middle scores (design mockup)
-        const juce::Colour onAccent { 0xff04111a };    // text on the filled check-colour buttons
 
         juce::Colour checkColour() { return moduleColour (ModuleId::check); }
 
-        juce::String seconds (float s) { return juce::String (s, 1).replace (".", ","); }
+        juce::String seconds (float s) { return i18n::number (s, 1); }
 
         // Layout of the header (design units)
         constexpr int pad = 16, headerH = 112, ringSize = 88, rightW = 252;
@@ -51,16 +54,21 @@ namespace velvox::ui
             for (int m = 0; m < dsp::numModules; ++m)
                 for (int k = 0; k < dsp::maxInstances ((ModuleId) m); ++k)
                     if (fix.routing->contains ((ModuleId) m, k) && ! now.contains ((ModuleId) m, k))
-                        lines.add (dsp::instanceDisplayName ((ModuleId) m, k) + juce::String::fromUTF8 (" einfügen"));
+                        lines.add (i18n::format (tr ("{0} einfügen", "Insert {0}"), { dsp::instanceDisplayName ((ModuleId) m, k) }));
         }
         auto& apvts = proc.getState();
         for (auto& p : fix.params)
             if (auto* param = apvts.getParameter (p.paramId))
             {
-                auto value = param->getText (param->convertTo0to1 (p.value), 32);
+                const float normalised = param->convertTo0to1 (p.value);
+                auto value = param->getText (normalised, 32);
+                if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (param))
+                    value = i18n::choiceName (p.paramId, choice->choices.indexOf (value), value);
+                else if (dynamic_cast<juce::AudioParameterBool*> (param) != nullptr)
+                    value = normalised > 0.5f ? tr ("An", "On") : tr ("Aus", "Off");
                 if (param->getLabel().isNotEmpty() && ! value.endsWith (param->getLabel()))
                     value << " " << param->getLabel();
-                lines.add (param->getName (64) + ": " + value);
+                lines.add (i18n::paramName (p.paramId, param->getName (64)) + ": " + value);
             }
         return lines.joinIntoString ("\n");
     }
@@ -119,22 +127,15 @@ namespace velvox::ui
         {
             case Style::filled:
             {
-                auto fill = enabled ? accent : colours::control;
-                if (enabled && (highlighted || down))
-                    fill = fill.brighter (down ? 0.05f : 0.18f);
-                if (enabled)
-                {
-                    g.setColour (accent.withAlpha (highlighted ? 0.28f : 0.16f));
-                    g.fillRoundedRectangle (r.expanded (2.0f), corner + 2.0f);
-                }
-                g.setColour (fill);
+                // The normal text button of the design (VelvoxLookAndFeel::drawButtonBackground): a faint
+                // white fill and the panel line, brighter text than the ghost buttons. No colour fill, no
+                // glow: the findings stay the loudest part of the view.
+                g.setColour (! enabled ? colours::control
+                                       : colours::accent.withAlpha (down ? 0.08f : (highlighted ? 0.05f : 0.02f)));
                 g.fillRoundedRectangle (r, corner);
-                if (! enabled)
-                {
-                    g.setColour (colours::borderInset);
-                    g.drawRoundedRectangle (r, corner, 1.0f);
-                }
-                text = enabled ? onAccent : colours::textFaint;
+                g.setColour (! enabled ? colours::borderInset : highlighted ? colours::line.brighter (0.4f) : colours::line.brighter (0.15f));
+                g.drawRoundedRectangle (r, corner, 1.0f);
+                text = enabled ? colours::textStrong : colours::textFaint;
                 break;
             }
             case Style::ghost:
@@ -199,8 +200,8 @@ namespace velvox::ui
             addChildComponent (*b);
         ignoreButton.setVisible (! ignoredRow);
         restoreButton.setVisible (ignoredRow);
-        ignoreButton.setTooltip (juce::String::fromUTF8 ("Diesen Befund ausblenden (wird mit dem Projekt gespeichert)"));
-        restoreButton.setTooltip (juce::String::fromUTF8 ("Wieder in der Liste zeigen"));
+        ignoreButton.setTooltip (tr ("Diesen Befund ausblenden (wird mit dem Projekt gespeichert)", "Hide this finding (saved with the project)"));
+        restoreButton.setTooltip (tr ("Wieder in der Liste zeigen", "Show it in the list again"));
     }
 
     bool VocalCheckView::Tile::set (const juce::String& p, const juce::String& fx, juce::Colour e, bool can, bool done, const juce::String& d)
@@ -275,7 +276,7 @@ namespace velvox::ui
         {
             g.setColour (colours::ok);
             g.setFont (semiBold (11.5f));
-            g.drawText (juce::String::fromUTF8 ("\xe2\x9c\x93 Angewendet"), applyButton.getBounds(), juce::Justification::centred, false);
+            g.drawText (tr ("\xe2\x9c\x93 Angewendet", "\xe2\x9c\x93 Applied"), applyButton.getBounds(), juce::Justification::centred, false);
         }
     }
 
@@ -294,27 +295,34 @@ namespace velvox::ui
                 case Empty::off:
                     g.setColour (colours::textSoft);
                     g.setFont (semiBold (14.0f));
-                    g.drawText ("VOCAL CHECK ist aus", juce::Rectangle<float> (0.0f, 36.0f, w, 22.0f), juce::Justification::centred, false);
+                    g.drawText (tr ("VOCAL CHECK ist aus", "VOCAL CHECK is off"), juce::Rectangle<float> (0.0f, 36.0f, w, 22.0f),
+                                juce::Justification::centred, false);
                     break;
                 case Empty::collecting:
                 {
-                    const auto bar = juce::Rectangle<float> (w * 0.5f - 120.0f, 46.0f, 240.0f, 4.0f);
+                    // Empty state: a clear sentence in the size of the other empty states, the progress below
+                    g.setColour (colours::textSoft);
+                    g.setFont (semiBold (14.0f));
+                    g.drawFittedText (tr ("Spiel die Vocal ab – Vocal Check hört zu.", "Play the vocal – Vocal Check is listening."),
+                                      juce::Rectangle<float> (8.0f, 20.0f, w - 16.0f, 22.0f).toNearestInt(), juce::Justification::centred, 1, 0.85f);
+                    const auto bar = juce::Rectangle<float> (w * 0.5f - 120.0f, 54.0f, 240.0f, 4.0f);
                     g.setColour (colours::control);
                     g.fillRoundedRectangle (bar, 2.0f);
                     const float share = juce::jlimit (0.0f, 1.0f, owner.collected / dsp::VocalAnalyzer::minVoicedSeconds);
                     g.setColour (checkColour());
                     g.fillRoundedRectangle (bar.withWidth (std::max (4.0f, bar.getWidth() * share)), 2.0f);
-                    g.setColour (colours::textFaint);
-                    g.setFont (monoFont (11.0f));
-                    g.drawText (seconds (std::min (owner.collected, dsp::VocalAnalyzer::minVoicedSeconds)) + " / "
-                                    + juce::String (juce::roundToInt (dsp::VocalAnalyzer::minVoicedSeconds)) + " s Stimme",
-                                juce::Rectangle<float> (0.0f, 58.0f, w, 16.0f), juce::Justification::centred, false);
+                    g.setColour (colours::textMuted);
+                    g.setFont (font (typesize::small));
+                    g.drawText (i18n::format (tr ("{0} / {1} s Stimme", "{0} / {1} s of voice"),
+                                              { seconds (std::min (owner.collected, dsp::VocalAnalyzer::minVoicedSeconds)),
+                                                juce::String (juce::roundToInt (dsp::VocalAnalyzer::minVoicedSeconds)) }),
+                                juce::Rectangle<float> (0.0f, 64.0f, w, 18.0f), juce::Justification::centred, false);
                     break;
                 }
                 case Empty::clean:
                     g.setColour (colours::ok);
                     g.setFont (semiBold (14.0f));
-                    g.drawText (juce::String::fromUTF8 ("Keine Auffälligkeiten"), juce::Rectangle<float> (0.0f, 30.0f, w, 22.0f),
+                    g.drawText (tr ("Keine Auffälligkeiten", "No issues found"), juce::Rectangle<float> (0.0f, 30.0f, w, 22.0f),
                                 juce::Justification::centred, false);
                     break;
                 case Empty::none:
@@ -335,18 +343,20 @@ namespace velvox::ui
     VocalCheckView::VocalCheckView (VelvoxAudioProcessor& p)
         : proc (p),
           power (p.getState(), pid::checkOn, checkColour()),
-          mode (p.getState(), pid::checkMode, { "Laufend", "Capture" }, checkColour()),
+          mode (p.getState(), pid::checkMode, { tr ("Laufend", "Continuous"), "Capture" }, checkColour()),
           list (std::make_unique<List> (*this))
     {
-        const char* genreNames[] { "Party", "Pop", "Akustik" };
-        const char* genreTips[] { "Zielbereiche für Party / EDM (wie der Auto-Mix)", "Zielbereiche für Pop",
-                                  "Zielbereiche für akustische, ruhige Songs" };
+        // Captions only: the genre is stored as its index (check::Genre)
+        const juce::String genreNames[] { "Party", "Pop", tr ("Akustik", "Acoustic") };
+        const juce::String genreTips[] { tr ("Zielbereiche für Party / EDM (wie der Auto-Mix)", "Target ranges for party / EDM (like the auto mix)"),
+                                         tr ("Zielbereiche für Pop", "Target ranges for pop"),
+                                         tr ("Zielbereiche für akustische, ruhige Songs", "Target ranges for acoustic, quiet songs") };
         for (int i = 0; i < 3; ++i)
         {
             genres[(size_t) i] = std::make_unique<CheckButton> (genreNames[i], CheckButton::Style::segment);
             auto& b = *genres[(size_t) i];
             b.setClickingTogglesState (false);
-            b.setTooltip (juce::String::fromUTF8 (genreTips[i]));
+            b.setTooltip (genreTips[i]);
             b.onClick = [this, i]
             {
                 proc.getVocalCheck().setGenre ((check::Genre) i);
@@ -356,10 +366,10 @@ namespace velvox::ui
             addAndMakeVisible (b);
         }
 
-        power.setTooltip ("Vocal Check ein / aus");
-        startStop.setTooltip (juce::String::fromUTF8 ("Capture: analysiert alles zwischen Start und Stop"));
-        reset.setTooltip (juce::String::fromUTF8 ("Alles bisher Analysierte vergessen"));
-        applyAll.setTooltip (juce::String::fromUTF8 ("Alle Vorschläge auf einmal anwenden (ein Rückgängig-Schritt)"));
+        power.setTooltip (tr ("Vocal Check ein / aus", "Vocal Check on / off"));
+        startStop.setTooltip (tr ("Capture: analysiert alles zwischen Start und Stop", "Capture: analyzes everything between Start and Stop"));
+        reset.setTooltip (tr ("Alles bisher Analysierte vergessen", "Forget everything analyzed so far"));
+        applyAll.setTooltip (tr ("Alle Vorschläge auf einmal anwenden (ein Rückgängig-Schritt)", "Apply all suggestions at once (one undo step)"));
         for (auto* c : std::initializer_list<juce::Component*> { &power, &mode, &startStop, &reset, &applyAll, &viewport })
             addAndMakeVisible (*c);
 
@@ -486,14 +496,15 @@ namespace velvox::ui
         const int newScore = on ? proc.getVocalCheck().score() : -1;
         juce::String text;
         if (! on)
-            text = "Aus";
+            text = tr ("Aus", "Off");
         else if (! r.enoughMaterial)
-            text = "Singe/spiele ab, um zu analysieren";
+            text = tr ("Singe/spiele ab, um zu analysieren", "Sing or play back to analyze");
         else if (capture)
-            text = juce::String (a.isCapturing() ? juce::String::fromUTF8 ("Capture läuft") : juce::String ("Capture")) + juce::String::fromUTF8 (" · ")
-                   + seconds (r.voicedSeconds) + " s Stimme";
+            text = i18n::format (a.isCapturing() ? tr ("Capture läuft · {0} s Stimme", "Capturing · {0} s of voice")
+                                                 : tr ("Capture · {0} s Stimme", "Capture · {0} s of voice"),
+                                 { seconds (r.voicedSeconds) });
         else
-            text = juce::String::fromUTF8 ("Laufend · ") + seconds (r.voicedSeconds) + " s Stimme";
+            text = i18n::format (tr ("Laufend · {0} s Stimme", "Continuous · {0} s of voice"), { seconds (r.voicedSeconds) });
 
         if (newScore != score || text != status)
         {
@@ -569,8 +580,8 @@ namespace velvox::ui
                 }
                 const bool can = ! ignoredRow && vc.canApply (f->id);
                 const bool done = ! ignoredRow && vc.wasApplied (f->id);
-                tile->set (f->problem, f->fix, checkSeverityColour (f->level), can, done,
-                           f->detail + (f->why.isNotEmpty() ? "\n" + f->why : juce::String()));
+                tile->set (i18n::show (f->problem), i18n::show (f->fix), checkSeverityColour (f->level), can, done,
+                           i18n::show (f->detail) + (f->why.isNotEmpty() ? "\n" + i18n::show (f->why) : juce::String()));
                 tile->setTooltip (tile->details);
                 next.push_back (std::move (tile));
             }
@@ -592,10 +603,11 @@ namespace velvox::ui
         int applicable = 0;
         for (auto* f : visible)
             applicable += vc.canApply (f->id) ? 1 : 0;
-        applyAll.setButtonText (applicable > 0 ? "Alles anwenden (" + juce::String (applicable) + ")" : juce::String ("Alles anwenden"));
+        applyAll.setButtonText (applicable > 0 ? i18n::format (tr ("Alles anwenden ({0})", "Apply all ({0})"), { juce::String (applicable) })
+                                               : tr ("Alles anwenden", "Apply all"));
         applyAll.setEnabled (applicable > 0);
 
-        ignoredToggle.setButtonText (juce::String ((int) ignored.size()) + " ignoriert");
+        ignoredToggle.setButtonText (i18n::format (tr ("{0} ignoriert", "{0} ignored"), { juce::String ((int) ignored.size()) }));
         ignoredToggle.chevron = ignoredExpanded ? 2 : 1;
         ignoredToggle.repaint();
         ignoredToggle.setVisible (! ignored.empty());
@@ -705,7 +717,7 @@ namespace velvox::ui
     CheckSummary::CheckSummary (VelvoxAudioProcessor& p) : proc (p)
     {
         addAndMakeVisible (open);
-        open.setTooltip (juce::String::fromUTF8 ("Befunde, Ignorieren und Anwenden im Tab VOCAL CHECK"));
+        open.setTooltip (tr ("Befunde, Ignorieren und Anwenden im Tab VOCAL CHECK", "Findings, Ignore and Apply in the VOCAL CHECK tab"));
         open.onClick = [this] { if (onOpenTab) onOpenTab(); };
         refresh();
     }
@@ -718,10 +730,10 @@ namespace velvox::ui
         const auto& r = proc.getLatestAnalysis();
         const int newScore = on ? proc.getVocalCheck().score() : -1;
         const int n = (int) proc.getVocalCheck().visibleFindings().size();
-        const juce::String text = ! on ? juce::String ("Aus")
-                                : ! r.enoughMaterial ? juce::String::fromUTF8 ("Sammle Stimme …")
-                                : n == 0 ? juce::String::fromUTF8 ("Keine Auffälligkeiten")
-                                : juce::String (n) + (n == 1 ? " Befund" : " Befunde");
+        const juce::String text = ! on ? tr ("Aus", "Off")
+                                : ! r.enoughMaterial ? tr ("Sammle Stimme …", "Collecting voice …")
+                                : n == 0 ? tr ("Keine Auffälligkeiten", "No issues found")
+                                : i18n::format (n == 1 ? tr ("{0} Befund", "{0} finding") : tr ("{0} Befunde", "{0} findings"), { juce::String (n) });
         if (newScore != score || text != count)
         {
             score = newScore;

@@ -12,6 +12,7 @@
 #include "DSP/Instances.h"
 #include "StateKeys.h"
 #include "Parameters/EqBands.h"
+#include "Text/I18n.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -39,7 +40,7 @@ namespace
     juce::String describe (const Finding& f)
     {
         return f.id + " [" + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %, f " + juce::String (juce::roundToInt (f.freqHz))
-             + "] " + f.problem + " | " + f.fix;
+             + "] " + i18n::show (f.problem) + " | " + i18n::show (f.fix);
     }
 
     // First finding whose id starts with `prefix` ("mud", "resonance." ...)
@@ -123,9 +124,45 @@ public:
             expect (f != nullptr, "headroom finding");
             if (f != nullptr)
             {
-                expectEquals (f->problem, juce::String ("Kaum Headroom (+3 dBFS)"));
-                expect (f->detail.contains ("+3 dBFS"), f->detail);
+                expectEquals (i18n::show (f->problem), juce::String ("Kaum Headroom (+3 dBFS)"));
+                expect (i18n::show (f->detail).contains ("+3 dBFS"), f->detail);
             }
+        }
+
+        beginTest ("Texts in English: findings carry both languages, the view picks one (also after a switch)");
+        {
+            AnalysisResult r;
+            r.enoughMaterial = true;
+            r.voicedSeconds = 12.0f;
+            r.analysedSeconds = 14.0f;
+            r.peakDb = 3.0f;
+            r.loudnessLufs = -40.0f;
+            check::evaluate (r, check::Genre::party);   // made in German (the test language) ...
+            {
+                i18n::ScopedLanguage en (i18n::Language::english);   // ... shown in English
+                expectEquals (check::dbfsText (-0.5f), juce::String::fromUTF8 ("\xe2\x88\x92" "0.5"));
+                expectEquals (check::hzText (3500.0f), juce::String ("3.5 kHz"));
+                if (const auto* f = findId (r, "headroom"))
+                {
+                    expectEquals (i18n::show (f->problem), juce::String ("Little headroom (+3 dBFS)"));
+                    expectEquals (i18n::show (f->fix), juce::String::fromUTF8 ("\xe2\x86\x92 Input \xe2\x88\x92" "6 dB"));
+                }
+                else
+                    expect (false, "headroom finding");
+                if (const auto* f = findId (r, "quiet"))
+                    expect (i18n::show (f->detail).contains ("-40.0 LUFS") || i18n::show (f->detail).contains (juce::String::fromUTF8 ("\xe2\x88\x92" "40.0 LUFS")),
+                            i18n::show (f->detail));
+                for (auto& f : r.findings)
+                    for (const auto& s : { f.problem, f.fix, f.detail, f.why })
+                    {
+                        const auto shown = i18n::show (s);
+                        expect (shown.isNotEmpty() && ! i18n::isPacked (shown), f.id);
+                        for (const char* german : { "\xc3\xa4", "\xc3\xb6", "\xc3\xbc", "\xc3\x9f", " bei ", " und ", " der ", " die ", "Ziel" })
+                            expect (! shown.contains (juce::String::fromUTF8 (german)), "English text: " + shown);
+                    }
+            }
+            if (const auto* f = findId (r, "headroom"))
+                expectEquals (i18n::show (f->problem), juce::String ("Kaum Headroom (+3 dBFS)"), "back in German");
         }
 
         beginTest ("Finding schema: id, category, German problem / fix text, confidence above the threshold");
@@ -337,8 +374,13 @@ public:
                     expect (withinThirdOctave (e.freqHz, 300.0f));
                     expect (e.gainDb <= -1.5f && e.gainDb >= -6.0f, "a moderate cut: " + juce::String (e.gainDb));
                 }
-                expect (f->problem.startsWith ("Mulm um "), f->problem);
+                expect (i18n::show (f->problem).startsWith ("Mulm um "), f->problem);
                 expect (f->fix.contains ("EQ"), f->fix);
+                {
+                    i18n::ScopedLanguage en (i18n::Language::english);
+                    expect (i18n::show (f->problem).startsWith ("Mud around "), i18n::show (f->problem));
+                    expect (i18n::show (f->fix).contains (" at "), i18n::show (f->fix));
+                }
             }
             expectLessThan (r.score, clean.score, "a problem lowers the score");
         }
@@ -803,7 +845,8 @@ public:
             const auto after = FullState::of (h.proc);
             expectGreaterThan (after.differences (before), 1, "parameters and routing changed");
             expectEquals (undo.getNumSteps(), 1, "one step");
-            expect (undo.getUndoName().startsWith ("Vocal Check"), undo.getUndoName());
+            expect (undo.getUndoName().startsWith ("Vocal Check: Rumpeln"), undo.getUndoName());
+            expect (! i18n::isPacked (undo.getUndoName()), "the undo name is plain text in the language of the click");
             expect (vc.wasApplied ("rumble") && ! vc.canApply ("rumble"));
 
             expect (undo.undo());
@@ -825,10 +868,13 @@ public:
             auto& undo = h.proc.getUndo();
             undo.clear();
             const auto before = FullState::of (h.proc);
-            expectGreaterThan (vc.applyAll(), 1);
+            {
+                i18n::ScopedLanguage en (i18n::Language::english);
+                expectGreaterThan (vc.applyAll(), 1);
+            }
             const auto after = FullState::of (h.proc);
             expectEquals (undo.getNumSteps(), 1, "one step");
-            expect (undo.getUndoName().startsWith ("Vocal Check"), undo.getUndoName());
+            expectEquals (undo.getUndoName(), juce::String ("Vocal Check: Apply all"), "named in the language of the click");
             expect (undo.undo());
             expectEquals (FullState::of (h.proc).differences (before), 0, "one undo restores everything");
             expect (undo.redo());

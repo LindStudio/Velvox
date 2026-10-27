@@ -4,6 +4,7 @@
 #include "Segments.h"
 #include "../Check/CheckTypes.h"
 #include "../Check/CheckTargets.h"
+#include "../Text/I18n.h"
 
 class VelvoxAudioProcessor;
 
@@ -35,6 +36,8 @@ namespace velvox::ui
     class CheckButton : public juce::Button
     {
     public:
+        // filled = the action buttons (Anwenden / Alles anwenden / Einschalten): the normal button of the
+        // design with brighter text, deliberately not louder than the findings
         enum class Style { filled, ghost, segment, link };
         CheckButton (const juce::String& text, Style style);
         void paintButton (juce::Graphics&, bool highlighted, bool down) override;
@@ -77,9 +80,9 @@ namespace velvox::ui
             juce::Colour edge;
             bool ignoredRow, canApply = false, applied = false;
             juce::Rectangle<int> textArea;
-            CheckButton applyButton { "Anwenden", CheckButton::Style::filled };
-            CheckButton ignoreButton { "Ignorieren", CheckButton::Style::ghost };
-            CheckButton restoreButton { "Wiederherstellen", CheckButton::Style::ghost };
+            CheckButton applyButton { i18n::tr ("Anwenden", "Apply"), CheckButton::Style::filled };
+            CheckButton ignoreButton { i18n::tr ("Ignorieren", "Ignore"), CheckButton::Style::ghost };
+            CheckButton restoreButton { i18n::tr ("Wiederherstellen", "Restore"), CheckButton::Style::ghost };
             friend class VocalCheckView;
         };
 
@@ -125,10 +128,10 @@ namespace velvox::ui
         Segments mode;
         CheckButton startStop { "Start", CheckButton::Style::ghost }, reset { "Reset", CheckButton::Style::ghost };
         std::array<std::unique_ptr<CheckButton>, 3> genres;
-        CheckButton applyAll { "Alles anwenden", CheckButton::Style::filled };
-        CheckButton ignoredToggle { "0 ignoriert", CheckButton::Style::link };
-        CheckButton restoreAll { "Alle wiederherstellen", CheckButton::Style::link };
-        CheckButton enable { "Einschalten", CheckButton::Style::filled };
+        CheckButton applyAll { i18n::tr ("Alles anwenden", "Apply all"), CheckButton::Style::filled };
+        CheckButton ignoredToggle { i18n::tr ("0 ignoriert", "0 ignored"), CheckButton::Style::link };
+        CheckButton restoreAll { i18n::tr ("Alle wiederherstellen", "Restore all"), CheckButton::Style::link };
+        CheckButton enable { i18n::tr ("Einschalten", "Turn on"), CheckButton::Style::filled };
 
         std::unique_ptr<List> list;
         juce::Viewport viewport;
@@ -164,6 +167,6 @@ namespace velvox::ui
         VelvoxAudioProcessor& proc;
         int score = -1;
         juce::String count;
-        CheckButton open { juce::String::fromUTF8 ("Zum VOCAL CHECK \xe2\x86\x92"), CheckButton::Style::ghost };
+        CheckButton open { i18n::tr ("Zum VOCAL CHECK \xe2\x86\x92", "Open VOCAL CHECK \xe2\x86\x92"), CheckButton::Style::ghost };
     };
 }

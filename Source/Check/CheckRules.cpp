@@ -1,8 +1,13 @@
 #include "CheckRules.h"
 #include "../DSP/VocalAnalyzer.h"
 #include "../Parameters/ParameterIDs.h"
+#include "../Text/I18n.h"
 
-// Source is compiled as UTF-8 (/utf-8): German texts are plain literals.
+// Source is compiled as UTF-8 (/utf-8): the texts are plain literals.
+//
+// The finding texts are built with i18n::both (German and English packed into one string):
+// the analysis is kept by the processor and survives a language switch (the editor is rebuilt,
+// the latest analysis is not), so the view picks the language at display with i18n::show.
 namespace velvox::check
 {
     namespace
@@ -11,17 +16,68 @@ namespace velvox::check
         using dsp::Finding;
         using dsp::ModuleId;
         using K = ParamChange::Kind;
+        using i18n::Language;
 
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
         const juce::String arrow = juce::String::fromUTF8 ("\xe2\x86\x92 ");
 
-        juce::String num (float v, int decimals)
+        juce::String num (float v, int decimals, Language language)
         {
             const float scale = std::pow (10.0f, (float) decimals);
             const float x = std::round (v * scale) / scale;
             const auto body = decimals == 0 ? juce::String (juce::roundToInt (std::abs (x)))
-                                            : juce::String (std::abs (x), decimals).replaceCharacter ('.', ',');
+                                            : i18n::number (std::abs (x), decimals, language);
             return (x < 0.0f ? juce::String::fromUTF8 ("\xe2\x88\x92") : juce::String()) + body;
+        }
+
+        juce::String hzIn (float hz, Language language)
+        {
+            if (hz >= 1000.0f)
+            {
+                const float k = std::round (hz / 100.0f) / 10.0f;
+                return (std::abs (k - std::round (k)) < 0.05f ? juce::String (juce::roundToInt (k)) : num (k, 1, language)) + " kHz";
+            }
+            return juce::String (juce::roundToInt (hz)) + " Hz";
+        }
+
+        juce::String dbIn (float db, bool withPlus, Language language)
+        {
+            const float v = std::round (db * 2.0f) / 2.0f;
+            const bool whole = std::abs (v - std::round (v)) < 0.01f;
+            const auto body = whole ? juce::String (juce::roundToInt (std::abs (v))) : num (std::abs (v), 1, language);
+            const juce::String sign = v < 0.0f ? juce::String::fromUTF8 ("\xe2\x88\x92") : (withPlus && v > 0.0f ? juce::String ("+") : juce::String());
+            return sign + body + (withPlus ? " dB" : "");
+        }
+
+        // A value of a finding text in both languages (numbers differ in the decimal separator)
+        struct V
+        {
+            V (int i) : de (juce::String (i)), en (juce::String (i)) {}
+            V (const char* german, const char* english) : de (juce::String::fromUTF8 (german)), en (juce::String::fromUTF8 (english)) {}
+            V (juce::String german, juce::String english, bool) : de (std::move (german)), en (std::move (english)) {}
+            juce::String de, en;
+        };
+        V numV (float v, int decimals)   { return { num (v, decimals, Language::german), num (v, decimals, Language::english), true }; }
+        V hzV (float hz)                 { return { hzIn (hz, Language::german), hzIn (hz, Language::english), true }; }
+        V dbV (float db)                 { return { dbIn (db, true, Language::german), dbIn (db, true, Language::english), true }; }
+        V dbfsV (float dbfs)
+        {
+            // Peaks above full scale must read "+3", never "3" (which looks like a value below 0)
+            return { dbIn (dbfs, true, Language::german).upToFirstOccurrenceOf (" dB", false, false),
+                     dbIn (dbfs, true, Language::english).upToFirstOccurrenceOf (" dB", false, false), true };
+        }
+
+        // A finding text in both languages (packed, see above): "{0}", "{1}" ... replaced by the values
+        juce::String txt (const char* german, const char* english, std::initializer_list<V> values = {})
+        {
+            auto g = juce::String::fromUTF8 (german), e = juce::String::fromUTF8 (english);
+            int i = 0;
+            for (const auto& v : values)
+            {
+                const auto key = "{" + juce::String (i++) + "}";
+                g = g.replace (key, v.de);
+                e = e.replace (key, v.en);
+            }
+            return i18n::both (g, e);
         }
 
         // Rounds an amount to a 0.5 dB step (the texts and the planner use the same value)
@@ -108,16 +164,20 @@ namespace velvox::check
             {
                 if (r.clipEvents > 0)
                     add ("clipping", Category::level, 0.99f, Severity::high, std::nullopt,
-                         de ("Übersteuert (") + juce::String (r.clipEvents) + de ("×)"), de ("Aufnahme- oder Spurpegel senken"),
-                         juce::String (r.clipEvents) + de (" Stelle(n) mit Samples auf Vollaussteuerung an dieser Stelle der Kette."),
-                         de ("Übersteuerung ist Verzerrung, die kein Modul danach entfernen kann."), false);
+                         txt ("Übersteuert ({0}×)", "Clipping ({0}×)", { r.clipEvents }),
+                         txt ("Aufnahme- oder Spurpegel senken", "Lower the recording or track level"),
+                         txt ("{0} Stelle(n) mit Samples auf Vollaussteuerung an dieser Stelle der Kette.",
+                              "{0} spot(s) with samples at full scale at this point of the chain.", { r.clipEvents }),
+                         txt ("Übersteuerung ist Verzerrung, die kein Modul danach entfernen kann.",
+                              "Clipping is distortion that no module after it can remove."), false);
                 else if (r.peakDb > t.peakMax)
                 {
                     const float amount = halfDb (std::min (-0.5f, -3.0f - r.peakDb));
                     auto& f = add ("headroom", Category::level, conf (r.peakDb, t.peakMax, 0.9f), severity (r.peakDb, t.peakMax, 0.6f), std::nullopt,
-                                   de ("Kaum Headroom (") + dbfsText (r.peakDb) + " dBFS)", de ("Input ") + dbText (amount),
-                                   de ("Höchster Pegel ") + dbfsText (r.peakDb) + " dBFS.",
-                                   de ("Ohne Reserve übersteuert jede spätere Anhebung."), false);
+                                   txt ("Kaum Headroom ({0} dBFS)", "Little headroom ({0} dBFS)", { dbfsV (r.peakDb) }),
+                                   txt ("Input {0}", "Input {0}", { dbV (amount) }),
+                                   txt ("Höchster Pegel {0} dBFS.", "Highest level {0} dBFS.", { dbfsV (r.peakDb) }),
+                                   txt ("Ohne Reserve übersteuert jede spätere Anhebung.", "Without headroom, any later boost clips."), false);
                     f.action.params.push_back ({ pid::inputGain, amount, K::amount, 0.0f });
                 }
 
@@ -126,10 +186,12 @@ namespace velvox::check
                     // Bring the voice to about -20 LUFS, but keep 3 dB headroom
                     const float amount = halfDb (juce::jlimit (0.0f, 18.0f, std::min (-20.0f - r.loudnessLufs, -3.0f - r.peakDb)));
                     auto& f = add ("quiet", Category::level, conf (-r.loudnessLufs, -t.loudnessMin, 8.0f), severity (-r.loudnessLufs, -t.loudnessMin, 6.0f),
-                                   std::nullopt, de ("Sehr leise (") + num (r.loudnessLufs, 0) + " LUFS)",
-                                   amount >= 1.0f ? de ("Input ") + dbText (amount) : de ("Spurpegel anheben (Spitzen schon hoch)"),
-                                   de ("Lautheit der Stimme ") + num (r.loudnessLufs, 1) + " LUFS.",
-                                   de ("Sehr leise Signale bringen Rauschen und Schwellen der Module aus dem Gleichgewicht."));
+                                   std::nullopt, txt ("Sehr leise ({0} LUFS)", "Very quiet ({0} LUFS)", { numV (r.loudnessLufs, 0) }),
+                                   amount >= 1.0f ? txt ("Input {0}", "Input {0}", { dbV (amount) })
+                                                  : txt ("Spurpegel anheben (Spitzen schon hoch)", "Raise the track level (peaks already high)"),
+                                   txt ("Lautheit der Stimme {0} LUFS.", "Loudness of the voice {0} LUFS.", { numV (r.loudnessLufs, 1) }),
+                                   txt ("Sehr leise Signale bringen Rauschen und Schwellen der Module aus dem Gleichgewicht.",
+                                        "Very quiet signals throw noise and the thresholds of the modules off balance."));
                     if (amount >= 1.0f)
                         f.action.params.push_back ({ pid::inputGain, amount, K::amount, 0.0f });
                 }
@@ -146,9 +208,13 @@ namespace velvox::check
                     const bool steep = r.rumbleDb > t.rumbleMax + 8.0f;
                     const float excess = r.rumbleDb - t.rumbleMax;
                     auto& f = add ("rumble", Category::lowEnd, conf (r.rumbleDb, threshold, 8.0f), severity (r.rumbleDb, threshold, 6.0f), ModuleId::eq,
-                                   de ("Rumpeln unter 90 Hz (") + dbText (excess) + ")", de ("Low Cut ") + hzText (fc) + (steep ? de (", 24 dB/Okt.") : juce::String()),
-                                   de ("40–90 Hz liegt ") + dbText (r.rumbleDb) + de (" gegenüber dem Kern der Stimme (Ziel unter ") + dbText (t.rumbleMax) + ").",
-                                   de ("Rumpeln und Trittschall füllen den Bassbereich von Kick und Bass und lassen Kompressoren pumpen."));
+                                   txt ("Rumpeln unter 90 Hz ({0})", "Rumble below 90 Hz ({0})", { dbV (excess) }),
+                                   steep ? txt ("Low Cut {0}, 24 dB/Okt.", "Low Cut {0}, 24 dB/oct.", { hzV (fc) })
+                                         : txt ("Low Cut {0}", "Low Cut {0}", { hzV (fc) }),
+                                   txt ("40–90 Hz liegt {0} gegenüber dem Kern der Stimme (Ziel unter {1}).",
+                                        "40–90 Hz sits at {0} relative to the core of the voice (target below {1}).", { dbV (r.rumbleDb), dbV (t.rumbleMax) }),
+                                   txt ("Rumpeln und Trittschall füllen den Bassbereich von Kick und Bass und lassen Kompressoren pumpen.",
+                                        "Rumble and footsteps fill the low end of kick and bass and make compressors pump."));
                     f.freqHz = fc;
                     f.action.modules.push_back (ModuleId::eq);
                     f.action.eq.push_back ({ EqRole::lowcut, EqShape::lowCut, fc, 0.0f, 0.7071f, steep ? 24 : 12 });
@@ -158,9 +224,12 @@ namespace velvox::check
                 {
                     const float fc = std::round (juce::jlimit (80.0f, 150.0f, std::min (120.0f, 0.8f * lowest)));
                     auto& f = add ("plosives", Category::lowEnd, conf (r.plosivesPerMinute, 5.0f, 10.0f), severity (r.plosivesPerMinute, 5.0f, 8.0f), ModuleId::eq,
-                                   de ("Plosive / Popps (") + juce::String (r.plosiveCount) + de ("×)"), de ("Low Cut ") + hzText (fc) + de (", 24 dB/Okt."),
-                                   juce::String (r.plosiveCount) + de (" tieffrequente Stöße (") + num (r.plosivesPerMinute, 1) + de (" pro Minute Stimme)."),
-                                   de ("P- und B-Laute treffen die Membran: kurze Bass-Stöße, die Kompressoren auslösen."));
+                                   txt ("Plosive / Popps ({0}×)", "Plosives / pops ({0}×)", { r.plosiveCount }),
+                                   txt ("Low Cut {0}, 24 dB/Okt.", "Low Cut {0}, 24 dB/oct.", { hzV (fc) }),
+                                   txt ("{0} tieffrequente Stöße ({1} pro Minute Stimme).", "{0} low-frequency bursts ({1} per minute of voice).",
+                                        { r.plosiveCount, numV (r.plosivesPerMinute, 1) }),
+                                   txt ("P- und B-Laute treffen die Membran: kurze Bass-Stöße, die Kompressoren auslösen.",
+                                        "P and B sounds hit the diaphragm: short bass bursts that trigger compressors."));
                     f.freqHz = fc;
                     f.action.modules.push_back (ModuleId::eq);
                     f.action.eq.push_back ({ EqRole::lowcut, EqShape::lowCut, fc, 0.0f, 0.7071f, 24 });
@@ -170,7 +239,7 @@ namespace velvox::check
             void tonal()
             {
                 // ---- Broad excesses against the voice template (where the template is reliable)
-                const auto bumpFinding = [this] (const char* id, const char* word, EqRole role, float lo, float hi, float minDb)
+                const auto bumpFinding = [this] (const char* id, V word, EqRole role, float lo, float hi, float minDb)
                 {
                     // Not below the lowest sung notes (the fundamentals are the voice itself)
                     const float from = std::max (lo, r.pitchValid ? r.f0LowHz * 1.12f : lo);
@@ -181,17 +250,21 @@ namespace velvox::check
                     const float q = bumpQ (p, r.deviationDb);
                     const float hz = p.hz;
                     auto& f = add (id, Category::tonal, conf (p.z, t.devZ, 1.5f), severity (p.db, minDb + 1.5f, 3.0f), ModuleId::eq,
-                                   de (word) + de (" um ") + hzText (hz) + " (" + dbText (halfDb (p.db)) + ")",
-                                   de ("EQ ") + dbText (gain) + de (" bei ") + hzText (hz),
-                                   de ("Um ") + hzText (hz) + " " + dbText (p.db) + de (" über einer typischen trockenen Stimme (1/3 Oktave)."),
-                                   juce::String (id) == "mud" ? de ("Zu viel 200–500 Hz klingt dumpf und verdeckt Bass und Kick.")
-                                                              : de ("Zu viel 500 Hz–1 kHz klingt nach Pappkarton und nimmt der Stimme die Klarheit."));
+                                   txt ("{0} um {1} ({2})", "{0} around {1} ({2})", { word, hzV (hz), dbV (halfDb (p.db)) }),
+                                   txt ("EQ {0} bei {1}", "EQ {0} at {1}", { dbV (gain), hzV (hz) }),
+                                   txt ("Um {0} {1} über einer typischen trockenen Stimme (1/3 Oktave).",
+                                        "Around {0}, {1} above a typical dry voice (1/3 octave).", { hzV (hz), dbV (p.db) }),
+                                   juce::String (id) == "mud"
+                                       ? txt ("Zu viel 200–500 Hz klingt dumpf und verdeckt Bass und Kick.",
+                                              "Too much 200–500 Hz sounds muddy and masks bass and kick.")
+                                       : txt ("Zu viel 500 Hz–1 kHz klingt nach Pappkarton und nimmt der Stimme die Klarheit.",
+                                              "Too much 500 Hz–1 kHz sounds like a cardboard box and takes the clarity out of the voice."));
                     f.freqHz = hz;
                     f.action.modules.push_back (ModuleId::eq);
                     f.action.eq.push_back ({ role, EqShape::bell, hz, gain, q, 12 });
                 };
-                bumpFinding ("mud", "Mulm", EqRole::mud, 200.0f, 500.0f, t.devMud);
-                bumpFinding ("boxy", "Boxig", EqRole::mud, 500.0f, 1000.0f, t.devBoxy);
+                bumpFinding ("mud", { "Mulm", "Mud" }, EqRole::mud, 200.0f, 500.0f, t.devMud);
+                bumpFinding ("boxy", { "Boxig", "Boxy" }, EqRole::mud, 500.0f, 1000.0f, t.devBoxy);
 
                 // ---- Thin / dull / bright (band windows of the objective)
                 if (r.bodyDb < t.body.lo)
@@ -199,9 +272,11 @@ namespace velvox::check
                     const float deficit = t.body.lo - r.bodyDb;
                     const float gain = halfDb (juce::jlimit (1.0f, 3.0f, 0.5f * deficit));
                     auto& f = add ("thin", Category::tonal, conf (deficit, 1.5f, 6.0f), severity (deficit, 1.5f, 5.0f), ModuleId::eq,
-                                   de ("Dünn: wenig Körper (") + dbText (-deficit) + ")", de ("EQ ") + dbText (gain) + de (" bei 180 Hz"),
-                                   de ("100–300 Hz liegt ") + dbText (r.bodyDb) + de (" gegenüber dem Kern der Stimme (Ziel ab ") + dbText (t.body.lo) + ").",
-                                   de ("100–300 Hz geben der Stimme Gewicht und Wärme."));
+                                   txt ("Dünn: wenig Körper ({0})", "Thin: little body ({0})", { dbV (-deficit) }),
+                                   txt ("EQ {0} bei 180 Hz", "EQ {0} at 180 Hz", { dbV (gain) }),
+                                   txt ("100–300 Hz liegt {0} gegenüber dem Kern der Stimme (Ziel ab {1}).",
+                                        "100–300 Hz sits at {0} relative to the core of the voice (target from {1}).", { dbV (r.bodyDb), dbV (t.body.lo) }),
+                                   txt ("100–300 Hz geben der Stimme Gewicht und Wärme.", "100–300 Hz give the voice weight and warmth."));
                     f.freqHz = 180.0f;
                     f.action.modules.push_back (ModuleId::eq);
                     f.action.eq.push_back ({ EqRole::warmth, EqShape::lowShelf, 180.0f, gain, 0.7071f, 12 });
@@ -212,9 +287,12 @@ namespace velvox::check
                     const float deficit = t.top.lo - r.topDb;
                     const float gain = halfDb (juce::jlimit (1.0f, 4.0f, 0.5f * deficit));
                     auto& f = add ("dull", Category::tonal, conf (deficit, 1.0f, 6.0f), severity (deficit, 1.0f, 5.0f), ModuleId::eq,
-                                   de ("Dumpf: wenig Höhen (") + dbText (-deficit) + ")", de ("EQ ") + dbText (gain) + de (" Höhen ab 9 kHz"),
-                                   de ("Alles über 2 kHz liegt ") + dbText (r.topDb) + de (" gegenüber dem Kern der Stimme (Ziel ab ") + dbText (t.top.lo) + ").",
-                                   de ("Konsonanten und Air tragen die Verständlichkeit; eine dumpfe Stimme versinkt hinter Synths und Hats."));
+                                   txt ("Dumpf: wenig Höhen ({0})", "Dull: lacking highs ({0})", { dbV (-deficit) }),
+                                   txt ("EQ {0} Höhen ab 9 kHz", "EQ {0} highs from 9 kHz", { dbV (gain) }),
+                                   txt ("Alles über 2 kHz liegt {0} gegenüber dem Kern der Stimme (Ziel ab {1}).",
+                                        "Everything above 2 kHz sits at {0} relative to the core of the voice (target from {1}).", { dbV (r.topDb), dbV (t.top.lo) }),
+                                   txt ("Konsonanten und Air tragen die Verständlichkeit; eine dumpfe Stimme versinkt hinter Synths und Hats.",
+                                        "Consonants and air carry intelligibility; a dull voice sinks behind synths and hats."));
                     f.freqHz = 9000.0f;
                     f.action.modules.push_back (ModuleId::eq);
                     f.action.eq.push_back ({ EqRole::air, EqShape::highShelf, 9000.0f, gain, 0.7071f, 12 });
@@ -224,9 +302,12 @@ namespace velvox::check
                     const float excess = r.topDb - t.top.hi;
                     const float gain = -halfDb (juce::jlimit (1.0f, 3.0f, 0.5f * excess));
                     auto& f = add ("bright", Category::tonal, conf (excess, 1.0f, 5.0f), severity (excess, 1.0f, 4.0f), ModuleId::eq,
-                                   de ("Sehr hell (") + dbText (excess) + ")", de ("EQ ") + dbText (gain) + de (" Höhen ab 9 kHz"),
-                                   de ("Alles über 2 kHz liegt ") + dbText (r.topDb) + de (" gegenüber dem Kern der Stimme (Ziel bis ") + dbText (t.top.hi) + ").",
-                                   de ("Zu viel Höhen klingen bei Club-Lautstärke spitz und ermüdend."));
+                                   txt ("Sehr hell ({0})", "Very bright ({0})", { dbV (excess) }),
+                                   txt ("EQ {0} Höhen ab 9 kHz", "EQ {0} highs from 9 kHz", { dbV (gain) }),
+                                   txt ("Alles über 2 kHz liegt {0} gegenüber dem Kern der Stimme (Ziel bis {1}).",
+                                        "Everything above 2 kHz sits at {0} relative to the core of the voice (target up to {1}).", { dbV (r.topDb), dbV (t.top.hi) }),
+                                   txt ("Zu viel Höhen klingen bei Club-Lautstärke spitz und ermüdend.",
+                                        "Too much top end sounds piercing and tiring at club volume."));
                     f.freqHz = 9000.0f;
                     f.action.modules.push_back (ModuleId::eq);
                     f.action.eq.push_back ({ EqRole::air, EqShape::highShelf, 9000.0f, gain, 0.7071f, 12 });
@@ -247,10 +328,12 @@ namespace velvox::check
                     const float reliability = r.pitchValid && r.pitchSpreadSemitones < 3.0f ? 0.8f : 1.0f;
                     auto& f = add ("resonance." + juce::String (thirdOctaveCentre (res.hz)), harshRange ? Category::harshness : Category::resonance,
                                    conf (res.excessDb, t.resonanceMin, 6.0f) * reliability, severity (res.excessDb, t.resonanceMin, 5.0f),
-                                   ModuleId::eq, de ("Resonanz bei ") + hzText (res.hz) + " (" + dbText (halfDb (res.excessDb)) + ")",
-                                   de ("EQ ") + dbText (gain) + de (" bei ") + hzText (res.hz) + de (" (schmal)"),
-                                   de ("Schmale Spitze um ") + hzText (res.hz) + ", " + dbText (res.excessDb) + de (" über ihrer Umgebung (±1/2 Oktave)."),
-                                   de ("Eine schmale Spitze klingelt bei jedem Wort, das sie trifft (Raum, Mikrofon oder Stimme)."));
+                                   ModuleId::eq, txt ("Resonanz bei {0} ({1})", "Resonance at {0} ({1})", { hzV (res.hz), dbV (halfDb (res.excessDb)) }),
+                                   txt ("EQ {0} bei {1} (schmal)", "EQ {0} at {1} (narrow)", { dbV (gain), hzV (res.hz) }),
+                                   txt ("Schmale Spitze um {0}, {1} über ihrer Umgebung (±1/2 Oktave).",
+                                        "Narrow peak around {0}, {1} above its surroundings (±1/2 octave).", { hzV (res.hz), dbV (res.excessDb) }),
+                                   txt ("Eine schmale Spitze klingelt bei jedem Wort, das sie trifft (Raum, Mikrofon oder Stimme).",
+                                        "A narrow peak rings on every word that hits it (room, mic or voice)."));
                     f.freqHz = res.hz;
                     f.action.modules.push_back (ModuleId::eq);
                     f.action.eq.push_back ({ res.hz < 1000.0f ? EqRole::mud : EqRole::presence, EqShape::bell, res.hz, gain, 6.0f, 12 });
@@ -303,10 +386,12 @@ namespace velvox::check
                     {
                         const float gain = -halfDb (juce::jlimit (1.5f, 5.0f, 0.75f * std::max (0.0f, excess) + 1.5f));
                         auto& f = add ("harsh", Category::harshness, conf (excess, 1.5f, 4.0f), severity (excess, 1.5f, 3.0f), ModuleId::eq,
-                                       de ("Scharf um ") + hzText (hz) + " (" + dbText (halfDb (excess)) + ")",
-                                       de ("EQ ") + dbText (gain) + de (" bei ") + hzText (hz),
-                                       de ("2–5 kHz liegt ") + dbText (r.presenceDb) + de (" gegenüber dem Kern der Stimme (Ziel bis ") + dbText (t.presenceMax) + ").",
-                                       de ("Bei 2–5 kHz ist das Ohr am empfindlichsten: zu viel klingt stechend und ermüdet bei Club-Lautstärke."));
+                                       txt ("Scharf um {0} ({1})", "Harsh around {0} ({1})", { hzV (hz), dbV (halfDb (excess)) }),
+                                       txt ("EQ {0} bei {1}", "EQ {0} at {1}", { dbV (gain), hzV (hz) }),
+                                       txt ("2–5 kHz liegt {0} gegenüber dem Kern der Stimme (Ziel bis {1}).",
+                                            "2–5 kHz sits at {0} relative to the core of the voice (target up to {1}).", { dbV (r.presenceDb), dbV (t.presenceMax) }),
+                                       txt ("Bei 2–5 kHz ist das Ohr am empfindlichsten: zu viel klingt stechend und ermüdet bei Club-Lautstärke.",
+                                            "The ear is most sensitive at 2–5 kHz: too much sounds piercing and gets tiring at club volume."));
                         f.freqHz = hz;
                         f.action.modules.push_back (ModuleId::eq);
                         f.action.eq.push_back ({ EqRole::presence, EqShape::bell, hz, gain, 1.2f, 12 });
@@ -328,9 +413,13 @@ namespace velvox::check
                 // Start reducing a little below the level of the S sounds
                 const float thresholdDb = std::round (juce::jlimit (-60.0f, -6.0f, r.voiceLevelDb + (r.sibilanceValid ? r.sibilanceVsVowelDb : -8.0f) - 6.0f));
                 auto& f = add ("sibilance", Category::sibilance, conf (r.sibilancePeakDb, threshold, 4.0f), severity (r.sibilancePeakDb, threshold, 3.0f),
-                               ModuleId::deess, de ("Scharfe S-Laute (") + dbText (halfDb (excess)) + ")", de ("De-Esser bei ") + hzText (detector),
-                               de ("Die lautesten S-Momente (5–10 kHz) liegen ") + dbText (r.sibilancePeakDb) + de (" gegenüber den Vokalen (Ziel bis ") + dbText (t.sibilancePeakMax) + de ("), Schwerpunkt um ") + hzText (sHz) + ".",
-                               de ("Laute S-Laute stechen bei hoher Lautstärke und werden durch Kompression und Hall noch schärfer."));
+                               ModuleId::deess, txt ("Scharfe S-Laute ({0})", "Harsh sibilance ({0})", { dbV (halfDb (excess)) }),
+                               txt ("De-Esser bei {0}", "De-Esser at {0}", { hzV (detector) }),
+                               txt ("Die lautesten S-Momente (5–10 kHz) liegen {0} gegenüber den Vokalen (Ziel bis {1}), Schwerpunkt um {2}.",
+                                    "The loudest S moments (5–10 kHz) sit at {0} relative to the vowels (target up to {1}), centered around {2}.",
+                                    { dbV (r.sibilancePeakDb), dbV (t.sibilancePeakMax), hzV (sHz) }),
+                               txt ("Laute S-Laute stechen bei hoher Lautstärke und werden durch Kompression und Hall noch schärfer.",
+                                    "Loud S sounds pierce at high volume and get even sharper with compression and reverb."));
                 f.freqHz = sHz;
                 f.action.modules.push_back (ModuleId::deess);
                 f.action.params.push_back ({ pid::deessMode, 0.0f, K::set, 0.0f });
@@ -349,10 +438,13 @@ namespace velvox::check
                     {
                         dynamicsFound = r.loudnessRangeDb >= threshold;
                         auto& f = add ("dynamics", Category::dynamics, conf (r.loudnessRangeDb, threshold, 6.0f), severity (r.loudnessRangeDb, threshold, 5.0f),
-                                       ModuleId::ride, de ("Pegel schwankt stark (") + num (r.loudnessRangeDb, 0) + " dB)", de ("Level Ride an"),
-                                       de ("Laute und leise Wörter liegen ") + num (r.loudnessRangeDb, 1) + de (" dB auseinander (Ziel ") + num (t.phrase.lo, 0)
-                                           + "–" + num (t.phrase.hi, 0) + " dB).",
-                                       de ("Leise Wörter verschwinden hinter dem Beat, laute springen heraus."));
+                                       ModuleId::ride, txt ("Pegel schwankt stark ({0} dB)", "Level varies a lot ({0} dB)", { numV (r.loudnessRangeDb, 0) }),
+                                       txt ("Level Ride an", "Level Ride on"),
+                                       txt ("Laute und leise Wörter liegen {0} dB auseinander (Ziel {1}–{2} dB).",
+                                            "Loud and quiet words are {0} dB apart (target {1}–{2} dB).",
+                                            { numV (r.loudnessRangeDb, 1), numV (t.phrase.lo, 0), numV (t.phrase.hi, 0) }),
+                                       txt ("Leise Wörter verschwinden hinter dem Beat, laute springen heraus.",
+                                            "Quiet words disappear behind the beat, loud ones jump out."));
                         f.action.modules.push_back (ModuleId::ride);
                         f.action.params.push_back ({ pid::rideTarget, std::round (juce::jlimit (-40.0f, -6.0f, r.voiceLevelDb + 1.0f)), K::set, 0.0f });
                         f.action.params.push_back ({ pid::rideAmount, std::round (juce::jlimit (50.0f, 90.0f, 50.0f + 5.0f * (r.loudnessRangeDb - t.phrase.hi))), K::atLeast, 0.0f });
@@ -363,9 +455,12 @@ namespace velvox::check
                 {
                     const float threshold = t.lraMax + 1.0f;
                     auto& f = add ("lra", Category::dynamics, conf (r.lraLu, threshold, 6.0f), severity (r.lraLu, threshold, 5.0f), ModuleId::ride,
-                                   de ("Große Lautstärkesprünge (LRA ") + num (r.lraLu, 0) + " LU)", de ("Level Ride an (Phrasen)"),
-                                   de ("Lautheitsbereich ") + num (r.lraLu, 1) + de (" LU (Ziel bis ") + num (t.lraMax, 0) + " LU).",
-                                   de ("Ganze Passagen sind deutlich leiser oder lauter als der Rest."));
+                                   txt ("Große Lautstärkesprünge (LRA {0} LU)", "Big loudness jumps (LRA {0} LU)", { numV (r.lraLu, 0) }),
+                                   txt ("Level Ride an (Phrasen)", "Level Ride on (phrases)"),
+                                   txt ("Lautheitsbereich {0} LU (Ziel bis {1} LU).", "Loudness range {0} LU (target up to {1} LU).",
+                                        { numV (r.lraLu, 1), numV (t.lraMax, 0) }),
+                                   txt ("Ganze Passagen sind deutlich leiser oder lauter als der Rest.",
+                                        "Whole passages are much quieter or louder than the rest."));
                     f.action.modules.push_back (ModuleId::ride);
                     f.action.params.push_back ({ pid::rideTarget, std::round (juce::jlimit (-40.0f, -6.0f, r.voiceLevelDb + 1.0f)), K::set, 0.0f });
                     f.action.params.push_back ({ pid::ridePhrase, 70.0f, K::atLeast, 0.0f });
@@ -376,9 +471,12 @@ namespace velvox::check
                 {
                     const float threshold = t.crestMax + 1.0f;
                     auto& f = add ("crest", Category::dynamics, conf (r.crestDb, threshold, 5.0f), severity (r.crestDb, threshold, 4.0f), ModuleId::comp,
-                                   de ("Starke Pegelspitzen (Crest ") + num (r.crestDb, 0) + " dB)", de ("Kompressor 3:1"),
-                                   de ("Spitze zu RMS ") + num (r.crestDb, 1) + de (" dB im Median (Ziel bis ") + num (t.crestMax, 0) + " dB).",
-                                   de ("Einzelne Silben springen weit über den Rest und bestimmen den Pegel."));
+                                   txt ("Starke Pegelspitzen (Crest {0} dB)", "Strong peaks (crest {0} dB)", { numV (r.crestDb, 0) }),
+                                   txt ("Kompressor 3:1", "Compressor 3:1"),
+                                   txt ("Spitze zu RMS {0} dB im Median (Ziel bis {1} dB).", "Peak to RMS {0} dB median (target up to {1} dB).",
+                                        { numV (r.crestDb, 1), numV (t.crestMax, 0) }),
+                                   txt ("Einzelne Silben springen weit über den Rest und bestimmen den Pegel.",
+                                        "Single syllables jump far above the rest and set the level."));
                     f.action.modules.push_back (ModuleId::comp);
                     f.action.params.push_back ({ pid::compThreshold, std::round (juce::jlimit (-50.0f, -6.0f, r.voiceLevelDb + 4.0f)), K::atMost, 0.0f });
                     f.action.params.push_back ({ pid::compRatio, 3.0f, K::atLeast, 1.0f });
@@ -389,9 +487,12 @@ namespace velvox::check
                 {
                     const float deficit = t.crestMin - r.crestDb;
                     auto& f = add ("overcompressed", Category::dynamics, conf (deficit, 0.5f, 2.0f), severity (deficit, 0.5f, 2.0f), ModuleId::comp,
-                                   de ("Überkomprimiert (Crest ") + num (r.crestDb, 0) + " dB)", de ("Kompression zurücknehmen"),
-                                   de ("Nur ") + num (r.loudnessRangeDb, 1) + de (" dB Pegelunterschied und ") + num (r.crestDb, 1) + de (" dB Crest-Faktor."),
-                                   de ("Mehr Kompression bringt hier nur Pumpen und Atemgeräusche, keine Lautheit."));
+                                   txt ("Überkomprimiert (Crest {0} dB)", "Overcompressed (crest {0} dB)", { numV (r.crestDb, 0) }),
+                                   txt ("Kompression zurücknehmen", "Back off the compression"),
+                                   txt ("Nur {0} dB Pegelunterschied und {1} dB Crest-Faktor.", "Only {0} dB level difference and {1} dB crest factor.",
+                                        { numV (r.loudnessRangeDb, 1), numV (r.crestDb, 1) }),
+                                   txt ("Mehr Kompression bringt hier nur Pumpen und Atemgeräusche, keine Lautheit.",
+                                        "More compression only brings pumping and breath noise here, no loudness."));
                     // Only modules that are on (no module is switched on for this)
                     f.action.params.push_back ({ pid::compRatio, -1.5f, K::amount, 1.0f });
                     f.action.params.push_back ({ pid::smashBlend, -15.0f, K::amount, 0.0f });
@@ -407,10 +508,12 @@ namespace velvox::check
                 {
                     const float c = std::max (conf (corrDeficit, 0.0f, 0.4f), conf (r.monoLossDb, 3.0f, 6.0f));
                     auto& f = add ("mono", Category::stereo, c, r.correlation < 0.0f ? Severity::high : Severity::medium, ModuleId::choir,
-                                   de ("Mono-Problem (Korrelation ") + num (r.correlation, 2) + ")",
-                                   de ("Breite 70 %"),
-                                   de ("Korrelation links/rechts ") + num (r.correlation, 2) + ", Mono-Verlust " + num (r.monoLossDb, 1) + " dB.",
-                                   de ("Club-Anlagen und Handys spielen oft mono: Teile der Stimme löschen sich dort aus."));
+                                   txt ("Mono-Problem (Korrelation {0})", "Mono problem (correlation {0})", { numV (r.correlation, 2) }),
+                                   txt ("Breite 70 %", "Width 70 %"),
+                                   txt ("Korrelation links/rechts {0}, Mono-Verlust {1} dB.", "Left/right correlation {0}, mono loss {1} dB.",
+                                        { numV (r.correlation, 2), numV (r.monoLossDb, 1) }),
+                                   txt ("Club-Anlagen und Handys spielen oft mono: Teile der Stimme löschen sich dort aus.",
+                                        "Club systems and phones often play mono: parts of the voice cancel out there."));
                     f.action.params.push_back ({ pid::stereoWidth, 70.0f, K::atMost, 100.0f });
                     f.action.params.push_back ({ pid::choirWidth, -30.0f, K::amount, 0.0f });
                     f.action.params.push_back ({ pid::doublerMonoSafe, 80.0f, K::atLeast, 0.0f });
@@ -423,9 +526,12 @@ namespace velvox::check
                 {
                     const float deficit = t.snrMin - r.snrDb;
                     auto& f = add ("noise", Category::noise, conf (deficit, 0.0f, 8.0f), severity (deficit, 0.0f, 8.0f), ModuleId::ride,
-                                   de ("Rauschen in Pausen (") + num (r.snrDb, 0) + " dB Abstand)", de ("Rauschen nicht mit anheben (Ride-Schwelle)"),
-                                   de ("Die Pausen liegen bei ") + num (r.noiseFloorDb, 1) + de (" dBFS, nur ") + num (r.snrDb, 1) + de (" dB unter der Stimme."),
-                                   de ("Jedes Dynamikmodul hebt das Rauschen zwischen den Wörtern an."));
+                                   txt ("Rauschen in Pausen ({0} dB Abstand)", "Noise in the gaps ({0} dB margin)", { numV (r.snrDb, 0) }),
+                                   txt ("Rauschen nicht mit anheben (Ride-Schwelle)", "Don't lift the noise (Ride threshold)"),
+                                   txt ("Die Pausen liegen bei {0} dBFS, nur {1} dB unter der Stimme.", "The gaps sit at {0} dBFS, only {1} dB below the voice.",
+                                        { numV (r.noiseFloorDb, 1), numV (r.snrDb, 1) }),
+                                   txt ("Jedes Dynamikmodul hebt das Rauschen zwischen den Wörtern an.",
+                                        "Every dynamics module lifts the noise between the words."));
                     // Only when LEVEL RIDE is on (it is not switched on for this)
                     f.action.params.push_back ({ pid::rideSilence, std::round (juce::jlimit (-80.0f, -30.0f, r.noiseFloorDb + 6.0f)), K::atLeast, 0.0f });
                 }
@@ -433,9 +539,13 @@ namespace velvox::check
                 if (r.tailSeconds > t.tailMax - 0.2f)
                 {
                     auto& f = add ("space", Category::space, conf (r.tailSeconds, t.tailMax, 1.0f), severity (r.tailSeconds, t.tailMax, 0.8f), ModuleId::reverb,
-                                   de ("Verhallt (Ausklang ") + num (r.tailSeconds, 1) + " s)", de ("Hall-/Delay-Mix senken"),
-                                   de ("Nach Wörtern dauert es etwa ") + num (r.tailSeconds, 1) + de (" s bis −30 dB (Ziel bis ") + num (t.tailMax, 1) + " s).",
-                                   de ("Lange Fahnen zwischen den Wörtern verwischen die nächsten Silben."));
+                                   txt ("Verhallt (Ausklang {0} s)", "Too much reverb (tail {0} s)", { numV (r.tailSeconds, 1) }),
+                                   txt ("Hall-/Delay-Mix senken", "Lower the reverb/delay mix"),
+                                   txt ("Nach Wörtern dauert es etwa {0} s bis −30 dB (Ziel bis {1} s).",
+                                        "After words it takes about {0} s to fall to −30 dB (target up to {1} s).",
+                                        { numV (r.tailSeconds, 1), numV (t.tailMax, 1) }),
+                                   txt ("Lange Fahnen zwischen den Wörtern verwischen die nächsten Silben.",
+                                        "Long tails between the words smear the next syllables."));
                     // Only reverb / delay that are on before VOCAL CHECK (a room on the recording cannot be removed)
                     f.action.params.push_back ({ pid::reverbMix, -8.0f, K::amount, 0.0f });
                     f.action.params.push_back ({ pid::delayMix, -8.0f, K::amount, 0.0f });
@@ -455,29 +565,13 @@ namespace velvox::check
         return best;
     }
 
-    juce::String hzText (float hz)
-    {
-        if (hz >= 1000.0f)
-        {
-            const float k = std::round (hz / 100.0f) / 10.0f;
-            return (std::abs (k - std::round (k)) < 0.05f ? juce::String (juce::roundToInt (k)) : num (k, 1)) + " kHz";
-        }
-        return juce::String (juce::roundToInt (hz)) + " Hz";
-    }
-
-    juce::String dbText (float db, bool withPlus)
-    {
-        const float v = std::round (db * 2.0f) / 2.0f;
-        const bool whole = std::abs (v - std::round (v)) < 0.01f;
-        const auto body = whole ? juce::String (juce::roundToInt (std::abs (v))) : num (std::abs (v), 1);
-        const juce::String sign = v < 0.0f ? juce::String::fromUTF8 ("\xe2\x88\x92") : (withPlus && v > 0.0f ? juce::String ("+") : juce::String());
-        return sign + body + (withPlus ? " dB" : "");
-    }
+    juce::String hzText (float hz)                  { return hzIn (hz, i18n::current()); }
+    juce::String dbText (float db, bool withPlus)   { return dbIn (db, withPlus, i18n::current()); }
 
     juce::String dbfsText (float dbfs)
     {
-        // Peaks above full scale must read "+3", never "3" (which looks like a value below 0)
-        return dbText (dbfs, true).upToFirstOccurrenceOf (" dB", false, false);
+        const auto v = dbfsV (dbfs);
+        return i18n::isGerman() ? v.de : v.en;
     }
 
     CheckTargets targetsFor (const dsp::AnalysisResult& r, Genre genre)
