@@ -190,7 +190,7 @@ public:
             expect (atEnd);
         }
 
-        beginTest ("0.7: the module browser and the help offer exactly the 11 remaining modules");
+        beginTest ("0.7: the module browser and the help offer exactly the 13 modules (11 kept + Room Noise, Breath Control)");
         {
             Harness h;
             ui::ModuleBrowser browser (h.proc);
@@ -200,11 +200,17 @@ public:
             for (auto id : browser.visibleModules())
                 keys.add (dsp::moduleKey (id));
             keys.sort (false);
-            juce::StringArray expected { "eq", "comp", "deess", "sat", "doubler", "delay", "reverb", "smash", "smooth", "check", "ride" };
+            juce::StringArray expected { "eq", "comp", "deess", "sat", "doubler", "delay", "reverb", "smash", "smooth", "check", "ride", "denoise", "breath" };
             expected.sort (false);
             expectEquals (keys.joinIntoString (","), expected.joinIntoString (","));
             for (int i = 0; i < dsp::numModules; ++i)
                 expect (ui::help::shortDescription (i).isNotEmpty(), dsp::moduleKey ((ModuleId) i));
+            expectEquals (juce::String (dsp::moduleDisplayName (ModuleId::denoise)), juce::String ("Room Noise"));
+            expectEquals (juce::String (dsp::moduleDisplayName (ModuleId::breath)), juce::String ("Breath Control"));
+            browser.setSearchText ("raumrauschen");
+            expect (browser.visibleModules().size() == 1 && browser.visibleModules()[0] == ModuleId::denoise, "German search word finds Room Noise");
+            browser.setSearchText ("atem");
+            expect (browser.visibleModules().size() == 1 && browser.visibleModules()[0] == ModuleId::breath, "German search word finds Breath Control");
             for (auto lang : { i18n::Language::german, i18n::Language::english })
                 for (const auto& page : ui::help::pages (lang))
                     for (auto* gone : { "Pitch", "Stutter", "Pulse", "Choir" })
@@ -291,7 +297,7 @@ public:
             using C = ui::ModuleBrowser::Category;
             expectEquals ((int) browser.visibleModules().size(), dsp::numModules, "every module");
             const std::vector<std::pair<C, std::vector<ModuleId>>> expected {
-                { C::cleanUp, { ModuleId::eq, ModuleId::deess, ModuleId::smooth } },
+                { C::cleanUp, { ModuleId::eq, ModuleId::deess, ModuleId::smooth, ModuleId::denoise, ModuleId::breath } },
                 { C::dynamics, { ModuleId::comp, ModuleId::smash, ModuleId::ride } },
                 { C::colour, { ModuleId::sat } },
                 { C::widthVoices, { ModuleId::doubler } },

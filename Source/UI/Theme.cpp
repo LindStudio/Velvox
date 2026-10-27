@@ -58,6 +58,8 @@ namespace velvox::ui
             case M::sat:     return text (sat_svg, sat_svgSize);
             case M::doubler: return text (doubler_svg, doubler_svgSize);
             case M::check:   return text (check_svg, check_svgSize);
+            case M::denoise: return text (denoise_svg, denoise_svgSize);
+            case M::breath:  return text (breath_svg, breath_svgSize);
         }
         return {};
     }

@@ -78,6 +78,19 @@ namespace velvox::ui
                 p.lineTo (P (0.95f, 0.45f));
                 p.addRoundedRectangle (juce::Rectangle<float> (w * 0.16f, h * 0.3f).withCentre (P (0.7f, 0.5f)), 1.5f);
                 break;
+            case (int) M::denoise:   // jagged noise turning smooth
+                p.startNewSubPath (P (0.05f, 0.5f));
+                p.lineTo (P (0.12f, 0.35f)); p.lineTo (P (0.2f, 0.65f)); p.lineTo (P (0.28f, 0.38f)); p.lineTo (P (0.36f, 0.6f));
+                p.cubicTo (P (0.5f, 0.6f), P (0.6f, 0.4f), P (0.75f, 0.4f));
+                p.lineTo (P (0.95f, 0.4f));
+                break;
+            case (int) M::breath:    // breath lines and a down arrow
+                p.startNewSubPath (P (0.05f, 0.35f)); p.lineTo (P (0.5f, 0.35f));
+                p.startNewSubPath (P (0.05f, 0.55f)); p.lineTo (P (0.6f, 0.55f));
+                p.startNewSubPath (P (0.05f, 0.75f)); p.lineTo (P (0.35f, 0.75f));
+                p.startNewSubPath (P (0.8f, 0.2f)); p.lineTo (P (0.8f, 0.75f));
+                p.startNewSubPath (P (0.68f, 0.62f)); p.lineTo (P (0.8f, 0.75f)); p.lineTo (P (0.92f, 0.62f));
+                break;
             default:                 // output: speaker
                 p.startNewSubPath (P (0.1f, 0.38f)); p.lineTo (P (0.3f, 0.38f)); p.lineTo (P (0.55f, 0.15f));
                 p.lineTo (P (0.55f, 0.85f)); p.lineTo (P (0.3f, 0.62f)); p.lineTo (P (0.1f, 0.62f)); p.closeSubPath();

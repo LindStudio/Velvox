@@ -505,6 +505,38 @@ R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosi
                    "Usually after the Compressor (control first, then density) and before the De-Esser. With Smash in use, the Compressor and Saturation can often do less.") }));
 
 
+            p.push_back (modulePage (l, gModules, "denoise", "Room Noise", {
+                t ("Raumrauschen: Senkt gleichmäßiges Rauschen der Aufnahme – Lüfter, Brummen des Raums, Rauschen des Vorverstärkers – und lässt die Stimme dabei in Ruhe. Das Rauschen lernt es von selbst, auch während gesungen wird.",
+                   "Lowers steady noise in the recording - fans, the hum of the room, preamp hiss - and leaves the voice alone. It learns the noise by itself, also while you sing."),
+                t ("Für Aufnahmen im Zimmer statt im Studio, wenn man zwischen den Zeilen ein Rauschen hört.",
+                   "For recordings made in a room instead of a studio, when you hear a hiss or hum between the lines."),
+                t ("- Ein Regler: Stärke. 100 % senkt das Rauschen um bis zu 18 dB.\n- Das Bild zeigt, wie stark gerade abgesenkt wird.\n- Es braucht ein paar Sekunden, bis es das Rauschen kennt; nach digitaler Stille (stummer Bereich) bis zu 5 Sekunden.",
+                   "- One control: Amount. 100 % lowers the noise by up to 18 dB.\n- The picture shows how much is lowered right now.\n- It needs a few seconds to know the noise; after digital silence (a muted part) up to 5 seconds."),
+                t ("- Mehr Stärke = leiseres Rauschen; sehr viel kann die Ränder leiser Silben etwas weicher machen.",
+                   "- More Amount = quieter noise; a lot can soften the edges of quiet syllables a little."),
+                t ("- 40 bis 60 % für eine normale Zimmeraufnahme, 80 % bei deutlich hörbarem Lüfter.",
+                   "- 40 to 60 % for a normal room recording, 80 % with a clearly audible fan."),
+                t ("- Es als Hall-Entferner benutzen: Hall ist kein gleichmäßiges Rauschen.\n- Brummen mit einem einzelnen Ton (50 Hz) erwarten zu entfernen – dafür ist der EQ da.",
+                   "- Using it to remove reverb: reverb is not steady noise.\n- Expecting it to remove a single hum tone (50 Hz) - use the EQ for that."),
+                t ("Ganz vorne in der Kette, vor allem anderen: Compressor und Sättigung würden das Rauschen sonst mit anheben.",
+                   "At the very front of the chain, before everything else: the Compressor and Saturation would otherwise raise the noise too.") }));
+
+            p.push_back (modulePage (l, gModules, "breath", "Breath Control", {
+                t ("Atem-Absenker: Erkennt Atmer zwischen den Zeilen und macht sie leiser – S-Laute und gesungene Töne bleiben, wie sie sind.",
+                   "Finds breaths between the lines and makes them quieter - S sounds and sung notes stay as they are."),
+                t ("Wenn Atmer nach dem Compressor zu laut werden, bei Rap und eng gesungenen Pop-Vocals.",
+                   "When breaths get too loud after the Compressor, in rap and close-sung pop vocals."),
+                t ("- Ein Regler: Stärke. 50 % = Atmer 12 dB leiser, 100 % = praktisch weg.\n- Das Bild zeigt, wann und wie stark ein Atmer abgesenkt wird.",
+                   "- One control: Amount. 50 % = breaths 12 dB quieter, 100 % = practically gone.\n- The picture shows when and how much a breath is lowered."),
+                t ("- Mehr Stärke = leisere Atmer. Ganz weg klingt oft unnatürlich; meist reichen 40 bis 60 %.",
+                   "- More Amount = quieter breaths. Completely gone often sounds unnatural; 40 to 60 % is usually enough."),
+                t ("- 50 % für Gesang, 40 % für Rap und Sprache.",
+                   "- 50 % for singing, 40 % for rap and speech."),
+                t ("- Ganz auf 100 % drehen: Die Stimme klingt dann schnell zerschnitten.",
+                   "- Turning it all the way to 100 %: the voice soon sounds chopped."),
+                t ("Vor den Compressor: Der würde die Atmer sonst erst lauter machen.",
+                   "Before the Compressor: it would otherwise make the breaths louder first.") }));
+
             p.push_back (modulePage (l, gModules, "smooth", "Smooth", {
                 t ("Adaptive Resonanz-Kontrolle: Findet Frequenzen, die klingeln oder aus ihrer Umgebung herausstechen, und senkt sie nur, solange sie herausstechen. Die Anzeige zeigt das Live-Spektrum der Vocal; was gerade entfernt wird, ist pink gezeichnet.",
                    "Adaptive resonance control: finds frequencies that ring or stick out of their neighbors and lowers them only while they stick out. The display shows the live spectrum of the vocal; what is removed right now is drawn in pink."),
@@ -642,6 +674,8 @@ namespace velvox::ui::help
             case ModuleId::delay:   return tr ("Echos neben der Stimme; Ducking hält die Wörter klar", "Echoes beside the voice; ducking keeps the words clear");
             case ModuleId::reverb:  return tr ("Raum und Tiefe; Ducking schafft Platz, solange du singst", "Room and depth; ducking clears space while you sing");
             case ModuleId::smash:   return tr ("Parallelkompression: Dichte und Lautheit, das Original behält seinen Punch", "Parallel compression: density and loudness, the original keeps its punch");
+            case ModuleId::denoise: return tr ("Raumrauschen: senkt gleichmäßiges Rauschen im Raum, die Stimme bleibt", "Lowers steady noise of the room, the voice stays");
+            case ModuleId::breath:  return tr ("Atem-Absenker: macht Atmer zwischen den Zeilen leiser, S-Laute bleiben", "Makes breaths between the lines quieter, S sounds stay");
             case ModuleId::smooth:  return tr ("Findet klingelnde, harte Frequenzen und zähmt sie nur, solange sie herausstechen", "Finds ringing, harsh frequencies and tames them only while they stick out");
             case ModuleId::check:   return tr ("Analysiert die Vocal an dieser Stelle der Kette und erklärt, was sich verbessern lässt", "Analyzes the vocal at this point of the chain and explains what could be improved");
             case ModuleId::ride:    return tr ("Hebt leise Wörter an, senkt laute ab – natürlich, ohne Pumpen", "Lifts quiet words, lowers loud ones - natural, without pumping");

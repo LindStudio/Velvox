@@ -74,6 +74,7 @@ set(VELVOX_SOURCES
     Source/UI/Segments.cpp
     Source/UI/ValueText.cpp
     Source/UI/SimpleView.cpp
+    Source/UI/CleanupPanels.cpp
     Source/UI/MascotClips.cpp
     Source/UI/MascotView.cpp
     Source/UI/PresetBrowser.cpp
@@ -141,7 +142,7 @@ juce_add_binary_data(VelvoxAssets
         Resources/Icons/levelride.svg Resources/Icons/smooth.svg Resources/Icons/vocalsmash.svg
         Resources/Icons/delay.svg Resources/Icons/reverb.svg
         Resources/Icons/eq.svg Resources/Icons/comp.svg Resources/Icons/deess.svg Resources/Icons/sat.svg
-        Resources/Icons/doubler.svg Resources/Icons/check.svg
+        Resources/Icons/doubler.svg Resources/Icons/check.svg Resources/Icons/denoise.svg Resources/Icons/breath.svg
         Resources/Images/HeadlinerIcon.png
         Resources/Images/HeadlinerWordmark.png
         Resources/Images/HeadlinerLogo.png

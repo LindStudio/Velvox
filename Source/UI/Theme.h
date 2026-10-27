@@ -137,7 +137,9 @@ namespace velvox::ui
         switch (id)
         {
             case M::eq:      return 0.00f;
+            case M::denoise: return 0.03f;
             case M::check:   return 0.06f;
+            case M::breath:  return 0.09f;
             case M::deess:   return 0.12f;
             case M::smooth:  return 0.20f;
             case M::comp:    return 0.32f;
@@ -170,6 +172,8 @@ namespace velvox::ui
             case M::comp:    argb = 0xff2563eb; break;
             case M::doubler: argb = 0xff818cf8; break;
             case M::sat:     argb = 0xffec4899; break;
+            case M::denoise: argb = 0xff14b8a6; break;   // 0.7 clean-up modules next to EQ / De-esser
+            case M::breath:  argb = 0xff67e8f9; break;
         }
         return juce::Colour (argb).withAlpha (alpha);
     }

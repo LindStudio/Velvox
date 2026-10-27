@@ -99,6 +99,8 @@ namespace velvox::ui
             case ModuleId::smooth:  return pid::smoothOn;
             case ModuleId::check:   return pid::checkOn;
             case ModuleId::ride:    return pid::rideOn;
+            case ModuleId::denoise: return pid::denoiseOn;
+            case ModuleId::breath:  return pid::breathOn;
         }
         return pid::eqOn;
     }

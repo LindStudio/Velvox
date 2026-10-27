@@ -1,4 +1,5 @@
 #include "ModuleViews.h"
+#include "CleanupPanels.h"
 #include "EqPanel.h"
 #include "ReverbPanel.h"
 #include "SmoothPanel.h"
@@ -303,6 +304,8 @@ namespace velvox::ui
             case ModuleId::smooth:  return createSmoothGraph (p, instance);
             case ModuleId::check:   return std::make_unique<CheckView> (p);
             case ModuleId::ride:    return createDynView (p, ModuleId::ride, instance);
+            case ModuleId::denoise:
+            case ModuleId::breath:  return createCleanupView (p, dsp::selectionModule (code));
         }
         return std::make_unique<OutputView>();
     }

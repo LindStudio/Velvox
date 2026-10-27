@@ -1,4 +1,5 @@
 #include "DetailPanels.h"
+#include "CleanupPanels.h"
 #include "EqPanel.h"
 #include "ReverbPanel.h"
 #include "SmoothPanel.h"
@@ -890,6 +891,8 @@ namespace velvox::ui
                 case ModuleId::smooth:  panel = createSmoothPanel (p); break;
                 case ModuleId::check:   panel = std::make_unique<CheckPanel> (p); break;
                 case ModuleId::ride:    panel = createDynPanel (p, ModuleId::ride); break;
+                case ModuleId::denoise:
+                case ModuleId::breath:  panel = createCleanupPanel (p, dsp::selectionModule (id)); break;   // CleanupPanels.cpp
             }
             if (panel == nullptr)
                 panel = std::make_unique<OutputPanel> (p);

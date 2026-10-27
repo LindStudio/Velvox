@@ -81,7 +81,12 @@ public:
                 panel->setBounds (panelSize());
                 const auto name = juce::String (id < 0 ? "output" : dsp::moduleKey ((ModuleId) id));
                 const auto& main = panel->getMainControls();
-                expect (main.size() >= 3 && main.size() <= 5, name + ": " + juce::String ((int) main.size()) + " main controls");
+                // 0.7: the single-parameter clean-up modules have one big knob in the visual and no main row
+                const bool single = id == (int) ModuleId::denoise || id == (int) ModuleId::breath;
+                if (single)
+                    expect (main.empty(), name + ": no main row");
+                else
+                    expect (main.size() >= 3 && main.size() <= 5, name + ": " + juce::String ((int) main.size()) + " main controls");
 
                 // Main knobs are large, Mehr knobs small - never a grid of equal knobs
                 for (auto* c : main)
@@ -135,7 +140,8 @@ public:
                     const auto visual = panel->getVisualArea();
                     expect (visual.getHeight() >= 150, name + ": large visual " + visual.toString());
                     expect (visual.getY() >= panel->getHeaderArea().getBottom(), name + ": visual under the header");
-                    expect (panel->getMainRowArea().getY() >= visual.getBottom(), name + ": main row under the visual");
+                    if (! panel->getMainControls().empty())   // 0.7 single-control panels have no main row
+                        expect (panel->getMainRowArea().getY() >= visual.getBottom(), name + ": main row under the visual");
                     for (auto* c : panel->getMainControls())
                         expect (panel->getMainRowArea().contains (c->getBounds().withTrimmedBottom (std::max (0, c->getBottom() - panel->getMainRowArea().getBottom()))),
                                 name + ": main control in the main row " + c->getBounds().toString());

@@ -23,6 +23,8 @@ namespace velvox
                 case M::smooth:  return e.smooth.enabled;
                 case M::check:   return e.checkOn;
                 case M::ride:    return e.ride.enabled;
+                case M::denoise: return e.denoise.enabled;
+                case M::breath:  return e.breath.enabled;
             }
             return true;
         };

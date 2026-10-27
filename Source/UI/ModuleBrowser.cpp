@@ -15,6 +15,7 @@ namespace velvox::ui
         // Display order: by category (spec 2.7), the usual order of a vocal chain inside each
         constexpr ModuleId browserOrder[dsp::numModules] {
             ModuleId::eq, ModuleId::deess, ModuleId::smooth,          // Clean-up
+            ModuleId::denoise, ModuleId::breath,
             ModuleId::comp, ModuleId::smash, ModuleId::ride,          // Dynamics
             ModuleId::sat,                                            // Colour
             ModuleId::doubler,                                        // Width / Voices
@@ -37,6 +38,8 @@ namespace velvox::ui
                 case ModuleId::smash:   return "smash parallel compression density loud kompression dichte laut";
                 case ModuleId::smooth:  return "smooth resonance harsh soothe resonanz scharf glätten";
                 case ModuleId::check:   return "check analysis diagnose meter analyse messen";
+                case ModuleId::denoise: return "noise denoise room hiss hum fan rauschen raumrauschen entrauschen brummen";
+                case ModuleId::breath:  return "breath breathing atem atmer atem-absenker luft holen";
                 case ModuleId::ride:    return "ride level rider gain automation pegel ausgleich";
             }
             return "";
@@ -65,7 +68,8 @@ namespace velvox::ui
     {
         switch (id)
         {
-            case ModuleId::eq: case ModuleId::deess: case ModuleId::smooth:       return Category::cleanUp;
+            case ModuleId::eq: case ModuleId::deess: case ModuleId::smooth:
+            case ModuleId::denoise: case ModuleId::breath:                        return Category::cleanUp;
             case ModuleId::comp: case ModuleId::smash: case ModuleId::ride:       return Category::dynamics;
             case ModuleId::sat:                                                   return Category::colour;
             case ModuleId::doubler:                                               return Category::widthVoices;
