@@ -15,6 +15,7 @@
 #include "UI/SimpleView.h"
 #include "UI/VocalCheckView.h"
 #include "UI/PresetBrowser.h"
+#include "UI/SettingsOverlay.h"
 
 // The whole UI is laid out on a fixed design canvas (ui::baseWidth x ui::baseHeight = 1000 x 600)
 // that is scaled uniformly to the window size, so every window size keeps the same proportions
@@ -26,20 +27,37 @@
 //   VOCAL CHECK score ring + finding tiles (VocalCheckView) over the whole body (both modes)
 //   overlays    analysis, auto-mix details, module browser, preset list, dialogs, help, tutorial, hover info
 // View state (mode, tab, selection) is stored with the project and never affects the audio.
-class VelvoxAudioProcessorEditor final : public juce::AudioProcessorEditor,
-                                         private juce::Timer,
-                                         private juce::ChangeListener
+//
+// HeadlinerView is the whole interface; VelvoxAudioProcessorEditor (below) is the window that
+// hosts it and builds a fresh one when the interface language changes (1.0), so every text,
+// including those set once in constructors, follows the new language at once.
+class HeadlinerView final : public juce::Component,
+                            private juce::Timer,
+                            private juce::ChangeListener
 {
 public:
     using Mode = velvox::ui::TopBar::Mode;
     using Tab = velvox::ui::TopBar::Tab;
 
-    explicit VelvoxAudioProcessorEditor (VelvoxAudioProcessor&);
-    ~VelvoxAudioProcessorEditor() override;
+    // What to show again after the view was rebuilt for a language change
+    enum class Reopen { none, welcome, settings };
+
+    explicit HeadlinerView (VelvoxAudioProcessor&, Reopen reopen = Reopen::none);
+    ~HeadlinerView() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;   // Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z
+
+    // The language was changed (welcome card or settings): the window rebuilds the view.
+    // Called on the message thread from a click inside this view - the window defers the rebuild.
+    std::function<void (Reopen)> onLanguageChange;
+    // A window size was chosen in the settings (scale of the design canvas)
+    std::function<void (double)> onWindowScale;
+
+    // Settings sheet (gear in the header) and the first-start welcome card
+    void showSettings();
+    void showWelcome();
 
     // Help and tutorial
     void showHelp (const juce::String& pageKey);
@@ -75,6 +93,7 @@ public:
     velvox::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return analysis; }
     velvox::ui::DetailPanel* getDetail() noexcept { return detail.get(); }
     velvox::ui::CompactMeters& getMeters() noexcept { return meters; }
+    velvox::ui::SettingsOverlay& getSettings() noexcept { return settingsOverlay; }
 
     // Canvas layout (design units)
     static juce::Rectangle<int> bodyArea();
@@ -140,6 +159,7 @@ private:
     velvox::ui::DialogOverlay dialog;
     velvox::ui::HelpOverlay help;
     velvox::ui::TutorialOverlay tutorial;
+    velvox::ui::SettingsOverlay settingsOverlay;
     velvox::ui::ModuleBrowser browser;
     velvox::ui::PresetBrowser presetBrowser;
     velvox::ui::TopBar topBar;
@@ -160,6 +180,72 @@ private:
     int frame = 0;
 
     juce::TooltipWindow tooltips { this, velvox::ui::motion::hoverInfoDelayMs };
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeadlinerView)
+};
+
+//==============================================================================
+// The plugin window: resizable at a fixed aspect ratio (size remembered per project as "uiScale"),
+// hosts one HeadlinerView and replaces it when the interface language changes.
+class VelvoxAudioProcessorEditor final : public juce::AudioProcessorEditor
+{
+public:
+    using Mode = HeadlinerView::Mode;
+    using Tab = HeadlinerView::Tab;
+    using Reopen = HeadlinerView::Reopen;
+
+    explicit VelvoxAudioProcessorEditor (VelvoxAudioProcessor&);
+    ~VelvoxAudioProcessorEditor() override;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+    bool keyPressed (const juce::KeyPress& key) override { return view->keyPressed (key); }
+
+    // Builds a fresh view in the current language (state, view mode and selection live in the project)
+    void rebuild (Reopen reopen);
+
+    HeadlinerView& getView() noexcept { return *view; }
+
+    // The view's interface (tests, snapshot renderer)
+    void showSettings()                                 { view->showSettings(); }
+    void showWelcome()                                  { view->showWelcome(); }
+    void showHelp (const juce::String& pageKey)         { view->showHelp (pageKey); }
+    void startTutorial (bool withWelcome)               { view->startTutorial (withWelcome); }
+    void startAnalysis()                                { view->startAnalysis(); }
+    void showMixDetails()                               { view->showMixDetails(); }
+    void setMode (Mode m)                               { view->setMode (m); }
+    void setTab (Tab t)                                 { view->setTab (t); }
+    Mode getMode() const noexcept                       { return view->getMode(); }
+    Tab getTab() const noexcept                         { return view->getTab(); }
+    bool isAdvanced() const noexcept                    { return view->isAdvanced(); }
+    bool isModulePanelShown() const noexcept            { return view->isModulePanelShown(); }
+    void selectModule (int moduleIdOrOutput)            { view->selectModule (moduleIdOrOutput); }
+    void openModule (int moduleIdOrOutput)              { view->openModule (moduleIdOrOutput); }
+    velvox::ui::HelpOverlay& getHelp() noexcept         { return view->getHelp(); }
+    velvox::ui::TutorialOverlay& getTutorial() noexcept { return view->getTutorial(); }
+    velvox::ui::ChainView& getChainView() noexcept      { return view->getChainView(); }
+    velvox::ui::TopBar& getTopBar() noexcept            { return view->getTopBar(); }
+    velvox::ui::SimpleView& getSimpleView() noexcept    { return view->getSimpleView(); }
+    velvox::ui::VocalCheckView& getCheckView() noexcept { return view->getCheckView(); }
+    velvox::ui::AutoMixView& getAutoMixView() noexcept  { return view->getAutoMixView(); }
+    bool isMixDetailsOpen() const noexcept              { return view->isMixDetailsOpen(); }
+    velvox::ui::ModuleBrowser& getBrowser() noexcept    { return view->getBrowser(); }
+    velvox::ui::PresetBrowser& getPresetBrowser() noexcept { return view->getPresetBrowser(); }
+    velvox::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return view->getAnalysisOverlay(); }
+    velvox::ui::DetailPanel* getDetail() noexcept       { return view->getDetail(); }
+    velvox::ui::CompactMeters& getMeters() noexcept     { return view->getMeters(); }
+    velvox::ui::SettingsOverlay& getSettings() noexcept { return view->getSettings(); }
+
+    static juce::Rectangle<int> bodyArea()  { return HeadlinerView::bodyArea(); }
+    static juce::Rectangle<int> chainArea() { return HeadlinerView::chainArea(); }
+    static juce::Rectangle<int> meterArea() { return HeadlinerView::meterArea(); }
+    static juce::Rectangle<int> panelArea() { return HeadlinerView::panelArea(); }
+
+private:
+    void attach();
+
+    VelvoxAudioProcessor& proc;
+    std::unique_ptr<HeadlinerView> view;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VelvoxAudioProcessorEditor)
 };

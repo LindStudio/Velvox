@@ -319,7 +319,8 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 
 // Renders the real editor to a PNG (for visual review without a DAW):
 //   VelvoxTests --snapshot out.png [presetName] [width] [beginner|pro] [moduleId|-1] [overlay]
-// overlay: "help:<page>", "welcome", "tutorial:<step>", "bypass", "hide:<key,key>", "focus:<moduleId>", "edit",
+// Language: environment variable HEADLINER_LANG = de (default) / en.
+// overlay: "help:<page>", "welcome", "settings", "tutorial:<step>", "bypass", "hide:<key,key>", "focus:<moduleId>", "edit",
 //          "intro" (analysis popup), "listening", "capturing", "analysing", "mixed" (overview after a synthetic auto mix),
 //          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report),
 //          "eq" (EQ panel with user bands, a macro band and a selection), "eqmore" (+ Mehr, migrated legacy curve),
@@ -381,6 +382,14 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     prefs.deleteFile();
     ui::settings::useFileForTesting (prefs);
     ui::settings::set (ui::settings::tutorialDone, overlay != "welcome");
+    const bool english = juce::SystemStats::getEnvironmentVariable ("HEADLINER_LANG", "de") == "en";
+    ui::settings::set (ui::settings::language, english ? "en" : "de");
+    ui::settings::applyLanguage();
+    if (overlay == "welcome")   // the very first start: no language chosen yet (the computer "runs" in HEADLINER_LANG)
+    {
+        ui::settings::getFile().deleteFile();
+        i18n::overrideSystemLanguage (english ? i18n::Language::english : i18n::Language::german);
+    }
 
     VelvoxAudioProcessor proc;
     proc.setRateAndBufferSizeDetails (48000.0, 512);
@@ -507,6 +516,8 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     {
         if (overlay.startsWith ("help:"))
             ed->showHelp (overlay.fromFirstOccurrenceOf (":", false, false));
+        if (overlay == "settings")
+            ed->showSettings();
         if (overlay.startsWith ("tutorial:"))
         {
             ed->startTutorial (false);
@@ -664,6 +675,9 @@ int main (int argc, char* argv[])
     const auto prefs = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("velvox-tests.settings");
     prefs.deleteFile();
     velvox::ui::settings::useFileForTesting (prefs);
+    // Tests read German texts unless they switch (i18n::ScopedLanguage); never the machine's language
+    velvox::ui::settings::set (velvox::ui::settings::language, "de");
+    velvox::ui::settings::applyLanguage();
 
     StdoutLogger logger;
     juce::Logger::setCurrentLogger (&logger);

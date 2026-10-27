@@ -1,4 +1,5 @@
 #include "TopBar.h"
+#include "../Text/I18n.h"
 #include "../PluginProcessor.h"
 #include "../ProductInfo.h"
 
@@ -181,6 +182,42 @@ namespace velvox::ui
             bool left;
         };
 
+        // Gear for the settings sheet: drawn like the "?" button (ghost square, icon in the text colour)
+        class GearButton final : public juce::Button
+        {
+        public:
+            GearButton() : juce::Button ("settings") {}
+
+            void paintButton (juce::Graphics& g, bool highlighted, bool down) override
+            {
+                getLookAndFeel().drawButtonBackground (g, *this, colours::control, highlighted, down);
+
+                const auto c = getLocalBounds().toFloat().getCentre();
+                const float outer = 7.4f, inner = 5.4f, hole = 2.5f;
+                juce::Path gear;
+                constexpr int teeth = 8;
+                bool first = true;
+                for (int i = 0; i < teeth * 2; ++i)
+                {
+                    // Alternating outer / inner radius, each tooth a short plateau
+                    const float r = (i % 2 == 0) ? outer : inner;
+                    for (const float off : { -0.17f, 0.17f })
+                    {
+                        const float a = juce::MathConstants<float>::twoPi * ((float) i + 0.5f + off) / (float) (teeth * 2);
+                        const juce::Point<float> p (c.x + r * std::sin (a), c.y - r * std::cos (a));
+                        if (first) gear.startNewSubPath (p);
+                        else gear.lineTo (p);
+                        first = false;
+                    }
+                }
+                gear.closeSubPath();
+                gear.addEllipse (juce::Rectangle<float> (hole * 2.0f, hole * 2.0f).withCentre (c));
+                gear.setUsingNonZeroWinding (false);
+                g.setColour (highlighted ? colours::textStrong : colours::textSoft);
+                g.fillPath (gear);
+            }
+        };
+
         juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
     }
 
@@ -231,6 +268,11 @@ namespace velvox::ui
 
         help.setTooltip ("Hilfe");
         help.onClick = [this] { if (onHelp) onHelp(); };
+
+        settingsButton = std::make_unique<GearButton>();
+        settingsButton->setTooltip (i18n::tr ("Einstellungen: Sprache, Ansicht, Fenstergröße", "Settings: language, view, window size"));
+        settingsButton->onClick = [this] { if (onSettings) onSettings(); };
+        addAndMakeVisible (*settingsButton);
         setMode (mode);
         setTab (tab);
         refresh();
@@ -401,8 +443,10 @@ namespace velvox::ui
         tabs[0]->setBounds (tabRow.removeFromLeft (84));
         tabs[1]->setBounds (tabRow);
 
-        // Right: bypass, help
+        // Right: bypass, settings, help
         help.setBounds (centred (r.removeFromRight (28), 28));
+        r.removeFromRight (6);
+        settingsButton->setBounds (centred (r.removeFromRight (28), 28));
         r.removeFromRight (8);
         bypass.setBounds (centred (r.removeFromRight (84), h));
     }

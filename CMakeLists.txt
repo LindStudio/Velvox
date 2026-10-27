@@ -109,6 +109,9 @@ set(VELVOX_SOURCES
     Source/UI/HelpContent.cpp
     Source/UI/HelpOverlay.cpp
     Source/UI/TutorialOverlay.cpp
+    Source/UI/SettingsOverlay.cpp
+    Source/Text/I18n.cpp
+    Source/Text/ParamText.cpp
 )
 
 # Saturation panel (0.6: character tiles, big Drive, Low / Mid / High strip)
@@ -273,5 +276,5 @@ endif()
 
 # Audition (0.6.1: EQ band solo, Saturation band solo; monitoring states, not parameters)
 if(VELVOX_BUILD_TESTS)
-    target_sources(VelvoxTests PRIVATE Tests/AuditionTests.cpp)
+    target_sources(VelvoxTests PRIVATE Tests/AuditionTests.cpp Tests/I18nTests.cpp)
 endif()

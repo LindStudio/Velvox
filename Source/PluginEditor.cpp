@@ -44,19 +44,19 @@ namespace
     }
 }
 
-juce::Rectangle<int> VelvoxAudioProcessorEditor::bodyArea()  { return { margin, topBarH + gap, baseWidth - 2 * margin, baseHeight - topBarH - gap - margin }; }
-juce::Rectangle<int> VelvoxAudioProcessorEditor::chainArea() { return bodyArea().withHeight (chainH).withTrimmedRight (meterW + gap); }
-juce::Rectangle<int> VelvoxAudioProcessorEditor::meterArea() { return bodyArea().withHeight (chainH).withTrimmedLeft (bodyArea().getWidth() - meterW); }
-juce::Rectangle<int> VelvoxAudioProcessorEditor::panelArea() { return bodyArea().withTrimmedTop (chainH + gap); }
+juce::Rectangle<int> HeadlinerView::bodyArea()  { return { margin, topBarH + gap, baseWidth - 2 * margin, baseHeight - topBarH - gap - margin }; }
+juce::Rectangle<int> HeadlinerView::chainArea() { return bodyArea().withHeight (chainH).withTrimmedRight (meterW + gap); }
+juce::Rectangle<int> HeadlinerView::meterArea() { return bodyArea().withHeight (chainH).withTrimmedLeft (bodyArea().getWidth() - meterW); }
+juce::Rectangle<int> HeadlinerView::panelArea() { return bodyArea().withTrimmedTop (chainH + gap); }
 
 //==============================================================================
-VelvoxAudioProcessorEditor::Canvas::Canvas()
+HeadlinerView::Canvas::Canvas()
 {
     addChildComponent (info);
     setOpaque (true);
 }
 
-void VelvoxAudioProcessorEditor::Canvas::paint (juce::Graphics& g)
+void HeadlinerView::Canvas::paint (juce::Graphics& g)
 {
     // The atmosphere is static: rendered once per physical size and then only blitted
     const float scale = juce::jlimit (0.5f, 4.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
@@ -72,7 +72,7 @@ void VelvoxAudioProcessorEditor::Canvas::paint (juce::Graphics& g)
     g.drawImage (backdrop, juce::Rectangle<float> ((float) baseWidth, (float) baseHeight));
 }
 
-void VelvoxAudioProcessorEditor::Canvas::paintOverChildren (juce::Graphics& g)
+void HeadlinerView::Canvas::paintOverChildren (juce::Graphics& g)
 {
     if (! bypassed)
         return;
@@ -94,26 +94,28 @@ void VelvoxAudioProcessorEditor::Canvas::paintOverChildren (juce::Graphics& g)
     drawCaption (g, text, pill, juce::Justification::centred, colours::bypass, 9.0f);
 }
 
-void VelvoxAudioProcessorEditor::Canvas::showInfo (juce::Component& anchor, const juce::String& title, const juce::String& value, const juce::String& text)
+void HeadlinerView::Canvas::showInfo (juce::Component& anchor, const juce::String& title, const juce::String& value, const juce::String& text)
 {
+    if (! settings::getBool (settings::infoCards, true))   // switched off in the settings
+        return;
     infoAnchor = &anchor;
     info.show (getLocalArea (&anchor, anchor.getLocalBounds()), title, value, text);
 }
 
-void VelvoxAudioProcessorEditor::Canvas::hideInfo (juce::Component& anchor)
+void HeadlinerView::Canvas::hideInfo (juce::Component& anchor)
 {
     if (infoAnchor == &anchor || infoAnchor == nullptr)
         info.hide();
 }
 
-void VelvoxAudioProcessorEditor::Canvas::hideInfoIfAnchorGone()
+void HeadlinerView::Canvas::hideInfoIfAnchorGone()
 {
     if (info.isVisible() && (infoAnchor == nullptr || ! infoAnchor->isShowing()))
         info.hide();
 }
 
 //==============================================================================
-VelvoxAudioProcessorEditor::DetailsOverlay::DetailsOverlay (AutoMixView& v) : view (v)
+HeadlinerView::DetailsOverlay::DetailsOverlay (AutoMixView& v) : view (v)
 {
     setWantsKeyboardFocus (true);
     addAndMakeVisible (view);
@@ -123,12 +125,12 @@ VelvoxAudioProcessorEditor::DetailsOverlay::DetailsOverlay (AutoMixView& v) : vi
     setVisible (false);
 }
 
-juce::Rectangle<int> VelvoxAudioProcessorEditor::DetailsOverlay::cardBounds() const
+juce::Rectangle<int> HeadlinerView::DetailsOverlay::cardBounds() const
 {
     return getLocalBounds().reduced (40, 34);
 }
 
-void VelvoxAudioProcessorEditor::DetailsOverlay::paint (juce::Graphics& g)
+void HeadlinerView::DetailsOverlay::paint (juce::Graphics& g)
 {
     g.fillAll (colours::scrim);
     const auto card = cardBounds().toFloat();
@@ -137,20 +139,20 @@ void VelvoxAudioProcessorEditor::DetailsOverlay::paint (juce::Graphics& g)
     drawGlass (g, card, radius::panel, 0.02f);
 }
 
-void VelvoxAudioProcessorEditor::DetailsOverlay::resized()
+void HeadlinerView::DetailsOverlay::resized()
 {
     auto card = cardBounds();
     close.setBounds (card.getRight() - 40, card.getY() + 10, 28, 28);
     view.setBounds (card.reduced (16, 14).withTrimmedRight (36));
 }
 
-void VelvoxAudioProcessorEditor::DetailsOverlay::mouseDown (const juce::MouseEvent& e)
+void HeadlinerView::DetailsOverlay::mouseDown (const juce::MouseEvent& e)
 {
     if (! cardBounds().contains (e.getPosition()))
         setVisible (false);
 }
 
-bool VelvoxAudioProcessorEditor::DetailsOverlay::keyPressed (const juce::KeyPress& key)
+bool HeadlinerView::DetailsOverlay::keyPressed (const juce::KeyPress& key)
 {
     if (key == juce::KeyPress::escapeKey)
     {
@@ -161,9 +163,8 @@ bool VelvoxAudioProcessorEditor::DetailsOverlay::keyPressed (const juce::KeyPres
 }
 
 //==============================================================================
-VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
-    : AudioProcessorEditor (&p),
-      proc (p),
+HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
+    : proc (p),
       spectrum (p.getChain().meters.inputTap, p.getChain().meters.outputTap),
       scopeL ((size_t) dsp::StereoTap::capacity), scopeR ((size_t) dsp::StereoTap::capacity),
       browser (p),
@@ -183,7 +184,7 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
 
     for (auto* c : std::initializer_list<juce::Component*> { &topBar, &chainView, &simpleView, &meters })
         canvas.addAndMakeVisible (c);
-    for (auto* c : std::initializer_list<juce::Component*> { &checkView, &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser })
+    for (auto* c : std::initializer_list<juce::Component*> { &checkView, &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser, &settingsOverlay })
         canvas.addChildComponent (c);
 
     chainView.setLiveData (&live);
@@ -225,12 +226,43 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     };
     help.onStartTutorial = [this] { startTutorial (false); };
     tutorial.targetFor = [this] (const juce::String& key) { return tutorialTarget (key); };
-    tutorial.onClose = [] (TutorialOverlay::Outcome outcome)
+    tutorial.onClose = [this] (TutorialOverlay::Outcome outcome)
     {
+        // Whatever was chosen, the welcome card has asked for the language: keep the current one
+        settings::confirmLanguageChoice();
         if (outcome == TutorialOverlay::Outcome::later)
             tutorialPostponedThisSession = true;
         else
             settings::set (settings::tutorialDone, true);
+
+        if (outcome == TutorialOverlay::Outcome::analyse)
+            startAnalysis();
+        else if (outcome == TutorialOverlay::Outcome::skipped && proc.getAutoMix().shouldShowPrompt())
+            proc.getAutoMix().dismissPrompt();   // "straight to the plugin": no analysis popup on top
+    };
+    tutorial.onLanguage = [this] (i18n::Language language)
+    {
+        settings::setLanguagePreference (language == i18n::Language::german ? i18n::Preference::german : i18n::Preference::english);
+        if (onLanguageChange)
+            onLanguageChange (Reopen::welcome);
+    };
+
+    topBar.onSettings = [this] { showSettings(); };
+    settingsOverlay.onLanguage = [this] (i18n::Preference preference)
+    {
+        settings::setLanguagePreference (preference);
+        if (onLanguageChange)
+            onLanguageChange (Reopen::settings);
+    };
+    settingsOverlay.onStartTutorial = [this]
+    {
+        settingsOverlay.close();
+        startTutorial (false);
+    };
+    settingsOverlay.onWindowScale = [this] (double scale)
+    {
+        if (onWindowScale)
+            onWindowScale (scale);
     };
 
     // ---- Layout on the design canvas
@@ -238,14 +270,15 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     chainView.setBounds (chainArea());
     simpleView.setBounds (bodyArea());
     meters.setBounds (meterArea().reduced (6, 4));
-    for (auto* overlay : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser })
+    for (auto* overlay : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser, &settingsOverlay })
         overlay->setBounds (0, 0, baseWidth, baseHeight);
 
     // ---- View state (stored with the project, never affects audio)
     // uiMode: "beginner" (0.3 - 0.5 AUTO MIX) = Simple, "pro" = Advanced, "check" (0.5) = Advanced + VOCAL CHECK.
-    // uiTab (0.6): "automix" / "check".
+    // uiTab (0.6): "automix" / "check". A new instance (nothing stored) opens in the view chosen in the settings.
     const auto& state = proc.getState().state;
-    const auto storedMode = state.getProperty (statekeys::uiMode, "beginner").toString();
+    const auto newInstanceMode = settings::getString (settings::defaultMode) == "advanced" ? "pro" : "beginner";
+    const auto storedMode = state.getProperty (statekeys::uiMode, newInstanceMode).toString();
     const auto storedTab = state.getProperty (statekeys::uiTab, juce::String()).toString();
     mode = storedMode == "pro" || storedMode == "check" ? Mode::advanced : Mode::simple;
     tab = storedTab == "check" || (storedTab.isEmpty() && storedMode == "check") ? Tab::vocalCheck : Tab::autoMix;
@@ -254,47 +287,36 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     applyView (false);
     constructed = true;
 
-    // ---- Window: resizable, fixed aspect ratio, remembered per project ("uiScale", a scale of
-    // the design canvas). Never larger than the work area of the screen.
-    const int minW = (int) std::ceil (baseWidth * minScale), maxW = juce::roundToInt (baseWidth * maxScale);
-    // Read before the limits are set: constraining the initial 0 x 0 size calls resized(), which stores a scale
-    const juce::var storedScale = state.getProperty (uiScaleProperty);
-    setResizable (true, true);
-    setResizeLimits (minW, (int) std::ceil (baseHeight * minScale), maxW, juce::roundToInt (baseHeight * maxScale));
-    if (auto* c = getConstrainer())
-        c->setFixedAspectRatio ((double) baseWidth / (double) baseHeight);
-
-    int fitW = maxW;
-    if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
-    {
-        const auto area = display->userArea;
-        fitW = (int) std::min (area.getWidth() * 0.94, area.getHeight() * 0.94 * baseWidth / (double) baseHeight);
-    }
-    const int defaultW = juce::jlimit (minW, std::max (minW, fitW), baseWidth);
-    const double savedScale = storedScale.isVoid() ? defaultW / (double) baseWidth : (double) storedScale;
-    const int w = juce::jlimit (minW, std::max (minW, std::min (maxW, fitW)), juce::roundToInt (savedScale * baseWidth));
-    setSize (w, juce::roundToInt (w * (double) baseHeight / baseWidth));
-
     auto& autoMix = proc.getAutoMix();
     autoMix.addChangeListener (this);
     chainView.setAutoMixModules (autoMix.getReport().changedModules);
 
     startTimerHz (frameRate);
 
-    // First open of a new instance: the analysis popup. A capture or analysis
-    // that is still running (the editor was closed meanwhile) shows its progress.
+    // What shows first:
+    //   - after a language change: the welcome card or the settings sheet again
+    //   - a capture or analysis that is still running (the window was closed meanwhile): its progress
+    //   - the very first start of Headliner (no language chosen yet): the welcome card with the language
+    //   - a new, not yet analysed instance: the analysis popup (unless switched off in the settings)
+    //   - the tour's welcome card until the tour was finished or declined
     using Phase = automix::AutoMixController::Phase;
     const auto phase = autoMix.getPhase();
-    if (phase == Phase::listening || phase == Phase::capturing || phase == Phase::analysing)
+    if (reopen == Reopen::welcome)
+        showWelcome();
+    else if (reopen == Reopen::settings)
+        showSettings();
+    else if (phase == Phase::listening || phase == Phase::capturing || phase == Phase::analysing)
         analysis.showProgress();
-    else if (autoMix.shouldShowPrompt())
+    else if (! settings::hasLanguageChoice())
+        showWelcome();
+    else if (autoMix.shouldShowPrompt() && settings::getBool (settings::offerAnalysis, true))
         analysis.showIntro();
     else if (! settings::getBool (settings::tutorialDone) && ! tutorialPostponedThisSession)
         startTutorial (true);
     raiseOverlays();
 }
 
-VelvoxAudioProcessorEditor::~VelvoxAudioProcessorEditor()
+HeadlinerView::~HeadlinerView()
 {
     stopTimer();
     proc.getAutoMix().removeChangeListener (this);
@@ -307,7 +329,7 @@ VelvoxAudioProcessorEditor::~VelvoxAudioProcessorEditor()
     setLookAndFeel (nullptr);
 }
 
-void VelvoxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster*)
+void HeadlinerView::changeListenerCallback (juce::ChangeBroadcaster*)
 {
     // A new mix, a restored state or a compare switch: every view follows at once
     auto& autoMix = proc.getAutoMix();
@@ -316,7 +338,7 @@ void VelvoxAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadcaster
         detail->refresh();
 }
 
-bool VelvoxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
+bool HeadlinerView::keyPressed (const juce::KeyPress& key)
 {
     // Global undo (spec 8 Q8): Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z (Cmd on macOS)
     const auto mods = key.getModifiers();
@@ -333,7 +355,7 @@ bool VelvoxAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
-void VelvoxAudioProcessorEditor::startAnalysis()
+void HeadlinerView::startAnalysis()
 {
     help.close();
     if (tutorial.isActive())
@@ -343,7 +365,7 @@ void VelvoxAudioProcessorEditor::startAnalysis()
     raiseOverlays();
 }
 
-void VelvoxAudioProcessorEditor::showMixDetails()
+void HeadlinerView::showMixDetails()
 {
     help.close();
     detailsOverlay.setVisible (true);
@@ -352,7 +374,7 @@ void VelvoxAudioProcessorEditor::showMixDetails()
     detailsOverlay.grabKeyboardFocus();
 }
 
-void VelvoxAudioProcessorEditor::openModule (int id)
+void HeadlinerView::openModule (int id)
 {
     selected = id;
     mode = Mode::advanced;
@@ -360,7 +382,7 @@ void VelvoxAudioProcessorEditor::openModule (int id)
     applyView (true);
 }
 
-void VelvoxAudioProcessorEditor::setMode (Mode m)
+void HeadlinerView::setMode (Mode m)
 {
     if (m == mode)
         return;
@@ -368,7 +390,7 @@ void VelvoxAudioProcessorEditor::setMode (Mode m)
     applyView (true);
 }
 
-void VelvoxAudioProcessorEditor::setTab (Tab t)
+void HeadlinerView::setTab (Tab t)
 {
     if (t == tab)
         return;
@@ -376,14 +398,14 @@ void VelvoxAudioProcessorEditor::setTab (Tab t)
     applyView (true);
 }
 
-void VelvoxAudioProcessorEditor::storeView()
+void HeadlinerView::storeView()
 {
     auto& state = proc.getState().state;
     state.setProperty (statekeys::uiMode, mode == Mode::advanced ? "pro" : "beginner", nullptr);
     state.setProperty (statekeys::uiTab, tab == Tab::vocalCheck ? "check" : "automix", nullptr);
 }
 
-void VelvoxAudioProcessorEditor::applyView (bool animate)
+void HeadlinerView::applyView (bool animate)
 {
     topBar.setMode (mode);
     topBar.setTab (tab);
@@ -417,7 +439,7 @@ void VelvoxAudioProcessorEditor::applyView (bool animate)
     canvas.repaint();
 }
 
-void VelvoxAudioProcessorEditor::select (int id)
+void HeadlinerView::select (int id)
 {
     // A selection that is no longer in the chain (removed, older project): the output stage
     if (id >= 0 && ! proc.getRouting().contains (dsp::selectionModule (id), dsp::selectionInstance (id)))
@@ -435,7 +457,7 @@ void VelvoxAudioProcessorEditor::select (int id)
     }
     detail.reset();
 
-    const auto openFromPanel = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)] (int moduleId)
+    const auto openFromPanel = [safe = juce::Component::SafePointer<HeadlinerView> (this)] (int moduleId)
     {
         // After the current click has finished
         juce::MessageManager::callAsync ([safe, moduleId] { if (safe != nullptr) safe->openModule (moduleId); });
@@ -446,7 +468,7 @@ void VelvoxAudioProcessorEditor::select (int id)
     {
         detail = createDetailPanel (proc, id, &spectrum, id >= 0 && dsp::selectionInstance (id) > 0 ? &panelLive : &live);
         detail->onOpenModule = openFromPanel;
-        detail->onShowVocalCheck = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)]
+        detail->onShowVocalCheck = [safe = juce::Component::SafePointer<HeadlinerView> (this)]
         {
             juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->setTab (Tab::vocalCheck); });
         };
@@ -466,29 +488,45 @@ void VelvoxAudioProcessorEditor::select (int id)
     raiseOverlays();
 }
 
-void VelvoxAudioProcessorEditor::raiseOverlays()
+void HeadlinerView::raiseOverlays()
 {
     canvas.info.toFront (false);
-    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &browser, &presetBrowser, &analysis, &dialog, &help, &tutorial })
+    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &browser, &presetBrowser, &analysis, &dialog, &help, &settingsOverlay, &tutorial })
         c->toFront (false);
     if (analysis.isVisible())
         analysis.toFront (true);
 }
 
-void VelvoxAudioProcessorEditor::showHelp (const juce::String& pageKey)
+void HeadlinerView::showSettings()
+{
+    help.close();
+    settingsOverlay.open();
+    raiseOverlays();
+    settingsOverlay.grabKeyboardFocus();
+}
+
+void HeadlinerView::showWelcome()
+{
+    help.close();
+    settingsOverlay.close();
+    tutorial.start (true);
+    raiseOverlays();
+}
+
+void HeadlinerView::showHelp (const juce::String& pageKey)
 {
     help.open (pageKey);
     raiseOverlays();
 }
 
-void VelvoxAudioProcessorEditor::startTutorial (bool withWelcome)
+void HeadlinerView::startTutorial (bool withWelcome)
 {
     help.close();
     tutorial.start (withWelcome);
     raiseOverlays();
 }
 
-juce::Rectangle<int> VelvoxAudioProcessorEditor::tutorialTarget (const juce::String& key)
+juce::Rectangle<int> HeadlinerView::tutorialTarget (const juce::String& key)
 {
     // Top bar sits at the canvas origin, so its child bounds are canvas coordinates
     if (key == "presets") return topBar.getPresetArea();
@@ -502,20 +540,19 @@ juce::Rectangle<int> VelvoxAudioProcessorEditor::tutorialTarget (const juce::Str
     return chainArea();   // "chain", "chainAndModules"
 }
 
-void VelvoxAudioProcessorEditor::paint (juce::Graphics& g)
+void HeadlinerView::paint (juce::Graphics& g)
 {
     g.fillAll (colours::background);
 }
 
-void VelvoxAudioProcessorEditor::resized()
+void HeadlinerView::resized()
 {
     const float scale = (float) getWidth() / (float) baseWidth;
     canvas.setTransform (juce::AffineTransform::scale (scale));
-    proc.getState().state.setProperty (uiScaleProperty, getWidth() / (double) baseWidth, nullptr);
 }
 
 // Pulls every meter exactly once per frame; all views read the shared result
-void VelvoxAudioProcessorEditor::updateLiveData()
+void HeadlinerView::updateLiveData()
 {
     auto& chain = proc.getChain();
     auto& m = chain.meters;
@@ -617,7 +654,7 @@ void VelvoxAudioProcessorEditor::updateLiveData()
     spectrum.update (live.sampleRate);
 }
 
-void VelvoxAudioProcessorEditor::timerCallback()
+void HeadlinerView::timerCallback()
 {
     updateLiveData();
     ++frame;
@@ -644,4 +681,80 @@ void VelvoxAudioProcessorEditor::timerCallback()
         canvas.bypassed = bypassed;
         canvas.repaint();
     }
+}
+
+//==============================================================================
+VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
+    : AudioProcessorEditor (&p), proc (p)
+{
+    settings::applyLanguage();
+    view = std::make_unique<HeadlinerView> (p);
+    attach();
+
+    // ---- Window: resizable, fixed aspect ratio, remembered per project ("uiScale", a scale of
+    // the design canvas; a new instance uses the size from the settings). Never larger than the
+    // work area of the screen.
+    const auto& state = proc.getState().state;
+    const int minW = (int) std::ceil (baseWidth * minScale), maxW = juce::roundToInt (baseWidth * maxScale);
+    // Read before the limits are set: constraining the initial 0 x 0 size calls resized(), which stores a scale
+    const juce::var storedScale = state.getProperty (uiScaleProperty);
+    setResizable (true, true);
+    setResizeLimits (minW, (int) std::ceil (baseHeight * minScale), maxW, juce::roundToInt (baseHeight * maxScale));
+    if (auto* c = getConstrainer())
+        c->setFixedAspectRatio ((double) baseWidth / (double) baseHeight);
+
+    int fitW = maxW;
+    if (const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const auto area = display->userArea;
+        fitW = (int) std::min (area.getWidth() * 0.94, area.getHeight() * 0.94 * baseWidth / (double) baseHeight);
+    }
+    const double preferred = settings::getString (settings::defaultScale).getDoubleValue();
+    const int defaultW = juce::jlimit (minW, std::max (minW, fitW), preferred > 0.0 ? juce::roundToInt (preferred * baseWidth) : baseWidth);
+    const double savedScale = storedScale.isVoid() ? defaultW / (double) baseWidth : (double) storedScale;
+    const int w = juce::jlimit (minW, std::max (minW, std::min (maxW, fitW)), juce::roundToInt (savedScale * baseWidth));
+    setSize (w, juce::roundToInt (w * (double) baseHeight / baseWidth));
+}
+
+VelvoxAudioProcessorEditor::~VelvoxAudioProcessorEditor() = default;
+
+void VelvoxAudioProcessorEditor::attach()
+{
+    view->onLanguageChange = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)] (Reopen reopen)
+    {
+        // The click that changed the language is still running inside the view: rebuild afterwards
+        juce::MessageManager::callAsync ([safe, reopen] { if (safe != nullptr) safe->rebuild (reopen); });
+    };
+    view->onWindowScale = [this] (double scale)
+    {
+        const int minW = (int) std::ceil (baseWidth * minScale);
+        int w = juce::roundToInt (scale * baseWidth);
+        if (const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds()))
+            w = std::min (w, (int) std::min (display->userArea.getWidth() * 0.94, display->userArea.getHeight() * 0.94 * baseWidth / (double) baseHeight));
+        w = std::max (minW, w);
+        setSize (w, juce::roundToInt (w * (double) baseHeight / baseWidth));
+    };
+    addAndMakeVisible (*view);
+    view->setBounds (getLocalBounds());
+}
+
+void VelvoxAudioProcessorEditor::rebuild (Reopen reopen)
+{
+    if (view != nullptr)
+        removeChildComponent (view.get());
+    view.reset();
+    view = std::make_unique<HeadlinerView> (proc, reopen);
+    attach();
+}
+
+void VelvoxAudioProcessorEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (colours::background);
+}
+
+void VelvoxAudioProcessorEditor::resized()
+{
+    if (view != nullptr)
+        view->setBounds (getLocalBounds());
+    proc.getState().state.setProperty (uiScaleProperty, getWidth() / (double) baseWidth, nullptr);
 }

@@ -4,7 +4,7 @@ namespace velvox::ui
 {
     namespace
     {
-        constexpr int welcomeW = 560, welcomeH = 330;
+        constexpr int welcomeW = 540, welcomeH = 392;
         constexpr int cardW = 380;
         constexpr float holePad = 6.0f;
 
@@ -56,14 +56,30 @@ namespace velvox::ui
         setVisible (false);
         setWantsKeyboardFocus (true);
 
-        for (auto* b : { &startButton, &pluginButton, &laterButton, &backButton, &nextButton, &skipButton })
+        for (auto* b : { &germanButton, &englishButton, &analyseButton, &startButton, &pluginButton, &backButton, &nextButton, &skipButton })
             addChildComponent (b);
 
-        startButton.setToggleState (true, juce::dontSendNotification);   // lit = primary action
-        nextButton.setToggleState (true, juce::dontSendNotification);
+        using i18n::tr;
+        analyseButton.setButtonText (tr ("Vocal analysieren", "Analyze vocal"));
+        startButton.setButtonText (tr ("Kurze Tour (1 Minute)", "Short tour (1 minute)"));
+        pluginButton.setButtonText (tr ("Direkt zum Plugin", "Go to the plugin"));
+        backButton.setButtonText (tr ("Zurück", "Back"));
+        nextButton.setButtonText (tr ("Weiter", "Next"));
+        skipButton.setButtonText (tr ("Beenden", "Skip"));
+
+        // Language: two large segments, the current language lit
+        germanButton.setConnectedEdges (juce::Button::ConnectedOnRight);
+        englishButton.setConnectedEdges (juce::Button::ConnectedOnLeft);
+        germanButton.setToggleState (i18n::isGerman(), juce::dontSendNotification);
+        englishButton.setToggleState (! i18n::isGerman(), juce::dontSendNotification);
+        germanButton.onClick = [this] { if (onLanguage) onLanguage (i18n::Language::german); };
+        englishButton.onClick = [this] { if (onLanguage) onLanguage (i18n::Language::english); };
+
+        analyseButton.getProperties().set ("primary", true);
+        nextButton.setToggleState (true, juce::dontSendNotification);   // lit = primary action
+        analyseButton.onClick = [this] { finish (Outcome::analyse); };
         startButton.onClick = [this] { goTo (0); };
         pluginButton.onClick = [this] { finish (Outcome::skipped); };
-        laterButton.onClick = [this] { finish (Outcome::later); };
         backButton.onClick = [this] { goTo (step - 1); };
         nextButton.onClick = [this]
         {
@@ -74,10 +90,14 @@ namespace velvox::ui
         };
         skipButton.onClick = [this] { finish (Outcome::skipped); };
 
-        startButton.setTooltip ("A short tour of the interface (about one minute)");
-        pluginButton.setTooltip ("Close and do not show this again - you can start it from Help any time");
-        laterButton.setTooltip ("Close for now and show it again the next time Headliner opens");
-        skipButton.setTooltip ("End the tour - you can start it again from Help");
+        analyseButton.setTooltip (tr ("Spiel die Vocal in der DAW ab - Headliner hört zu und stellt die Module ein",
+                                      "Play the vocal in your DAW - Headliner listens and sets up the modules"));
+        startButton.setTooltip (tr ("Ein kurzer Rundgang durch die Oberfläche",
+                                    "A short tour of the interface"));
+        pluginButton.setTooltip (tr ("Schließen - die Tour startest du jederzeit in den Einstellungen oder der Hilfe",
+                                     "Close - start the tour any time from the settings or Help"));
+        skipButton.setTooltip (tr ("Tour beenden - du kannst sie jederzeit neu starten",
+                                   "End the tour - you can start it again any time"));
     }
 
     void TutorialOverlay::start (bool withWelcome)
@@ -146,7 +166,7 @@ namespace velvox::ui
     void TutorialOverlay::layoutButtons()
     {
         const bool welcome = step < 0;
-        for (auto* b : { &startButton, &pluginButton, &laterButton })
+        for (auto* b : { &germanButton, &englishButton, &analyseButton, &startButton, &pluginButton })
             b->setVisible (welcome && isVisible());
         for (auto* b : { &backButton, &nextButton, &skipButton })
             b->setVisible (! welcome && isVisible());
@@ -154,16 +174,23 @@ namespace velvox::ui
         const auto card = cardBounds();
         if (welcome)
         {
-            auto row = card.reduced (space::xxl, space::xl).removeFromBottom (36);
-            startButton.setBounds (row.removeFromRight (150));
-            row.removeFromRight (space::s);
-            pluginButton.setBounds (row.removeFromRight (150));
-            laterButton.setBounds (row.removeFromLeft (150));
+            // Bottom up: secondary row, primary action, divider, language
+            auto r = card.reduced (space::xxl, space::xl);
+            auto secondary = r.removeFromBottom (34);
+            startButton.setBounds (secondary.removeFromLeft ((secondary.getWidth() - space::s) / 2));
+            secondary.removeFromLeft (space::s);
+            pluginButton.setBounds (secondary);
+            r.removeFromBottom (space::s);
+            analyseButton.setBounds (r.removeFromBottom (42));
+            r.removeFromBottom (space::xl + 1);
+            auto language = r.removeFromBottom (44);
+            germanButton.setBounds (language.removeFromLeft (language.getWidth() / 2));
+            englishButton.setBounds (language);
             return;
         }
 
         backButton.setEnabled (step > 0);
-        nextButton.setButtonText (step + 1 >= (int) steps().size() ? "Finish" : "Next");
+        nextButton.setButtonText (step + 1 >= (int) steps().size() ? i18n::tr ("Fertig", "Finish") : i18n::tr ("Weiter", "Next"));
         auto row = card.reduced (space::xl, space::l).removeFromBottom (32);
         nextButton.setBounds (row.removeFromRight (84));
         row.removeFromRight (space::s);
@@ -230,15 +257,23 @@ namespace velvox::ui
             drawGlass (g, card, radius::panel, 0.03f);
 
             auto r = card.reduced ((float) space::xxl, (float) space::xl);
-            drawCaption (g, "Welcome", r.removeFromTop (20.0f), juce::Justification::centredLeft, colours::teal, typesize::caption);
+            drawCaption (g, i18n::tr ("Willkommen", "Welcome"), r.removeFromTop (20.0f), juce::Justification::centredLeft, colours::teal, typesize::caption);
             drawBrand (g, Brand::wordmark, r.removeFromTop (40.0f), juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid);
             g.setGradientFill (auroraGradient (r.getTopLeft(), r.getTopLeft().translated (48.0f, 0.0f)));
             g.fillRoundedRectangle (r.getX(), r.getY() + 6.0f, 48.0f, 2.0f, 1.0f);
             r.removeFromTop (22.0f);
-            layoutBody ("Headliner is your vocal processing system for modern EDM, hypertechno and hard dance vocals. "
-                        "Shape your voice with individual modules, or find the sound you are looking for in seconds.\n\n"
-                        "Would you like a one-minute tour of the interface?",
-                        r.getWidth(), typesize::lead).draw (g, r.withTrimmedBottom (52.0f));
+
+            // Text above the language buttons; a divider between language and the start options
+            const auto language = germanButton.getBounds().toFloat();
+            layoutBody (i18n::tr ("Headliner mischt deine Vocal: Spiel sie ab, Headliner hört zu und stellt die Module ein. "
+                                  "Danach ist alles frei einstellbar.\n\n"
+                                  "Wähle deine Sprache - du kannst sie jederzeit in den Einstellungen ändern.",
+                                  "Headliner mixes your vocal: play it, Headliner listens and sets up the modules. "
+                                  "Everything stays adjustable afterwards.\n\n"
+                                  "Choose your language - you can change it any time in the settings."),
+                        r.getWidth(), typesize::lead).draw (g, r.withBottom (language.getY() - (float) space::m));
+            g.setColour (colours::borderSoft);
+            g.drawHorizontalLine (juce::roundToInt (language.getBottom() + (float) space::m), r.getX(), r.getRight());
             return;
         }
 
@@ -262,7 +297,7 @@ namespace velvox::ui
         drawGlass (g, card, radius::card, 0.03f);
 
         auto r = card.reduced ((float) space::xl, (float) space::xl);
-        drawCaption (g, "Step " + juce::String (step + 1) + " of " + juce::String ((int) steps().size()),
+        drawCaption (g, i18n::format (i18n::tr ("Schritt {0} von {1}", "Step {0} of {1}"), { juce::String (step + 1), juce::String ((int) steps().size()) }),
                      r.removeFromTop (16.0f), juce::Justification::centredLeft, colours::teal, typesize::caption);
         g.setColour (colours::text);
         g.setFont (font (typesize::title - 2.0f, true));

@@ -65,8 +65,10 @@ namespace velvox::ui
         // handler a plain menu opens
         std::function<void()> onPresetList;
         std::function<void()> onHelp;
+        std::function<void()> onSettings;   // gear: the settings sheet (1.0)
 
         juce::TextButton& getHelpButton() noexcept { return help; }
+        juce::Button& getSettingsButton() noexcept { return *settingsButton; }
         juce::TextButton& getPresetButton() noexcept { return presetButton; }
         juce::TextButton& getPrevButton() noexcept { return prev; }
         juce::TextButton& getNextButton() noexcept { return next; }
@@ -93,6 +95,7 @@ namespace velvox::ui
         Tab tab = Tab::autoMix;
         Toggle bypass;
         juce::TextButton help { "?" };
+        std::unique_ptr<juce::Button> settingsButton;
         juce::Rectangle<int> logoArea;
         bool shownModified = false;
         int modifiedCheck = 0;

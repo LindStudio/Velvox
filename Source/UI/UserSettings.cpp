@@ -49,6 +49,33 @@ namespace velvox::ui::settings
         overrideFile() = file;
     }
 
+    i18n::Preference languagePreference()
+    {
+        return i18n::preferenceFromString (getString (language));
+    }
+
+    bool hasLanguageChoice()
+    {
+        return open()->containsKey (language);
+    }
+
+    void setLanguagePreference (i18n::Preference p)
+    {
+        set (language, i18n::toString (p));
+        i18n::setCurrent (i18n::resolve (p));
+    }
+
+    void confirmLanguageChoice()
+    {
+        if (! hasLanguageChoice())
+            set (language, i18n::toString (languagePreference()));
+    }
+
+    void applyLanguage()
+    {
+        i18n::setCurrent (i18n::resolve (languagePreference()));
+    }
+
     juce::File getFile()
     {
         return open()->getFile();
