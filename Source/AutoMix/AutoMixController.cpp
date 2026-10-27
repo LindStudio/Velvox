@@ -2,6 +2,7 @@
 #include "../Parameters/ParameterLayout.h"
 #include "../StateKeys.h"
 #include "../Parameters/EqBands.h"
+#include "ReportText.h"
 
 namespace velvox::automix
 {
@@ -12,11 +13,11 @@ namespace velvox::automix
         const juce::Identifier previousType { "Previous" };
         const juce::Identifier mixType { "Mix" };
         const juce::Identifier stepType { "Step" }, findingType { "Finding" }, noteType { "Note" }, adjustType { "Adjust" };
-
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
     }
 
     //==========================================================================
+    // The texts are stored as they are: packed in both languages (i18n::both) since 1.0, plain
+    // German in projects from older versions (i18n::show leaves those unchanged)
     juce::ValueTree MixReport::toValueTree() const
     {
         juce::ValueTree t (reportType);
@@ -257,7 +258,7 @@ namespace velvox::automix
             }
             else
             {
-                error = result.error.isNotEmpty() ? result.error : de ("Die Analyse ist fehlgeschlagen.");
+                error = result.error.isNotEmpty() ? result.error : txt::both ("Die Analyse ist fehlgeschlagen.", "The analysis failed.");
                 setPhase (Phase::failed);
             }
             return;
@@ -274,7 +275,7 @@ namespace velvox::automix
     void AutoMixController::applyResult (const AutoMixResult& result)
     {
         // Keep what was there before, so it can be compared and restored
-        previousSnapshot = ParameterSnapshot::capture (apvts, de ("Vor dem Auto-Mix"));
+        previousSnapshot = ParameterSnapshot::capture (apvts, "Vor dem Auto-Mix");   // internal name, never shown
         hasPreviousSnapshot = true;
         showingPrevious = false;
 
@@ -296,7 +297,7 @@ namespace velvox::automix
         apvts.state.setProperty (statekeys::routing, result.plan.routing.toString(), nullptr);
         if (onApplying) onApplying (false, true);
 
-        mixSnapshot = ParameterSnapshot::capture (apvts, de ("Headliner Auto-Mix"));
+        mixSnapshot = ParameterSnapshot::capture (apvts, "Headliner Auto-Mix");
 
         // Report for the UI (only what was really set up)
         MixReport r;

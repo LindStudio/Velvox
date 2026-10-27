@@ -8,6 +8,7 @@
 #include "AutoMix/AutoEq.h"
 #include "Parameters/EqBands.h"
 #include "Parameters/ParameterLayout.h"
+#include "Text/I18n.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -129,7 +130,10 @@ public:
                 expect (autoeq::withinLimits (*notch));
             }
             expect (std::any_of (plan.decisions.begin(), plan.decisions.end(), [] (const Decision& d)
-                                 { return d.module == dsp::ModuleId::eq && d.title.startsWith ("Resonanz"); }), "the overview names it");
+                                 { return d.module == dsp::ModuleId::eq && i18n::show (d.title).startsWith ("Resonanz"); }), "the overview names it");
+            expect (std::any_of (plan.decisions.begin(), plan.decisions.end(), [] (const Decision& d)
+                                 { return d.module == dsp::ModuleId::eq && i18n::show (d.title, i18n::Language::english).startsWith ("Resonance")
+                                          && i18n::show (d.title, i18n::Language::english).contains ("narrow"); }), "and in English");
             expect (! plan.on (pid::smoothOn), "SMOOTH is not switched on for a resonance the EQ already notches (not harsh)");
             for (auto& b : autoBands (plan, cur))
                 expect (autoeq::withinLimits (b), "limits: " + autoeq::titleOf (b.bandRole(), b));

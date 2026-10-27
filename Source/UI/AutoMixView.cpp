@@ -1,12 +1,15 @@
 #include "AutoMixView.h"
 #include "../PluginProcessor.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-        juce::String num (float v, int decimals = 1) { return juce::String (v, decimals).replaceCharacter ('.', ','); }
+        using i18n::tr;
+        // The report texts are packed in both languages (or plain German from older projects)
+        using i18n::show;
+        juce::String num (float v, int decimals = 1) { return i18n::number (v, decimals); }
 
         constexpr int headerH = 44, gapV = 10, statusW = 300, tuneH = 92;
 
@@ -44,9 +47,9 @@ namespace velvox::ui
         {
             switch (c)
             {
-                case automix::Confidence::measured: return "gemessen";
-                case automix::Confidence::likely:   return "wahrscheinlich";
-                case automix::Confidence::possible: return de ("möglich");
+                case automix::Confidence::measured: return tr ("gemessen", "measured");
+                case automix::Confidence::likely:   return tr ("wahrscheinlich", "likely");
+                case automix::Confidence::possible: return tr ("möglich", "possible");
             }
             return {};
         }
@@ -137,7 +140,7 @@ namespace velvox::ui
                 g.drawText (row.title, top.withTrimmedRight (110.0f), juce::Justification::centredLeft, true);
                 g.setColour (row.measured ? colours::teal : colours::textFaint);
                 g.setFont (font (11.5f));
-                g.drawText (row.measured ? "Messung" : "Regel", top.removeFromRight (100.0f).withTrimmedRight (8.0f),
+                g.drawText (row.measured ? tr ("Messung", "Measured") : tr ("Regel", "Rule"), top.removeFromRight (100.0f).withTrimmedRight (8.0f),
                             juce::Justification::centredRight, false);
 
                 g.setColour (colours::textDim);
@@ -202,11 +205,12 @@ namespace velvox::ui
         addAndMakeVisible (stepView);
 
         analyse.getProperties().set ("primary", true);
-        analyse.setTooltip (de ("Headliner erfasst einen Abschnitt deiner Vocal während der Wiedergabe und erstellt daraus den Mix. Der bisherige Zustand bleibt wiederherstellbar."));
+        analyse.setTooltip (tr ("Headliner erfasst einen Abschnitt deiner Vocal während der Wiedergabe und erstellt daraus den Mix. Der bisherige Zustand bleibt wiederherstellbar.",
+                                "Headliner captures a section of your vocal during playback and builds the mix from it. The previous state can be restored."));
         analyse.onClick = [this] { if (onAnalyse) onAnalyse(); };
 
-        restore.setButtonText (de ("Vorherigen Zustand wiederherstellen"));
-        restore.setTooltip (de ("Verwirft den Auto-Mix und stellt die Einstellungen von davor wieder her"));
+        restore.setButtonText (tr ("Vorherigen Zustand wiederherstellen", "Restore previous state"));
+        restore.setTooltip (tr ("Verwirft den Auto-Mix und stellt die Einstellungen von davor wieder her", "Discards the auto mix and brings back the settings from before"));
         restore.onClick = [this] { autoMix.restorePrevious(); };
 
         for (auto* b : { &analyse, &restore })
@@ -216,7 +220,7 @@ namespace velvox::ui
         density->setDialSize (dialsize::macro);
         addAndMakeVisible (*density);
         // Off / Bypass match / Auto gain (the host sees the English choice names)
-        const juce::StringArray matchLabels { "Aus", "Wie Bypass", "Auto-Gain" };
+        const juce::StringArray matchLabels { tr ("Aus", "Off"), tr ("Wie Bypass", "Like bypass"), tr ("Auto-Gain", "Auto gain") };
         levelMatch = std::make_unique<Segments> (p.getState(), pid::levelMatchMode, matchLabels, colours::blue);
         addAndMakeVisible (*levelMatch);
 
@@ -247,12 +251,12 @@ namespace velvox::ui
                 const int id = moduleIdForKey (s.moduleKey);
                 const juce::String chip = s.moduleKey == "output" ? juce::String ("Output")
                                         : (id >= 0 ? juce::String (dsp::moduleShortName ((dsp::ModuleId) id)) : s.moduleKey);
-                rows.push_back ({ chip, s.title, s.reason, id, s.measured, false });
+                rows.push_back ({ chip, show (s.title), show (s.reason), id, s.measured, false });
             }
             for (auto& a : r.adjustments)
-                rows.push_back ({ {}, de ("Nachgeprüft: ") + a, {}, -2, false, true });
+                rows.push_back ({ {}, i18n::format (tr ("Nachgeprüft: {0}", "Checked: {0}"), { show (a) }), {}, -2, false, true });
             for (auto& n : r.notes)
-                rows.push_back ({ {}, n, {}, -2, false, true });
+                rows.push_back ({ {}, show (n), {}, -2, false, true });
         }
         steps->setRows (std::move (rows));
         stepView.setVisible (r.valid);
@@ -264,7 +268,7 @@ namespace velvox::ui
     void AutoMixView::updateButtons()
     {
         const bool has = autoMix.hasMix();
-        analyse.setButtonText (has ? "Neu analysieren" : "Vocal analysieren");
+        analyse.setButtonText (has ? tr ("Neu analysieren", "Analyze again") : tr ("Vocal analysieren", "Analyze vocal"));
 
         restore.setVisible (has && autoMix.hasPrevious());
     }
@@ -276,14 +280,15 @@ namespace velvox::ui
         const float lufs = m.inputLufs.load();
         juce::String in;
         juce::Colour c = colours::textDim;
-        if (lufs < -70.0f)          { in = "Kein Signal"; c = colours::textFaint; }
-        else if (lufs < -36.0f)     { in = num (lufs) + de (" LUFS · sehr leise"); c = colours::bypass; }
+        if (lufs < -70.0f)          { in = tr ("Kein Signal", "No signal"); c = colours::textFaint; }
+        else if (lufs < -36.0f)     { in = num (lufs) + tr (" LUFS · sehr leise", " LUFS · very quiet"); c = colours::bypass; }
         else                        { in = num (lufs) + " LUFS"; c = colours::text; }
 
         const auto sc = proc.getSidechainStatus();
-        juce::String side = ! sc.connected ? de ("Nicht verbunden (optional)")
-                          : (sc.hasSignal() ? de ("Verbunden · Beat ") + juce::String (juce::roundToInt (sc.beatRmsDb)) + " dB RMS"
-                                            : de ("Verbunden · kein Signal"));
+        juce::String side = ! sc.connected ? tr ("Nicht verbunden (optional)", "Not connected (optional)")
+                          : (sc.hasSignal() ? i18n::format (tr ("Verbunden · Beat {0} dB RMS", "Connected · beat {0} dB RMS"),
+                                                            { juce::String (juce::roundToInt (sc.beatRmsDb)) })
+                                            : tr ("Verbunden · kein Signal", "Connected · no signal"));
 
         if (in != inputStatus || side != sidechainStatus || c != inputColour)
         {
@@ -307,8 +312,9 @@ namespace velvox::ui
             g.drawText ("AUTO MIX", h.removeFromLeft (124.0f), juce::Justification::centredLeft, false);
 
             // Status chip
-            const juce::String chipText = r.valid ? (autoMix.isShowingPrevious() ? de ("Vorher-Zustand aktiv") : de ("Analyse abgeschlossen"))
-                                                  : de ("Noch nicht analysiert");
+            const juce::String chipText = r.valid ? (autoMix.isShowingPrevious() ? tr ("Vorher-Zustand aktiv", "Before state active")
+                                                                                 : tr ("Analyse abgeschlossen", "Analysis complete"))
+                                                  : tr ("Noch nicht analysiert", "Not analyzed yet");
             const auto chipFont = medium (13.0f);
             const float w = (float) juce::GlyphArrangement::getStringWidthInt (chipFont, chipText) + 34.0f;
             auto chip = h.removeFromLeft (w).withSizeKeepingCentre (w, 28.0f);
@@ -330,7 +336,7 @@ namespace velvox::ui
             auto a = statusArea.reduced (20, 16);
             g.setColour (colours::text);
             g.setFont (caps (16.0f));
-            g.drawText ("VOCAL-STATUS", a.removeFromTop (26), juce::Justification::centredLeft, false);
+            g.drawText (tr ("VOCAL-STATUS", "VOCAL STATUS"), a.removeFromTop (26), juce::Justification::centredLeft, false);
             a.removeFromTop (6);
 
             const auto line = [&g, &a] (const juce::String& label, const juce::String& value, juce::Colour c)
@@ -346,37 +352,39 @@ namespace velvox::ui
 
             if (r.valid)
             {
-                line ("Analyse", num (r.voicedSeconds) + de (" s Gesang (Abschnitt)"), colours::text);
-                line ("Material", r.conservative ? de ("Wenig - vorsichtige Werte") : juce::String ("Ausreichend"),
+                line (tr ("Analyse", "Analysis"), i18n::format (tr ("{0} s Gesang (Abschnitt)", "{0} s of singing (section)"), { num (r.voicedSeconds) }), colours::text);
+                line ("Material", r.conservative ? tr ("Wenig - vorsichtige Werte", "Little - cautious values") : tr ("Ausreichend", "Enough"),
                       r.conservative ? colours::bypass : colours::ok);
-                line ("Bearbeitet", juce::String (r.changedModules.size()) + " Module", colours::text);
-                line ("Ausgang", num (r.outputLufs) + " LUFS · Spitze " + num (r.outputPeakDb) + " dB", colours::text);
+                line (tr ("Bearbeitet", "Processed"), i18n::format (tr ("{0} Module", "{0} modules"), { juce::String (r.changedModules.size()) }), colours::text);
+                line (tr ("Ausgang", "Output"), i18n::format (tr ("{0} LUFS · Spitze {1} dB", "{0} LUFS · peak {1} dB"), { num (r.outputLufs), num (r.outputPeakDb) }),
+                      colours::text);
             }
             else
             {
-                line ("Analyse", "Noch keine", colours::textFaint);
+                line (tr ("Analyse", "Analysis"), tr ("Noch keine", "None yet"), colours::textFaint);
             }
-            line ("Eingang (live)", inputStatus, inputColour);
-            line ("Beat-Sidechain", sidechainStatus + (r.valid && r.beatAnalysed ? de (" · analysiert") : juce::String()),
+            line (tr ("Eingang (live)", "Input (live)"), inputStatus, inputColour);
+            line (tr ("Beat-Sidechain", "Beat sidechain"), sidechainStatus + (r.valid && r.beatAnalysed ? tr (" · analysiert", " · analyzed") : juce::String()),
                   colours::textDim);
 
             a.removeFromTop (10);
             g.setColour (colours::text);
             g.setFont (font (14.0f, true));
-            g.drawText (de ("Hinweise zur Aufnahme"), a.removeFromTop (22), juce::Justification::centredLeft, false);
+            g.drawText (tr ("Hinweise zur Aufnahme", "Notes on the recording"), a.removeFromTop (22), juce::Justification::centredLeft, false);
 
             if (! r.valid)
             {
                 g.setColour (colours::textDim);
                 g.setFont (font (13.0f));
-                g.drawFittedText (de ("Erscheinen nach der Analyse - nur was gemessen wurde, mit Angabe der Sicherheit."),
-                                  a.removeFromTop (40), juce::Justification::topLeft, 2);
+                g.drawFittedText (tr ("Erscheinen nach der Analyse - nur was gemessen wurde, mit Angabe der Sicherheit.",
+                                      "Shown after the analysis - only what was measured, with how certain it is."),
+                                  a.removeFromTop (40), juce::Justification::topLeft, 2, 1.0f);
             }
             else if (r.findings.empty())
             {
                 g.setColour (colours::ok);
                 g.setFont (font (13.0f));
-                g.drawText (de ("Keine Auffälligkeiten gemessen."), a.removeFromTop (22), juce::Justification::centredLeft, false);
+                g.drawText (tr ("Keine Auffälligkeiten gemessen.", "Nothing unusual measured."), a.removeFromTop (22), juce::Justification::centredLeft, false);
             }
             else
             {
@@ -391,7 +399,7 @@ namespace velvox::ui
                     g.drawText (confidenceText (f.confidence), row.removeFromRight (100), juce::Justification::centredRight, false);
                     g.setColour (colours::text.withAlpha (0.9f));
                     g.setFont (font (13.0f));
-                    g.drawFittedText (f.title, row.withTrimmedLeft (16), juce::Justification::centredLeft, 1, 0.85f);
+                    g.drawFittedText (show (f.title), row.withTrimmedLeft (16), juce::Justification::centredLeft, 1, 0.85f);
                 }
             }
         }
@@ -403,13 +411,13 @@ namespace velvox::ui
             auto head = a.removeFromTop (26);
             g.setColour (colours::text);
             g.setFont (caps (16.0f));
-            g.drawText ("AUTOMATISCH ERSTELLTER MIX", head, juce::Justification::centredLeft, false);
+            g.drawText (tr ("AUTOMATISCH ERSTELLTER MIX", "AUTOMATICALLY CREATED MIX"), head, juce::Justification::centredLeft, false);
             if (! r.valid)
             {
                 a.removeFromTop (30);
                 g.setColour (colours::textDim);
                 g.setFont (font (15.0f, true));
-                g.drawText ("Noch kein Auto-Mix.", a.removeFromTop (30), juce::Justification::centred, false);
+                g.drawText (tr ("Noch kein Auto-Mix.", "No auto mix yet."), a.removeFromTop (30), juce::Justification::centred, false);
             }
         }
 
@@ -419,10 +427,10 @@ namespace velvox::ui
             auto a = macroArea.reduced (20, 14);
             g.setColour (colours::textStrong);
             g.setFont (semiBold (13.0f, 0.18f));
-            g.drawText ("FEINSCHLIFF", a.removeFromTop (18), juce::Justification::centredLeft, false);
+            g.drawText (tr ("FEINSCHLIFF", "FINE-TUNING"), a.removeFromTop (18), juce::Justification::centredLeft, false);
             g.setColour (colours::textFaint);
             g.setFont (semiBold (10.0f, 0.15f));
-            g.drawText ("FAIRER VERGLEICH", levelMatch->getBounds().translated (0, -20).withHeight (16), juce::Justification::centredLeft, false);
+            g.drawText (tr ("FAIRER VERGLEICH", "FAIR COMPARISON"), levelMatch->getBounds().translated (0, -20).withHeight (16), juce::Justification::centredLeft, false);
         }
     }
 

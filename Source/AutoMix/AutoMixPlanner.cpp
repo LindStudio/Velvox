@@ -4,6 +4,7 @@
 #include "../Parameters/RoutingMigration.h"
 #include "../Parameters/EqBands.h"
 #include "AutoEq.h"
+#include "ReportText.h"
 
 namespace velvox::automix
 {
@@ -11,12 +12,11 @@ namespace velvox::automix
 
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-        juce::String db (float v) { return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB"; }
-        juce::String hz (float f)
-        {
-            return f >= 1000.0f ? juce::String (f / 1000.0f, 1) + " kHz" : juce::String (juce::roundToInt (f)) + " Hz";
-        }
+        // Decision titles, reasons and notes are saved in the report: both languages
+        using txt::both;
+        using txt::db;
+        using txt::hz;
+        using txt::num;
         float clamp (float v, float lo, float hi) { return juce::jlimit (lo, hi, v); }
 
         bool likely (const VocalProfile& p, const char* key)
@@ -224,7 +224,8 @@ namespace velvox::automix
             plan.set (id, 0.0f);
         }
         if (creativeWasOn > 0)
-            plan.notes.push_back (de ("Kreativ-Effekte (Pitch, Stutter, Pulse, Choir) wurden für den Grundmix ausgeschaltet. Der vorherige Zustand lässt sich wiederherstellen."));
+            plan.notes.push_back (both ("Kreativ-Effekte (Pitch, Stutter, Pulse, Choir) wurden für den Grundmix ausgeschaltet. Der vorherige Zustand lässt sich wiederherstellen.",
+                                        "Creative effects (Pitch, Stutter, Pulse, Choir) were turned off for the basic mix. The previous state can be restored."));
 
         bool macrosWereSet = false;
         for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroAggression, pid::macroWidth, pid::macroSpace, pid::macroDensity })
@@ -233,7 +234,8 @@ namespace velvox::automix
             plan.set (id, 0.0f);
         }
         if (macrosWereSet)
-            plan.notes.push_back (de ("Die SIMPEL-Regler starten wieder bei 0 - von dort aus verfeinern sie den neuen Mix."));
+            plan.notes.push_back (both ("Die SIMPEL-Regler starten wieder bei 0 - von dort aus verfeinern sie den neuen Mix.",
+                                        "The SIMPLE controls start at 0 again - from there they fine-tune the new mix."));
 
         plan.set (pid::deessListen, 0.0f);
         plan.set (pid::smoothDelta, 0.0f);
@@ -241,7 +243,8 @@ namespace velvox::automix
         plan.set (pid::stereoWidth, 100.0f);
 
         if (plan.conservative)
-            plan.notes.push_back (de ("Es wurde wenig Gesang erfasst - Headliner verwendet deshalb nur vorsichtige Einstellungen."));
+            plan.notes.push_back (both ("Es wurde wenig Gesang erfasst - Headliner verwendet deshalb nur vorsichtige Einstellungen.",
+                                        "Little singing was captured - so Headliner uses only cautious settings."));
 
         // ================= EQ: clean-up, not colour =================
         plan.set (pid::eqOn, 1.0f);
@@ -257,14 +260,16 @@ namespace velvox::automix
         }
         {
             float fc = 80.0f;
-            juce::String reason = de ("Keine sichere Tonhöhe gemessen - Standard-Trennfrequenz für Gesang.");
+            juce::String reason = both ("Keine sichere Tonhöhe gemessen - Standard-Trennfrequenz für Gesang.",
+                                        "No reliable pitch measured - standard cutoff for vocals.");
             bool measured = false;
             if (p.pitchValid)
             {
                 // Well below the lowest sung fundamental: only rumble and handling noise
                 // live there, and the 12 dB/oct slope stays clear of the voice
                 fc = clamp (0.6f * p.f0LowHz, 70.0f, 150.0f);
-                reason = de ("Tiefe gesungene Töne liegen um ") + hz (p.f0LowHz) + de (" - darunter liegt nur Rumpeln.");
+                reason = both ("Tiefe gesungene Töne liegen um {0} - darunter liegt nur Rumpeln.",
+                               "The lowest sung notes are around {0} - below that is only rumble.", { hz (p.f0LowHz) });
                 measured = true;
             }
             const bool rumble = p.hasIssue ("rumble");
@@ -272,10 +277,11 @@ namespace velvox::automix
             {
                 fc = std::min (p.pitchValid ? 0.75f * p.f0LowHz : 110.0f, fc * 1.2f);
                 fc = clamp (fc, 70.0f, 170.0f);
-                reason << de (" Zusätzlich viel Energie unter 90 Hz (") << db (p.rumbleDb) << ").";
+                reason << both (" Zusätzlich viel Energie unter 90 Hz ({0}).", " Also a lot of energy below 90 Hz ({0}).", { db (p.rumbleDb) });
             }
             setRoleBand (plan, current, 0, dsp::EqRole::lowCut, eqBand (dsp::EqBandType::lowCut, fc, 0.0f, 0.7071f, rumble ? 3 : 1), true);
-            decide (M::eq, de ("Low Cut ") + hz (fc) + (rumble ? de (", 24 dB/Okt.") : de (", 12 dB/Okt.")), reason, measured);
+            decide (M::eq, rumble ? both ("Low Cut {0}, 24 dB/Okt.", "Low Cut {0}, 24 dB/oct", { hz (fc) })
+                                  : both ("Low Cut {0}, 12 dB/Okt.", "Low Cut {0}, 12 dB/oct", { hz (fc) }), reason, measured);
         }
 
         // 0.6.1 (spec item 7): narrow notches on sustained resonances and broad tonal moves
@@ -312,7 +318,8 @@ namespace velvox::automix
                     }
         }
         if (const auto* air = moveFor (dsp::EqRole::air); (air == nullptr || air->band.gain <= 0.0f) && (harsh || p.presenceDb > -4.0f))
-            plan.notes.push_back (de ("Keine Höhenanhebung: Die Aufnahme ist bereits hell genug."));
+            plan.notes.push_back (both ("Keine Höhenanhebung: Die Aufnahme ist bereits hell genug.",
+                                        "No high boost: the recording is already bright enough."));
 
         // ================= Level Ride: phrase levels =================
         // Also on wet hooks with a small loudness range: in the blind listening test of
@@ -335,9 +342,10 @@ namespace velvox::automix
             plan.set (pid::ridePhrase, 40.0f);
             plan.set (pid::rideTransient, 60.0f);
             plan.set (pid::rideSilence, clamp (silence, -70.0f, -35.0f));
-            decide (M::ride, de ("Level Ride ") + juce::String (juce::roundToInt (amount)) + de (" %, max. +") + juce::String ((int) boost) + " dB",
-                    de ("Laute und leise Wörter liegen ") + juce::String (p.dynamicsDb, 1) + de (" dB auseinander - leise Wörter werden angehoben, bevor der Kompressor arbeitet.")
-                        + (noisy ? de (" Anhebung begrenzt (Rauschen).") : juce::String()), true);
+            decide (M::ride, "Level Ride " + juce::String (juce::roundToInt (amount)) + " %, max. +" + juce::String ((int) boost) + " dB",
+                    both ("Laute und leise Wörter liegen {0} dB auseinander - leise Wörter werden angehoben, bevor der Kompressor arbeitet.",
+                          "Loud and quiet words are {0} dB apart - quiet words are lifted before the compressor works.", { num (p.dynamicsDb, 1) })
+                        + (noisy ? both (" Anhebung begrenzt (Rauschen).", " Lift limited (noise).") : juce::String()), true);
         }
 
         // ================= Compressor: steady level =================
@@ -365,9 +373,10 @@ namespace velvox::automix
             plan.set (pid::compMakeup, clamp (std::round (expectedGr * 2.0f) / 2.0f, 0.0f, 6.0f));
             plan.set (pid::compMix, 100.0f);
             plan.set (pid::compScHpf, 100.0f);
-            decide (M::comp, de ("Kompressor ") + juce::String (ratio, 1) + de (":1, Schwelle ") + db (threshold),
-                    compressed ? de ("Die Aufnahme ist bereits dicht - nur sanfte Kontrolle.")
-                               : de ("Etwa ") + juce::String (expectedGr, 1) + de (" dB Reduktion auf typischen Wörtern für einen gleichmäßigen, durchsetzungsfähigen Pegel."),
+            decide (M::comp, both ("Kompressor {0}:1, Schwelle {1}", "Compressor {0}:1, threshold {1}", { num (ratio, 1), db (threshold) }),
+                    compressed ? both ("Die Aufnahme ist bereits dicht - nur sanfte Kontrolle.", "The recording is already dense - only gentle control.")
+                               : both ("Etwa {0} dB Reduktion auf typischen Wörtern für einen gleichmäßigen, durchsetzungsfähigen Pegel.",
+                                       "About {0} dB of reduction on typical words for an even level that cuts through.", { num (expectedGr, 1) }),
                     true);
         }
 
@@ -382,12 +391,14 @@ namespace velvox::automix
             plan.set (pid::smashRelease, 90.0f);
             plan.set (pid::smashTone, harsh ? -10.0f : (dull ? 25.0f : 10.0f));
             plan.set (pid::smashOutput, 0.0f);
-            decide (M::smash, de ("Parallelkompression 18 % Blend"),
-                    de ("Ein kleiner Anteil stark komprimierter Stimme unter dem Original gibt Dichte, ohne die Transienten zu verlieren."), false);
+            decide (M::smash, both ("Parallelkompression 18 % Blend", "Parallel compression 18 % blend"),
+                    both ("Ein kleiner Anteil stark komprimierter Stimme unter dem Original gibt Dichte, ohne die Transienten zu verlieren.",
+                          "A little heavily compressed voice under the original adds density without losing the transients."), false);
         }
         else if (compressed)
         {
-            plan.notes.push_back (de ("Keine Parallelkompression: Die Aufnahme ist bereits stark komprimiert."));
+            plan.notes.push_back (both ("Keine Parallelkompression: Die Aufnahme ist bereits stark komprimiert.",
+                                        "No parallel compression: the recording is already heavily compressed."));
         }
 
         // ================= De-esser =================
@@ -398,15 +409,17 @@ namespace velvox::automix
             const bool strong = p.hasIssue ("sibilance");
             const float range = p.sibilanceVsVowelDb > 0.0f ? 8.0f : (likely (p, "sibilance") ? 6.0f : (strong ? 5.0f : 3.0f));
             configureDeEsser (plan, p, inGain, range);
-            decide (M::deess, de ("De-Esser ab ") + hz (p.deessDetectorHz) + ", max. " + juce::String ((int) range) + " dB",
-                    de ("S-Laute ") + db (p.sibilanceVsVowelDb) + de (" gegenüber den Vokalen. ")
-                        + (strong ? de ("Schwelle zwischen Vokal- und S-Pegel, damit nur S-Laute reduziert werden.")
-                                  : de ("Vorsorglich dezent: Kompression und Präsenz heben S-Laute an.")), true);
+            decide (M::deess, both ("De-Esser ab {0}, max. {1} dB", "De-Esser from {0}, max. {1} dB", { hz (p.deessDetectorHz), juce::String ((int) range) }),
+                    both ("S-Laute {0} gegenüber den Vokalen. ", "Sibilance {0} against the vowels. ", { db (p.sibilanceVsVowelDb) })
+                        + (strong ? both ("Schwelle zwischen Vokal- und S-Pegel, damit nur S-Laute reduziert werden.",
+                                          "Threshold between vowel and S level, so only the S sounds are reduced.")
+                                  : both ("Vorsorglich dezent: Kompression und Präsenz heben S-Laute an.",
+                                          "Gentle, as a precaution: compression and presence lift S sounds.")), true);
         }
         else
         {
-            plan.notes.push_back (p.sibilanceValid ? de ("De-Esser bleibt aus: S-Laute sind unauffällig.")
-                                                   : de ("De-Esser bleibt aus: zu wenige S-Laute zum Messen."));
+            plan.notes.push_back (p.sibilanceValid ? both ("De-Esser bleibt aus: S-Laute sind unauffällig.", "De-Esser stays off: the sibilance is unremarkable.")
+                                                   : both ("De-Esser bleibt aus: zu wenige S-Laute zum Messen.", "De-Esser stays off: too few S sounds to measure."));
         }
 
         // ================= Smooth: adaptive resonance control =================
@@ -436,9 +449,11 @@ namespace velvox::automix
             plan.set (pid::smoothRelease, 80.0f);
             plan.set (pid::smoothMode, 0.0f);
             plan.set (pid::smoothOutput, 0.0f);
-            decide (M::smooth, de ("Resonanzkontrolle ") + juce::String ((int) amount) + " %",
-                    highRes != nullptr ? de ("Schmale Spitze um ") + hz (highRes->hz) + de (" - SMOOTH senkt sie nur, wenn sie hervorsticht.")
-                                       : de ("Betonte obere Mitten (") + db (p.presenceDb) + de (") - SMOOTH glättet nur die herausstechenden Bänder."),
+            decide (M::smooth, both ("Resonanzkontrolle {0} %", "Resonance control {0} %", { juce::String ((int) amount) }),
+                    highRes != nullptr ? both ("Schmale Spitze um {0} - SMOOTH senkt sie nur, wenn sie hervorsticht.",
+                                               "Narrow peak around {0} - SMOOTH lowers it only when it sticks out.", { hz (highRes->hz) })
+                                       : both ("Betonte obere Mitten ({0}) - SMOOTH glättet nur die herausstechenden Bänder.",
+                                               "Emphasized upper mids ({0}) - SMOOTH smooths only the bands that stick out.", { db (p.presenceDb) }),
                     true);
         }
 
@@ -455,15 +470,17 @@ namespace velvox::automix
             plan.set (pid::satMix, mix);
             plan.set (pid::satOutput, 0.0f);
             static const char* names[] { "Warm", "Tape", "Tube", "Hard" };
-            decide (M::sat, de ("Sättigung ") + names[character] + ", " + juce::String ((int) mix) + " %",
-                    harsh ? de ("Dezente, weiche Obertöne für Dichte - ohne die Schärfe zu betonen.")
-                          : dull ? de ("Obertöne bringen eine dunkle Stimme nach vorne.")
-                                 : de ("Leichte Obertöne für Dichte und Durchsetzungskraft."), false);
+            decide (M::sat, both ("Sättigung {0}, {1} %", "Saturation {0}, {1} %", { names[character], juce::String ((int) mix) }),
+                    harsh ? both ("Dezente, weiche Obertöne für Dichte - ohne die Schärfe zu betonen.",
+                                  "Subtle, soft harmonics for density - without emphasizing the harshness.")
+                          : dull ? both ("Obertöne bringen eine dunkle Stimme nach vorne.", "Harmonics bring a dark voice forward.")
+                                 : both ("Leichte Obertöne für Dichte und Durchsetzungskraft.", "Light harmonics for density and punch."), false);
         }
         else
         {
-            plan.notes.push_back (p.distortionLikely ? de ("Keine Sättigung: Die Aufnahme zeigt bereits Übersteuerung.")
-                                                     : de ("Keine Sättigung: bereits dicht und hell."));
+            plan.notes.push_back (p.distortionLikely ? both ("Keine Sättigung: Die Aufnahme zeigt bereits Übersteuerung.",
+                                                             "No saturation: the recording already shows clipping.")
+                                                     : both ("Keine Sättigung: bereits dicht und hell.", "No saturation: already dense and bright."));
         }
 
         // ================= Width: doubler, mono-safe =================
@@ -478,12 +495,14 @@ namespace velvox::automix
             plan.set (pid::doublerDetune, 7.0f);
             plan.set (pid::doublerMonoSafe, 100.0f);   // mono sum stays exactly the original
             plan.set (pid::doublerTone, 8000.0f);
-            decide (M::doubler, de ("Breite: Doubler 20 %, mono-sicher"),
-                    de ("Leichte Doppelung links/rechts. \"Mono safe\" 100 %: In Mono klingt die Stimme exakt wie ohne Doubler."), false);
+            decide (M::doubler, both ("Breite: Doubler 20 %, mono-sicher", "Width: Doubler 20 %, mono-safe"),
+                    both ("Leichte Doppelung links/rechts. \"Mono safe\" 100 %: In Mono klingt die Stimme exakt wie ohne Doubler.",
+                          "Light doubling left/right. \"Mono safe\" 100 %: in mono the voice sounds exactly as without the Doubler."), false);
         }
         else if (alreadyWide)
         {
-            plan.notes.push_back (de ("Kein Doubler: Die Aufnahme ist bereits breit (Korrelation ") + juce::String (p.correlation, 2) + ").");
+            plan.notes.push_back (both ("Kein Doubler: Die Aufnahme ist bereits breit (Korrelation {0}).",
+                                        "No Doubler: the recording is already wide (correlation {0}).", { num (p.correlation, 2) }));
         }
         plan.set (pid::monoBelow, 120.0f);
 
@@ -494,7 +513,8 @@ namespace velvox::automix
         {
             plan.set (pid::reverbOn, 0.0f);
             plan.set (pid::delayOn, 0.0f);
-            plan.notes.push_back (de ("Kein Hall und kein Delay: Die Aufnahme hat bereits deutlichen Raum (") + juce::String (p.tailSeconds, 1) + de (" s Ausklang)."));
+            plan.notes.push_back (both ("Kein Hall und kein Delay: Die Aufnahme hat bereits deutlichen Raum ({0} s Ausklang).",
+                                        "No reverb and no delay: the recording already has a clear room sound ({0} s decay).", { num (p.tailSeconds, 1) }));
         }
         else
         {
@@ -523,13 +543,17 @@ namespace velvox::automix
             plan.set (pid::reverbDuckThreshold, duckThreshold);
             plan.set (pid::reverbDuckAttack, 20.0f);
             plan.set (pid::reverbDuckRelease, 500.0f);
-            decide (M::reverb, (type == 3 ? de ("Large Hall ") : type == 1 ? de ("Plate-Hall ") : de ("Room-Hall ")) + juce::String ((int) revMix) + " %, "
-                                   + juce::String (decay, 1).replaceCharacter ('.', ',') + de (" s, geduckt"),
-                    someRoom ? de ("Die Aufnahme hat etwas Raum - deshalb nur wenig Hall.")
-                             : spoken ? de ("Sprechgesang/Rap (wenig gehaltene Töne gemessen): kurzer, trockener Raum, damit der Text vorne bleibt.")
-                                      : largeHall ? de ("Lange, gehaltene Melodiebögen: Large Hall mit 40 ms Pre-Delay trägt die Töne; Ducking hält die Wörter vorne.")
-                                      : sustained ? de ("Viele gehaltene Töne: etwas längere Plate für Tiefe; Ducking hält die Wörter vorne.")
-                                                  : de ("Räumliche Tiefe; 30 ms Pre-Delay und Ducking halten die Wörter vorne."), true);
+            decide (M::reverb, both ("{0} {1} %, {2} s, geduckt", "{0} {1} %, {2} s, ducked",
+                                     { txt::reverbType (type), juce::String ((int) revMix), num (decay, 1) }),
+                    someRoom ? both ("Die Aufnahme hat etwas Raum - deshalb nur wenig Hall.", "The recording has some room sound - so only a little reverb.")
+                             : spoken ? both ("Sprechgesang/Rap (wenig gehaltene Töne gemessen): kurzer, trockener Raum, damit der Text vorne bleibt.",
+                                              "Spoken vocal/rap (few held notes measured): a short, dry room keeps the lyrics up front.")
+                                      : largeHall ? both ("Lange, gehaltene Melodiebögen: Large Hall mit 40 ms Pre-Delay trägt die Töne; Ducking hält die Wörter vorne.",
+                                                          "Long, held melodic lines: a Large Hall with 40 ms pre-delay carries the notes; ducking keeps the words up front.")
+                                      : sustained ? both ("Viele gehaltene Töne: etwas längere Plate für Tiefe; Ducking hält die Wörter vorne.",
+                                                          "Many held notes: a slightly longer plate for depth; ducking keeps the words up front.")
+                                                  : both ("Räumliche Tiefe; 30 ms Pre-Delay und Ducking halten die Wörter vorne.",
+                                                          "Spatial depth; 30 ms pre-delay and ducking keep the words up front."), true);
 
             const bool delay = ! someRoom && ! plan.conservative;   // echoes on a roomy take only add wash
             plan.set (pid::delayOn, delay ? 1.0f : 0.0f);
@@ -548,9 +572,11 @@ namespace velvox::automix
                 plan.set (pid::delayDuckAttack, 10.0f);
                 plan.set (pid::delayDuckRelease, 300.0f);
                 plan.set (pid::delayToReverb, 15.0f);
-                decide (M::delay, spoken ? de ("Delay 1/4, 6 %, geduckt") : de ("Delay 1/8 punktiert, 9 %, geduckt"),
-                        de ("Tempo-synchrones Echo (folgt dem Songtempo, ohne Tempo-Info ") + (spoken ? "400" : "300")
-                            + de (" ms). Es kommt erst in den Pausen hervor."), false);
+                decide (M::delay, spoken ? both ("Delay 1/4, 6 %, geduckt", "Delay 1/4, 6 %, ducked")
+                                         : both ("Delay 1/8 punktiert, 9 %, geduckt", "Delay 1/8 dotted, 9 %, ducked"),
+                        both ("Tempo-synchrones Echo (folgt dem Songtempo, ohne Tempo-Info {0} ms). Es kommt erst in den Pausen hervor.",
+                              "Tempo-synced echo (follows the song tempo, {0} ms without tempo info). It comes out only in the gaps.",
+                              { spoken ? "400" : "300" }), false);
             }
         }
 

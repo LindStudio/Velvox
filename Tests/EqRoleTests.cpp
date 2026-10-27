@@ -132,6 +132,7 @@ static EqMacroTests eqMacroTests;
 //==============================================================================
 #include "SyntheticVocal.h"
 #include "AutoMix/AutoMixEngine.h"
+#include "Text/I18n.h"
 
 namespace
 {
@@ -232,11 +233,12 @@ public:
             expect (r.ok, r.error);
             if (! r.ok)
                 continue;
-            expectEquals (r.candidates[(size_t) r.chosenCandidate].name, juce::String::fromUTF8 (g.chosen), "same candidate");
+            // Candidate names are stored in both languages; the goldens are the German ones
+            expectEquals (i18n::show (r.candidates[(size_t) r.chosenCandidate].name), juce::String::fromUTF8 (g.chosen), "same candidate");
             expectEquals (r.plan.routing.toString(), juce::String (g.routing), "same chain");
             expectWithinAbsoluteError (r.plan.get (pid::outputGain), g.outputGain, 0.25f, "output level (renders use the matched EQ now)");
             logMessage ("    output gain " + juce::String (r.plan.get (pid::outputGain), 4) + " (0.5: " + juce::String (g.outputGain, 4) + "), chosen "
-                        + r.candidates[(size_t) r.chosenCandidate].name + ", chain " + r.plan.routing.toString());
+                        + i18n::show (r.candidates[(size_t) r.chosenCandidate].name) + ", chain " + r.plan.routing.toString());
             for (auto role : { EqRole::lowCut, EqRole::warmth, EqRole::autoMix, EqRole::air, EqRole::autoTone, EqRole::autoNotch1, EqRole::autoNotch2, EqRole::autoNotch3 })
                 if (const auto b = planBand (r.plan, current, role); b.has_value() && b->on)
                     logMessage ("      role " + juce::String ((int) role) + ": type " + juce::String (b->type) + " " + juce::String (b->freq, 4) + " Hz "

@@ -1,5 +1,6 @@
 #include "VocalProfile.h"
 #include "../DSP/Loudness.h"
+#include "ReportText.h"
 #include <juce_dsp/juce_dsp.h>
 #include <map>
 
@@ -10,12 +11,11 @@ namespace velvox::automix
         constexpr int hop = VocalProfiler::fftSize / 4;
         constexpr int nb = VocalProfiler::numBands;
 
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-        juce::String db (float v) { return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB"; }
-        juce::String hz (float f)
-        {
-            return f >= 1000.0f ? juce::String (f / 1000.0f, 1) + " kHz" : juce::String (juce::roundToInt (f)) + " Hz";
-        }
+        // The findings end up in the saved report: both languages
+        using txt::both;
+        using txt::db;
+        using txt::hz;
+        using txt::num;
 
         float toDb (double power) { return (float) (10.0 * std::log10 (std::max (power, 1.0e-20))); }
 
@@ -798,7 +798,7 @@ namespace velvox::automix
         }
 
         // ======================================================================
-        // Issues (German UI texts). Measurements are reported as such; heuristics
+        // Issues (report texts in both languages). Measurements are reported as such; heuristics
         // carry their confidence. Thresholds are deliberately conservative.
         using C = Confidence;
         const auto add = [&p] (const char* key, C c, juce::String title, juce::String detail, float severity)
@@ -807,66 +807,80 @@ namespace velvox::automix
         };
 
         if (p.clipRuns > 0)
-            add ("clipping", C::measured, de ("Übersteuerung im Eingang"),
-                 juce::String (p.clipRuns) + de (" Stelle(n) mit Samples auf Vollaussteuerung. Headliner kann Verzerrung nicht rückgängig machen - Aufnahme- oder Spurpegel senken."), 100.0f);
+            add ("clipping", C::measured, both ("Übersteuerung im Eingang", "Clipping at the input"),
+                 both ("{0} Stelle(n) mit Samples auf Vollaussteuerung. Headliner kann Verzerrung nicht rückgängig machen - Aufnahme- oder Spurpegel senken.",
+                       "{0} spot(s) with samples at full scale. Headliner can't undo distortion - lower the recording or track level.",
+                       { juce::String (p.clipRuns) }), 100.0f);
         else if (p.peakDb > -0.5f)
-            add ("hotInput", C::measured, de ("Sehr hoher Eingangspegel"),
-                 de ("Spitzenpegel ") + db (p.peakDb) + de (" dBFS - kaum Reserve."), 50.0f);
+            add ("hotInput", C::measured, both ("Sehr hoher Eingangspegel", "Very high input level"),
+                 both ("Spitzenpegel {0}FS - kaum Reserve.", "Peak level {0}FS - hardly any headroom.", { db (p.peakDb) }), 50.0f);
 
         if (p.enoughMaterial && p.voiceRmsDb < -40.0f)
-            add ("quiet", C::measured, de ("Sehr leises Signal"),
-                 de ("Mittlerer Stimmpegel ") + db (p.voiceRmsDb) + de (" dBFS. Input-Gain oder Spurpegel anheben."), 40.0f);
+            add ("quiet", C::measured, both ("Sehr leises Signal", "Very quiet signal"),
+                 both ("Mittlerer Stimmpegel {0}FS. Input-Gain oder Spurpegel anheben.", "Average voice level {0}FS. Raise the input gain or track level.",
+                       { db (p.voiceRmsDb) }), 40.0f);
 
         if (! p.enoughMaterial)
             return p;
 
         if (p.snrValid && p.snrDb < 30.0f)
-            add ("noise", p.snrDb < 22.0f ? C::likely : C::possible, de ("Hörbares Hintergrundrauschen"),
-                 de ("Abstand Stimme zu Pausen ") + juce::String (p.snrDb, 1) + de (" dB. Anhebungen werden begrenzt, damit Rauschen nicht lauter wird."), 30.0f);
+            add ("noise", p.snrDb < 22.0f ? C::likely : C::possible, both ("Hörbares Hintergrundrauschen", "Audible background noise"),
+                 both ("Abstand Stimme zu Pausen {0} dB. Anhebungen werden begrenzt, damit Rauschen nicht lauter wird.",
+                       "Voice to gaps {0} dB. Boosts are limited so the noise doesn't get louder.", { num (p.snrDb, 1) }), 30.0f);
 
         if (p.rumbleDb > -24.0f)
-            add ("rumble", p.rumbleDb > -16.0f ? C::likely : C::possible, de ("Viel Energie unter 90 Hz"),
-                 de ("Rumpeln/Trittschall: ") + db (p.rumbleDb) + de (" gegenüber dem Kern der Stimme."), 35.0f + p.rumbleDb);
+            add ("rumble", p.rumbleDb > -16.0f ? C::likely : C::possible, both ("Viel Energie unter 90 Hz", "A lot of energy below 90 Hz"),
+                 both ("Rumpeln/Trittschall: {0} gegenüber dem Kern der Stimme.", "Rumble/handling noise: {0} against the core of the voice.", { db (p.rumbleDb) }),
+                 35.0f + p.rumbleDb);
 
         if (p.lowMidDb > -1.0f)
-            add ("mud", p.lowMidDb > 2.0f ? C::likely : C::possible, de ("Viel Tiefmitten-Energie"),
-                 de ("250-500 Hz liegt bei ") + db (p.lowMidDb) + de (" gegenüber 300 Hz-2 kHz (Maximum um ") + hz (p.lowMidPeakHz) + ").", 20.0f + p.lowMidDb);
+            add ("mud", p.lowMidDb > 2.0f ? C::likely : C::possible, both ("Viel Tiefmitten-Energie", "A lot of low-mid energy"),
+                 both ("250-500 Hz liegt bei {0} gegenüber 300 Hz-2 kHz (Maximum um {1}).", "250-500 Hz is at {0} against 300 Hz-2 kHz (maximum around {1}).",
+                       { db (p.lowMidDb), hz (p.lowMidPeakHz) }), 20.0f + p.lowMidDb);
 
         if (p.topDb < -16.0f)
-            add ("dull", p.topDb < -20.0f ? C::likely : C::possible, de ("Wenig Höhen und Präsenz"),
-                 de ("Alles über 2 kHz liegt bei ") + db (p.topDb) + de (" gegenüber dem Kern der Stimme."), 25.0f - p.topDb * 0.5f);
+            add ("dull", p.topDb < -20.0f ? C::likely : C::possible, both ("Wenig Höhen und Präsenz", "Few highs and little presence"),
+                 both ("Alles über 2 kHz liegt bei {0} gegenüber dem Kern der Stimme.", "Everything above 2 kHz is at {0} against the core of the voice.",
+                       { db (p.topDb) }), 25.0f - p.topDb * 0.5f);
         else if (p.presenceDb > -2.0f)
-            add ("harsh", p.presenceDb > 1.0f ? C::likely : C::possible, de ("Betonte obere Mitten"),
-                 de ("2-5 kHz liegt bei ") + db (p.presenceDb) + de (" gegenüber dem Kern der Stimme - kann scharf klingen."), 25.0f + p.presenceDb);
+            add ("harsh", p.presenceDb > 1.0f ? C::likely : C::possible, both ("Betonte obere Mitten", "Emphasized upper mids"),
+                 both ("2-5 kHz liegt bei {0} gegenüber dem Kern der Stimme - kann scharf klingen.", "2-5 kHz is at {0} against the core of the voice - can sound harsh.",
+                       { db (p.presenceDb) }), 25.0f + p.presenceDb);
 
         if (p.sibilanceValid && p.sibilanceVsVowelDb > -5.0f)
-            add ("sibilance", p.sibilanceVsVowelDb > -2.0f ? C::likely : C::possible, de ("Ausgeprägte S-Laute"),
-                 de ("S-Laute liegen ") + db (p.sibilanceVsVowelDb) + de (" gegenüber den Vokalen, Schwerpunkt um ") + hz (p.sibilanceHz) + ".", 35.0f + p.sibilanceVsVowelDb);
+            add ("sibilance", p.sibilanceVsVowelDb > -2.0f ? C::likely : C::possible, both ("Ausgeprägte S-Laute", "Strong sibilance"),
+                 both ("S-Laute liegen {0} gegenüber den Vokalen, Schwerpunkt um {1}.", "Sibilance is at {0} against the vowels, centered around {1}.",
+                       { db (p.sibilanceVsVowelDb), hz (p.sibilanceHz) }), 35.0f + p.sibilanceVsVowelDb);
 
         for (auto& r : p.resonances)
-            add ("resonance", r.strong && p.pitchSpreadSemitones > 3.0f ? C::likely : C::possible, de ("Schmalbandige Resonanz"),
-                 de ("Spitze um ") + hz (r.hz) + ", " + db (r.excessDb) + de (" über der Umgebung (kann bei wenig Tonhöhenwechsel auch ein Teilton sein)."),
+            add ("resonance", r.strong && p.pitchSpreadSemitones > 3.0f ? C::likely : C::possible, both ("Schmalbandige Resonanz", "Narrow resonance"),
+                 both ("Spitze um {0}, {1} über der Umgebung (kann bei wenig Tonhöhenwechsel auch ein Teilton sein).",
+                       "Peak around {0}, {1} above its surroundings (with little pitch movement it can also be a harmonic).", { hz (r.hz), db (r.excessDb) }),
                  10.0f + r.excessDb);
 
         if (p.dynamicsValid && p.dynamicsDb > 12.0f)
-            add ("dynamics", p.dynamicsDb > 16.0f ? C::likely : C::possible, de ("Große Lautstärkeschwankungen"),
-                 de ("Laute und leise Wörter liegen ") + juce::String (p.dynamicsDb, 1) + de (" dB auseinander (400-ms-Pegel, 10. bis 95. Perzentil)."), 20.0f + p.dynamicsDb);
+            add ("dynamics", p.dynamicsDb > 16.0f ? C::likely : C::possible, both ("Große Lautstärkeschwankungen", "Large level swings"),
+                 both ("Laute und leise Wörter liegen {0} dB auseinander (400-ms-Pegel, 10. bis 95. Perzentil).",
+                       "Loud and quiet words are {0} dB apart (400 ms level, 10th to 95th percentile).", { num (p.dynamicsDb, 1) }), 20.0f + p.dynamicsDb);
 
         if (p.heavilyCompressed)
-            add ("compressed", C::possible, de ("Bereits stark komprimiert"),
-                 de ("Nur ") + juce::String (p.dynamicsDb, 1) + de (" dB Pegelunterschied zwischen Wörtern und ") + juce::String (p.crestDb, 1) + de (" dB Crest-Faktor."), 15.0f);
+            add ("compressed", C::possible, both ("Bereits stark komprimiert", "Already heavily compressed"),
+                 both ("Nur {0} dB Pegelunterschied zwischen Wörtern und {1} dB Crest-Faktor.", "Only {0} dB of level difference between words and a {1} dB crest factor.",
+                       { num (p.dynamicsDb, 1), num (p.crestDb, 1) }), 15.0f);
 
         if (p.reverberant)
-            add ("reverberant", p.tailSeconds > 1.2f ? C::likely : C::possible, de ("Hörbarer Raum oder Hall auf der Aufnahme"),
-                 de ("Nach Wörtern dauert es etwa ") + juce::String (p.tailSeconds, 1) + de (" s bis zum Abklingen um 30 dB."), 18.0f + p.tailSeconds);
+            add ("reverberant", p.tailSeconds > 1.2f ? C::likely : C::possible, both ("Hörbarer Raum oder Hall auf der Aufnahme", "Audible room or reverb on the recording"),
+                 both ("Nach Wörtern dauert es etwa {0} s bis zum Abklingen um 30 dB.", "After words it takes about {0} s to decay by 30 dB.", { num (p.tailSeconds, 1) }),
+                 18.0f + p.tailSeconds);
 
         if (p.stereoContent && p.correlation < 0.3f)
-            add ("mono", p.correlation < 0.0f ? C::measured : C::possible, de ("Eingeschränkte Monokompatibilität"),
-                 de ("Korrelation links/rechts ") + juce::String (p.correlation, 2) + ".", 30.0f);
+            add ("mono", p.correlation < 0.0f ? C::measured : C::possible, both ("Eingeschränkte Monokompatibilität", "Limited mono compatibility"),
+                 both ("Korrelation links/rechts {0}.", "Left/right correlation {0}.", { num (p.correlation, 2) }), 30.0f);
 
         if (p.maskingHint)
-            add ("masking", C::possible, de ("Beat überlagert den Präsenzbereich"),
-                 de ("Der Beat ist bei 2-5 kHz ") + db (p.beatPresenceVsVocalDb) + de (" lauter als die Stimme. Das ist nur ein Hinweis, kein Beweis für Verdeckung."), 12.0f);
+            add ("masking", C::possible, both ("Beat überlagert den Präsenzbereich", "Beat covers the presence range"),
+                 both ("Der Beat ist bei 2-5 kHz {0} lauter als die Stimme. Das ist nur ein Hinweis, kein Beweis für Verdeckung.",
+                       "At 2-5 kHz the beat is {0} louder than the voice. This is only a hint, not proof of masking.", { db (p.beatPresenceVsVocalDb) }), 12.0f);
 
         std::stable_sort (p.issues.begin(), p.issues.end(), [] (const Issue& a, const Issue& b)
         {
