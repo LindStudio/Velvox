@@ -172,11 +172,14 @@ namespace velvox::ui
         addAndMakeVisible (navViewport);
         addAndMakeVisible (pageViewport);
 
+        using i18n::tr;
         addAndMakeVisible (closeButton);
         addAndMakeVisible (tutorialButton);
-        closeButton.setTooltip ("Close the help (Esc)");
+        closeButton.setButtonText (tr ("Schließen", "Close"));
+        tutorialButton.setButtonText (tr ("Tour starten", "Start tour"));
+        closeButton.setTooltip (tr ("Hilfe schließen (Esc)", "Close the help (Esc)"));
         closeButton.onClick = [this] { close(); };
-        tutorialButton.setTooltip ("Walk through the interface step by step");
+        tutorialButton.setTooltip (tr ("Die Oberfläche Schritt für Schritt kennenlernen", "Walk through the interface step by step"));
         tutorialButton.onClick = [this]
         {
             close();
@@ -239,10 +242,11 @@ namespace velvox::ui
         auto header = cardBounds().removeFromTop (headerH).reduced (space::xl, 0);
         g.setColour (colours::text);
         g.setFont (font (typesize::title + 1.0f, true));
-        g.drawText ("Help", header.removeFromTop (headerH / 2 + 8).withTrimmedTop (14), juce::Justification::bottomLeft, false);
+        g.drawText (i18n::tr ("Hilfe", "Help"), header.removeFromTop (headerH / 2 + 8).withTrimmedTop (14), juce::Justification::bottomLeft, false);
         g.setColour (colours::textDim);
         g.setFont (font (typesize::body));
-        g.drawText ("How Headliner works, every module explained. Works completely offline.", header.withTrimmedBottom (12),
+        g.drawText (i18n::tr ("So funktioniert Headliner, jedes Modul erklärt. Komplett offline.",
+                              "How Headliner works, every module explained. Works completely offline."), header.withTrimmedBottom (12),
                     juce::Justification::centredLeft, true);
 
         // Hairlines: under the header and between navigation and page

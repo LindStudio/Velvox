@@ -357,12 +357,16 @@ public:
             const juce::StringArray outdated { "lower lane", "Analysieren starts", "Auto Mix and Module switch", "Module button",
                                                "Hide from chain view", "six fine-tuning controls", "right rail", "\"Audio analysieren\"",
                                                "Ins / Send switch", "Modules button", "VOCAL CONTROL", "A/B", "CHAIN tab", "Copy A to B" };
-            for (auto& step : ui::TutorialOverlay::steps())
-                for (auto& phrase : outdated)
-                    expect (! step.text.contains (phrase), "tutorial '" + step.title + "' mentions: " + phrase);
-            for (auto& page : ui::help::pages())
-                for (auto& phrase : outdated)
-                    expect (! page.body.contains (phrase), "help '" + page.key + "' mentions: " + phrase);
+            for (auto language : { i18n::Language::german, i18n::Language::english })
+            {
+                i18n::ScopedLanguage scoped (language);
+                for (auto& step : ui::TutorialOverlay::steps())
+                    for (auto& phrase : outdated)
+                        expect (! step.text.contains (phrase), "tutorial '" + step.title + "' mentions: " + phrase);
+                for (auto& page : ui::help::pages())
+                    for (auto& phrase : outdated)
+                        expect (! page.body.contains (phrase), "help '" + page.key + "' mentions: " + phrase);
+            }
 
             const auto* start = ui::help::find ("start");
             expect (start != nullptr && start->body.contains ("SIMPEL") && start->body.contains ("ADVANCED")
@@ -373,6 +377,69 @@ public:
             expect (modesStep, "tutorial step for SIMPEL / ADVANCED");
             const auto* controls = ui::help::find ("controls");
             expect (controls != nullptr && controls->body.contains ("Alt") && controls->body.contains ("Shift"), "gestures explained in the help");
+
+            // The tour starts with the main action; the settings (gear) are mentioned
+            expectEquals (ui::TutorialOverlay::steps().front().target, juce::String ("analyse"), "tour starts with the analysis");
+            expect (ui::TutorialOverlay::steps().back().text.contains ("Zahnrad"), "tour mentions the settings");
+            expect (start != nullptr && start->body.contains (juce::String::fromUTF8 ("„Vocal analysieren“")), "German help quotes the German button");
+        }
+
+        beginTest ("Design: help and tutorial in English");
+        {
+            i18n::ScopedLanguage en (i18n::Language::english);
+
+            const auto* start = ui::help::find ("start");
+            expect (start != nullptr && start->title == "Welcome to Headliner");
+            expect (start != nullptr && start->body.contains ("SIMPLE") && start->body.contains ("ADVANCED")
+                    && start->body.contains ("VOCAL CHECK") && start->body.contains ("\"Analyze vocal\""),
+                    "English start page explains the modes and the tabs with the English UI words");
+            const auto* controls = ui::help::find ("controls");
+            expect (controls != nullptr && controls->body.contains ("Alt") && controls->body.contains ("Shift"));
+            expectEquals (ui::help::moduleSectionHeadings()[0], juce::String ("What it does"));
+            expectEquals (ui::help::shortDescription (-1), juce::String ("Stereo image, mono safety and fair loudness comparison"));
+
+            bool modesStep = false;
+            for (auto& step : ui::TutorialOverlay::steps())
+                modesStep = modesStep || (step.target == "modes" && step.text.contains ("SIMPLE") && step.text.contains ("ADVANCED"));
+            expect (modesStep, "English tutorial step for SIMPLE / ADVANCED");
+            expectEquals (ui::TutorialOverlay::steps().front().title, juce::String ("Analyze vocal"));
+            expect (ui::TutorialOverlay::steps().back().text.contains ("gear"), "English tour mentions the settings");
+
+            // Nothing German left in the English help and tour
+            juce::StringArray german;
+            for (auto* w : { "SIMPEL", "Vorher", "Nachher", "analysieren", "Mehr", "Duplizieren", "Zurücksetzen", "Als Send",
+                             "Anwenden", "Eigene", "Favoriten", "Speichern", "Modul-", " die ", " und ", " der ", "Strg",
+                             "ä", "ö", "ü", "ß", "„", "–" })
+                german.add (juce::String::fromUTF8 (w));
+            const auto germanIn = [&] (const juce::String& text)
+            {
+                for (auto& w : german)
+                    if (text.contains (w))
+                        return w;
+                return juce::String();
+            };
+            for (auto& page : ui::help::pages())
+                for (auto* text : { &page.title, &page.group, &page.body })
+                    expect (germanIn (*text).isEmpty(), "help '" + page.key + "' still German: " + germanIn (*text));
+            for (int id = -1; id < dsp::numModules; ++id)
+                expect (germanIn (ui::help::shortDescription (id)).isEmpty(), "short description " + juce::String (id));
+            for (auto& step : ui::TutorialOverlay::steps())
+                expect (germanIn (step.title + " " + step.text).isEmpty(), "tour step '" + step.title + "': " + germanIn (step.text));
+
+            // Both languages have the same pages in the same order, and the same tour targets
+            const auto& de = ui::help::pages (i18n::Language::german);
+            const auto& enPages = ui::help::pages (i18n::Language::english);
+            expectEquals ((int) de.size(), (int) enPages.size());
+            for (size_t i = 0; i < std::min (de.size(), enPages.size()); ++i)
+                expectEquals (de[i].key, enPages[i].key);
+            const auto enSteps = ui::TutorialOverlay::steps();
+            {
+                i18n::ScopedLanguage german_ (i18n::Language::german);
+                const auto& deSteps = ui::TutorialOverlay::steps();
+                expectEquals ((int) deSteps.size(), (int) enSteps.size());
+                for (size_t i = 0; i < std::min (deSteps.size(), enSteps.size()); ++i)
+                    expectEquals (deSteps[i].target, enSteps[i].target);
+            }
         }
 
         // ---- Findings of the 0.5 review that still apply
