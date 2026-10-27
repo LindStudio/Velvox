@@ -9,7 +9,7 @@
 //
 //   plugin opens        wake-up (once), then idle
 //   silence > 2 s       idle (breathes, looks around)
-//   auto mix running    working (runs on the spot)
+//   auto mix listening  idle (stands and listens; running on the spot looked odd - Jakob, 2026-10-27)
 //   singing             a dance picked by the Vocal Check score:
 //                         < 40 bad (on the phone, ignores you) · < 60 problem (scolds) · < 75 okay
 //                         < 90 good · else super · no score yet = okay
@@ -107,7 +107,7 @@ namespace velvox::ui::mascot
         Clip desired (const Inputs& in)
         {
             if (in.autoMixBusy)
-                return Clip::working;
+                return Clip::idle;
             if (silent > 0.0)   // a pause between phrases keeps the dance, a long one ends it
                 return silent > silenceToIdle || ! isDance (now) ? Clip::idle : now;
             if (in.score >= 95 && cooldown <= 0.0)

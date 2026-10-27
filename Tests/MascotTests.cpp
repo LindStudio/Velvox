@@ -82,7 +82,7 @@ public:
             expect (f.brain.clip() == Clip::okay, "no score yet: a neutral dance");
         }
 
-        beginTest ("Silence brings him back to idle, the auto mix makes him run");
+        beginTest ("Silence brings him back to idle; while the auto mix listens he stands and listens (no running)");
         {
             Fixture f;
             run (f.brain, singing (82), 3.0);
@@ -94,7 +94,7 @@ public:
             auto busy = singing (82);
             busy.autoMixBusy = true;
             run (f.brain, busy, 3.0);
-            expect (f.brain.clip() == Clip::working);
+            expect (f.brain.clip() == Clip::idle, "Jakob: running at the start and on play looked odd");
         }
 
         beginTest ("No flicker: a new state holds a moment, scores near a border keep the current dance");
