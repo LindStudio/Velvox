@@ -1018,6 +1018,62 @@ public:
             expect (h.proc.getAutoMix().getPhase() == AutoMixController::Phase::idle);
         }
 
+        beginTest ("0.7: the auto mix sets Room Noise and Breath Control only when the vocal needs them");
+        {
+            const auto mixOf = [] (const CapturedAudio& audio)
+            {
+                Harness h;
+                h.proc.getAutoMix().applyResult (h.proc.getAutoMix().runSynchronously (audio));
+                struct R { float denoiseOn, denoiseAmount, breathOn, breathAmount; bool denoiseInChain, breathInChain; };
+                return R { h.get (pid::denoiseOn), h.get (pid::denoiseAmount), h.get (pid::breathOn), h.get (pid::breathAmount),
+                           h.proc.getRouting().contains (dsp::ModuleId::denoise), h.proc.getRouting().contains (dsp::ModuleId::breath) };
+            };
+
+            VocalSpec clean; clean.seconds = 16.0;
+            const auto c = mixOf (makeVocal (clean));
+            expect (c.denoiseOn < 0.5f && c.breathOn < 0.5f && ! c.denoiseInChain && ! c.breathInChain, "a clean studio vocal gets neither");
+
+            VocalSpec noisy = clean; noisy.noiseDb = -52.0f;   // voice -18 dBFS: 34 dB SNR, an audible room
+            const auto n = mixOf (makeVocal (noisy));
+            expect (n.denoiseOn > 0.5f && n.denoiseInChain, "a noisy room switches Room Noise on");
+            expect (n.denoiseAmount >= 20.0f && n.denoiseAmount <= 80.0f, "amount " + juce::String (n.denoiseAmount));
+
+            // Breaths: 300 ms of band-limited noise well under the voice in the middle of every longer pause
+            auto withBreaths = makeVocal (clean);
+            auto& v = withBreaths.vocal[0];
+            const double fs = withBreaths.sampleRate;
+            const int block = (int) (0.05 * fs);
+            int silentBlocks = 0, added = 0;
+            juce::Random rnd (5);
+            for (int s0 = 0; s0 + block < (int) v.size(); s0 += block)
+            {
+                double e = 0.0;
+                for (int i = s0; i < s0 + block; ++i)
+                    e += v[(size_t) i] * v[(size_t) i];
+                silentBlocks = e / block < 1.0e-8 ? silentBlocks + 1 : 0;
+                if (silentBlocks == 8)   // 400 ms of pause
+                {
+                    const int len = (int) (0.3 * fs), start = s0 - (int) (0.35 * fs);
+                    float lp = 0.0f, hpIn = 0.0f, hpOut = 0.0f;
+                    for (int i = 0; i < len; ++i)
+                    {
+                        const float w = rnd.nextFloat() * 2.0f - 1.0f;
+                        hpOut = 0.95f * (hpOut + w - hpIn);
+                        hpIn = w;
+                        lp += 0.5f * (hpOut - lp);
+                        const float env = (float) (0.5 - 0.5 * std::cos (6.283185307 * i / (len - 1)));
+                        v[(size_t) (start + i)] += 0.004f * env * lp;
+                    }
+                    ++added;
+                    silentBlocks = 0;
+                }
+            }
+            expect (added >= 3, "breaths added: " + juce::String (added));
+            const auto b = mixOf (withBreaths);
+            expect (b.breathOn > 0.5f && b.breathInChain, "audible breaths switch Breath Control on");
+            expectWithinAbsoluteError (b.breathAmount, 50.0f, 10.5f, "50 % (sung) or 40 % (spoken)");
+        }
+
         beginTest ("0.7: the report never mentions the removed creative effects");
         {
             Harness h;

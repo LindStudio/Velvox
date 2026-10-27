@@ -1,5 +1,6 @@
 #include "VocalProfile.h"
 #include "../DSP/Loudness.h"
+#include "../DSP/BreathModule.h"
 #include "ReportText.h"
 #include <juce_dsp/juce_dsp.h>
 #include <map>
@@ -246,6 +247,25 @@ namespace velvox::automix
                 p.snrDb = p.voiceRmsDb - p.noiseFloorDb;
                 p.snrValid = true;
             }
+        }
+
+        // Breaths (0.7): the Breath Control detector itself over the mid signal, at full strength; the share of
+        // 512-sample blocks it lowers by more than 6 dB
+        {
+            dsp::BreathModule breath;
+            breath.prepare (fs, 512);
+            breath.setSettings ({ true, 100.0f });
+            std::vector<float> mid ((size_t) n);
+            for (int i = 0; i < n; ++i)
+                mid[(size_t) i] = 0.5f * (L[i] + R[i]);
+            int lowered = 0, blocks = 0;
+            for (int start = 0; start < n; start += 512, ++blocks)
+            {
+                float* io[] { mid.data() + start };
+                breath.process (io, 1, std::min (512, n - start));
+                lowered += breath.getReductionDb() < -6.0f ? 1 : 0;
+            }
+            p.breathShare = blocks > 0 ? (float) lowered / (float) blocks : 0.0f;
         }
 
         // Word / phrase dynamics: 400 ms windows that are mostly voice

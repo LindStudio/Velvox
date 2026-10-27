@@ -64,6 +64,7 @@ namespace velvox::automix
         float noiseFloorDb = -100.0f;     // level of the quiet captured parts (5th percentile of 50 ms blocks)
         float snrDb = 0.0f;
         bool snrValid = false;            // enough pause material to measure a floor
+        float breathShare = 0.0f;         // 0.7: share of the capture the Breath Control detector lowers (0..1)
 
         // ---- Pitch (autocorrelation of voiced frames)
         float f0MedianHz = 0.0f, f0LowHz = 0.0f, f0HighHz = 0.0f;

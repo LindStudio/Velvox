@@ -230,6 +230,33 @@ namespace velvox::automix
         const bool roomy = likely (p, "reverberant");
         const bool someRoom = p.reverberant;
 
+        // ================= Clean-up first: room noise and breaths (0.7) =================
+        plan.set (pid::denoiseOn, 0.0f);
+        plan.set (pid::breathOn, 0.0f);
+        if (p.snrValid && p.snrDb < 40.0f)
+        {
+            const float amount = (float) juce::roundToInt (juce::jlimit (20.0f, 80.0f, juce::jmap (p.snrDb, 40.0f, 20.0f, 20.0f, 80.0f)));
+            plan.set (pid::denoiseOn, 1.0f);
+            plan.set (pid::denoiseAmount, amount);
+            plan.routing.insertDefault (M::denoise, 0);
+            decide (M::denoise, both ("Raumrauschen {0} %", "Room Noise {0} %", { juce::String ((int) amount) }),
+                    both ("Nur {0} dB zwischen Stimme und Rauschen - das Rauschen zwischen den Zeilen wird leiser.",
+                          "Only {0} dB between voice and noise - the noise between the lines gets quieter.", { juce::String (juce::roundToInt (p.snrDb)) }),
+                    true);
+        }
+        if (p.breathShare > 0.02f)
+        {
+            const float amount = p.pitchedShare < 0.45f ? 40.0f : 50.0f;   // rap / speech: a little more natural breath
+            plan.set (pid::breathOn, 1.0f);
+            plan.set (pid::breathAmount, amount);
+            plan.routing.insertDefault (M::breath, 0);
+            decide (M::breath, both ("Atem-Absenker {0} %", "Breath Control {0} %", { juce::String ((int) amount) }),
+                    both ("Hörbare Atmer zwischen den Zeilen ({0} % der Aufnahme) - sie werden leiser, S-Laute bleiben.",
+                          "Audible breaths between the lines ({0} % of the take) - they get quieter, S sounds stay.",
+                          { juce::String (juce::roundToInt (100.0f * p.breathShare)) }),
+                    true);
+        }
+
         // ---- Start from a defined state: macros off
         bool macrosWereSet = false;
         for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroAggression, pid::macroWidth, pid::macroSpace, pid::macroDensity })
