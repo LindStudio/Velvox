@@ -1,6 +1,8 @@
 #include "TimePanels.h"
 #include "../PluginProcessor.h"
 #include "HelpContent.h"
+#include "../Text/I18n.h"
+#include "../Text/ParamText.h"
 
 namespace velvox::ui
 {
@@ -8,7 +10,15 @@ namespace velvox::ui
 
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
+        using i18n::tr;
+
+        // Upper case including ä / ö / ü (juce::String::toUpperCase leaves them as they are)
+        juce::String capitals (const juce::String& s)
+        {
+            return s.toUpperCase().replace (juce::String::fromUTF8 ("ä"), juce::String::fromUTF8 ("Ä"))
+                                  .replace (juce::String::fromUTF8 ("ö"), juce::String::fromUTF8 ("Ö"))
+                                  .replace (juce::String::fromUTF8 ("ü"), juce::String::fromUTF8 ("Ü"));
+        }
 
         // Live pictures repaint at 30 Hz (the editor frame runs at 60)
         bool liveFrame (int& counter) noexcept { return (++counter & 1) == 0; }
@@ -37,7 +47,7 @@ namespace velvox::ui
         };
         info = std::make_unique<HoverInfo> (*this, [] { return juce::String ("Echo"); },
                                             [this] { return readout(); },
-                                            [] { return de ("Ziehen: links/rechts = Zeit, hoch/runter = Feedback."); });
+                                            [] { return tr ("Ziehen: links/rechts = Zeit, hoch/runter = Feedback.", "Drag: left/right = time, up/down = feedback."); });
     }
 
     EchoMapView::~EchoMapView() { endDrag(); }
@@ -221,7 +231,7 @@ namespace velvox::ui
         {
             juce::PopupMenu menu;
             juce::Component::SafePointer<EchoMapView> safe (this);
-            menu.addItem (de ("Zeit und Feedback zurücksetzen"), [safe] { if (safe != nullptr) safe->resetEcho(); });
+            menu.addItem (tr ("Zeit und Feedback zurücksetzen", "Reset time and feedback"), [safe] { if (safe != nullptr) safe->resetEcho(); });
             if (auto* host = findParentComponentOfClass<gestures::PanelMenuHost>())
             {
                 menu.addSeparator();
@@ -343,7 +353,7 @@ namespace velvox::ui
 
     void EchoMapView::resetEcho()
     {
-        proc.getUndo().perform (de ("Echo zurücksetzen"), [this]
+        proc.getUndo().perform (tr ("Echo zurücksetzen", "Reset echo"), [this]
         {
             for (auto* id : { pid::delayTime, pid::delayFeedback, pid::delayDivision })
                 if (auto* p = param (id))
@@ -441,10 +451,10 @@ namespace velvox::ui
     {
         settings.shape = -1;   // first update builds the paths
         info = std::make_unique<HoverInfo> (*this,
-                                            [this] { return hovered >= 0 ? "Punkt " + juce::String (hovered + 1) : juce::String ("Pulse"); },
+                                            [this] { return hovered >= 0 ? tr ("Punkt ", "Point ") + juce::String (hovered + 1) : juce::String ("Pulse"); },
                                             [this] { return hoverText; },
-                                            [this] { return hovered >= 0 ? de ("Ziehen: Position im Takt und Lautstärke.")
-                                                                         : de ("Die Lautstärke über einen Zyklus."); });
+                                            [this] { return hovered >= 0 ? tr ("Ziehen: Position im Takt und Lautstärke.", "Drag: position in the bar and volume.")
+                                                                         : tr ("Die Lautstärke über einen Zyklus.", "The volume over one cycle."); });
     }
 
     PulseCurveView::~PulseCurveView()
@@ -537,10 +547,13 @@ namespace velvox::ui
             shownRate = s.rate;
             bpm = newBpm;
             hostTempo = newHost;
-            readoutText = dsp::PulseModule::rateNames()[s.rate] + "   " + juce::String (bpm, 1) + " BPM" + (hostTempo ? "" : " manuell");
+            readoutText = dsp::PulseModule::rateNames()[s.rate] + "   " + juce::String (bpm, 1) + " BPM" + (hostTempo ? juce::String() : tr (" manuell", " manual"));
         }
         if (hovered < 0)
-            hoverText = dsp::PulseModule::shapeNames()[juce::jlimit (0, 4, s.shape)] + "   Amount " + percent (s.amount);
+        {
+            const int shape = juce::jlimit (0, 4, s.shape);
+            hoverText = i18n::choiceName (pid::pulseShape, shape, dsp::PulseModule::shapeNames()[shape]) + "   " + tr ("Stärke ", "Amount ") + percent (s.amount);
+        }
         if (liveFrame (frameCount) || dragged >= 0)
             repaint();
     }
@@ -583,7 +596,7 @@ namespace velvox::ui
 
     void PulseCurveView::resetPoint (int i)
     {
-        proc.getUndo().perform ("Punkt " + juce::String (i + 1) + de (" zurücksetzen"), [this, i]
+        proc.getUndo().perform (i18n::format (tr ("Punkt {0} zurücksetzen", "Reset point {0}"), { juce::String (i + 1) }), [this, i]
         {
             for (auto* id : { pid::pulseX[i], pid::pulseY[i] })
                 if (auto* prm = proc.getState().getParameter (id))
@@ -599,7 +612,7 @@ namespace velvox::ui
             juce::PopupMenu menu;
             juce::Component::SafePointer<PulseCurveView> safe (this);
             if (p >= 0)
-                menu.addItem ("Punkt " + juce::String (p + 1) + de (" zurücksetzen"), [safe, p] { if (safe != nullptr) safe->resetPoint (p); });
+                menu.addItem (i18n::format (tr ("Punkt {0} zurücksetzen", "Reset point {0}"), { juce::String (p + 1) }), [safe, p] { if (safe != nullptr) safe->resetPoint (p); });
             if (auto* host = findParentComponentOfClass<gestures::PanelMenuHost>())
             {
                 if (p >= 0)
@@ -738,9 +751,9 @@ namespace velvox::ui
         selected = parameter != nullptr ? juce::roundToInt (parameter->convertFrom0to1 (parameter->getValue())) : 0;
         juce::String description;
         if (const auto* spec = findParameterSpec (pid::pulseShape))
-            description = spec->description;
-        info = std::make_unique<HoverInfo> (*this, [] { return juce::String ("Kurve"); },
-                                            [this] { return dsp::PulseModule::shapeNames()[juce::jlimit (0, numTiles - 1, hovered >= 0 ? hovered : selected)]; },
+            description = i18n::paramDescription (pid::pulseShape, spec->description);
+        info = std::make_unique<HoverInfo> (*this, [] { return tr ("Kurve", "Curve"); },
+                                            [this] { const int i = juce::jlimit (0, numTiles - 1, hovered >= 0 ? hovered : selected); return i18n::choiceName (pid::pulseShape, i, dsp::PulseModule::shapeNames()[i]); },
                                             [description] { return description; });
     }
 
@@ -860,13 +873,6 @@ namespace velvox::ui
 
     void PulseShapeTiles::paint (juce::Graphics& g)
     {
-        static const juce::StringArray upper = []
-        {
-            juce::StringArray a;
-            for (const auto& n : dsp::PulseModule::shapeNames())
-                a.add (n.toUpperCase());
-            return a;
-        }();
         for (int i = 0; i < numTiles; ++i)
         {
             const auto t = tiles[(size_t) i].toFloat();
@@ -879,7 +885,8 @@ namespace velvox::ui
             g.strokePath (paths[(size_t) i], juce::PathStrokeType (sel ? 1.8f : 1.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             g.setFont (semiBold (9.0f, 0.12f));
             g.setColour (sel ? colours::textStrong : colours::knobName);
-            g.drawText (upper[i], t.withTrimmedTop (t.getHeight() - 17.0f), juce::Justification::centred, false);
+            g.drawFittedText (capitals (i18n::choiceName (pid::pulseShape, i, dsp::PulseModule::shapeNames()[i])),
+                              t.withTrimmedTop (t.getHeight() - 17.0f).toNearestInt(), juce::Justification::centred, 1, 0.85f);
         }
     }
 
@@ -912,7 +919,7 @@ namespace velvox::ui
             shownPattern = pattern;
             shownRate = s.rate;
             steps = pats[(size_t) pattern].steps;
-            readoutText = juce::String (pats[(size_t) pattern].name) + "   "
+            readoutText = i18n::choiceName (pid::chopPattern, pattern, pats[(size_t) pattern].name) + "   "
                           + dsp::ChopModule::rateNames()[juce::jlimit (0, dsp::ChopModule::rateNames().size() - 1, s.rate)];
         }
         numFrames = proc.getChain().getChop().readDisplay (frames.data(), (int) frames.size());
@@ -1056,7 +1063,7 @@ namespace velvox::ui
                 syncSwitch = &toggle (pid::delaySync, "Sync");
                 pingSwitch = &toggle (pid::delayPingPong, "Ping-Pong");
                 segments (pid::duckSource, { "Vocal", "Sidechain" });
-                time = &knob (pid::delayTime, "Time");
+                time = &knob (pid::delayTime, tr ("Zeit", "Time"));
                 feedback = &knob (pid::delayFeedback, "Feedback");
                 knob (pid::delayLowCut, "Low Cut");
                 knob (pid::delayHighCut, "High Cut");
@@ -1068,7 +1075,7 @@ namespace velvox::ui
                 knob (pid::delayDiffusion, "Diffusion");
                 knob (pid::delayMod, "Modulation");
                 knob (pid::delaySpread, "Spread");
-                knob (pid::delayToReverb, "Into Reverb");
+                knob (pid::delayToReverb, tr ("Ins Reverb", "Into Reverb"));
                 mix = &knob (pid::delayMix, "Mix");
                 showSynced (apvts.getRawParameterValue (pidFor (pid::delaySync))->load() > 0.5f);
                 setMixKnob (mix);
@@ -1122,18 +1129,19 @@ namespace velvox::ui
             explicit PulsePanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Pulse", help::shortDescription ((int) ModuleId::pulse), pid::pulseOn)
             {
-                amount = &knob (pid::pulseAmount, "Amount");
+                // German names with umlauts in capitals: the knob upper-cases its name, juce::String::toUpperCase leaves ä / ö / ü
+                amount = &knob (pid::pulseAmount, tr ("STÄRKE", "Amount"));
                 tiles = &own (std::make_unique<PulseShapeTiles> (p));
                 auto& rate = segments (pid::pulseRate, { "1/1", "1/2", "1/4", "1/8", "1/16" }, true);
                 setCaption (rate, "Rate");
-                auto& smooth = knob (pid::pulseSmooth, "Smooth");
+                auto& smooth = knob (pid::pulseSmooth, tr ("GLÄTTUNG", "Smooth"));
                 auto& mix = knob (pid::pulseMix, "Mix");
-                knob (pid::pulseDepth, "Depth");
+                knob (pid::pulseDepth, tr ("Tiefe", "Depth"));
                 knob (pid::pulseAttack, "Attack");
                 knob (pid::pulseRelease, "Release");
-                knob (pid::pulseTension, "Tension");
+                knob (pid::pulseTension, tr ("Spannung", "Tension"));
                 segments (pid::pulseInterp);
-                bpm = &knob (pid::pulseBpm, "Manual BPM");
+                bpm = &knob (pid::pulseBpm, tr ("BPM manuell", "Manual BPM"));
                 setMainControls ({ &rate, &smooth, &mix });
                 placeInVisual ({ amount, tiles });
                 amount->setDialSize (112);
@@ -1177,10 +1185,11 @@ namespace velvox::ui
             {
                 auto& rate = segments (pid::chopRate);
                 setCaption (rate, "Rate");
-                auto& depth = knob (pid::chopDepth, "Depth");
-                auto& smooth = knob (pid::chopSmooth, "Smooth");
+                // German names with umlauts in capitals: the knob upper-cases its name, juce::String::toUpperCase leaves ä / ö / ü
+                auto& depth = knob (pid::chopDepth, tr ("Tiefe", "Depth"));
+                auto& smooth = knob (pid::chopSmooth, tr ("GLÄTTUNG", "Smooth"));
                 auto& pattern = choice (pid::chopPattern, {});
-                setCaption (pattern, "Pattern");
+                setCaption (pattern, tr ("Muster", "Pattern"));
                 setMainControls ({ &rate, &depth, &smooth, &pattern });
             }
         };

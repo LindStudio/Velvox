@@ -390,7 +390,7 @@ public:
                 expectWithinAbsoluteError (room.view.getDecayBands()[(size_t) b],
                                            dsp::ReverbModule::predictedRt60 (heard, ReverbRoom::decayBandHz (b), 48000.0), 1.0e-4f);
             expect (room.view.getDecayBands()[5] < room.view.getDecayBands()[2], "dark damping: 4 kHz decays faster than 500 Hz");
-            expectEquals (room.view.getReadout(), juce::String::fromUTF8 ("Mix 18 % · Pre 20 ms · Size 60 %"));
+            expectEquals (room.view.getReadout(), juce::String::fromUTF8 ("Mix 18 % · Pre 20 ms · Größe 60 %"));
 
             auto r = h.proc.getRouting();
             r.insertDefault (ModuleId::reverb, 1);

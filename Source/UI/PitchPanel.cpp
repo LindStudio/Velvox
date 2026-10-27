@@ -1,6 +1,8 @@
 #include "PitchPanel.h"
 #include "../PluginProcessor.h"
 #include "HelpContent.h"
+#include "../Text/I18n.h"
+#include "../Text/ParamText.h"
 
 namespace velvox::ui
 {
@@ -178,11 +180,12 @@ namespace velvox::ui
             explicit PitchPanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Pitch", help::shortDescription ((int) ModuleId::pitch), pid::pitchOn)
             {
-                semis = &knob (pid::pitchSemitones, "Semitones");
+                // German names with umlauts in capitals: the knob upper-cases its name, juce::String::toUpperCase leaves ä / ö / ü
+                semis = &knob (pid::pitchSemitones, i18n::tr ("HALBTÖNE", "Semitones"));
                 formant = &knob (pid::pitchFormant, "Formant");
-                auto& fine = knob (pid::pitchCents, "Fine");
+                auto& fine = knob (pid::pitchCents, i18n::tr ("Fein", "Fine"));
                 auto& mix = knob (pid::pitchMix, "Mix");
-                auto& keep = toggle (pid::pitchPreserveFormants, "Formanten erhalten");
+                auto& keep = toggle (pid::pitchPreserveFormants, i18n::tr ("Formanten erhalten", "Keep formants"));
                 setMainControls ({ &fine, &mix, &keep });
                 placeInVisual ({ semis, formant });
                 for (auto* k : { semis, formant })
@@ -201,8 +204,9 @@ namespace velvox::ui
                 const int latency = proc.getChain().getLatencyFor (withPitch, true) - proc.getChain().getLatencyFor (withPitch, false);
                 const double ms = 1000.0 * latency / std::max (1.0, proc.getSampleRate());
                 const auto* spec = findParameterSpec (pid::pitchSemitones);
-                semis->setDescription (juce::String (spec != nullptr ? spec->description : "") + "\n\n"
-                                       + juce::String::fromUTF8 ("Solange Pitch an ist: ") + juce::String (juce::roundToInt (ms)) + " ms Latenz.");
+                semis->setDescription ((spec != nullptr ? i18n::paramDescription (pid::pitchSemitones, spec->description) : juce::String()) + "\n\n"
+                                       + i18n::format (i18n::tr ("Solange Pitch an ist: {0} ms Latenz.", "While Pitch is on: {0} ms latency."),
+                                                       { juce::String (juce::roundToInt (ms)) }));
             }
 
         private:

@@ -3,11 +3,21 @@
 #include "../DSP/SaturationModule.h"
 #include "../Parameters/ParameterLayout.h"
 #include "HelpContent.h"
+#include "../Text/I18n.h"
+#include "../Text/ParamText.h"
 
 namespace velvox::ui
 {
     namespace
     {
+        // Upper case including ä / ö / ü (juce::String::toUpperCase leaves them as they are)
+        juce::String capitals (const juce::String& s)
+        {
+            return s.toUpperCase().replace (juce::String::fromUTF8 ("ä"), juce::String::fromUTF8 ("Ä"))
+                                  .replace (juce::String::fromUTF8 ("ö"), juce::String::fromUTF8 ("Ö"))
+                                  .replace (juce::String::fromUTF8 ("ü"), juce::String::fromUTF8 ("Ü"));
+        }
+
         juce::RangedAudioParameter* paramFor (APVTS& state, const char* baseId, int instance)
         {
             if (auto* p = state.getParameter (dsp::instanceParamId (baseId, instance)))
@@ -35,7 +45,7 @@ namespace velvox::ui
             const auto* spec = findParameterSpec (id);
             if (spec == nullptr)
                 spec = findParameterSpec (dsp::splitInstanceParamId (id).first);
-            return spec != nullptr ? juce::String (spec->description) : juce::String();
+            return spec != nullptr ? i18n::paramDescription (id, spec->description) : juce::String();
         }
 
         juce::String hzText (float f)
@@ -65,7 +75,8 @@ namespace velvox::ui
         juce::String characterName (int c)
         {
             static const char* const names[4] { "Warm", "Tape", "Tube", "Hard" };
-            return names[juce::jlimit (0, 3, c)];
+            const int i = juce::jlimit (0, 3, c);
+            return i18n::choiceName (pid::satCharacter, i, names[i]);
         }
 
         // Icons in a unit square, built once
@@ -154,8 +165,9 @@ namespace velvox::ui
             drawCharacterIcon (g, character, iconArea, selected ? c : (hover ? colours::textSoft : colours::textMuted), selected ? 1.8f : 1.5f);
             g.setColour (selected ? c.interpolatedWith (juce::Colours::white, 0.55f) : (hover ? colours::textSoft : colours::textMuted));
             g.setFont (semiBold (10.5f, 0.12f));
-            g.drawText (characterName (character).toUpperCase(), r.withTop (iconArea.getBottom() + 4.0f).withHeight (labelH),
-                        juce::Justification::centred, false);
+            g.drawFittedText (capitals (characterName (character)),
+                              r.withTop (iconArea.getBottom() + 4.0f).withHeight (labelH).reduced (2.0f, 0.0f).toNearestInt(),
+                              juce::Justification::centred, 1, 0.85f);
         }
     }
 
@@ -245,7 +257,7 @@ namespace velvox::ui
         explicit Handle (SatView& o) : owner (o)
         {
             info = std::make_unique<HoverInfo> (*this,
-                [this] { auto* p = parameter(); return p != nullptr ? p->getName (48) : juce::String(); },
+                [this] { auto* p = parameter(); return p != nullptr ? i18n::paramName (p->getParameterID(), p->getName (48)) : juce::String(); },
                 [this] { auto* p = parameter(); return p != nullptr ? p->getCurrentValueAsText() + " " + p->getLabel() : juce::String(); },
                 [this] { auto* p = parameter(); return p != nullptr ? descriptionOf (p->getParameterID()) : juce::String(); });
         }
@@ -493,7 +505,8 @@ namespace velvox::ui
             addAndMakeVisible (*switches[(size_t) b]);
 
             auto solo = std::make_unique<AuditionButton>();
-            solo->setDescription (juce::String::fromUTF8 ("Nur dieses Band hören. Klick: an / aus, gedrückt halten: solange gehalten."));
+            solo->setDescription (i18n::tr ("Nur dieses Band hören. Klick: an / aus, gedrückt halten: solange gehalten.",
+                                           "Hear only this band. Click: on / off, press and hold: while held."));
             solo->onChange = [this, b] (bool on)
             {
                 auto& sat = proc.getChain().getSaturation (instance);
@@ -746,6 +759,13 @@ namespace velvox::ui
                              juce::Rectangle<float> (x - 20.0f, strip.getBottom() + 3.0f, 40.0f, 12.0f), juce::Justification::centred,
                              colours::textFaint, 8.0f);
         }
+        // The ends of the axis (20 Hz / 20 kHz) where they do not crowd the 100 / 10k labels
+        if (xForFrequency (100.0f) - strip.getX() >= 40.0f)
+            drawCaption (g, "20", juce::Rectangle<float> (strip.getX() + 2.0f, strip.getBottom() + 3.0f, 30.0f, 12.0f), juce::Justification::centredLeft,
+                         colours::textFaint, 8.0f);
+        if (strip.getRight() - xForFrequency (10000.0f) >= 48.0f)
+            drawCaption (g, "20k", juce::Rectangle<float> (strip.getRight() - 32.0f, strip.getBottom() + 3.0f, 30.0f, 12.0f), juce::Justification::centredRight,
+                         colours::textFaint, 8.0f);
 
         const int count = multiband ? 3 : 1;
         for (int b = 0; b < count; ++b)
@@ -791,7 +811,7 @@ namespace velvox::ui
             {
                 satlook::drawCharacterIcon (g, character, text.removeFromLeft (16.0f).withSizeKeepingCentre (16.0f, 16.0f), c.withAlpha (a), 1.4f);
                 text.removeFromLeft (6.0f);
-                const auto name = satlook::characterName (character).toUpperCase();
+                const auto name = capitals (satlook::characterName (character));
                 g.setFont (semiBold (10.5f, 0.12f));
                 if (juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), name) <= (int) text.getWidth())
                 {
@@ -829,7 +849,7 @@ namespace velvox::ui
 
         auto hb = harmonicsBox;
         auto head = hb.removeFromTop (14.0f);
-        drawCaption (g, juce::String::fromUTF8 ("Obertöne"), head, juce::Justification::centredLeft, colours::textFaint, 8.0f);
+        drawCaption (g, i18n::tr ("Obertöne", "Harmonics"), head, juce::Justification::centredLeft, colours::textFaint, 8.0f);
         drawCaption (g, "THD " + (thdPercent < 10.0f ? juce::String (thdPercent, 1) : juce::String (juce::roundToInt (thdPercent))) + " %", head, juce::Justification::centredRight, colours::textDim, 8.0f);
         hb.removeFromTop (4.0f);
         auto labels = hb.removeFromBottom (13.0f);

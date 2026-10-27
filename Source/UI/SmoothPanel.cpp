@@ -1,6 +1,7 @@
 #include "SmoothPanel.h"
 #include "../PluginProcessor.h"
 #include "HelpContent.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
@@ -8,7 +9,7 @@ namespace velvox::ui
 
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
+        using i18n::tr;
 
         juce::RangedAudioParameter* param (VelvoxAudioProcessor& proc, const juce::String& id)
         {
@@ -150,7 +151,7 @@ namespace velvox::ui
 
     //==========================================================================
     SpeedKnob::SpeedKnob (VelvoxAudioProcessor& p, int inst, juce::Colour hue)
-        : Knob ("Speed", hue), proc (p), instance (inst)
+        : Knob (i18n::tr ("Tempo", "Speed"), hue), proc (p), instance (inst)
     {
         slider.setRange (0.0, 1.0, 0.0);
         slider.textFromValueFunction = [] (double v) { return textFor ((float) v); };
@@ -190,7 +191,8 @@ namespace velvox::ui
                 smoothedit::setSpeed (proc, instance, (float) slider.getValue());
         };
         slider.addMouseListener (this, false);
-        setDescription (de ("Wie schnell Smooth zupackt und loslässt: stellt Attack und Release gemeinsam."));
+        setDescription (tr ("Wie schnell Smooth zupackt und loslässt: stellt Attack und Release gemeinsam.",
+                            "How fast Smooth grabs and lets go: sets Attack and Release together."));
         sync();
         snapToValue();
     }
@@ -243,8 +245,8 @@ namespace velvox::ui
     {
         juce::Component::SafePointer<SpeedKnob> safe (this);
         juce::PopupMenu m;
-        m.addItem ("Standardwert", [safe] { if (safe != nullptr) safe->resetToDefault(); });
-        m.addItem (de ("Wert eingeben …"), [safe] { if (safe != nullptr) safe->slider.showTextBox(); });
+        m.addItem (tr ("Standardwert", "Default value"), [safe] { if (safe != nullptr) safe->resetToDefault(); });
+        m.addItem (tr ("Wert eingeben …", "Enter value …"), [safe] { if (safe != nullptr) safe->slider.showTextBox(); });
         if (auto* panel = findParentComponentOfClass<DetailPanel>())
         {
             m.addSeparator();
@@ -656,13 +658,13 @@ namespace velvox::ui
         }
         if (point >= 0)
         {
-            cardTitle = "PUNKT " + juce::String (point + 1);
+            cardTitle = tr ("PUNKT ", "POINT ") + juce::String (point + 1);
             cardValues = hzText (s.weightFreq[(size_t) point]) + "   " + dbText (s.weightGain[(size_t) point]);
             cardAnchor = pointPosition (point);
         }
         else if (edge != Edge::none)
         {
-            cardTitle = edge == Edge::low ? "LOW LIMIT" : "HIGH LIMIT";
+            cardTitle = edge == Edge::low ? tr ("UNTERGRENZE", "LOW LIMIT") : tr ("OBERGRENZE", "HIGH LIMIT");
             cardValues = hzText (edge == Edge::low ? s.lowHz : s.highHz);
             cardAnchor = { edgeX (edge), plotArea().getY() + 40.0f };
         }
@@ -703,6 +705,9 @@ namespace velvox::ui
         for (int i = 0; i < 8; ++i)
             g.drawText (hzLabels[i], juce::Rectangle<float> (xForFreq (hzValues[i]) - 20.0f, r.getBottom() + 5.0f, 40.0f, 14.0f),
                         juce::Justification::centred, false);
+        // The ends of the axis (20 Hz / 20 kHz), inside the plot width
+        g.drawText ("20", juce::Rectangle<float> (r.getX() + 2.0f, r.getBottom() + 5.0f, 30.0f, 14.0f), juce::Justification::centredLeft, false);
+        g.drawText ("20k", juce::Rectangle<float> (r.getRight() - 32.0f, r.getBottom() + 5.0f, 30.0f, 14.0f), juce::Justification::centredRight, false);
 
         const float lo = xForFreq (std::min (s.lowHz, s.highHz)), hi = xForFreq (std::max (s.lowHz, s.highHz));
         {
@@ -815,9 +820,9 @@ namespace velvox::ui
         juce::PopupMenu m;
         if (point < 0 || point >= dsp::SmoothSettings::numWeights)
             return m;
-        m.addSectionHeader ("Punkt " + juce::String (point + 1));
-        m.addItem (de ("Zurücksetzen"), [safe, point] { if (safe != nullptr) { smoothedit::resetPoint (safe->proc, safe->instance, point); safe->readParameters(); } });
-        m.addItem ("Alle flach", [safe] { if (safe != nullptr) { smoothedit::flattenAll (safe->proc, safe->instance); safe->readParameters(); } });
+        m.addSectionHeader (tr ("Punkt ", "Point ") + juce::String (point + 1));
+        m.addItem (tr ("Zurücksetzen", "Reset"), [safe, point] { if (safe != nullptr) { smoothedit::resetPoint (safe->proc, safe->instance, point); safe->readParameters(); } });
+        m.addItem (tr ("Alle flach", "Flatten all"), [safe] { if (safe != nullptr) { smoothedit::flattenAll (safe->proc, safe->instance); safe->readParameters(); } });
         addPanelItems (m);
         return m;
     }
@@ -1086,16 +1091,17 @@ namespace velvox::ui
                 : DetailPanel (p, "Smooth", help::shortDescription ((int) ModuleId::smooth), pid::smoothOn)
             {
                 auto& mode = segments (pid::smoothMode);
-                setCaption (mode, "Mode");
+                setCaption (mode, tr ("Modus", "Mode"));
                 auto& delta = toggle (pid::smoothDelta, "Delta");
-                auto& depth = knob (pid::smoothAmount, "Depth");
-                auto& sharpness = knob (pid::smoothSensitivity, "Sharpness");
+                auto& depth = knob (pid::smoothAmount, tr ("Tiefe", "Depth"));
+                // German names with umlauts in capitals: the knob upper-cases its name, juce::String::toUpperCase leaves ä / ö / ü
+                auto& sharpness = knob (pid::smoothSensitivity, tr ("SCHÄRFE", "Sharpness"));
                 speed = &own (std::make_unique<SpeedKnob> (p, getInstance(), moduleColour (ModuleId::smooth)));
                 knob (pid::smoothAttack, "Attack");
                 knob (pid::smoothRelease, "Release");
                 knob (pid::smoothOutput, "Output");
-                knob (pid::smoothLow, "Low");
-                knob (pid::smoothHigh, "High");
+                knob (pid::smoothLow, tr ("Untergrenze", "Low"));
+                knob (pid::smoothHigh, tr ("Obergrenze", "High"));
                 setMainControls ({ &depth, &sharpness, speed, &delta });
             }
 

@@ -1,6 +1,7 @@
 #include "ReverbPanel.h"
 #include "../PluginProcessor.h"
 #include "HelpContent.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
@@ -118,9 +119,10 @@ namespace velvox::ui
         explicit DotHandle (ReverbRoom& r) : room (r)
         {
             setMouseCursor (juce::MouseCursor::DraggingHandCursor);
-            info = std::make_unique<HoverInfo> (*this, [] { return juce::String ("Depth"); },
+            info = std::make_unique<HoverInfo> (*this, [] { return i18n::tr ("Tiefe", "Depth"); },
                                                 [this] { return room.getReadout(); },
-                                                [] { return juce::String::fromUTF8 ("Drag back for more space: Mix, Pre-Delay and Size move together."); });
+                                                [] { return i18n::tr ("Nach hinten ziehen für mehr Raum: Mix, Pre-Delay und Größe ändern sich gemeinsam.",
+                                                                      "Drag back for more space: Mix, Pre-Delay and Size move together."); });
         }
         void refreshInfo() { info->refresh(); }
 
@@ -161,9 +163,8 @@ namespace velvox::ui
             return;
         depthKey = key;
         paramDepth = dsp::reverbDepthFromSettings (type, mix, preDelay, size);
-        readout = "Mix " + juce::String (juce::roundToInt (mix)) + juce::String::fromUTF8 (" % · Pre ")
-                + juce::String (juce::roundToInt (preDelay)) + juce::String::fromUTF8 (" ms · Size ")
-                + juce::String (juce::roundToInt (size)) + " %";
+        readout = i18n::format (i18n::tr ("Mix {0} % · Pre {1} ms · Größe {2} %", "Mix {0} % · Pre {1} ms · Size {2} %"),
+                                { juce::String (juce::roundToInt (mix)), juce::String (juce::roundToInt (preDelay)), juce::String (juce::roundToInt (size)) });
     }
 
     float ReverbRoom::perspective (float t) const noexcept
@@ -430,7 +431,7 @@ namespace velvox::ui
         const auto r = getLocalBounds().toFloat().reduced (14.0f, 10.0f);
         g.setFont (semiBold (9.0f, 0.12f));
         g.setColour (colours::textFaint);
-        g.drawText ("DEPTH", r.withSize (44.0f, 14.0f), juce::Justification::centredLeft, false);
+        g.drawText (i18n::tr ("TIEFE", "DEPTH"), r.withSize (44.0f, 14.0f), juce::Justification::centredLeft, false);
         g.setFont (monoFont (11.0f));
         g.setColour (on ? colours::text : colours::textMuted);
         g.drawText (depthText, r.withSize (60.0f, 14.0f).translated (44.0f, 0.0f), juce::Justification::centredLeft, false);
@@ -452,11 +453,11 @@ namespace velvox::ui
             return [safe, d] { if (safe != nullptr) { reverbedit::setDepth (safe->proc, safe->instance, d); safe->readParameters(); safe->repaint(); } };
         };
         juce::PopupMenu m;
-        m.addSectionHeader ("Depth");
-        m.addItem ("Vorne", to (0.1f));
-        m.addItem ("Mitte", to (0.5f));
-        m.addItem ("Hinten", to (0.9f));
-        m.addItem ("Standardwerte", [safe] { if (safe != nullptr) { reverbedit::resetDepth (safe->proc, safe->instance); safe->repaint(); } });
+        m.addSectionHeader (i18n::tr ("Tiefe", "Depth"));
+        m.addItem (i18n::tr ("Vorne", "Front"), to (0.1f));
+        m.addItem (i18n::tr ("Mitte", "Middle"), to (0.5f));
+        m.addItem (i18n::tr ("Hinten", "Back"), to (0.9f));
+        m.addItem (i18n::tr ("Standardwerte", "Default values"), [safe] { if (safe != nullptr) { reverbedit::resetDepth (safe->proc, safe->instance); safe->repaint(); } });
         if (auto* panel = findParentComponentOfClass<DetailPanel>())
         {
             m.addSeparator();
@@ -566,21 +567,22 @@ namespace velvox::ui
                 : DetailPanel (p, "Reverb", help::shortDescription ((int) ModuleId::reverb), pid::reverbOn)
             {
                 auto& type = choice (pid::reverbType, {});
-                setCaption (type, "Room");
+                setCaption (type, i18n::tr ("Raum", "Room"));
                 type.box.setScrollWheelEnabled (true);
                 segments (pid::duckSource, { "Vocal", "Sidechain" });
-                auto& size = knob (pid::reverbSize, "Size");
+                // German names with umlauts in capitals: the knob upper-cases its name, juce::String::toUpperCase leaves ä / ö / ü
+                auto& size = knob (pid::reverbSize, i18n::tr ("GRÖSSE", "Size"));
                 auto& decay = knob (pid::reverbDecay, "Decay");
                 auto& mix = knob (pid::reverbMix, "Mix");
                 knob (pid::reverbPreDelay, "Pre-Delay");
                 knob (pid::reverbLowCut, "Low Cut");
                 knob (pid::reverbHighCut, "High Cut");
-                knob (pid::reverbDamping, "Damping");
+                knob (pid::reverbDamping, i18n::tr ("DÄMPFUNG", "Damping"));
                 knob (pid::reverbBass, "Bass Decay");
                 knob (pid::reverbWidth, "Width");
                 knob (pid::reverbEarly, "Early");
                 knob (pid::reverbDiffusion, "Diffusion");
-                knob (pid::reverbMod, "Movement");
+                knob (pid::reverbMod, i18n::tr ("Bewegung", "Movement"));
                 knob (pid::reverbDuckAmount, "Ducking");
                 knob (pid::reverbDuckThreshold, "Duck Thresh");
                 knob (pid::reverbDuckAttack, "Duck Attack");

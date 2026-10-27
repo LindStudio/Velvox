@@ -2,6 +2,7 @@
 #include "../PluginProcessor.h"
 #include "HelpContent.h"
 #include "ValueText.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
@@ -655,7 +656,7 @@ namespace velvox::ui
         const auto yLevel = [&] (float db) { return juce::jmap (juce::jlimit (floorDb, 0.0f, db), floorDb, 0.0f, r.getBottom(), r.getY()); };
 
         // ---- Level display
-        dbGuides (g, r, { -6.0f, -12.0f, -18.0f, -24.0f, -36.0f, -48.0f }, yLevel);
+        dbGuides (g, r, { -6.0f, -12.0f, -18.0f, -24.0f, -30.0f, -36.0f, -42.0f, -48.0f }, yLevel);
         {
             juce::Graphics::ScopedSaveState clip (g);
             g.reduceClipRegion (r.toNearestInt());
@@ -860,11 +861,11 @@ namespace velvox::ui
         stepParam (id, paramValue (id) * std::exp2 (notches * wheelOct * fine));
     }
 
-    juce::String DeEssGraph::cardTitleFor (int) const { return "S-BAND"; }
+    juce::String DeEssGraph::cardTitleFor (int) const { return i18n::tr ("S-BAND", "SIBILANCE BAND"); }
 
     juce::String DeEssGraph::cardValueFor (int) const
     {
-        return hzText (paramValue (pidFor (pid::deessFreq))) + "   Range " + dbText (paramValue (pidFor (pid::deessRange)));
+        return hzText (paramValue (pidFor (pid::deessFreq))) + "   Range " + dbText (-paramValue (pidFor (pid::deessRange)));
     }
 
     juce::Point<float> DeEssGraph::anchorFor (int) const
@@ -965,6 +966,16 @@ namespace velvox::ui
         const auto r = plotArea();
         const float a = on ? 1.0f : 0.45f;
         SpectrumView::drawFrequencyGrid (g, r, true);
+        {
+            // The ends of the axis (20 Hz / 20 kHz) where they do not crowd the 50 / 10k labels
+            g.setColour (colours::textFaint);
+            g.setFont (medium (11.0f));
+            const float labelY = r.getBottom() - 18.0f;
+            if (SpectrumView::xForFrequency (50.0f, r) - r.getX() >= 36.0f)
+                g.drawText ("20", juce::Rectangle<float> (r.getX() + 4.0f, labelY, 30.0f, 14.0f), juce::Justification::left, false);
+            if (r.getRight() - (SpectrumView::xForFrequency (10000.0f, r) + 4.0f + 24.0f) >= 30.0f)
+                g.drawText ("20k", juce::Rectangle<float> (r.getRight() - 30.0f, labelY, 26.0f, 14.0f), juce::Justification::right, false);
+        }
 
         {
             juce::Graphics::ScopedSaveState clip (g);
@@ -1248,7 +1259,7 @@ namespace velvox::ui
         stepParam (id, paramValue (id) + notches * wheelDb * fine);
     }
 
-    juce::String RideBars::cardTitleFor (int) const { return "TARGET"; }
+    juce::String RideBars::cardTitleFor (int) const { return i18n::tr ("ZIEL", "TARGET"); }
     juce::String RideBars::cardValueFor (int) const { return dbText (paramValue (pidFor (pid::rideTarget))); }
     juce::Point<float> RideBars::anchorFor (int) const { return { plotArea().getCentreX(), targetY() }; }
 
@@ -1382,7 +1393,7 @@ namespace velvox::ui
                 auto& attack = knob (pid::compAttack, "Attack");
                 auto& release = knob (pid::compRelease, "Release");
                 auto& detector = segments (pid::compDetector);
-                setCaption (detector, "Detector");
+                setCaption (detector, i18n::tr ("Detektor", "Detector"));
                 toggle (pid::compAutoRelease, "Auto Release");
                 toggle (pid::compAutoMakeup, "Auto Makeup");
                 knob (pid::compKnee, "Knee");
@@ -1401,13 +1412,20 @@ namespace velvox::ui
                 : DetailPanel (p, "De-Esser", help::shortDescription ((int) ModuleId::deess), pid::deessOn)
             {
                 auto& mode = segments (pid::deessMode, { "Split", "Wide" });
-                setCaption (mode, "Mode");
-                auto& listen = toggle (pid::deessListen, "Listen");
+                setCaption (mode, i18n::tr ("Modus", "Mode"));
+                auto& listen = toggle (pid::deessListen, i18n::tr ("Abhören", "Listen"));
                 auto& detection = segments (pid::deessDetection);
-                setCaption (detection, "Detection");
+                setCaption (detection, i18n::tr ("Erkennung", "Detection"));
                 auto& threshold = knob (pid::deessThreshold, "Threshold");
                 auto& range = knob (pid::deessRange, "Range");
-                knob (pid::deessFreq, "Frequency");
+                // Range is a reduction: shown as "−9.0 dB" (typed values count either way, "9" = "-9")
+                range.slider.textFromValueFunction = [] (double v) { return dbText (-(float) v); };
+                range.slider.valueFromTextFunction = [] (const juce::String& t)
+                {
+                    return std::abs (t.replaceCharacter (',', '.').retainCharacters ("0123456789.").getDoubleValue());
+                };
+                range.slider.updateText();
+                knob (pid::deessFreq, i18n::tr ("Frequenz", "Frequency"));
                 setMainControls ({ &threshold, &range, &mode, &listen });
             }
         };
@@ -1462,14 +1480,14 @@ namespace velvox::ui
             explicit RidePanel (VelvoxAudioProcessor& p)
                 : DetailPanel (p, "Level Ride", help::shortDescription ((int) ModuleId::ride), pid::rideOn)
             {
-                amount = &knob (pid::rideAmount, "Ausgleich");
-                auto& target = knob (pid::rideTarget, "Target");
-                auto& response = knob (pid::rideResponse, "Speed");
-                auto& silence = knob (pid::rideSilence, "Ignore Below");
-                knob (pid::rideMaxBoost, "Max Boost");
-                knob (pid::rideMaxCut, "Max Cut");
+                amount = &knob (pid::rideAmount, i18n::tr ("Ausgleich", "Leveling"));
+                auto& target = knob (pid::rideTarget, i18n::tr ("Ziel", "Target"));
+                auto& response = knob (pid::rideResponse, i18n::tr ("Tempo", "Speed"));
+                auto& silence = knob (pid::rideSilence, i18n::tr ("Ignorieren unter", "Ignore Below"));
+                knob (pid::rideMaxBoost, i18n::tr ("Max. Anheben", "Max Boost"));
+                knob (pid::rideMaxCut, i18n::tr ("Max. Absenken", "Max Cut"));
                 knob (pid::ridePhrase, "Phrase");
-                knob (pid::rideTransient, "Transients");
+                knob (pid::rideTransient, i18n::tr ("Transienten", "Transients"));
                 setMainControls ({ &target, &response, &silence });
                 placeInVisual ({ amount });
                 amount->setProminence (Knob::Prominence::primary);

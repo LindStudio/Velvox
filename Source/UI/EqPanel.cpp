@@ -1,16 +1,13 @@
 #include "EqPanel.h"
 #include "HelpContent.h"
 #include "../PluginProcessor.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
     using dsp::EqBandType;
     using dsp::ModuleId;
-
-    namespace
-    {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-    }
+    using i18n::tr;
 
     //==========================================================================
     namespace eqedit
@@ -91,7 +88,7 @@ namespace velvox::ui
             b.freq = juce::jlimit (dsp::eqdesign::minFreq, dsp::eqdesign::maxFreq, freqHz);
             b.gain = juce::jlimit (-dsp::eqdesign::maxGainDb, dsp::eqdesign::maxGainDb, gainDb);
             b.q = 1.0f;
-            proc.getUndo().perform (de ("EQ-Band hinzufügen"), [&] { eqbands::writeBand (a, instance, slot, b); });
+            proc.getUndo().perform (tr ("EQ-Band hinzufügen", "Add EQ band"), [&] { eqbands::writeBand (a, instance, slot, b); });
             return slot;
         }
 
@@ -99,12 +96,12 @@ namespace velvox::ui
         {
             if (band < 0 || band >= dsp::maxEqBands)
                 return;
-            proc.getUndo().perform (de ("EQ-Band löschen"), [&] { eqbands::writeBand (access (proc), instance, band, dsp::EqBand {}); });
+            proc.getUndo().perform (tr ("EQ-Band löschen", "Delete EQ band"), [&] { eqbands::writeBand (access (proc), instance, band, dsp::EqBand {}); });
         }
 
         void setType (VelvoxAudioProcessor& proc, int instance, int band, EqBandType type)
         {
-            edit (proc, instance, band, "EQ-Band: Typ", [&] (const eqbands::Access& a)
+            edit (proc, instance, band, tr ("EQ-Band: Typ", "EQ band: type"), [&] (const eqbands::Access& a)
             {
                 a.set (paramId (instance, band, pid::eqband::type), (float) type);
             });
@@ -112,7 +109,7 @@ namespace velvox::ui
 
         void setSlope (VelvoxAudioProcessor& proc, int instance, int band, int slopeIndex)
         {
-            edit (proc, instance, band, "EQ-Band: Steilheit", [&] (const eqbands::Access& a)
+            edit (proc, instance, band, tr ("EQ-Band: Steilheit", "EQ band: slope"), [&] (const eqbands::Access& a)
             {
                 a.set (paramId (instance, band, pid::eqband::slope), (float) juce::jlimit (0, dsp::numEqSlopes - 1, slopeIndex));
             });
@@ -120,7 +117,7 @@ namespace velvox::ui
 
         void toggleOn (VelvoxAudioProcessor& proc, int instance, int band)
         {
-            edit (proc, instance, band, "EQ-Band ein/aus", [&] (const eqbands::Access& a)
+            edit (proc, instance, band, tr ("EQ-Band ein/aus", "EQ band on/off"), [&] (const eqbands::Access& a)
             {
                 const auto id = paramId (instance, band, pid::eqband::on);
                 a.set (id, a.get (id) > 0.5f ? 0.0f : 1.0f);
@@ -129,7 +126,7 @@ namespace velvox::ui
 
         void resetBand (VelvoxAudioProcessor& proc, int instance, int band)
         {
-            edit (proc, instance, band, de ("EQ-Band zurücksetzen"), [&] (const eqbands::Access& a)
+            edit (proc, instance, band, tr ("EQ-Band zurücksetzen", "Reset EQ band"), [&] (const eqbands::Access& a)
             {
                 const dsp::EqBand defaults;
                 a.set (paramId (instance, band, pid::eqband::gain), defaults.gain);
@@ -159,11 +156,11 @@ namespace velvox::ui
             switch ((dsp::EqRole) juce::jlimit (0, dsp::numEqRoles - 1, role))
             {
                 case dsp::EqRole::none:     return {};
-                case dsp::EqRole::presence: return "PRES";
+                case dsp::EqRole::presence: return tr ("PRÄS", "PRES");
                 case dsp::EqRole::warmth:   return "WARM";
-                case dsp::EqRole::air:      return "AIR";
+                case dsp::EqRole::air:      return tr ("LUFT", "AIR");
                 case dsp::EqRole::lowCut:   return "LC";
-                case dsp::EqRole::mud:      return "MUD";
+                case dsp::EqRole::mud:      return tr ("MULM", "MUD");
                 case dsp::EqRole::autoMix:  return "AUTO";
                 case dsp::EqRole::highCut:  return "HC";
                 case dsp::EqRole::autoTone:
@@ -467,7 +464,7 @@ namespace velvox::ui
             if (b.isCut())
                 values << "   " << dsp::eqSlopeDbPerOct (b.slope) << " dB/oct";
             if (! b.on)
-                values << "   AUS";
+                values << "   " << tr ("AUS", "OFF");
             if (card != cardBand || title != cardTitle || values != cardValues)
             {
                 cardTitle = title;
@@ -514,6 +511,9 @@ namespace velvox::ui
         for (int i = 0; i < 8; ++i)
             g.drawText (hzLabels[i], juce::Rectangle<float> (xForFreq (hzValues[i]) - 20.0f, r.getBottom() + 5.0f, 40.0f, 14.0f),
                         juce::Justification::centred, false);
+        // The ends of the axis (20 Hz / 20 kHz), inside the plot width
+        g.drawText ("20", juce::Rectangle<float> (r.getX() + 2.0f, r.getBottom() + 5.0f, 30.0f, 14.0f), juce::Justification::centredLeft, false);
+        g.drawText ("20k", juce::Rectangle<float> (r.getRight() - 32.0f, r.getBottom() + 5.0f, 30.0f, 14.0f), juce::Justification::centredRight, false);
 
         const float active = eqOn ? 1.0f : 0.4f;
         const int solo = getAuditionBand();
@@ -652,11 +652,11 @@ namespace velvox::ui
             for (int s = 0; s < dsp::numEqSlopes; ++s)
                 slopes.addItem (menuSlopeBase + s, juce::String (dsp::eqSlopeDbPerOct (s)) + " dB/oct", true, b.slope == s);
             menu.addSeparator();
-            menu.addSubMenu ("Steilheit", slopes);
+            menu.addSubMenu (tr ("Steilheit", "Slope"), slopes);
         }
         menu.addSeparator();
-        menu.addItem (menuToggle, "Ein", true, b.on);
-        menu.addItem (menuDelete, juce::String::fromUTF8 ("Löschen"));
+        menu.addItem (menuToggle, tr ("Ein", "On"), true, b.on);
+        menu.addItem (menuDelete, tr ("Löschen", "Delete"));
         return menu;
     }
 
@@ -1074,12 +1074,14 @@ namespace velvox::ui
         : DetailPanel (p, "Equalizer", help::shortDescription ((int) ModuleId::eq), pid::eqOn)
     {
         knob (pid::eqMix, "Mix");
-        legacyResponse = &own (std::make_unique<juce::TextButton> (de ("Alte EQ-Kurve – umstellen")));
-        legacyResponse->setTooltip (de ("Dieses EQ nutzt noch die Filterkurven von 0.5 (klingt wie das alte Projekt). "
-                                        "Umstellen: analog genaue Kurven ohne Stauchung nahe 20 kHz."));
+        legacyResponse = &own (std::make_unique<juce::TextButton> (tr ("Alte EQ-Kurve – umstellen", "Old EQ curve – update")));
+        legacyResponse->setTooltip (tr ("Dieses EQ nutzt noch die Filterkurven von 0.5 (klingt wie das alte Projekt). "
+                                        "Umstellen: analog genaue Kurven ohne Stauchung nahe 20 kHz.",
+                                        "This EQ still uses the filter curves of 0.5 (sounds like the old project). "
+                                        "Update: analog-accurate curves without cramping near 20 kHz."));
         legacyResponse->onClick = [this]
         {
-            proc.getUndo().perform (de ("EQ: neue Filterkurven"), [this] { eqbands::clearLegacyResponse (apvts, getInstance()); });
+            proc.getUndo().perform (tr ("EQ: neue Filterkurven", "EQ: new filter curves"), [this] { eqbands::clearLegacyResponse (apvts, getInstance()); });
             refresh();
         };
         lastLegacyShown = apvts.getRawParameterValue (pidFor (pid::eqLegacyResponse))->load() > 0.5f;
@@ -1089,7 +1091,7 @@ namespace velvox::ui
             s = &own (std::make_unique<Slot>());
         setMainControls ({ slots[0], slots[1], slots[2], slots[3], slots[4] });
 
-        noBand.setText ("Kein Band", juce::dontSendNotification);
+        noBand.setText (tr ("Kein Band", "No band"), juce::dontSendNotification);
         noBand.setFont (semiBold (10.0f, 0.12f));
         noBand.setColour (juce::Label::textColourId, colours::textFaint);
         noBand.setJustificationType (juce::Justification::centred);
@@ -1097,8 +1099,10 @@ namespace velvox::ui
         addChildComponent (noBand);
 
         // Band solo of the selected band (monitoring only: the DSP atomic, no parameter)
-        soloButton.setDescription (de ("Nur dieses Band hören. Klick: an / aus, gedrückt halten: solange gehalten. "
-                                        "Im Graphen den Kopfhörer am Punkt ziehen: links / rechts = Frequenz, hoch / runter = Q."));
+        soloButton.setDescription (tr ("Nur dieses Band hören. Klick: an / aus, gedrückt halten: solange gehalten. "
+                                        "Im Graphen den Kopfhörer am Punkt ziehen: links / rechts = Frequenz, hoch / runter = Q.",
+                                        "Hear only this band. Click: on / off, press and hold: while held. "
+                                        "In the graph, drag the headphones at the point: left / right = frequency, up / down = Q."));
         soloButton.onChange = [this] (bool on)
         {
             auto& eq = proc.getChain().getEqualizer (getInstance());
@@ -1201,12 +1205,12 @@ namespace velvox::ui
 
         const auto b = eqedit::parameterBand (proc, k, selectedBand);
         const auto id = [&] (const char* field) { return eqedit::paramId (k, selectedBand, field); };
-        slots[0]->bind (apvts, Kind::toggle, id (pid::eqband::on), "Ein", hue);
-        slots[1]->bind (apvts, Kind::choice, id (pid::eqband::type), "Typ", hue);
+        slots[0]->bind (apvts, Kind::toggle, id (pid::eqband::on), tr ("Ein", "On"), hue);
+        slots[1]->bind (apvts, Kind::choice, id (pid::eqband::type), tr ("Typ", "Type"), hue);
         slots[2]->bind (apvts, Kind::knob, id (pid::eqband::freq), "Freq", hue);
         slots[3]->bind (apvts, Kind::knob, id (pid::eqband::gain), "Gain", hue);
         if (b.isCut())
-            slots[4]->bind (apvts, Kind::choice, id (pid::eqband::slope), "Slope", hue);
+            slots[4]->bind (apvts, Kind::choice, id (pid::eqband::slope), tr ("Steilheit", "Slope"), hue);
         else
             slots[4]->bind (apvts, Kind::knob, id (pid::eqband::q), "Q", hue);
         slots[3]->setUsable (eqedit::hasGain (b.type));

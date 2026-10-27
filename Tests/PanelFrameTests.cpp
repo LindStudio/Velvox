@@ -4,6 +4,9 @@
 #include "TestHelpers.h"
 #include "PluginEditor.h"
 #include "UI/UserSettings.h"
+#include "Text/I18n.h"
+#include "UI/EqPanel.h"
+#include "UI/VoicesPanels.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -112,8 +115,13 @@ public:
             }
         }
 
-        beginTest ("Layout: header, visual, main row; nothing outside, nothing tiny - Mehr closed and open");
+        // In both interface languages (labels differ in length)
+        for (auto language : { i18n::Language::german, i18n::Language::english })
         {
+            const bool english = language == i18n::Language::english;
+            beginTest (juce::String ("Layout: header, visual, main row; nothing outside, nothing tiny - Mehr closed and open")
+                       + (english ? " (English)" : ""));
+            const i18n::ScopedLanguage scoped (language);
             Harness h;
             allModulesInChain (h);
             for (int id = -1; id < dsp::numModules; ++id)
@@ -250,6 +258,107 @@ public:
             for (auto* c : panel->getMainControls())
                 if (auto* k = dynamic_cast<ui::Knob*> (c))
                     expect (k->slider.findParentComponentOfClass<ui::gestures::PanelMenuHost>() == panel.get(), "knob menu gets the panel items");
+        }
+
+        beginTest ("Module panels in English: knob and switch names, no German left");
+        {
+            const i18n::ScopedLanguage english (i18n::Language::english);
+            Harness h;
+            allModulesInChain (h);
+
+            // Knob names / switch texts / labels of a panel (Mehr included), by parameter where there is one
+            std::function<void (juce::Component&, std::map<juce::String, juce::String>&, juce::StringArray&)> collect;
+            collect = [&] (juce::Component& parent, std::map<juce::String, juce::String>& byParam, juce::StringArray& texts)
+            {
+                for (auto* c : parent.getChildren())
+                {
+                    if (auto* k = dynamic_cast<ui::Knob*> (c))
+                    {
+                        byParam[k->getParamId()] = k->getLabel();
+                        texts.add (k->getLabel());
+                        texts.add (k->getDescription());
+                    }
+                    else if (auto* t = dynamic_cast<ui::Toggle*> (c))
+                    {
+                        byParam[t->getParamId()] = t->getButtonText();
+                        texts.add (t->getButtonText());
+                    }
+                    else if (auto* l = dynamic_cast<juce::Label*> (c))
+                        texts.add (l->getText());
+                    collect (*c, byParam, texts);
+                }
+            };
+
+            const auto isGerman = [] (const juce::String& s)
+            {
+                if (s.containsAnyOf (juce::String::fromUTF8 ("äöüÄÖÜß")))
+                    return true;
+                for (auto* word : { "AUSGLEICH", "ZIEL", "TIEFE", "STIMME", "RAUM", "MODUS", "ERKENNUNG", "FREQUENZ",
+                                    "HALBT", "FEIN", "FORMANTEN", "MUSTER", "DICHTE", "BEWEGUNG", "GRENZE", "IGNORIEREN", "KEIN BAND",
+                                    "ZIEHEN", "LATENZ", "ANTEIL" })
+                    if (s.toUpperCase().contains (word))
+                        return true;
+                return false;
+            };
+
+            std::map<juce::String, juce::String> all;
+            for (int id = 0; id < dsp::numModules; ++id)
+            {
+                if (id == (int) ModuleId::check)
+                    continue;   // the Vocal Check panel is not part of this group
+                auto panel = ui::createDetailPanel (h.proc, id);
+                panel->setBounds (panelSize());
+                panel->refresh();
+                std::map<juce::String, juce::String> byParam;
+                juce::StringArray texts;
+                collect (*panel, byParam, texts);
+                for (const auto& t : texts)
+                    expect (! isGerman (t), juce::String (dsp::moduleKey ((ModuleId) id)) + ": German text in English: " + t);
+                all.insert (byParam.begin(), byParam.end());
+            }
+
+            const auto label = [&] (const char* id) { return all.count (id) > 0 ? all[id] : juce::String ("<missing " + juce::String (id) + ">"); };
+            expectEquals (label (pid::rideAmount), juce::String ("LEVELING"));
+            expectEquals (label (pid::rideTarget), juce::String ("TARGET"));
+            expectEquals (label (pid::rideResponse), juce::String ("SPEED"));
+            expectEquals (label (pid::rideSilence), juce::String ("IGNORE BELOW"));
+            expectEquals (label (pid::deessFreq), juce::String ("FREQUENCY"));
+            expectEquals (label (pid::smoothAmount), juce::String ("DEPTH"));
+            expectEquals (label (pid::smoothSensitivity), juce::String ("SHARPNESS"));
+            expectEquals (label (pid::chopDepth), juce::String ("DEPTH"));
+            expectEquals (label (pid::pulseAmount), juce::String ("AMOUNT"));
+            expectEquals (label (pid::delayTime), juce::String ("TIME"));
+            expectEquals (label (pid::reverbSize), juce::String ("SIZE"));
+            expectEquals (label (pid::pitchSemitones), juce::String ("SEMITONES"));
+            expectEquals (label (pid::pitchPreserveFormants), juce::String ("Keep formants"));
+            expectEquals (label (pid::satMix), juce::String ("MIX"));
+            expectEquals (label (pid::doublerModDepth), juce::String ("MOD DEPTH"));
+            expectEquals (ui::eqedit::roleTag ((int) dsp::EqRole::air), juce::String ("AIR"));
+            expectEquals (ui::eqedit::roleTag ((int) dsp::EqRole::mud), juce::String ("MUD"));
+            expectEquals (ui::doubleredit::valueText (ui::doubleredit::Field::on, 0.0f), juce::String ("Off"));
+        }
+
+        beginTest ("De-Esser Range reads as a reduction");
+        {
+            Harness h;
+            auto r = h.proc.getRouting();
+            if (! r.contains (ModuleId::deess))
+                r.insertDefault (ModuleId::deess, 0);
+            h.proc.setRouting (r);
+            h.set (pid::deessRange, 9.0f);
+            auto panel = ui::createDetailPanel (h.proc, (int) ModuleId::deess);
+            panel->setBounds (panelSize());
+            ui::Knob* range = nullptr;
+            for (auto* c : panel->getMainControls())
+                if (auto* k = dynamic_cast<ui::Knob*> (c); k != nullptr && k->getParamId() == pid::deessRange)
+                    range = k;
+            expect (range != nullptr, "Range is a main control");
+            if (range != nullptr)
+            {
+                expectEquals (range->slider.getTextFromValue (9.0), juce::String::fromUTF8 ("−9.0 dB"));
+                expectWithinAbsoluteError ((float) range->slider.getValueFromText ("-6"), 6.0f, 1.0e-4f, "typed negative");
+                expectWithinAbsoluteError ((float) range->slider.getValueFromText ("6"), 6.0f, 1.0e-4f, "typed positive");
+            }
         }
     }
 };
