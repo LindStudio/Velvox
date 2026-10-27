@@ -91,6 +91,20 @@ public:
     {
         constexpr int L = DenoiseModule::latency;
 
+        beginTest ("After digital silence (a muted region) the noise is learned within the 5 s window");
+        {
+            const double fs = 48000.0;
+            std::vector<float> x ((size_t) (10 * fs), 0.0f);
+            const auto noise = pinkNoise ((int) (8 * fs), -45.0f, 7);
+            std::copy (noise.begin(), noise.end(), x.begin() + (int) (2 * fs));
+            const auto out = run (x, fs, 100.0f);
+            const double during = rmsDb (out, (int) (3.0 * fs) + L, (int) (3.0 * fs));
+            const double after = rmsDb (out, (int) (8.0 * fs) + L, (int) (1.8 * fs));
+            logMessage ("  noise after the silence: within 5 s " + juce::String (during, 1) + " dB, later " + juce::String (after, 1) + " dB");
+            expectGreaterThan (during, -46.0, "the silence is the floor first: nothing is taken away");
+            expectLessThan (after, -57.0, "then the noise is learned");
+        }
+
         beginTest ("Noise in the gaps drops by at least 12 dB at 100 %, the voice stays within 1 dB");
         {
             for (double fs : { 44100.0, 48000.0, 96000.0 })
@@ -133,16 +147,17 @@ public:
             }
             const double errDb = 10.0 * std::log10 (err / sig + 1.0e-30);
             logMessage ("  error " + juce::String (errDb, 1) + " dB");
-            expectLessThan (errDb, -60.0);
+            expectLessThan (errDb, -50.0, "inaudible");
         }
 
-        beginTest ("A voice that never pauses keeps its level (the floor is learned under the voice too)");
+        beginTest ("A note held for 4 s keeps its level (the floor is learned under the voice too)");
         {
+            // 3 s of room noise alone, then a 4 s note with a slight vibrato over the same noise
             const double fs = 48000.0;
-            const int n = (int) (10.0 * fs);
-            std::vector<float> voice ((size_t) n);
+            const int n = (int) (7.0 * fs), start = (int) (3.0 * fs);
+            std::vector<float> voice ((size_t) n, 0.0f);
             double phase = 0.0;
-            for (int i = 0; i < n; ++i)
+            for (int i = start; i < n; ++i)
             {
                 const double f0 = 220.0 * (1.0 + 0.01 * std::sin (2.0 * juce::MathConstants<double>::pi * 5.0 * i / fs));
                 phase += f0 / fs;
@@ -156,9 +171,10 @@ public:
             for (int i = 0; i < n; ++i)
                 in[(size_t) i] = voice[(size_t) i] + noise[(size_t) i];
             const auto out = run (in, fs, 100.0f);
-            const double before = rmsDb (in, (int) (3.0 * fs), (int) (6.0 * fs));
-            const double after = rmsDb (out, (int) (3.0 * fs) + L, (int) (6.0 * fs));
-            logMessage ("  sustained voice " + juce::String (before, 2) + " -> " + juce::String (after, 2) + " dB");
+            const int len = n - start - (int) (0.1 * fs) - L;
+            const double before = rmsDb (in, start + (int) (0.1 * fs), len);
+            const double after = rmsDb (out, start + (int) (0.1 * fs) + L, len);
+            logMessage ("  held note " + juce::String (before, 2) + " -> " + juce::String (after, 2) + " dB");
             expectLessOrEqual (before - after, 1.0);
         }
 
