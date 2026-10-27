@@ -281,5 +281,5 @@ endif()
 
 # Mascot (the Vocalypse devil in SIMPEL)
 if(VELVOX_BUILD_TESTS)
-    target_sources(VelvoxTests PRIVATE Tests/MascotTests.cpp Tests/DenoiseTests.cpp)
+    target_sources(VelvoxTests PRIVATE Tests/MascotTests.cpp Tests/DenoiseTests.cpp Tests/BreathTests.cpp)
 endif()
