@@ -20,6 +20,8 @@ namespace velvox
         if (module == "Delay")      return M::delay;
         if (module == "Reverb")     return M::reverb;
         if (module == "Doubler")    return M::doubler;
+        if (module == "Denoise")    return M::denoise;
+        if (module == "Breath")     return M::breath;
         if (module == "Smash")      return M::smash;
         if (module == "Smooth")     return M::smooth;
         if (module == "Ride")       return M::ride;
@@ -355,6 +357,11 @@ namespace velvox
 
 
             // ---------------- VOCAL SMASH (0.3) ----------------
+            // ---------------- Raumrauschen + Atem-Absenker (0.7) ----------------
+            { pid::denoiseOn,     "Room Noise On",     "Denoise", T::Bool, 0, 1, 0, 0, "", {}, "Enables ROOM NOISE: lowers steady background noise of the room without touching the voice." },
+            { pid::denoiseAmount, "Room Noise Amount", "Denoise", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {}, "How strongly the noise is lowered (100 % = up to 18 dB)." },
+            { pid::breathOn,      "Breath Control On", "Breath", T::Bool, 0, 1, 0, 0, "", {}, "Enables BREATH CONTROL: lowers breaths between the lines, leaves S sounds alone." },
+            { pid::breathAmount,  "Breath Amount",     "Breath", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {}, "How much quieter breaths get: 50 % = -12 dB, 100 % = practically gone." },
             { pid::smashOn,      "Smash On",      "Smash", T::Bool, 0, 1, 0, 0, "", {}, "Enables VOCAL SMASH, a dedicated parallel compressor." },
             { pid::smashAmount,  "Smash Amount",  "Smash", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {},
               "How hard the parallel path is squashed (lower threshold, higher ratio). The original keeps its dynamics." },

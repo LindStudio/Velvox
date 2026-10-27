@@ -94,7 +94,7 @@ namespace
             else
                 s.extra[(size_t) k - 1] = b;
         }
-        s.checkOn = true;
+        s.checkOn = s.denoise.enabled = s.breath.enabled = true;
         return s;
     }
 
@@ -115,6 +115,8 @@ namespace
             case ModuleId::smooth:  return b.smooth.enabled;
             case ModuleId::ride:    return b.ride.enabled;
             case ModuleId::check:   return s.checkOn;
+            case ModuleId::denoise: return s.denoise.enabled;
+            case ModuleId::breath:  return s.breath.enabled;
         }
         return false;
     }

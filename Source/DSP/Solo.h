@@ -37,5 +37,7 @@ namespace velvox::dsp
             else
                 s.extra[(size_t) k - 1] = b;
         }
+        if (! keep (ModuleId::denoise, 0)) s.denoise.enabled = false;
+        if (! keep (ModuleId::breath, 0))  s.breath.enabled = false;
     }
 }

@@ -73,9 +73,49 @@ public:
                 }
         }
 
+        beginTest ("0.7: Raumrauschen (denoise) and Atem-Absenker (breath): keys, parameters, latency while in the chain");
+        {
+            for (auto [key, id] : { std::pair { "denoise", ModuleId::denoise }, { "breath", ModuleId::breath } })
+            {
+                expect (dsp::moduleFromKey (key) == id, key);
+                expectEquals (juce::String (dsp::moduleKey (id)), juce::String (key));
+                expectEquals (dsp::maxInstances (id), 1);
+            }
+            Harness h;
+            for (auto* id : { pid::denoiseAmount, pid::breathAmount })
+            {
+                auto* p = h.proc.getState().getParameter (id);
+                expect (p != nullptr, id);
+                if (p == nullptr) continue;
+                const auto range = p->getNormalisableRange();
+                expectEquals (range.start, 0.0f);
+                expectEquals (range.end, 100.0f);
+                expectEquals (p->convertFrom0to1 (p->getDefaultValue()), 50.0f);
+            }
+            expect (h.proc.getState().getParameter (pid::denoiseOn) != nullptr && h.proc.getState().getParameter (pid::breathOn) != nullptr);
+
+            h.proc.updateHostLatency();
+            const int without = h.proc.getLatencySamples();
+            expect (! h.proc.getRouting().contains (ModuleId::denoise) && ! h.proc.getRouting().contains (ModuleId::breath),
+                    "a fresh instance has neither in the chain (no extra latency)");
+            h.set (pid::denoiseOn, 1.0f);
+            h.set (pid::breathOn, 1.0f);
+            const auto& r = h.proc.getRouting();
+            expect (r.contains (ModuleId::denoise) && r.contains (ModuleId::breath), "switching on inserts them");
+            expectEquals (r.indexOf (ModuleId::denoise, 0), 0, "Raumrauschen first");
+            expectEquals (r.indexOf (ModuleId::breath, 0), 1, "Atem-Absenker right after it");
+            h.proc.updateHostLatency();
+            const int with = h.proc.getLatencySamples();
+            expectEquals (with, without + dsp::DenoiseModule::latency + dsp::BreathModule::latencyFor (h.fs));
+            h.set (pid::denoiseOn, 0.0f);
+            h.set (pid::breathOn, 0.0f);
+            h.proc.updateHostLatency();
+            expectEquals (h.proc.getLatencySamples(), with, "switching off keeps the latency (still in the chain)");
+        }
+
         beginTest ("0.7: Pitch, Stutter, Pulse and Choir are gone");
         {
-            expectEquals (dsp::numModules, 11);
+            expectEquals (dsp::numModules, 13);   // 11 after the removal + Raumrauschen and Atem-Absenker
             for (auto* key : { "pitch", "chop", "pulse", "choir" })
                 expect (! dsp::moduleFromKey (key).has_value(), key);
             expectEquals (dsp::Routing::fromString ("eq|pitch|comp|chop|pulse|choir|reverb").toString(),
@@ -95,14 +135,14 @@ public:
 
             // 0.2 / 0.3 strings: every module, 0.3 modules at their default places
             const auto full = Routing::legacyFull();
-            expectEquals (full.size(), dsp::numModules);
+            expectEquals (full.size(), dsp::numModules - 2, "every module up to 0.6 (the 0.7 clean-up modules never join an old chain)");
             expect (Routing::fromString (legacyV03Default) == full);
             expect (Routing::fromString ("eq,comp,deess,sat,doubler,pitch,delay:send,reverb:send,chop") == full, "v0.2 default -> 0.3 default");
             const auto custom = Routing::fromString ("sat,eq,comp,deess,doubler,pitch,delay:insert,reverb:send,chop");
             expect (custom.isValid() && custom.isInsert (ModuleId::delay) && custom.isSend (ModuleId::reverb));
             expect (custom.positionOf (ModuleId::sat) == 0 && custom.positionOf (ModuleId::ride) == custom.positionOf (ModuleId::eq) + 1,
                     "custom order kept, ride placed after EQ");
-            expect (custom.positionOf (ModuleId::check) == dsp::numModules - 1, "check stays last");
+            expect (custom.positionOf (ModuleId::check) == custom.size() - 1, "check stays last");
 
             // v2 strings are exact, with instances
             const auto multi = Routing::fromString ("v2,eq,comp,eq#2,deess,reverb#2:insert,delay:send");

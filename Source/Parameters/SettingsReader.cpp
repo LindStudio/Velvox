@@ -88,6 +88,8 @@ namespace velvox
     bind (raw.macroPresence, pid::macroPresence);   bind (raw.macroWarmth, pid::macroWarmth);
     bind (raw.macroAggression, pid::macroAggression); bind (raw.macroWidth, pid::macroWidth);
     bind (raw.macroSpace, pid::macroSpace);         bind (raw.macroDensity, pid::macroDensity);
+    bind (raw.denoiseOn, pid::denoiseOn);       bind (raw.denoiseAmount, pid::denoiseAmount);
+    bind (raw.breathOn, pid::breathOn);         bind (raw.breathAmount, pid::breathAmount);
     bind (raw.smashOn, pid::smashOn);          bind (raw.smashAmount, pid::smashAmount);
     bind (raw.smashBlend, pid::smashBlend);     bind (raw.smashAttack, pid::smashAttack);
     bind (raw.smashRelease, pid::smashRelease); bind (raw.smashTone, pid::smashTone);
@@ -268,6 +270,9 @@ namespace velvox
     s.comp.autoRelease = raw.compAutoRelease.on();
     s.comp.autoMakeup = raw.compAutoMakeup.on();
     s.deess.relative = raw.deessDetection.index() == 1;
+
+    s.denoise = { raw.denoiseOn.on(), raw.denoiseAmount.get() };
+    s.breath = { raw.breathOn.on(), raw.breathAmount.get() };
 
     s.smash.enabled = raw.smashOn.on();
     s.smash.amount = raw.smashAmount.get() * 0.01f;

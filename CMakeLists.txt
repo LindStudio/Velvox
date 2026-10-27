@@ -51,6 +51,8 @@ set(VELVOX_SOURCES
     Source/DSP/DoublerModule.cpp
     Source/DSP/Ducker.cpp
     Source/DSP/SmashModule.cpp
+    Source/DSP/DenoiseModule.cpp
+    Source/DSP/BreathModule.cpp
     Source/DSP/SmoothModule.cpp
     Source/DSP/CheckModule.cpp
     Source/DSP/VocalAnalyzer.cpp
@@ -279,5 +281,5 @@ endif()
 
 # Mascot (the Vocalypse devil in SIMPEL)
 if(VELVOX_BUILD_TESTS)
-    target_sources(VelvoxTests PRIVATE Tests/MascotTests.cpp)
+    target_sources(VelvoxTests PRIVATE Tests/MascotTests.cpp Tests/DenoiseTests.cpp)
 endif()

@@ -122,6 +122,8 @@ void VelvoxAudioProcessor::insertEngagedInstances()
         if (k == 0)
         {
             engage (dsp::ModuleId::check, e.checkOn);
+            engage (dsp::ModuleId::denoise, e.denoise.enabled);
+            engage (dsp::ModuleId::breath, e.breath.enabled);
         }
     }
 
@@ -164,6 +166,8 @@ bool VelvoxAudioProcessor::isInstanceAudible (dsp::ModuleId id, int k) const
         case M::smooth:  return b.smooth.enabled;
         case M::ride:    return b.ride.enabled;
         case M::check:   return e.checkOn;
+        case M::denoise: return e.denoise.enabled;
+        case M::breath:  return e.breath.enabled;
     }
     return false;
 }

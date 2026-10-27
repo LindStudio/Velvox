@@ -31,7 +31,9 @@ namespace velvox::dsp
             case ModuleId::smash:
             case ModuleId::ride:
             case ModuleId::doubler: return 2;
-            case ModuleId::check:   return 1;
+            case ModuleId::check:
+            case ModuleId::denoise:
+            case ModuleId::breath:  return 1;
         }
         return 1;
     }

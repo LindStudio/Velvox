@@ -11,6 +11,8 @@
 #include "StereoStage.h"
 #include "DoublerModule.h"
 #include "Ducker.h"
+#include "DenoiseModule.h"
+#include "BreathModule.h"
 #include "SmashModule.h"
 #include "SmoothModule.h"
 #include "CheckModule.h"
@@ -59,6 +61,10 @@ namespace velvox::dsp
         // Mix that sets the insert's dry gain on the true law (< 0: the Mix). The macros add wet
         // but never take the original away (DSP/MixLaw.h)
         float delayLawMix = -1.0f, reverbLawMix = -1.0f;
+
+        // 0.7 clean-up modules (off and outside the chain by default)
+        DenoiseSettings denoise;
+        BreathSettings breath;
 
         // 0.3 modules (all off by default)
         SmashSettings smash;
@@ -162,6 +168,8 @@ namespace velvox::dsp
         const SaturationModule& getSaturation (int instance = 0) const noexcept { return saturation[(size_t) clampInstance (ModuleId::sat, instance)]; }   // UI: getMeters()
         SaturationModule& getSaturation (int instance = 0) noexcept { return saturation[(size_t) clampInstance (ModuleId::sat, instance)]; }   // UI: setSoloBand (lock-free)
         EqualizerModule& getEqualizer (int instance = 0) noexcept { return eq[(size_t) clampInstance (ModuleId::eq, instance)]; }   // UI: setAuditionBand (lock-free)
+        const DenoiseModule& getDenoise() const noexcept { return denoise; }   // UI: getReductionDb (lock-free)
+        const BreathModule& getBreath() const noexcept { return breath; }
         SmashModule& getSmash (int instance = 0) noexcept { return smash[(size_t) clampInstance (ModuleId::smash, instance)]; }
         DoublerModule& getDoubler (int instance = 0) noexcept { return doubler[(size_t) clampInstance (ModuleId::doubler, instance)]; }
         SmoothModule& getSmooth (int instance = 0) noexcept { return smooth[(size_t) clampInstance (ModuleId::smooth, instance)]; }
@@ -200,6 +208,8 @@ namespace velvox::dsp
         std::array<SmashModule, maxInstances (ModuleId::smash)> smash;
         std::array<SmoothModule, maxInstances (ModuleId::smooth)> smooth;
         CheckModule check;
+        DenoiseModule denoise;
+        BreathModule breath;
         std::atomic<double> displayTempo { 0.0 };
         std::array<RideModule, maxInstances (ModuleId::ride)> ride;
 

@@ -251,6 +251,12 @@ namespace velvox::pid
     inline constexpr const char* eqLegacyResponse = "eqLegacyResponse";
 
     // ---- added in 0.6: dynamics options (defaults = 0.5 behaviour) ----
+    // ---- added in 0.7: Raumrauschen (room noise) and Atem-Absenker (breath control), off by default ----
+    inline constexpr const char* denoiseOn     = "denoiseOn";
+    inline constexpr const char* denoiseAmount = "denoiseAmount";
+    inline constexpr const char* breathOn      = "breathOn";
+    inline constexpr const char* breathAmount  = "breathAmount";
+
     inline constexpr const char* compAutoRelease = "compAutoRelease";
     inline constexpr const char* compAutoMakeup  = "compAutoMakeup";
     inline constexpr const char* deessDetection  = "deessDetection";

@@ -6,18 +6,18 @@ namespace velvox::dsp
     namespace
     {
         constexpr const char* keys[numModules]  { "eq", "comp", "deess", "sat", "doubler", "delay", "reverb",
-                                                  "smash", "smooth", "check", "ride" };
+                                                  "smash", "smooth", "check", "ride", "denoise", "breath" };
         constexpr const char* names[numModules] { "EQ", "Compressor", "De-esser", "Saturation", "Doubler", "Delay", "Reverb",
-                                                  "Vocal Smash", "Smooth", "Vocal Check", "Level Ride" };
+                                                  "Vocal Smash", "Smooth", "Vocal Check", "Level Ride", "Room Noise", "Breath Control" };
         constexpr const char* shortNames[numModules] { "EQ", "Comp", "De-ess", "Sat", "Doubler", "Delay", "Reverb",
-                                                       "Smash", "Smooth", "Check", "Ride" };
+                                                       "Smash", "Smooth", "Check", "Ride", "Noise", "Breath" };
 
         // Default processing order of 0.3. The nine v0.2 modules keep their relative
         // order; the 0.3 modules sit where they usually belong: leveling before
         // compression, parallel squash after it, resonance control after
-        // de-essing, analysis last.
+        // de-essing, analysis last. 0.7: clean-up of noise and breaths before everything else.
         constexpr ModuleId defaultOrder[numModules] {
-            ModuleId::eq, ModuleId::ride, ModuleId::comp, ModuleId::smash, ModuleId::deess, ModuleId::smooth,
+            ModuleId::denoise, ModuleId::breath, ModuleId::eq, ModuleId::ride, ModuleId::comp, ModuleId::smash, ModuleId::deess, ModuleId::smooth,
             ModuleId::sat, ModuleId::doubler, ModuleId::delay, ModuleId::reverb, ModuleId::check
         };
 
@@ -76,7 +76,8 @@ namespace velvox::dsp
     {
         Routing r;
         for (auto id : defaultOrder)
-            r.insertAt (r.count, id, 0, ! canBeSend (id));
+            if (idx (id) < idx (ModuleId::denoise))   // the 0.3 chain: no 0.7 module
+                r.insertAt (r.count, id, 0, ! canBeSend (id));
         return r;
     }
 
@@ -287,7 +288,7 @@ namespace velvox::dsp
         for (int d = 0; d < numModules; ++d)
         {
             const auto id = defaultOrder[d];
-            if (r.contains (id, 0))
+            if (r.contains (id, 0) || idx (id) >= idx (ModuleId::denoise))   // 0.7 modules never join an old chain
                 continue;
 
             int insertAt = 0;

@@ -57,6 +57,7 @@ namespace velvox
         Raw reverbDuckAmount, reverbDuckThreshold, reverbDuckAttack, reverbDuckRelease;
         Raw lowType, lowQ, highType, highQ, lpfOn, lpfFreq, lpfSlope, satCharacter, deessMode, compDetector, compScHpf;
         Raw macroPresence, macroWarmth, macroAggression, macroWidth, macroSpace, macroDensity;
+        Raw denoiseOn, denoiseAmount, breathOn, breathAmount;   // 0.7
         Raw smashOn, smashAmount, smashBlend, smashAttack, smashRelease, smashTone, smashOutput;
         Raw smoothOn, smoothAmount, smoothSensitivity, smoothLow, smoothHigh, smoothAttack, smoothRelease, smoothMode, smoothOutput, smoothDelta;
         std::array<Raw, 6> smoothWFreq, smoothWGain;

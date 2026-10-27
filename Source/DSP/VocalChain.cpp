@@ -122,8 +122,11 @@ namespace velvox::dsp
         for (auto& g : deessGate)
             g.prepare (sampleRate, bs);
 
-        // Room for the largest possible latency: every saturation, ride and smooth instance
-        int maxLatency = 0;
+        denoise.prepare (sampleRate, bs);
+        breath.prepare (sampleRate, bs);
+
+        // Room for the largest possible latency: every saturation, ride and smooth instance, denoise, breath
+        int maxLatency = denoise.getLatencySamples() + breath.getLatencySamples();
         for (auto& sat : saturation)
             maxLatency += sat.getLatencySamples();
         for (auto& r : ride)
@@ -212,6 +215,8 @@ namespace velvox::dsp
             // joining mid-stream: silent until its delay line is filled, then a fade-in (no restart click)
             case ModuleId::smooth:  smooth[(size_t) k].reset (! adoptRoutingImmediately); break;
             case ModuleId::ride:    ride[(size_t) k].reset(); break;
+            case ModuleId::denoise: denoise.reset(); break;
+            case ModuleId::breath:  breath.reset(); break;
             case ModuleId::check:   break;
         }
     }
@@ -300,6 +305,8 @@ namespace velvox::dsp
             applyInstance (k, s.extra[(size_t) k - 1], s);
 
         check.setEnabled (s.checkOn);
+        denoise.setSettings (s.denoise);
+        breath.setSettings (s.breath);
         delayIntoReverb.setTargetValue (juce::jlimit (0.0f, 1.0f, s.delayIntoReverb));
 
         stereo.setSettings (s.stereo);
@@ -329,6 +336,10 @@ namespace velvox::dsp
                 latency += smooth[(size_t) slot.instance].getLatencySamples();
             else if (slot.id == ModuleId::ride)
                 latency += ride[(size_t) slot.instance].getLatencySamples();
+            else if (slot.id == ModuleId::denoise)
+                latency += denoise.getLatencySamples();
+            else if (slot.id == ModuleId::breath)
+                latency += breath.getLatencySamples();
         }
         return latency;
     }
@@ -565,6 +576,9 @@ namespace velvox::dsp
             case ModuleId::smash:   smash[k].process (io, numChannels, n); break;
             case ModuleId::smooth:  smooth[k].process (io, numChannels, n); break;
             case ModuleId::check:   check.process (io, numChannels, n); break; // read only
+            // 0.7: constant latency while in the chain, own click-free on/off
+            case ModuleId::denoise: denoise.process (io, numChannels, n); break;
+            case ModuleId::breath:  breath.process (io, numChannels, n); break;
             case ModuleId::ride:    ride[k].process (io, numChannels, n); break;
 
             case ModuleId::delay:
@@ -842,6 +856,10 @@ namespace velvox::dsp
                 latency += ride[(size_t) slot.instance].getLatencySamples();
             else if (slot.id == ModuleId::smooth)   // STFT: constant while in the chain (also when off)
                 latency += smooth[(size_t) slot.instance].getLatencySamples();
+            else if (slot.id == ModuleId::denoise)  // STFT, constant while in the chain
+                latency += denoise.getLatencySamples();
+            else if (slot.id == ModuleId::breath)   // look-ahead, constant while in the chain
+                latency += breath.getLatencySamples();
         }
         return latency;
     }
