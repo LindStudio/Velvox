@@ -100,6 +100,20 @@ namespace velvox::automix
         return b.has_value() && b->on ? b->gain : 0.0f;
     }
 
+    std::map<juce::String, float> sliderPositions (const std::map<juce::String, float>& values)
+    {
+        const auto get = [&values] (const char* id) { const auto it = values.find (id); return it != values.end() ? it->second : 0.0f; };
+        const auto pct = [] (float fraction) { return juce::jlimit (0.0f, 100.0f, fraction * 100.0f); };
+        const bool comp = get (pid::compOn) > 0.5f;
+        return {
+            { pid::macroPresence,   pct (roleGain ({}, values, dsp::EqRole::air) / 5.0f) },
+            { pid::macroWarmth,     pct (roleGain ({}, values, dsp::EqRole::warmth) / 3.0f) },
+            { pid::macroSpace,      pct (get (pid::reverbOn) > 0.5f ? get (pid::reverbMix) / 100.0f / 0.3f : 0.0f) },
+            { pid::macroWidth,      pct (get (pid::doublerOn) > 0.5f ? get (pid::doublerMix) / 100.0f / 0.6f : 0.0f) },
+            { pid::macroAggression, pct (comp ? (get (pid::compRatio) - 2.0f) / 4.0f : 0.0f) },
+        };
+    }
+
     int setRoleBand (MixPlan& plan, const std::map<juce::String, float>& current, int instance, dsp::EqRole role,
                      const dsp::EqBand& value, bool createIfMissing)
     {
@@ -234,8 +248,8 @@ namespace velvox::automix
             plan.set (id, 0.0f);
         }
         if (macrosWereSet)
-            plan.notes.push_back (both ("Die SIMPEL-Regler starten wieder bei 0 - von dort aus verfeinern sie den neuen Mix.",
-                                        "The SIMPLE controls start at 0 again - from there they fine-tune the new mix."));
+            plan.notes.push_back (both ("Die SIMPEL-Regler zeigen jetzt, was der Auto Mix eingestellt hat - von dort aus verfeinerst du den neuen Mix.",
+                                        "The SIMPLE controls now show what the auto mix set - from there you fine-tune the new mix."));
 
         plan.set (pid::deessListen, 0.0f);
         plan.set (pid::smoothDelta, 0.0f);

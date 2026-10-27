@@ -45,6 +45,15 @@ namespace velvox::automix
     dsp::EqBand eqBand (dsp::EqBandType type, float freq, float gain, float q, int slope = 3);
     std::optional<dsp::EqBand> roleBand (const MixPlan& plan, const std::map<juce::String, float>& current, dsp::EqRole role, int instance = 0);
     float roleGain (const MixPlan& plan, const std::map<juce::String, float>& current, dsp::EqRole role, int instance = 0);   // 0 when absent / off
+
+    // 0.7 (Jakob: "the sliders should stand where the auto mix set them"): the SIMPLE slider positions
+    // (0..100 %) that show what a mix did, on each slider's own scale (Parameters/MacroMapper.h,
+    // dsp::applyMacroMove), so pulling a slider to 0 takes that part of the mix back:
+    //   PRESENCE  air shelf gain / 5 dB      WARMTH  warmth shelf gain / 3 dB
+    //   SPACE     reverb mix / 30 %          WIDTH   doubler mix / 60 %
+    //   PUNCH     (compressor ratio - 2) / 4
+    // Cuts show as 0 (the sliders only go up). `values` = every parameter after the mix.
+    std::map<juce::String, float> sliderPositions (const std::map<juce::String, float>& values);
     // Writes the band of `role` (all fields of `value`, role set); a missing one is created in a free slot
     // only when `createIfMissing`. Returns the band, -1 when it was not written.
     int setRoleBand (MixPlan& plan, const std::map<juce::String, float>& current, int instance, dsp::EqRole role,

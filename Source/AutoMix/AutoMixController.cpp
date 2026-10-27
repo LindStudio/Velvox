@@ -284,7 +284,14 @@ namespace velvox::automix
 
         // Apply through the normal parameters (gestures: the host sees every change)
         eqbands::ScopedBridgeSuspend noEqBridge (apvts);   // the plan sets the EQ bands itself
-        for (const auto& [id, value] : result.plan.values)
+        // The SIMPLE sliders show what the mix did (positions only: inside the transaction nothing is mapped)
+        auto values = result.plan.values;
+        auto after = currentValues();
+        for (const auto& [id, value] : values)
+            after[id] = value;
+        for (const auto& [id, position] : sliderPositions (after))
+            values[id] = position;
+        for (const auto& [id, value] : values)
             if (auto* param = apvts.getParameter (id))
             {
                 const float norm = param->convertTo0to1 (value);

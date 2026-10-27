@@ -3,6 +3,7 @@
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
 #include "PluginEditor.h"
+#include "AutoMix/AutoMixPlanner.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -38,6 +39,16 @@ namespace
         return out;
     }
 
+    // Every parameter in real units (what the auto mix reads as "current")
+    std::map<juce::String, float> valuesOf (Harness& h)
+    {
+        std::map<juce::String, float> out;
+        for (auto* p : h.proc.getParameters())
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p))
+                out[r->getParameterID()] = r->convertFrom0to1 (r->getValue());
+        return out;
+    }
+
     void runMix (Harness& h)
     {
         VocalSpec s;
@@ -56,6 +67,39 @@ public:
 
     void runTest() override
     {
+        beginTest ("After the auto mix the SIMPEL sliders show what it set; pulling one to 0 takes that part back");
+        {
+            Harness h;
+            // Sliders moved before: the mix replaces them by its own positions
+            gesture (h, pid::macroPresence, 60.0f);
+            runMix (h);
+            auto& am = h.proc.getAutoMix();
+            const auto values = valuesOf (h);
+            const float air = automix::roleGain ({}, values, dsp::EqRole::air);
+            const float warmth = automix::roleGain ({}, values, dsp::EqRole::warmth);
+            const auto& st = h.proc.getState();
+            const auto pos = [&] (const char* id) { return st.getParameter (id)->convertFrom0to1 (st.getParameter (id)->getValue()); };
+            expectWithinAbsoluteError (pos (pid::macroPresence), juce::jlimit (0.0f, 100.0f, air / 5.0f * 100.0f), 0.6f);
+            expectWithinAbsoluteError (pos (pid::macroWarmth), juce::jlimit (0.0f, 100.0f, warmth / 3.0f * 100.0f), 0.6f);
+            const auto on = [&] (const char* id) { return values.at (id) > 0.5f; };
+            expectWithinAbsoluteError (pos (pid::macroSpace),
+                                       juce::jlimit (0.0f, 100.0f, on (pid::reverbOn) ? values.at (pid::reverbMix) / 0.3f : 0.0f), 0.6f);
+            expectWithinAbsoluteError (pos (pid::macroWidth),
+                                       juce::jlimit (0.0f, 100.0f, on (pid::doublerOn) ? values.at (pid::doublerMix) / 0.6f : 0.0f), 0.6f);
+            expect (pos (pid::macroPresence) + pos (pid::macroWarmth) + pos (pid::macroSpace) + pos (pid::macroWidth)
+                        + pos (pid::macroAggression) > 0.0f, "a mix that did something shows something");
+
+            // The positions are only shown: applying them changed no module
+            expectWithinAbsoluteError (automix::roleGain ({}, valuesOf (h), dsp::EqRole::air), air, 1.0e-3f);
+
+            if (pos (pid::macroPresence) > 1.0f)
+            {
+                gesture (h, pid::macroPresence, 0.0f);
+                expectWithinAbsoluteError (automix::roleGain ({}, valuesOf (h), dsp::EqRole::air), 0.0f, 0.05f,
+                                           "Presence at 0 = no air boost from the mix any more");
+            }
+        }
+
         beginTest ("Stored view states of older versions map onto SIMPEL / ADVANCED and the tabs");
         {
             {
