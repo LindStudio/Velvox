@@ -213,3 +213,12 @@ Okay → Gut → Super steigt auch messbar in der Bewegungsenergie (mittlere Ges
 4. Render-Skript schreiben (`tools/mascot/`), Vorschaubild + eine Tanzschleife rendern, Jakob zeigen.
 5. „Schlecht“-Varianten bauen, Mund-Texturen malen bzw. aus `RedDevilGesichter.png` ableiten, alle Schleifen rendern.
 6. Mockup des Teufelchens in SIMPEL (Canvas) → Freigabe → JUCE-Umsetzung.
+
+## Module 0.7 (Jakob, 2026-10-27)
+- **Raus, komplett gelöscht:** Pitch, Stutter, Pulse, Choir. Keine Rücksicht auf alte Projekte („habe nur Testprojekte“).
+  Presets ohne diese Module neu anpassen. Plan: `docs/superpowers/plans/2026-10-27-remove-creative-modules.md`.
+- **Neu:** Raumrauschen und Atem-Absenker, Stärke vom Nutzer einstellbar, Auto Mix stellt sie ein.
+  Plan: `docs/superpowers/plans/2026-10-27-denoise-breath-modules.md`.
+- **Danach:** Beat als Sidechain (eigener Plan).
+- **Maskottchen:** Teufel gefällt Jakob nicht mehr. Kandidaten Meteor, Ghettoblaster, Kassette – 3D im Comic-Stil
+  (nicht Sticker). Jakob erzeugt Bilder mit den Prompts; danach Umsetzung.
