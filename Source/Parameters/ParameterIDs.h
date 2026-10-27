@@ -138,21 +138,6 @@ namespace velvox::pid
     inline constexpr const char* reverbDuckAttack    = "reverbDuckAttack";
     inline constexpr const char* reverbDuckRelease   = "reverbDuckRelease";
 
-    // Pitch
-    inline constexpr const char* pitchOn               = "pitchOn";
-    inline constexpr const char* pitchSemitones        = "pitchSemitones";
-    inline constexpr const char* pitchCents            = "pitchCents";
-    inline constexpr const char* pitchPreserveFormants = "pitchPreserveFormants";
-    inline constexpr const char* pitchFormant          = "pitchFormant";
-    inline constexpr const char* pitchMix              = "pitchMix";
-
-    // Vocal chop
-    inline constexpr const char* chopOn      = "chopOn";
-    inline constexpr const char* chopPattern = "chopPattern";
-    inline constexpr const char* chopRate    = "chopRate";
-    inline constexpr const char* chopDepth   = "chopDepth";
-    inline constexpr const char* chopSmooth  = "chopSmooth";
-
     // Pro extensions of existing modules
     inline constexpr const char* lowType      = "lowType";
     inline constexpr const char* lowQ         = "lowQ";
@@ -176,20 +161,6 @@ namespace velvox::pid
 
     // ---- added in 0.3 (all modules default to off: older projects sound identical) ----
 
-    // PULSE - rhythmic volume shaper
-    inline constexpr const char* pulseOn      = "pulseOn";
-    inline constexpr const char* pulseRate    = "pulseRate";
-    inline constexpr const char* pulseDepth   = "pulseDepth";
-    inline constexpr const char* pulseAttack  = "pulseAttack";
-    inline constexpr const char* pulseRelease = "pulseRelease";
-    inline constexpr const char* pulseSmooth  = "pulseSmooth";
-    inline constexpr const char* pulseInterp  = "pulseInterp";
-    inline constexpr const char* pulseTension = "pulseTension";
-    inline constexpr const char* pulseMix     = "pulseMix";
-    inline constexpr const char* pulseBpm     = "pulseBpm";
-    // Curve points (time 0..1 within the cycle, level 0..1)
-    inline constexpr const char* pulseX[6] { "pulseX1", "pulseX2", "pulseX3", "pulseX4", "pulseX5", "pulseX6" };
-    inline constexpr const char* pulseY[6] { "pulseY1", "pulseY2", "pulseY3", "pulseY4", "pulseY5", "pulseY6" };
 
     // VOCAL SMASH - parallel compression
     inline constexpr const char* smashOn      = "smashOn";
@@ -199,16 +170,6 @@ namespace velvox::pid
     inline constexpr const char* smashRelease = "smashRelease";
     inline constexpr const char* smashTone    = "smashTone";
     inline constexpr const char* smashOutput  = "smashOutput";
-
-    // CHOIR - multi-voice doubling
-    inline constexpr const char* choirOn       = "choirOn";
-    inline constexpr const char* choirVoices   = "choirVoices";
-    inline constexpr const char* choirDetune   = "choirDetune";
-    inline constexpr const char* choirTiming   = "choirTiming";
-    inline constexpr const char* choirHumanize = "choirHumanize";
-    inline constexpr const char* choirWidth    = "choirWidth";
-    inline constexpr const char* choirDensity  = "choirDensity";
-    inline constexpr const char* choirMix      = "choirMix";
 
     // SMOOTH - adaptive resonance control
     inline constexpr const char* smoothOn          = "smoothOn";
@@ -293,7 +254,4 @@ namespace velvox::pid
     inline constexpr const char* compAutoRelease = "compAutoRelease";
     inline constexpr const char* compAutoMakeup  = "compAutoMakeup";
     inline constexpr const char* deessDetection  = "deessDetection";
-    // ---- added in 0.6: Pulse "like Kickstart" (defaults = the 0.5 sound) ----
-    inline constexpr const char* pulseShape  = "pulseShape";    // choice: Custom (the pulseX/Y curve), Classic, Punch, Swell, Gate
-    inline constexpr const char* pulseAmount = "pulseAmount";   // %, 50 = pulseDepth exactly; 0 none, 100 full ducking
 }

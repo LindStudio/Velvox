@@ -40,7 +40,6 @@ namespace velvox::ui
         double time = 0.0;             // seconds, for idle animations
         double sampleRate = 48000.0;
         float effectiveDelayMs = 375.0f;
-        int chopStep = -1;
         bool hasSignal = false;
         bool clipped = false;          // the output went over 0 dBFS in this frame
 

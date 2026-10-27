@@ -14,7 +14,7 @@ namespace velvox::dsp
     //
     // The limits follow CPU and memory cost and what a vocal chain plausibly needs:
     // cheap tone / dynamics modules more often, effects with large buffers twice,
-    // modules with latency or a global role (pitch, chop, pulse, check) once.
+    // modules with a global role (check) once.
     inline constexpr int maxExtraInstances = 3;   // instances beyond the first, largest bank
 
     constexpr int maxInstances (ModuleId id) noexcept
@@ -30,11 +30,7 @@ namespace velvox::dsp
             case ModuleId::smooth:
             case ModuleId::smash:
             case ModuleId::ride:
-            case ModuleId::doubler:
-            case ModuleId::choir:   return 2;
-            case ModuleId::pitch:
-            case ModuleId::chop:
-            case ModuleId::pulse:
+            case ModuleId::doubler: return 2;
             case ModuleId::check:   return 1;
         }
         return 1;

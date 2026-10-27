@@ -78,7 +78,6 @@ namespace velvox::automix
     //    switched on "because it is usually on"
     //  - one problem, one tool: e.g. harshness goes to SMOOTH, not also to the EQ
     //  - small steps; boosts are limited when the material is noisy or bright
-    //  - creative effects (pitch, chop, pulse, choir) are never switched on
     //  - not enough material -> conservative settings, and the plan says so
     class AutoMixPlanner
     {

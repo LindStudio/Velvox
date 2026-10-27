@@ -363,7 +363,7 @@ public:
     {
         const auto planFor = [] (const VocalSpec& s) { return AutoMixPlanner::plan (VocalProfiler::analyse (makeVocal (s)), defaults()); };
 
-        beginTest ("Planner: every value is legal and creative effects stay off");
+        beginTest ("Planner: every value is legal, the macros start at 0");
         {
             VocalSpec s; s.seconds = 14.0;
             const auto plan = planFor (s);
@@ -374,7 +374,7 @@ public:
                 if (spec != nullptr)
                     expect (v >= spec->minValue - 1.0e-4f && v <= spec->maxValue + 1.0e-4f, id + " in range");
             }
-            for (auto* id : { pid::pitchOn, pid::chopOn, pid::pulseOn, pid::choirOn, pid::macroPresence, pid::macroSpace })
+            for (auto* id : { pid::macroPresence, pid::macroSpace })
                 expectEquals (plan.get (id, -1.0f), 0.0f, id);
             expect (plan.routing.isValid());
 
@@ -607,9 +607,6 @@ public:
                         if (spec != nullptr)
                             expect (v >= spec->minValue - 1.0e-4f && v <= spec->maxValue + 1.0e-4f, name + ": " + id + " in range");
                     }
-                    // Creative effects stay off in every variant, as in the base plan
-                    for (auto* id : { pid::pitchOn, pid::chopOn, pid::pulseOn, pid::choirOn })
-                        expectEquals (plan.get (id, 0.0f), 0.0f, name + ": " + id);
                 }
 
                 const auto again = AutoMixEngine::candidatesFor (base, profile);

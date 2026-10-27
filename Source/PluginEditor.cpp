@@ -607,7 +607,6 @@ void HeadlinerView::updateLiveData()
             act[(size_t) M::smooth][(size_t) k] = juce::jlimit (0.0f, 1.0f, chain.getSmooth (k).getMaxCutDb() / 8.0f);
         if (k == 0)
         {
-            act[(size_t) M::pulse][0] = juce::jlimit (0.0f, 1.0f, 1.0f - chain.getPulse().displayGain.load());
             live.compGr.push (comp);
             live.deessGr.push (deess);
             live.delayDuck.push (dduck);
@@ -648,7 +647,6 @@ void HeadlinerView::updateLiveData()
     live.time = juce::Time::getMillisecondCounterHiRes() * 0.001;
     live.sampleRate = proc.getSampleRate() > 0.0 ? proc.getSampleRate() : 48000.0;
     live.effectiveDelayMs = m.effectiveDelayMs.load();
-    live.chopStep = chain.getChopStep();
     live.hasSignal = m.inputLufs.load() > -70.0f;
 
     // The selected instance k > 0: its views read instance k through the instance-0 fields
@@ -666,7 +664,6 @@ void HeadlinerView::updateLiveData()
         panelLive.time = live.time;
         panelLive.sampleRate = live.sampleRate;
         panelLive.effectiveDelayMs = live.effectiveDelayMs;
-        panelLive.chopStep = live.chopStep;
         panelLive.hasSignal = live.hasSignal;
     }
 

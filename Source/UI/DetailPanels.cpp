@@ -2,7 +2,6 @@
 #include "EqPanel.h"
 #include "ReverbPanel.h"
 #include "SmoothPanel.h"
-#include "PitchPanel.h"
 #include "SatPanel.h"
 #include "ChainView.h"
 #include "../PluginProcessor.h"
@@ -885,13 +884,9 @@ namespace velvox::ui
                 case ModuleId::deess:   panel = createDynPanel (p, ModuleId::deess); break;
                 case ModuleId::sat:     panel = createSatPanel (p); break;   // SatPanel.cpp
                 case ModuleId::doubler: panel = createVoicesModulePanel (p, ModuleId::doubler); break;
-                case ModuleId::pitch:   panel = createPitchPanel (p); break;
-                case ModuleId::chop:    panel = createTimeModulePanel (p, ModuleId::chop); break;
                 case ModuleId::delay:   panel = createTimeModulePanel (p, ModuleId::delay); break;
                 case ModuleId::reverb:  panel = createReverbPanel (p); break;
-                case ModuleId::pulse:   panel = createTimeModulePanel (p, ModuleId::pulse); break;
                 case ModuleId::smash:   panel = createDynPanel (p, ModuleId::smash); break;
-                case ModuleId::choir:   panel = createVoicesModulePanel (p, ModuleId::choir); break;
                 case ModuleId::smooth:  panel = createSmoothPanel (p); break;
                 case ModuleId::check:   panel = std::make_unique<CheckPanel> (p); break;
                 case ModuleId::ride:    panel = createDynPanel (p, ModuleId::ride); break;

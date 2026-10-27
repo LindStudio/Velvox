@@ -77,7 +77,7 @@ public:
             juce::StringArray ids;
             for (const auto& entry : *schema.getArray())
                 ids.add (entry.getProperty ("id", {}).toString());
-            for (auto* id : { pid::doublerMix, pid::pitchSemitones, pid::chopPattern, pid::reverbDuckAmount,
+            for (auto* id : { pid::doublerMix, pid::reverbDuckAmount,
                               pid::stereoWidth, pid::levelMatchMode, pid::macroSpace })
                 expect (ids.contains (id), juce::String ("schema misses ") + id);
             Harness h;

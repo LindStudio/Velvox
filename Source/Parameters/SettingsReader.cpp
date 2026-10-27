@@ -79,12 +79,6 @@ namespace velvox
     bind (raw.delayDuckAttack, pid::delayDuckAttack);       bind (raw.delayDuckRelease, pid::delayDuckRelease);
     bind (raw.reverbDuckAmount, pid::reverbDuckAmount);     bind (raw.reverbDuckThreshold, pid::reverbDuckThreshold);
     bind (raw.reverbDuckAttack, pid::reverbDuckAttack);     bind (raw.reverbDuckRelease, pid::reverbDuckRelease);
-    bind (raw.pitchOn, pid::pitchOn);                       bind (raw.pitchSemitones, pid::pitchSemitones);
-    bind (raw.pitchCents, pid::pitchCents);                 bind (raw.pitchPreserveFormants, pid::pitchPreserveFormants);
-    bind (raw.pitchFormant, pid::pitchFormant);             bind (raw.pitchMix, pid::pitchMix);
-    bind (raw.chopOn, pid::chopOn);                         bind (raw.chopPattern, pid::chopPattern);
-    bind (raw.chopRate, pid::chopRate);                     bind (raw.chopDepth, pid::chopDepth);
-    bind (raw.chopSmooth, pid::chopSmooth);
     bind (raw.lowType, pid::lowType);           bind (raw.lowQ, pid::lowQ);
     bind (raw.highType, pid::highType);         bind (raw.highQ, pid::highQ);
     bind (raw.lpfOn, pid::lpfOn);               bind (raw.lpfFreq, pid::lpfFreq);
@@ -94,25 +88,10 @@ namespace velvox
     bind (raw.macroPresence, pid::macroPresence);   bind (raw.macroWarmth, pid::macroWarmth);
     bind (raw.macroAggression, pid::macroAggression); bind (raw.macroWidth, pid::macroWidth);
     bind (raw.macroSpace, pid::macroSpace);         bind (raw.macroDensity, pid::macroDensity);
-    bind (raw.pulseOn, pid::pulseOn);           bind (raw.pulseRate, pid::pulseRate);
-    bind (raw.pulseDepth, pid::pulseDepth);     bind (raw.pulseAttack, pid::pulseAttack);
-    bind (raw.pulseRelease, pid::pulseRelease); bind (raw.pulseSmooth, pid::pulseSmooth);
-    bind (raw.pulseInterp, pid::pulseInterp);   bind (raw.pulseTension, pid::pulseTension);
-    bind (raw.pulseMix, pid::pulseMix);         bind (raw.pulseBpm, pid::pulseBpm);
-    for (size_t i = 0; i < raw.pulseX.size(); ++i)
-    {
-        bind (raw.pulseX[i], pid::pulseX[i]);
-        bind (raw.pulseY[i], pid::pulseY[i]);
-    }
-    bind (raw.pulseShape, pid::pulseShape);     bind (raw.pulseAmount, pid::pulseAmount);
     bind (raw.smashOn, pid::smashOn);          bind (raw.smashAmount, pid::smashAmount);
     bind (raw.smashBlend, pid::smashBlend);     bind (raw.smashAttack, pid::smashAttack);
     bind (raw.smashRelease, pid::smashRelease); bind (raw.smashTone, pid::smashTone);
     bind (raw.smashOutput, pid::smashOutput);
-    bind (raw.choirOn, pid::choirOn);           bind (raw.choirVoices, pid::choirVoices);
-    bind (raw.choirDetune, pid::choirDetune);   bind (raw.choirTiming, pid::choirTiming);
-    bind (raw.choirHumanize, pid::choirHumanize); bind (raw.choirWidth, pid::choirWidth);
-    bind (raw.choirDensity, pid::choirDensity); bind (raw.choirMix, pid::choirMix);
     bind (raw.smoothOn, pid::smoothOn);         bind (raw.smoothAmount, pid::smoothAmount);
     bind (raw.smoothSensitivity, pid::smoothSensitivity); bind (raw.smoothLow, pid::smoothLow);
     bind (raw.smoothHigh, pid::smoothHigh);     bind (raw.smoothAttack, pid::smoothAttack);
@@ -264,19 +243,6 @@ namespace velvox
     s.delayDuck = { raw.delayDuckAmount.get(), raw.delayDuckThreshold.get(), raw.delayDuckAttack.get(), raw.delayDuckRelease.get() };
     s.reverbDuck = { raw.reverbDuckAmount.get(), raw.reverbDuckThreshold.get(), raw.reverbDuckAttack.get(), raw.reverbDuckRelease.get() };
 
-    s.pitch.enabled = raw.pitchOn.on();
-    s.pitch.semitones = raw.pitchSemitones.get();
-    s.pitch.cents = raw.pitchCents.get();
-    s.pitch.preserveFormants = raw.pitchPreserveFormants.on();
-    s.pitch.formantShift = raw.pitchFormant.get();
-    s.pitch.mix = raw.pitchMix.get() * 0.01f;
-
-    s.chop.enabled = raw.chopOn.on();
-    s.chop.pattern = raw.chopPattern.index();
-    s.chop.rate = raw.chopRate.index();
-    s.chop.depth = raw.chopDepth.get() * 0.01f;
-    s.chop.smoothMs = raw.chopSmooth.get();
-
     s.eq.lowType = raw.lowType.index();
     s.eq.lowQ = raw.lowQ.get();
     s.eq.highType = raw.highType.index();
@@ -303,24 +269,6 @@ namespace velvox
     s.comp.autoMakeup = raw.compAutoMakeup.on();
     s.deess.relative = raw.deessDetection.index() == 1;
 
-    s.pulse.enabled = raw.pulseOn.on();
-    s.pulse.rate = raw.pulseRate.index();
-    s.pulse.depth = raw.pulseDepth.get() * 0.01f;
-    s.pulse.attackMs = raw.pulseAttack.get();
-    s.pulse.releaseMs = raw.pulseRelease.get();
-    s.pulse.smoothMs = raw.pulseSmooth.get();
-    s.pulse.interpolation = raw.pulseInterp.index();
-    s.pulse.tension = raw.pulseTension.get() * 0.01f;
-    s.pulse.mix = raw.pulseMix.get() * 0.01f;
-    s.pulse.manualBpm = raw.pulseBpm.get();
-    s.pulse.shape = raw.pulseShape.index();
-    s.pulse.amount = raw.pulseAmount.get() * 0.01f;
-    for (size_t i = 0; i < raw.pulseX.size(); ++i)
-    {
-        s.pulse.x[i] = raw.pulseX[i].get();
-        s.pulse.y[i] = raw.pulseY[i].get();
-    }
-
     s.smash.enabled = raw.smashOn.on();
     s.smash.amount = raw.smashAmount.get() * 0.01f;
     s.smash.blend = raw.smashBlend.get() * 0.01f;
@@ -328,15 +276,6 @@ namespace velvox
     s.smash.releaseMs = raw.smashRelease.get();
     s.smash.tone = raw.smashTone.get() * 0.01f;
     s.smash.outputDb = raw.smashOutput.get();
-
-    s.choir.enabled = raw.choirOn.on();
-    s.choir.voices = dsp::ChoirModule::voiceCountForIndex (raw.choirVoices.index());
-    s.choir.detuneCents = raw.choirDetune.get();
-    s.choir.timingMs = raw.choirTiming.get();
-    s.choir.humanize = raw.choirHumanize.get() * 0.01f;
-    s.choir.width = raw.choirWidth.get() * 0.01f;
-    s.choir.density = raw.choirDensity.get() * 0.01f;
-    s.choir.mix = raw.choirMix.get() * 0.01f;
 
     s.smooth.enabled = raw.smoothOn.on();
     s.smooth.amount = raw.smoothAmount.get() * 0.01f;

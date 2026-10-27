@@ -20,12 +20,10 @@ public:
             for (auto& p : getFactoryPresets())
                 if (p.name == "Hypertechno Lead")
                     p.applyTo (h.proc.getState());
-            for (auto* id : { pid::eqOn, pid::compOn, pid::deessOn, pid::satOn, pid::doublerOn, pid::pitchOn,
-                              pid::chopOn, pid::delayOn, pid::reverbOn, pid::lpfOn,
-                              pid::pulseOn, pid::smashOn, pid::choirOn, pid::smoothOn, pid::checkOn, pid::rideOn })
+            for (auto* id : { pid::eqOn, pid::compOn, pid::deessOn, pid::satOn, pid::doublerOn,
+                              pid::delayOn, pid::reverbOn, pid::lpfOn,
+                              pid::smashOn, pid::smoothOn, pid::checkOn, pid::rideOn })
                 h.set (id, 1.0f);
-            h.set (pid::pitchSemitones, -12.0f);
-            h.set (pid::choirVoices, 3.0f);   // 8 voices
             h.set (pid::levelMatchMode, 2.0f);
             h.set (pid::stereoWidth, 140.0f);
             h.set (pid::monoBelow, 150.0f);

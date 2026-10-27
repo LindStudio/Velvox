@@ -148,7 +148,7 @@ private:
     void markFreshInstances (const velvox::dsp::Routing& before, const velvox::dsp::Routing& after);
     bool loadingState = false;
 
-    // Latency follows the pitch module (on/off, quality); reported on the message thread
+    // Latency follows the latent modules in the chain; reported on the message thread
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
     // A module instance switched on (automation, macro, preset) that is not in the chain

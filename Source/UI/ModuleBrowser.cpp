@@ -17,9 +17,8 @@ namespace velvox::ui
             ModuleId::eq, ModuleId::deess, ModuleId::smooth,          // Clean-up
             ModuleId::comp, ModuleId::smash, ModuleId::ride,          // Dynamics
             ModuleId::sat,                                            // Colour
-            ModuleId::doubler, ModuleId::choir, ModuleId::pitch,      // Width / Voices
+            ModuleId::doubler,                                        // Width / Voices
             ModuleId::delay, ModuleId::reverb,                        // Space
-            ModuleId::chop, ModuleId::pulse,                          // Rhythm
             ModuleId::check                                           // Analysis
         };
 
@@ -33,13 +32,9 @@ namespace velvox::ui
                 case ModuleId::deess:   return "deesser sibilance s t harsh zischlaute s-laute scharf";
                 case ModuleId::sat:     return "saturation drive distortion warmth tape tube harmonics sättigung verzerrung wärme band röhre obertöne";
                 case ModuleId::doubler: return "double width stereo thick dopplung breite dick";
-                case ModuleId::pitch:   return "pitch shift transpose formant tonhöhe transponieren formanten";
-                case ModuleId::chop:    return "stutter chop gate rhythm trance rhythmus";
                 case ModuleId::delay:   return "delay echo ping pong tempo space raum";
                 case ModuleId::reverb:  return "reverb hall room plate space depth atmosphere raum tiefe atmosphäre";
-                case ModuleId::pulse:   return "pulse pump volume shaper sidechain rhythm kickstart pumpen lautstärke rhythmus";
                 case ModuleId::smash:   return "smash parallel compression density loud kompression dichte laut";
-                case ModuleId::choir:   return "choir voices unison wide chor stimmen breit";
                 case ModuleId::smooth:  return "smooth resonance harsh soothe resonanz scharf glätten";
                 case ModuleId::check:   return "check analysis diagnose meter analyse messen";
                 case ModuleId::ride:    return "ride level rider gain automation pegel ausgleich";
@@ -73,9 +68,8 @@ namespace velvox::ui
             case ModuleId::eq: case ModuleId::deess: case ModuleId::smooth:       return Category::cleanUp;
             case ModuleId::comp: case ModuleId::smash: case ModuleId::ride:       return Category::dynamics;
             case ModuleId::sat:                                                   return Category::colour;
-            case ModuleId::doubler: case ModuleId::choir: case ModuleId::pitch:   return Category::widthVoices;
+            case ModuleId::doubler:                                               return Category::widthVoices;
             case ModuleId::delay: case ModuleId::reverb:                          return Category::space;
-            case ModuleId::chop: case ModuleId::pulse:                            return Category::rhythm;
             case ModuleId::check:                                                 return Category::analysis;
         }
         return Category::cleanUp;
@@ -92,7 +86,6 @@ namespace velvox::ui
             case Category::colour:      return { "Farbe", "Color" };
             case Category::widthVoices: return { "Breite / Stimmen", "Width / Voices" };
             case Category::space:       return { "Raum", "Space" };
-            case Category::rhythm:      return { "Rhythmus", "Rhythm" };
             case Category::analysis:    return { "Analyse", "Analysis" };
         }
         return { "", "" };

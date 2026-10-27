@@ -230,17 +230,7 @@ namespace velvox::automix
         const bool roomy = likely (p, "reverberant");
         const bool someRoom = p.reverberant;
 
-        // ---- Start from a defined state: creative effects and macros off
-        int creativeWasOn = 0;
-        for (auto* id : { pid::pitchOn, pid::chopOn, pid::pulseOn, pid::choirOn })
-        {
-            creativeWasOn += cur (id) > 0.5f ? 1 : 0;
-            plan.set (id, 0.0f);
-        }
-        if (creativeWasOn > 0)
-            plan.notes.push_back (both ("Kreativ-Effekte (Pitch, Stutter, Pulse, Choir) wurden für den Grundmix ausgeschaltet. Der vorherige Zustand lässt sich wiederherstellen.",
-                                        "Creative effects (Pitch, Stutter, Pulse, Choir) were turned off for the basic mix. The previous state can be restored."));
-
+        // ---- Start from a defined state: macros off
         bool macrosWereSet = false;
         for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroAggression, pid::macroWidth, pid::macroSpace, pid::macroDensity })
         {

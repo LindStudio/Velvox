@@ -2,19 +2,14 @@
 
 #include "DetailPanels.h"
 #include "../DSP/DelayModule.h"
-#include "../DSP/PulseModule.h"
-#include "../DSP/ChopModule.h"
 
-// The three time-module panels of 0.6 (spec 5.11, 5.13, 5.14) on the common frame:
+// The time-module panel of 0.6 (spec 5.11) on the common frame (Pulse and Stutter were removed in 0.7):
 //   Delay   - echo map: the repeats as bars (L above / R below the centre line, height = level),
 //             the first (or any) echo dragged: x = time, y = feedback
-//   Pulse   - "like Kickstart": one big Amount, Custom + 4 pump shape tiles, rate buttons, the gain
-//             curve with a live playhead (the 6-point editor while Custom is selected)
-//   Stutter - cuts on the waveform: the scrolling vocal with the muted / repeated slices shaded
 // The views are public so the tests can drive them like a user.
 namespace velvox::ui
 {
-    // Visual / panel for delay, pulse or chop; nullptr for every other module
+    // Visual / panel for the delay; nullptr for every other module
     std::unique_ptr<ModuleView> createTimeModuleView (VelvoxAudioProcessor& p, dsp::ModuleId id, int instance);
     std::unique_ptr<DetailPanel> createTimeModulePanel (VelvoxAudioProcessor& p, dsp::ModuleId id);
 
@@ -94,130 +89,5 @@ namespace velvox::ui
         int numAxis = 0;
         int frameCount = 0;
         std::unique_ptr<HoverInfo> info;
-    };
-
-    //==========================================================================
-    // PULSE: the gain over one cycle (what is processed: PulseModule::gainAt), the raw shape as a glowing
-    // line and the live playhead (displayPhase / displayGain). While the shape is Custom its 6 points are
-    // handles (drag, Shift/Ctrl fine, double-click / Alt+click = default point, right-click = menu).
-    class PulseCurveView final : public ModuleView
-    {
-    public:
-        explicit PulseCurveView (VelvoxAudioProcessor& p);
-        ~PulseCurveView() override;
-
-        void update (const LiveData&) override;
-        void paint (juce::Graphics&) override;
-        void resized() override;
-        void mouseMove (const juce::MouseEvent&) override;
-        void mouseExit (const juce::MouseEvent&) override;
-        void mouseDown (const juce::MouseEvent&) override;
-        void mouseDrag (const juce::MouseEvent&) override;
-        void mouseUp (const juce::MouseEvent&) override;
-        void mouseDoubleClick (const juce::MouseEvent&) override;
-
-        bool showsPoints() const noexcept { return settings.shape == 0; }
-        juce::Point<float> pointPosition (int i) const noexcept;
-        juce::Rectangle<float> getPlotArea() const noexcept { return plot; }
-        float yForGain (float gain) const noexcept;
-        const dsp::PulseSettings& getSettings() const noexcept { return settings; }
-        // The gain the drawing shows at a phase (cached PulseModule::gainAt, interpolated)
-        float drawnGainAt (float phase) const noexcept;
-        static constexpr int tableSize = 512;
-
-    private:
-        void rebuildPaths();
-        int pointAt (juce::Point<float> p) const noexcept;
-        void resetPoint (int i);
-
-        VelvoxAudioProcessor& proc;
-        dsp::PulseSettings settings;
-        float phase = -1.0f, bpm = 150.0f;
-        bool hostTempo = false;
-        Smoothed gain { 1.0f, 1.0f };
-        juce::Rectangle<float> plot, meter;
-        juce::Path curvePath, appliedPath, appliedFill;
-        std::array<float, tableSize + 1> gainTable {};
-        bool pathsValid = false;
-        int hovered = -1, dragged = -1, frameCount = 0, shownRate = -1;
-        juce::Point<float> dragValue, lastPos;
-        std::vector<juce::RangedAudioParameter*> gestureParams;
-        juce::String hoverText;
-        juce::String readoutText;
-        std::unique_ptr<HoverInfo> info;
-    };
-
-    // The shape tiles: Custom + Classic, Punch, Swell, Gate, each with its curve. Bound to pulseShape
-    // (component property "paramId"): click = choose (one undo step), double-click / Alt+click = default
-    // (Custom), wheel = previous / next, right-click = menu, hover = info card.
-    class PulseShapeTiles final : public juce::Component
-    {
-    public:
-        explicit PulseShapeTiles (VelvoxAudioProcessor& p);
-        ~PulseShapeTiles() override;
-
-        void paint (juce::Graphics&) override;
-        void resized() override;
-        void mouseMove (const juce::MouseEvent&) override;
-        void mouseExit (const juce::MouseEvent&) override;
-        void mouseDown (const juce::MouseEvent&) override;
-        void mouseDoubleClick (const juce::MouseEvent&) override;
-        void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
-
-        // Once per frame: the selection and the Custom tile's curve follow the parameters
-        void refresh (const dsp::PulseSettings& s);
-
-        int getNumTiles() const noexcept { return numTiles; }
-        juce::Rectangle<int> getTileBounds (int i) const noexcept { return tiles[(size_t) juce::jlimit (0, numTiles - 1, i)]; }
-        int getSelectedTile() const noexcept { return selected; }
-        void chooseTile (int i);
-        void setAccent (juce::Colour c) { accent = c; repaint(); }
-
-        static constexpr int numTiles = 5;
-
-    private:
-        int tileAt (juce::Point<int> p) const noexcept;
-        void rebuildPath (int i);
-
-        VelvoxAudioProcessor& proc;
-        juce::RangedAudioParameter* parameter = nullptr;
-        dsp::PulseSettings custom;
-        std::array<juce::Rectangle<int>, numTiles> tiles;
-        std::array<juce::Path, numTiles> paths;
-        int selected = 0, hovered = -1;
-        juce::Colour accent = colours::accent;
-        std::unique_ptr<HoverInfo> info;
-    };
-
-    //==========================================================================
-    // STUTTER: the last few seconds of the vocal scrolling from right to left (ChopModule::readDisplay):
-    // the input in grey, what passes in the module colour, muted slices darkened, repeated slices outlined.
-    class StutterWaveView final : public ModuleView
-    {
-    public:
-        explicit StutterWaveView (VelvoxAudioProcessor& p);
-
-        void update (const LiveData&) override;
-        void paint (juce::Graphics&) override;
-        void resized() override;
-
-        static constexpr double windowSeconds = 4.0;
-        static constexpr int windowFrames = (int) (windowSeconds / dsp::ChopModule::displayFrameSeconds);
-
-        int getNumFrames() const noexcept { return numFrames; }
-        dsp::ChopModule::DisplayFrame getFrame (int i) const noexcept { return frames[(size_t) juce::jlimit (0, dsp::ChopModule::displayCapacity - 1, i)]; }
-        // Slices of the visible window drawn shaded: '.' = muted (gain < 0.5), 'r' = repeated
-        int countShadedSlices (char type) const noexcept;
-
-    private:
-        bool isMuted (const dsp::ChopModule::DisplayFrame& f) const noexcept { return f.type == '.' && f.gain < 0.5f; }
-
-        VelvoxAudioProcessor& proc;
-        std::array<dsp::ChopModule::DisplayFrame, dsp::ChopModule::displayCapacity> frames {};
-        int numFrames = 0, currentStep = -1, frameCount = 0, shownPattern = -1, shownRate = -1;
-        bool on = false;
-        const char* steps = "";
-        juce::String readoutText;
-        juce::Rectangle<float> wave, strip;
     };
 }

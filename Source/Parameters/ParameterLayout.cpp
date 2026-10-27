@@ -1,6 +1,4 @@
 #include "ParameterLayout.h"
-#include "../DSP/ChopModule.h"
-#include "../DSP/PulseModule.h"
 #include "../DSP/Instances.h"
 #include "../DSP/EqDesign.h"
 #include "../DSP/SmoothModule.h"
@@ -23,12 +21,8 @@ namespace velvox
         if (module == "Reverb")     return M::reverb;
         if (module == "Doubler")    return M::doubler;
         if (module == "Smash")      return M::smash;
-        if (module == "Choir")      return M::choir;
         if (module == "Smooth")     return M::smooth;
         if (module == "Ride")       return M::ride;
-        if (module == "Pitch")      return M::pitch;
-        if (module == "Chop")       return M::chop;
-        if (module == "Pulse")      return M::pulse;
         if (module == "Check")      return M::check;
         if (module == "Ducking")
         {
@@ -156,7 +150,7 @@ namespace velvox
 
                     // "Comp Threshold" -> "Compressor 2: Threshold"
                     juce::String name (spec.name);
-                    for (auto* prefix : { "EQ ", "Comp ", "De-Ess ", "Sat ", "Delay ", "Reverb ", "Doubler ", "Smash ", "Choir ", "Smooth ", "Ride " })
+                    for (auto* prefix : { "EQ ", "Comp ", "De-Ess ", "Sat ", "Delay ", "Reverb ", "Doubler ", "Smash ", "Smooth ", "Ride " })
                         if (name.startsWith (prefix))
                         {
                             name = name.substring ((int) std::strlen (prefix));
@@ -326,23 +320,7 @@ namespace velvox
             { pid::reverbDuckAttack,    "Reverb Duck Attack",    "Ducking", T::Float, 1.0f, 200.0f, 20.0f, 20.0f, "ms", {}, "How fast the reverb is pushed down." },
             { pid::reverbDuckRelease,   "Reverb Duck Release",   "Ducking", T::Float, 20.0f, 2000.0f, 500.0f, 300.0f, "ms", {},               "How fast the reverb comes back in the gaps." },
 
-            // ---------------- Pitch (0.2) ----------------
-            { pid::pitchOn,        "Pitch On",       "Pitch", T::Bool, 0, 1, 0, 0, "", {},
-              "Enables the creative pitch shifter. Adds about 15 ms latency while on (compensated by the DAW)." },
-            { pid::pitchSemitones, "Pitch",          "Pitch", T::Float, -24.0f, 24.0f, 0.0f, 0.0f, "st", {}, "Transposition in semitones.", 1.0f },
-            { pid::pitchCents,     "Pitch Fine",     "Pitch", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "ct", {}, "Fine tuning in cents." },
-            { pid::pitchPreserveFormants, "Pitch Keep Formants", "Pitch", T::Bool, 0, 1, 1, 0, "", {},
-              "On: the voice keeps its natural character when shifted. Off: formants move with the pitch (chipmunk / monster)." },
-            { pid::pitchFormant,   "Pitch Formant",  "Pitch", T::Float, -12.0f, 12.0f, 0.0f, 0.0f, "st", {}, "Moves the vocal character (formants) up or down independently of the pitch.", 0.1f },
-            { pid::pitchMix,       "Pitch Mix",      "Pitch", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "Blend of shifted and original voice." },
 
-            // ---------------- Vocal chop (0.2) ----------------
-            { pid::chopOn,      "Stutter On",      "Chop", T::Bool, 0, 1, 0, 0, "", {}, "Enables Stutter, the tempo-synced gate and repeater." },
-            { pid::chopPattern, "Stutter Pattern", "Chop", T::Choice, 0, (float) (dsp::ChopModule::patterns().size() - 1), 2, 0, "",
-              dsp::ChopModule::patternNames(), "16-step rhythm: plays, mutes or repeats (stutters) the vocal." },
-            { pid::chopRate,    "Stutter Rate",    "Chop", T::Choice, 0, 3, 1, 0, "", dsp::ChopModule::rateNames(), "Length of one step, synced to the host tempo." },
-            { pid::chopDepth,   "Stutter Depth",   "Chop", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "How strongly the pattern is applied." },
-            { pid::chopSmooth,  "Stutter Smooth",  "Chop", T::Float, 0.5f, 30.0f, 3.0f, 5.0f, "ms", {}, "Softens the edges of each step (higher = smoother, less clicky)." },
 
             // ---------------- Pro extensions (0.2) ----------------
             { pid::lowType,  "Low Band Type",  "EQ", T::Choice, 0, 1, 0, 0, "", { "Shelf", "Bell" }, "Low band as shelf (whole low end) or bell (around the frequency)." },
@@ -375,32 +353,6 @@ namespace velvox
             { pid::macroDensity,    "Density",    "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Thicker and steadier: more compression and a touch of saturation." },
 
-            // ---------------- PULSE (0.3) ----------------
-            { pid::pulseOn,      "Pulse On",      "Pulse", T::Bool, 0, 1, 0, 0, "", {}, "Enables PULSE, the rhythmic volume shaper." },
-            { pid::pulseRate,    "Pulse Rate",    "Pulse", T::Choice, 0, 9, 2, 0, "", dsp::PulseModule::rateNames(),
-              "Length of one curve cycle, synced to the host tempo (or the manual BPM when the host sends none)." },
-            { pid::pulseDepth,   "Pulse Depth",   "Pulse", T::Float, 0.0f, 100.0f, 60.0f, 0.0f, "%", {}, "How far the curve pulls the volume down at its lowest points." },
-            { pid::pulseAttack,  "Pulse Attack",  "Pulse", T::Float, 0.1f, 50.0f, 1.0f, 5.0f, "ms", {}, "How fast the volume may drop - longer softens hard dips." },
-            { pid::pulseRelease, "Pulse Release", "Pulse", T::Float, 1.0f, 300.0f, 10.0f, 40.0f, "ms", {}, "How fast the volume may come back up." },
-            { pid::pulseSmooth,  "Pulse Smooth",  "Pulse", T::Float, 0.0f, 30.0f, 2.0f, 5.0f, "ms", {}, "Final rounding of the gain movement against clicks." },
-            { pid::pulseInterp,  "Pulse Interpolation", "Pulse", T::Choice, 0, 2, 1, 0, "", { "Linear", "Smooth", "Step" },
-              "How the curve moves between its points: straight lines, S-shaped curves or hard steps." },
-            { pid::pulseTension, "Pulse Shape",   "Pulse", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "%", {},
-              "Bends every curve segment: negative = fast start, positive = slow start (punchier pumps)." },
-            { pid::pulseMix,     "Pulse Mix",     "Pulse", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "Blend between the original and the shaped vocal." },
-            { pid::pulseBpm,     "Pulse BPM",     "Pulse", T::Float, 40.0f, 250.0f, 150.0f, 0.0f, "BPM", {}, "Tempo used when the host does not report one.", 0.1f },
-            { pid::pulseX[0], "Pulse Point 1 Time", "Pulse", T::Float, 0.0f, 1.0f, 0.00f, 0.0f, "", {}, "Curve point position in the cycle." },
-            { pid::pulseX[1], "Pulse Point 2 Time", "Pulse", T::Float, 0.0f, 1.0f, 0.06f, 0.0f, "", {}, "Curve point position in the cycle." },
-            { pid::pulseX[2], "Pulse Point 3 Time", "Pulse", T::Float, 0.0f, 1.0f, 0.28f, 0.0f, "", {}, "Curve point position in the cycle." },
-            { pid::pulseX[3], "Pulse Point 4 Time", "Pulse", T::Float, 0.0f, 1.0f, 0.50f, 0.0f, "", {}, "Curve point position in the cycle." },
-            { pid::pulseX[4], "Pulse Point 5 Time", "Pulse", T::Float, 0.0f, 1.0f, 0.75f, 0.0f, "", {}, "Curve point position in the cycle." },
-            { pid::pulseX[5], "Pulse Point 6 Time", "Pulse", T::Float, 0.0f, 1.0f, 0.95f, 0.0f, "", {}, "Curve point position in the cycle." },
-            { pid::pulseY[0], "Pulse Point 1 Level", "Pulse", T::Float, 0.0f, 1.0f, 0.00f, 0.0f, "", {}, "Curve point volume (1 = untouched)." },
-            { pid::pulseY[1], "Pulse Point 2 Level", "Pulse", T::Float, 0.0f, 1.0f, 0.10f, 0.0f, "", {}, "Curve point volume (1 = untouched)." },
-            { pid::pulseY[2], "Pulse Point 3 Level", "Pulse", T::Float, 0.0f, 1.0f, 0.70f, 0.0f, "", {}, "Curve point volume (1 = untouched)." },
-            { pid::pulseY[3], "Pulse Point 4 Level", "Pulse", T::Float, 0.0f, 1.0f, 0.95f, 0.0f, "", {}, "Curve point volume (1 = untouched)." },
-            { pid::pulseY[4], "Pulse Point 5 Level", "Pulse", T::Float, 0.0f, 1.0f, 1.00f, 0.0f, "", {}, "Curve point volume (1 = untouched)." },
-            { pid::pulseY[5], "Pulse Point 6 Level", "Pulse", T::Float, 0.0f, 1.0f, 1.00f, 0.0f, "", {}, "Curve point volume (1 = untouched)." },
 
             // ---------------- VOCAL SMASH (0.3) ----------------
             { pid::smashOn,      "Smash On",      "Smash", T::Bool, 0, 1, 0, 0, "", {}, "Enables VOCAL SMASH, a dedicated parallel compressor." },
@@ -413,16 +365,6 @@ namespace velvox
               "Tilts the colour of the squashed path: negative = warmer, positive = brighter and more present." },
             { pid::smashOutput,  "Smash Output",  "Smash", T::Float, -12.0f, 12.0f, 0.0f, 0.0f, "dB", {}, "Output trim of the module." },
 
-            // ---------------- CHOIR (0.3) ----------------
-            { pid::choirOn,       "Choir On",       "Choir", T::Bool, 0, 1, 0, 0, "", {}, "Enables CHOIR, multi-voice doubling." },
-            { pid::choirVoices,   "Choir Voices",   "Choir", T::Choice, 0, 3, 1, 0, "", { "2", "4", "6", "8" }, "Number of virtual voices around the original." },
-            { pid::choirDetune,   "Choir Detune",   "Choir", T::Float, 0.0f, 40.0f, 10.0f, 12.0f, "ct", {}, "Pitch difference between the voices (each voice gets its own offset)." },
-            { pid::choirTiming,   "Choir Timing",   "Choir", T::Float, 0.0f, 60.0f, 18.0f, 20.0f, "ms", {}, "How late the voices come in compared with each other - like singers who are not perfectly together." },
-            { pid::choirHumanize, "Choir Humanize", "Choir", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {}, "Slow, independent drift of pitch and timing per voice so the choir never sounds static." },
-            { pid::choirWidth,    "Choir Width",    "Choir", T::Float, 0.0f, 100.0f, 80.0f, 0.0f, "%", {}, "How far the voices spread across the stereo field." },
-            { pid::choirDensity,  "Choir Density",  "Choir", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {},
-              "Thickness of the choir: low = voices sit softly behind, high = every voice at full level." },
-            { pid::choirMix,      "Choir Mix",      "Choir", T::Float, 0.0f, 100.0f, 35.0f, 0.0f, "%", {}, "Balance between the original vocal and the choir." },
 
             // ---------------- SMOOTH (0.3) ----------------
             { pid::smoothOn,          "Smooth On",          "Smooth", T::Bool, 0, 1, 0, 0, "", {}, "Enables SMOOTH, adaptive resonance control." },
@@ -480,11 +422,6 @@ namespace velvox
             { pid::delayMod,       "Delay Modulation","Delay", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Slow wow and flutter on the repeats, like a tape echo." },
 
-            // ---------------- Pulse (0.6, "like Kickstart") ----------------
-            { pid::pulseShape,  "Pulse Curve",  "Pulse", T::Choice, 0, (float) (dsp::PulseModule::shapeNames().size() - 1), 0, 0, "",
-              dsp::PulseModule::shapeNames(), "Pump shape: Custom uses the drawn curve; Classic, Punch, Swell and Gate are ready-made pumps." },
-            { pid::pulseAmount, "Pulse Amount", "Pulse", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {},
-              "How hard the vocal pumps: 0 = untouched, 50 = the Depth setting, 100 = ducked fully at the beat." },
             // ---------------- Dynamics options (0.6) ----------------
             { pid::compAutoRelease, "Comp Auto Release", "Compressor", T::Bool, 0, 1, 0, 0, "", {},
               "Program-dependent release: short peaks recover quickly, sustained compression recovers slowly and smoothly." },

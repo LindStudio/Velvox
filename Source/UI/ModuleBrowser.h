@@ -8,7 +8,7 @@ class VelvoxAudioProcessor;
 namespace velvox::ui
 {
     // Module browser of 0.6 (spec 2.7): a popup over the editor with a search field and a grid of module
-    // cards grouped by category - Clean-up, Dynamics, Colour, Width / Voices, Space, Rhythm, Analysis.
+    // cards grouped by category - Clean-up, Dynamics, Colour, Width / Voices, Space, Analysis.
     // Each card shows the module's icon and name; hovering shows its one-line description at the bottom.
     // A module whose instances are all in use is greyed out with the reason and cannot be chosen.
     // Keys: type to search, Up / Down (and Left / Right while the search is empty) move the highlight,
@@ -16,7 +16,7 @@ namespace velvox::ui
     class ModuleBrowser final : public juce::Component, private juce::TextEditor::Listener
     {
     public:
-        enum class Category { cleanUp = 0, dynamics, colour, widthVoices, space, rhythm, analysis };
+        enum class Category { cleanUp = 0, dynamics, colour, widthVoices, space, analysis };
         static constexpr int numCategories = 7;
         static Category categoryOf (dsp::ModuleId id) noexcept;
         static juce::String categoryName (Category c);

@@ -50,14 +50,7 @@ set(VELVOX_SOURCES
     Source/DSP/StereoStage.cpp
     Source/DSP/DoublerModule.cpp
     Source/DSP/Ducker.cpp
-    Source/DSP/PitchModule.cpp
-    Source/DSP/PitchTracker.cpp
-    Source/DSP/FormantCorrector.cpp
-    Source/DSP/SpliceShifter.cpp
-    Source/DSP/ChopModule.cpp
-    Source/DSP/PulseModule.cpp
     Source/DSP/SmashModule.cpp
-    Source/DSP/ChoirModule.cpp
     Source/DSP/SmoothModule.cpp
     Source/DSP/CheckModule.cpp
     Source/DSP/VocalAnalyzer.cpp
@@ -91,7 +84,6 @@ set(VELVOX_SOURCES
     Source/UI/EqPanel.cpp
     Source/UI/ReverbPanel.cpp
     Source/UI/SmoothPanel.cpp
-    Source/UI/PitchPanel.cpp
     Source/UI/AutoMixView.cpp
     Source/UI/AnalysisOverlay.cpp
     Source/UI/TopBar.cpp
@@ -144,10 +136,10 @@ juce_add_binary_data(VelvoxAssets
         Resources/Fonts/Montserrat-SemiBold.ttf
         Resources/Fonts/Montserrat-Bold.ttf
         Resources/Fonts/RobotoMono-Regular.ttf
-        Resources/Icons/levelride.svg Resources/Icons/smooth.svg Resources/Icons/vocalsmash.svg Resources/Icons/choir.svg
-        Resources/Icons/pulse.svg Resources/Icons/stutter.svg Resources/Icons/delay.svg Resources/Icons/reverb.svg
+        Resources/Icons/levelride.svg Resources/Icons/smooth.svg Resources/Icons/vocalsmash.svg
+        Resources/Icons/delay.svg Resources/Icons/reverb.svg
         Resources/Icons/eq.svg Resources/Icons/comp.svg Resources/Icons/deess.svg Resources/Icons/sat.svg
-        Resources/Icons/doubler.svg Resources/Icons/pitch.svg Resources/Icons/check.svg
+        Resources/Icons/doubler.svg Resources/Icons/check.svg
         Resources/Images/HeadlinerIcon.png
         Resources/Images/HeadlinerWordmark.png
         Resources/Images/HeadlinerLogo.png
@@ -201,7 +193,7 @@ target_link_libraries(Velvox
 # ---------------------------------------------------------------------------
 if(VELVOX_BUILD_TESTS)
     juce_add_console_app(VelvoxTests PRODUCT_NAME "VelvoxTests")
-    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/PitchTests.cpp Tests/PitchDiagnostics.cpp Tests/ChopTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/MacroBakeTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/VocalCheckRealDataTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/SaturationTests.cpp Tests/ReverbQualityTests.cpp Tests/EqPanelTests.cpp Tests/ReverbPanelTests.cpp Tests/CheckPanelTests.cpp Tests/SmoothPanelTests.cpp Tests/PitchPanelTests.cpp Tests/DynamicsQualityTests.cpp Tests/StateRestoreTests.cpp)
+    target_sources(VelvoxTests PRIVATE ${VELVOX_SOURCES} Tests/TestMain.cpp Tests/VelvoxTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/MacroBakeTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/VocalCheckRealDataTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/SaturationTests.cpp Tests/ReverbQualityTests.cpp Tests/EqPanelTests.cpp Tests/ReverbPanelTests.cpp Tests/CheckPanelTests.cpp Tests/SmoothPanelTests.cpp Tests/DynamicsQualityTests.cpp Tests/StateRestoreTests.cpp)
     target_include_directories(VelvoxTests PRIVATE Source ${VELVOX_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VelvoxTests PRIVATE /bigobj /utf-8)

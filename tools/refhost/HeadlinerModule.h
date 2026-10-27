@@ -22,13 +22,9 @@ namespace velvox::refhost
             case M::deess:   return pid::deessOn;
             case M::sat:     return pid::satOn;
             case M::doubler: return pid::doublerOn;
-            case M::pitch:   return pid::pitchOn;
             case M::delay:   return pid::delayOn;
             case M::reverb:  return pid::reverbOn;
-            case M::chop:    return pid::chopOn;
-            case M::pulse:   return pid::pulseOn;
             case M::smash:   return pid::smashOn;
-            case M::choir:   return pid::choirOn;
             case M::smooth:  return pid::smoothOn;
             case M::check:   return pid::checkOn;
             case M::ride:    return pid::rideOn;

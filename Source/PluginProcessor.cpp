@@ -115,16 +115,12 @@ void VelvoxAudioProcessor::insertEngagedInstances()
         engage (dsp::ModuleId::sat, b.sat.enabled && b.sat.mix > 0.0f);
         engage (dsp::ModuleId::doubler, b.doubler.enabled && b.doubler.mix > 0.0f);
         engage (dsp::ModuleId::smash, b.smash.enabled);
-        engage (dsp::ModuleId::choir, b.choir.enabled);
         engage (dsp::ModuleId::smooth, b.smooth.enabled);
         engage (dsp::ModuleId::ride, b.ride.enabled);
         engage (dsp::ModuleId::delay, b.delayOn && b.delayMix > 0.0f);
         engage (dsp::ModuleId::reverb, b.reverbOn && b.reverbMix > 0.0f);
         if (k == 0)
         {
-            engage (dsp::ModuleId::pitch, e.pitch.enabled);
-            engage (dsp::ModuleId::chop, e.chop.enabled);
-            engage (dsp::ModuleId::pulse, e.pulse.enabled);
             engage (dsp::ModuleId::check, e.checkOn);
         }
     }
@@ -165,12 +161,8 @@ bool VelvoxAudioProcessor::isInstanceAudible (dsp::ModuleId id, int k) const
         case M::delay:   return b.delayOn && b.delayMix > 0.0f;
         case M::reverb:  return b.reverbOn && b.reverbMix > 0.0f;
         case M::smash:   return b.smash.enabled;
-        case M::choir:   return b.choir.enabled;
         case M::smooth:  return b.smooth.enabled;
         case M::ride:    return b.ride.enabled;
-        case M::pitch:   return e.pitch.enabled;
-        case M::chop:    return e.chop.enabled;
-        case M::pulse:   return e.pulse.enabled;
         case M::check:   return e.checkOn;
     }
     return false;
@@ -222,7 +214,7 @@ void VelvoxAudioProcessor::refreshAnalysis()
 
 void VelvoxAudioProcessor::updateHostLatency()
 {
-    const int latency = chain.getLatencyFor (getRouting(), reader.pitchOn());
+    const int latency = chain.getLatencyFor (getRouting());
     if (latency != getLatencySamples())
         setLatencySamples (latency);
 }
@@ -283,7 +275,7 @@ void VelvoxAudioProcessor::syncRoutingFromState()
     if (const int solo = getSolo(); solo >= 0 && ! routing.contains (dsp::selectionModule (solo), dsp::selectionInstance (solo)))
         soloCode.store (-1);
     if (juce::MessageManager::existsAndIsCurrentThread())
-        triggerAsyncUpdate();   // latency follows the saturation / pitch instances in the chain
+        triggerAsyncUpdate();   // latency follows the saturation / smooth / ride instances in the chain
 }
 
 void VelvoxAudioProcessor::setSolo (int code)
@@ -377,7 +369,7 @@ void VelvoxAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
 {
     chain.prepare (sampleRate, samplesPerBlock);
     audioRouting = getRouting();
-    setLatencySamples (chain.getLatencyFor (audioRouting, reader.pitchOn()));
+    setLatencySamples (chain.getLatencyFor (audioRouting));
 }
 
 void VelvoxAudioProcessor::releaseResources()

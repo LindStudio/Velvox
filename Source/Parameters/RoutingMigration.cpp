@@ -19,11 +19,7 @@ namespace velvox
                 case M::delay: case M::reverb:  return true;   // the familiar core and the send lane
                 case M::sat:     return e.sat.enabled && e.sat.mix > 0.0f;
                 case M::doubler: return e.doubler.enabled && e.doubler.mix > 0.0f;
-                case M::pitch:   return e.pitch.enabled;
-                case M::chop:    return e.chop.enabled;
-                case M::pulse:   return e.pulse.enabled;
                 case M::smash:   return e.smash.enabled;
-                case M::choir:   return e.choir.enabled;
                 case M::smooth:  return e.smooth.enabled;
                 case M::check:   return e.checkOn;
                 case M::ride:    return e.ride.enabled;

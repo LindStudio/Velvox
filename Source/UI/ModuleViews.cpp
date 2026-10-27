@@ -2,10 +2,8 @@
 #include "EqPanel.h"
 #include "ReverbPanel.h"
 #include "SmoothPanel.h"
-#include "PitchPanel.h"
 #include "../PluginProcessor.h"
 #include "SatPanel.h"
-#include "../DSP/ChopModule.h"
 #include "TimePanels.h"
 #include "VoicesPanels.h"
 #include "DynPanels.h"
@@ -299,13 +297,9 @@ namespace velvox::ui
             case ModuleId::deess:   return createDynView (p, ModuleId::deess, instance);
             case ModuleId::sat:     return createSatView (p, instance);
             case ModuleId::doubler: return createVoicesModuleView (p, ModuleId::doubler, instance);
-            case ModuleId::pitch:   return createPitchStage (p);
-            case ModuleId::chop:    return createTimeModuleView (p, ModuleId::chop, instance);
             case ModuleId::delay:   return createTimeModuleView (p, ModuleId::delay, instance);
             case ModuleId::reverb:  return createReverbRoom (p, instance);
-            case ModuleId::pulse:   return createTimeModuleView (p, ModuleId::pulse, instance);
             case ModuleId::smash:   return createDynView (p, ModuleId::smash, instance);
-            case ModuleId::choir:   return createVoicesModuleView (p, ModuleId::choir, instance);
             case ModuleId::smooth:  return createSmoothGraph (p, instance);
             case ModuleId::check:   return std::make_unique<CheckView> (p);
             case ModuleId::ride:    return createDynView (p, ModuleId::ride, instance);

@@ -40,12 +40,6 @@ namespace velvox::ui
                 p.addEllipse (juce::Rectangle<float> (w * 0.5f, h * 0.5f).withCentre (P (0.38f, 0.5f)));
                 p.addEllipse (juce::Rectangle<float> (w * 0.5f, h * 0.5f).withCentre (P (0.62f, 0.5f)));
                 break;
-            case (int) M::pitch:     // up / down
-                p.startNewSubPath (P (0.35f, 0.85f)); p.lineTo (P (0.35f, 0.15f));
-                p.startNewSubPath (P (0.18f, 0.32f)); p.lineTo (P (0.35f, 0.15f)); p.lineTo (P (0.52f, 0.32f));
-                p.startNewSubPath (P (0.65f, 0.15f)); p.lineTo (P (0.65f, 0.85f));
-                p.startNewSubPath (P (0.48f, 0.68f)); p.lineTo (P (0.65f, 0.85f)); p.lineTo (P (0.82f, 0.68f));
-                break;
             case (int) M::delay:     // fading repeats
                 for (int i = 0; i < 4; ++i)
                 {
@@ -61,31 +55,11 @@ namespace velvox::ui
                     p.addCentredArc (x + 0.25f * w, y + 0.5f * h, rad * w, rad * h, 0.0f, 0.5f, 2.64f, true);
                 }
                 break;
-            case (int) M::chop:      // gate steps
-                p.startNewSubPath (P (0.05f, 0.8f));
-                p.lineTo (P (0.05f, 0.25f)); p.lineTo (P (0.3f, 0.25f)); p.lineTo (P (0.3f, 0.8f));
-                p.lineTo (P (0.5f, 0.8f)); p.lineTo (P (0.5f, 0.25f)); p.lineTo (P (0.7f, 0.25f)); p.lineTo (P (0.7f, 0.8f));
-                p.lineTo (P (0.95f, 0.8f));
-                break;
-            case (int) M::pulse:     // pump curve
-                p.startNewSubPath (P (0.05f, 0.85f));
-                p.quadraticTo (P (0.12f, 0.2f), P (0.45f, 0.2f));
-                p.lineTo (P (0.5f, 0.85f));
-                p.quadraticTo (P (0.57f, 0.2f), P (0.95f, 0.2f));
-                break;
             case (int) M::smash:     // two layers: dynamic + flat
                 p.startNewSubPath (P (0.05f, 0.4f));
                 p.cubicTo (P (0.25f, 0.05f), P (0.35f, 0.75f), P (0.55f, 0.3f));
                 p.cubicTo (P (0.7f, 0.0f), P (0.8f, 0.55f), P (0.95f, 0.35f));
                 p.startNewSubPath (P (0.05f, 0.75f)); p.lineTo (P (0.95f, 0.75f));
-                break;
-            case (int) M::choir:     // three heads
-                for (int i = 0; i < 3; ++i)
-                {
-                    const float cx = 0.22f + 0.28f * (float) i, cy = i == 1 ? 0.38f : 0.52f;
-                    p.addEllipse (juce::Rectangle<float> (w * 0.22f, h * 0.22f).withCentre (P (cx, cy)));
-                    p.addCentredArc (x + cx * w, y + (cy + 0.32f) * h, 0.17f * w, 0.14f * h, 0.0f, -1.4f, 1.4f, true);
-                }
                 break;
             case (int) M::smooth:    // spectrum with a tamed peak
                 p.startNewSubPath (P (0.05f, 0.7f));

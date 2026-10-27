@@ -27,7 +27,6 @@ namespace velvox
         dsp::ChainSettings read (const dsp::Routing& routing, bool monoMonitor) const noexcept;
         dsp::MacroValues readMacros() const noexcept;
 
-        bool pitchOn() const noexcept   { return raw.pitchOn.on(); }
         bool checkOn() const noexcept   { return raw.checkOn.on(); }
         int checkMode() const noexcept  { return raw.checkMode.index(); }
 
@@ -56,15 +55,9 @@ namespace velvox
         std::array<Raw, 4> doublerVOn, doublerVDelay, doublerVDetune, doublerVGain, doublerVPan;
         Raw duckSource, delayDuckAmount, delayDuckThreshold, delayDuckAttack, delayDuckRelease;
         Raw reverbDuckAmount, reverbDuckThreshold, reverbDuckAttack, reverbDuckRelease;
-        Raw pitchOn, pitchSemitones, pitchCents, pitchPreserveFormants, pitchFormant, pitchMix;
-        Raw chopOn, chopPattern, chopRate, chopDepth, chopSmooth;
         Raw lowType, lowQ, highType, highQ, lpfOn, lpfFreq, lpfSlope, satCharacter, deessMode, compDetector, compScHpf;
         Raw macroPresence, macroWarmth, macroAggression, macroWidth, macroSpace, macroDensity;
-        Raw pulseOn, pulseRate, pulseDepth, pulseAttack, pulseRelease, pulseSmooth, pulseInterp, pulseTension, pulseMix, pulseBpm;
-        std::array<Raw, 6> pulseX, pulseY;
-        Raw pulseShape, pulseAmount;   // 0.6
         Raw smashOn, smashAmount, smashBlend, smashAttack, smashRelease, smashTone, smashOutput;
-        Raw choirOn, choirVoices, choirDetune, choirTiming, choirHumanize, choirWidth, choirDensity, choirMix;
         Raw smoothOn, smoothAmount, smoothSensitivity, smoothLow, smoothHigh, smoothAttack, smoothRelease, smoothMode, smoothOutput, smoothDelta;
         std::array<Raw, 6> smoothWFreq, smoothWGain;
         Raw checkOn, checkMode;

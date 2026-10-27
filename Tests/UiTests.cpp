@@ -193,7 +193,7 @@ public:
         {
             ViewFixture f;
             for (auto id : { ModuleId::ride, ModuleId::smash, ModuleId::smooth, ModuleId::sat, ModuleId::doubler,
-                             ModuleId::choir, ModuleId::chop, ModuleId::pulse, ModuleId::check })
+                             ModuleId::check, ModuleId::sat, ModuleId::smooth, ModuleId::comp })
                 f.view.insertModule (id);
             f.view.insertModule (ModuleId::eq);
             const auto row = f.view.getRowViewport();
@@ -271,9 +271,8 @@ public:
                 { C::cleanUp, { ModuleId::eq, ModuleId::deess, ModuleId::smooth } },
                 { C::dynamics, { ModuleId::comp, ModuleId::smash, ModuleId::ride } },
                 { C::colour, { ModuleId::sat } },
-                { C::widthVoices, { ModuleId::doubler, ModuleId::choir, ModuleId::pitch } },
+                { C::widthVoices, { ModuleId::doubler } },
                 { C::space, { ModuleId::delay, ModuleId::reverb } },
-                { C::rhythm, { ModuleId::chop, ModuleId::pulse } },
                 { C::analysis, { ModuleId::check } } };
             std::vector<ModuleId> order;
             for (auto& [cat, ids] : expected)
@@ -325,14 +324,15 @@ public:
             // Full: greyed with a reason, not choosable, skipped by the highlight
             browser.open (0, true);
             auto r = h.proc.getRouting();
-            r.insertAt (r.size(), ModuleId::pitch, 0);
+            if (! r.contains (ModuleId::check))
+                r.insertAt (r.size(), ModuleId::check, 0);
             h.proc.setRouting (r);
-            expect (browser.reasonUnavailable (ModuleId::pitch).isNotEmpty(), "reason for pitch");
+            expect (browser.reasonUnavailable (ModuleId::check).isNotEmpty(), "reason for check");
             expect (browser.reasonUnavailable (ModuleId::reverb).isEmpty());
             chosen = ModuleId::eq;
-            click (browser, browser.cardBoundsFor (ModuleId::pitch).getCentre().toFloat());
-            expect (chosen == ModuleId::eq && browser.isOpen(), "pitch is already in the chain (one instance)");
-            browser.setSearchText ("transpose");
+            click (browser, browser.cardBoundsFor (ModuleId::check).getCentre().toFloat());
+            expect (chosen == ModuleId::eq && browser.isOpen(), "check is already in the chain (one instance)");
+            browser.setSearchText ("diagnose");
             expect (! browser.chooseHighlighted(), "Enter does not add a full module");
         }
 

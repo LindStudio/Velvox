@@ -21,12 +21,10 @@ namespace
         for (auto& p : getFactoryPresets())
             if (p.name == "Hypertechno Lead")
                 p.applyTo (h.proc.getState());
-        for (auto* id : { pid::eqOn, pid::compOn, pid::deessOn, pid::satOn, pid::doublerOn, pid::pitchOn,
-                          pid::chopOn, pid::delayOn, pid::reverbOn, pid::lpfOn,
-                          pid::pulseOn, pid::smashOn, pid::choirOn, pid::smoothOn, pid::checkOn, pid::rideOn })
+        for (auto* id : { pid::eqOn, pid::compOn, pid::deessOn, pid::satOn, pid::doublerOn,
+                          pid::delayOn, pid::reverbOn, pid::lpfOn,
+                          pid::smashOn, pid::smoothOn, pid::checkOn, pid::rideOn })
             h.set (id, 1.0f);
-        h.set (pid::pitchSemitones, -12.0f);
-        h.set (pid::choirVoices, 3.0f);
         const auto in = h.noise (0.3f, 4.0, 3);
         double best = 1.0e12;
         for (int run = 0; run < 3; ++run)
@@ -96,29 +94,6 @@ public:
         logMessage ("reverb only (large hall, 4 s): " + juce::String (reverbOnlyMs(), 1) + " ms");
         logMessage ("delay only (4 s): " + juce::String (delayOnlyMs(), 1) + " ms");
 
-        {
-            Harness h;
-            h.neutral();
-            h.set (pid::pitchOn, 1.0f);
-            h.run (h.noise (0.3f, 1.0, 5));
-        }
-        logMessage ("after a processor with pitch: " + juce::String (worstCaseMs(), 0) + " ms");
-
-        {
-            Harness h;
-            h.neutral();
-            h.set (pid::pitchOn, 1.0f);
-            juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
-        }
-        logMessage ("after a dispatch loop: " + juce::String (worstCaseMs(), 0) + " ms");
-
-        for (int i = 0; i < 20; ++i)
-        {
-            Harness h;
-            h.set (pid::pitchOn, 1.0f);
-            h.set (pid::pitchOn, 0.0f);
-        }
-        logMessage ("after 20 processors: " + juce::String (worstCaseMs(), 0) + " ms");
         expect (true);
     }
 };

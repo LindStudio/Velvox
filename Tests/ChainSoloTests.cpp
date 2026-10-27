@@ -88,14 +88,13 @@ namespace
         {
             auto b = s.instance (k);
             b.eqOn = b.compOn = b.deessOn = b.delayOn = b.reverbOn = true;
-            b.sat.enabled = b.doubler.enabled = b.smash.enabled = b.choir.enabled = b.smooth.enabled = b.ride.enabled = true;
+            b.sat.enabled = b.doubler.enabled = b.smash.enabled = b.smooth.enabled = b.ride.enabled = true;
             if (k == 0)
                 s.setInstance0 (b);
             else
                 s.extra[(size_t) k - 1] = b;
         }
-        s.pitch.enabled = s.chop.enabled = s.pulse.enabled = s.checkOn = true;
-        s.pitch.mix = 0.8f;
+        s.checkOn = true;
         return s;
     }
 
@@ -113,12 +112,8 @@ namespace
             case ModuleId::delay:   return b.delayOn;
             case ModuleId::reverb:  return b.reverbOn;
             case ModuleId::smash:   return b.smash.enabled;
-            case ModuleId::choir:   return b.choir.enabled;
             case ModuleId::smooth:  return b.smooth.enabled;
             case ModuleId::ride:    return b.ride.enabled;
-            case ModuleId::pitch:   return s.pitch.enabled && s.pitch.mix > 0.0f;
-            case ModuleId::chop:    return s.chop.enabled;
-            case ModuleId::pulse:   return s.pulse.enabled;
             case ModuleId::check:   return s.checkOn;
         }
         return false;
@@ -157,23 +152,6 @@ public:
             expect (! dsp::canSolo (ModuleId::check), "Check does not change the sound: no solo");
         }
 
-        beginTest ("applySolo: the pitch shifter keeps its latency (on, mix 0); the soloed module keeps its settings");
-        {
-            auto s = allOn();
-            dsp::applySolo (s, ModuleId::comp, 0);
-            expect (s.pitch.enabled, "pitch stays on (latency unchanged)");
-            expectEquals (s.pitch.mix, 0.0f, "pitch heard dry");
-
-            auto p = allOn();
-            dsp::applySolo (p, ModuleId::pitch, 0);
-            expect (p.pitch.enabled);
-            expectEquals (p.pitch.mix, 0.8f, "soloed pitch unchanged");
-
-            auto off = allOn();
-            off.compOn = false;
-            dsp::applySolo (off, ModuleId::comp, 0);
-            expect (! off.compOn, "a soloed module that is switched off stays off");
-        }
 
         runProcessorTests();
         runSoloUiTests();
@@ -181,8 +159,8 @@ public:
     }
 
     // Every module, several duplicates, two sends: 21 instances
-    static constexpr const char* fullChain = "v2,check,eq,eq#2,comp,comp#2,deess,sat,sat#2,smooth,ride,smash,doubler,choir,pitch,chop,"
-                                             "pulse,delay:insert,eq#3,reverb:send,reverb#2:send";
+    static constexpr const char* fullChain = "v2,check,eq,eq#2,comp,comp#2,deess,sat,sat#2,smooth,ride,smash,doubler,"
+                                             "delay:insert,eq#3,reverb:send,reverb#2:send,eq#4,comp#3,deess#2,doubler#2";
 
     static juce::MouseWheelDetails wheelOf (float dy, float dx = 0.0f, bool smooth = false)
     {
@@ -268,8 +246,8 @@ public:
 
             // Shift + drag on a tile drags the strip too
             view.scrollTo (300.0f, false);
-            const auto chop = view.getTileBounds (ModuleId::chop).getCentre();
-            drag (view, chop, chop + juce::Point<float> (-60.0f, 0.0f), juce::ModifierKeys::shiftModifier);
+            const auto onTile = view.getTileBounds (ModuleId::reverb).getCentre();
+            drag (view, onTile, onTile + juce::Point<float> (-60.0f, 0.0f), juce::ModifierKeys::shiftModifier);
             expectWithinAbsoluteError (view.getScroll(), 360.0f, 1.0f, "shift-drag pans");
             expect (h.proc.getRouting() == routingBefore, "shift-drag never reorders");
 
@@ -346,7 +324,7 @@ public:
         beginTest ("Chain tile: S solos with one click, again releases; it never selects, drags or switches power");
         {
             Harness h;
-            setupBusyChain (h, false);
+            setupBusyChain (h);
             ui::ChainView view (h.proc);
             view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
             view.setSelected ((int) ModuleId::eq);
@@ -367,7 +345,7 @@ public:
         beginTest ("Chain tile: Alt+click solos, the tile menu has Solo, the hover card names it; Check has no solo");
         {
             Harness h;
-            setupBusyChain (h, false);
+            setupBusyChain (h);
             auto r = h.proc.getRouting();
             r.insertDefault (ModuleId::check, 0);
             h.proc.setRouting (r);
@@ -408,7 +386,7 @@ public:
         beginTest ("Chain: solo shows clearly - soloed tile in solo yellow, the others dimmed, OUTPUT says SOLO");
         {
             Harness h;
-            setupBusyChain (h, false);
+            setupBusyChain (h);
             ui::ChainView view (h.proc);
             view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
             view.refresh();
@@ -427,7 +405,7 @@ public:
         beginTest ("Panel header: solo button follows and sets the processor state; editor closing ends the solo");
         {
             Harness h;
-            setupBusyChain (h, false);
+            setupBusyChain (h);
             {
                 auto e = proEditor (h);
                 auto& ed = asVelvox (*e);
@@ -455,15 +433,14 @@ public:
         }
     }
 
-    // A chain with tone, dynamics, colour, latency and a send: EQ, Comp, Sat, Smash, Pitch (off), Reverb send
-    static void setupBusyChain (Harness& h, bool pitchOn)
+    // A chain with tone, dynamics, colour, latency and a send: EQ, Comp, Sat, Smash, Reverb send
+    static void setupBusyChain (Harness& h)
     {
-        h.proc.setRouting (dsp::Routing::fromString ("v2,eq,comp,sat,smash,pitch,reverb:send"));
+        h.proc.setRouting (dsp::Routing::fromString ("v2,eq,comp,sat,smash,reverb:send"));
         h.set (pid::eqOn, 1.0f);
         h.set (pid::compOn, 1.0f);
         h.set (pid::satOn, 1.0f);
         h.set (pid::smashOn, 1.0f);
-        h.set (pid::pitchOn, pitchOn ? 1.0f : 0.0f);
         h.set (pid::reverbOn, 1.0f);
         h.set (pid::deessOn, 0.0f);
         h.set (pid::delayOn, 0.0f);
@@ -487,7 +464,7 @@ public:
         beginTest ("Processor solo: one at a time, click again releases, Check and absent instances cannot be soloed");
         {
             Harness h;
-            setupBusyChain (h, false);
+            setupBusyChain (h);
             expectEquals (h.proc.getSolo(), -1, "no solo by default");
             expect (h.proc.toggleSolo (comp), "solo on");
             expect (h.proc.isSoloed (comp));
@@ -508,8 +485,8 @@ public:
         beginTest ("Processor solo: only the soloed module is heard (= the chain with every other module off)");
         {
             Harness a, b;
-            setupBusyChain (a, false);
-            setupBusyChain (b, false);
+            setupBusyChain (a);
+            setupBusyChain (b);
             for (auto* id : { pid::eqOn, pid::satOn, pid::smashOn, pid::reverbOn })
                 b.set (id, 0.0f);
             a.proc.setSolo (comp);
@@ -524,16 +501,16 @@ public:
             expect (diff < 1.0e-3f, "solo comp == comp alone, max diff " + juce::String (diff, 6));
         }
 
-        beginTest ("Processor solo: latency unchanged (saturation in the chain, pitch shifter on)");
+        beginTest ("Processor solo: latency unchanged (saturation in the chain)");
         {
             Harness h;
-            setupBusyChain (h, true);
+            setupBusyChain (h);
             h.proc.updateHostLatency();
             h.run (h.sine (220.0, 0.2f, 0.3));
             const int hostBefore = h.proc.getLatencySamples(), chainBefore = h.proc.getChain().getLatencySamples();
             expect (hostBefore > 0 && chainBefore == hostBefore, "latent chain");
             const int switchesBefore = h.proc.getChain().meters.structureSwitches.load();
-            for (int code : { comp, sat, (int) ModuleId::smash, (int) ModuleId::pitch, (int) ModuleId::reverb, -1 })
+            for (int code : { comp, sat, (int) ModuleId::smash, (int) ModuleId::reverb, -1 })
             {
                 h.proc.setSolo (code);
                 h.proc.updateHostLatency();
@@ -547,22 +524,22 @@ public:
         beginTest ("Processor solo: switching is click-free");
         {
             // Reference: the largest curvature of every static solo state
-            const int codes[] { -1, (int) ModuleId::eq, comp, sat, (int) ModuleId::smash, (int) ModuleId::reverb, (int) ModuleId::pitch };
+            const int codes[] { -1, (int) ModuleId::eq, comp, sat, (int) ModuleId::smash, (int) ModuleId::reverb };
             float reference = 0.0f;
             for (int code : codes)
             {
                 Harness h;
-                setupBusyChain (h, true);
+                setupBusyChain (h);
                 h.proc.setSolo (code);
                 const auto out = h.run (h.sine (180.0, 0.3f, 1.5));
                 reference = std::max (reference, maxCurvature (out, (int) (0.7 * h.fs)));
             }
 
             // Solo switched every 0.25 s (whole sine periods, so the input itself is continuous)
-            const auto switching = [&] (bool pitchOn, std::function<void (Harness&, int)> apply)
+            const auto switching = [&] (std::function<void (Harness&, int)> apply)
             {
                 Harness h;
-                setupBusyChain (h, pitchOn);
+                setupBusyChain (h);
                 h.run (h.sine (180.0, 0.3f, 0.7));
                 float worst = 0.0f;
                 for (int round = 0; round < 3; ++round)
@@ -573,29 +550,24 @@ public:
                     }
                 return worst;
             };
-            const float solo = switching (true, [] (Harness& h, int code) { h.proc.setSolo (code); });
-            const float soloNoPitch = switching (false, [] (Harness& h, int code) { h.proc.setSolo (code); });
-            // The same changes made by hand with the power switches (pitch off: its switch changes the latency)
+            const float solo = switching ([] (Harness& h, int code) { h.proc.setSolo (code); });
+            // The same changes made by hand with the power switches
             const auto byHand = [] (Harness& h, int code)
             {
                 for (auto [id, param] : { std::pair { ModuleId::eq, pid::eqOn }, { ModuleId::comp, pid::compOn }, { ModuleId::sat, pid::satOn },
                                           { ModuleId::smash, pid::smashOn }, { ModuleId::reverb, pid::reverbOn } })
                     h.set (param, code < 0 || code == (int) id ? 1.0f : 0.0f);
-                // the pitch shifter's mix knob turned like the solo does (its switch would change the latency)
-                h.set (pid::pitchMix, code < 0 || code == (int) ModuleId::pitch ? 100.0f : 0.0f);
             };
-            const float handNoPitch = switching (false, byHand), handPitch = switching (true, byHand);
-            logMessage ("    curvature: solo " + juce::String (solo, 5) + " / pitch off " + juce::String (soloNoPitch, 5) + "; by hand "
-                        + juce::String (handPitch, 5) + " / " + juce::String (handNoPitch, 5) + "; static " + juce::String (reference, 5));
-            expect (soloNoPitch <= handNoPitch * 1.1f + 1.0e-5f, "as smooth as switching the modules by hand");
-            expect (solo <= handPitch * 1.1f + 1.0e-5f, "as smooth as switching by hand, pitch shifter on");
+            const float hand = switching (byHand);
+            logMessage ("    curvature: solo " + juce::String (solo, 5) + "; by hand " + juce::String (hand, 5) + "; static " + juce::String (reference, 5));
+            expect (solo <= hand * 1.1f + 1.0e-5f, "as smooth as switching the modules by hand");
             expect (solo < 0.01f, "far from a click (a 1 % step)");
         }
 
         beginTest ("Processor solo: a monitoring state - never saved, never an undo step, never marks parameters");
         {
             Harness h;
-            setupBusyChain (h, false);
+            setupBusyChain (h);
             const auto stateBefore = h.proc.getState().copyState().toXmlString();
             const int stepsBefore = h.proc.getUndo().getNumSteps();
             h.proc.setSolo (comp);
@@ -616,7 +588,7 @@ public:
         beginTest ("Processor solo: the soloed instance leaving the chain ends the solo");
         {
             Harness h;
-            setupBusyChain (h, false);
+            setupBusyChain (h);
             h.proc.setSolo (comp);
             auto r = h.proc.getRouting();
             r.remove (ModuleId::comp, 0);

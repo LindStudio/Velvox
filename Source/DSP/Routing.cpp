@@ -5,21 +5,20 @@ namespace velvox::dsp
 {
     namespace
     {
-        constexpr const char* keys[numModules]  { "eq", "comp", "deess", "sat", "doubler", "pitch", "delay", "reverb", "chop",
-                                                  "pulse", "smash", "choir", "smooth", "check", "ride" };
-        constexpr const char* names[numModules] { "EQ", "Compressor", "De-esser", "Saturation", "Doubler", "Pitch", "Delay", "Reverb", "Stutter",
-                                                  "Pulse", "Vocal Smash", "Choir", "Smooth", "Vocal Check", "Level Ride" };
-        constexpr const char* shortNames[numModules] { "EQ", "Comp", "De-ess", "Sat", "Doubler", "Pitch", "Delay", "Reverb", "Stutter",
-                                                       "Pulse", "Smash", "Choir", "Smooth", "Check", "Ride" };
+        constexpr const char* keys[numModules]  { "eq", "comp", "deess", "sat", "doubler", "delay", "reverb",
+                                                  "smash", "smooth", "check", "ride" };
+        constexpr const char* names[numModules] { "EQ", "Compressor", "De-esser", "Saturation", "Doubler", "Delay", "Reverb",
+                                                  "Vocal Smash", "Smooth", "Vocal Check", "Level Ride" };
+        constexpr const char* shortNames[numModules] { "EQ", "Comp", "De-ess", "Sat", "Doubler", "Delay", "Reverb",
+                                                       "Smash", "Smooth", "Check", "Ride" };
 
         // Default processing order of 0.3. The nine v0.2 modules keep their relative
         // order; the 0.3 modules sit where they usually belong: leveling before
         // compression, parallel squash after it, resonance control after
-        // de-essing, rhythm effects late, analysis last.
+        // de-essing, analysis last.
         constexpr ModuleId defaultOrder[numModules] {
             ModuleId::eq, ModuleId::ride, ModuleId::comp, ModuleId::smash, ModuleId::deess, ModuleId::smooth,
-            ModuleId::sat, ModuleId::doubler, ModuleId::choir, ModuleId::pitch, ModuleId::delay, ModuleId::reverb,
-            ModuleId::chop, ModuleId::pulse, ModuleId::check
+            ModuleId::sat, ModuleId::doubler, ModuleId::delay, ModuleId::reverb, ModuleId::check
         };
 
         constexpr int idx (ModuleId id) noexcept { return (int) id; }
@@ -277,7 +276,7 @@ namespace velvox::dsp
         //    precedes them in the default order (or to the front)
         // so an old routing string gains the new modules exactly where a fresh 0.3
         // instance had them, and the given order is never rearranged.
-        constexpr int firstV03Module = (int) ModuleId::pulse;
+        constexpr int firstV03Module = (int) ModuleId::smash;
         for (int d = 0; d < numModules; ++d)
         {
             const auto id = defaultOrder[d];

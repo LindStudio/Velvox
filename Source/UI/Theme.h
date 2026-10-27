@@ -144,12 +144,8 @@ namespace velvox::ui
             case M::ride:    return 0.40f;
             case M::smash:   return 0.47f;
             case M::doubler: return 0.56f;
-            case M::choir:   return 0.62f;
-            case M::pitch:   return 0.68f;
             case M::delay:   return 0.74f;
             case M::reverb:  return 0.80f;
-            case M::chop:    return 0.88f;
-            case M::pulse:   return 0.94f;
             case M::sat:     return 1.00f;
         }
         return 0.0f;
@@ -166,9 +162,6 @@ namespace velvox::ui
             case M::ride:    argb = 0xff00d1ff; break;
             case M::smooth:  argb = 0xff22b8ff; break;
             case M::smash:   argb = 0xff3b82f6; break;
-            case M::choir:   argb = 0xff6366ff; break;
-            case M::pulse:   argb = 0xff8b5cf6; break;
-            case M::chop:    argb = 0xffa855f7; break;
             case M::delay:   argb = 0xffd946ef; break;
             case M::reverb:  argb = 0xfff472b6; break;
             case M::eq:      argb = 0xff2dd4bf; break;
@@ -176,7 +169,6 @@ namespace velvox::ui
             case M::deess:   argb = 0xff0ea5e9; break;
             case M::comp:    argb = 0xff2563eb; break;
             case M::doubler: argb = 0xff818cf8; break;
-            case M::pitch:   argb = 0xffc084fc; break;
             case M::sat:     argb = 0xffec4899; break;
         }
         return juce::Colour (argb).withAlpha (alpha);

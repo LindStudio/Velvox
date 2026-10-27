@@ -121,7 +121,7 @@ namespace
         {
             dsp::VocalChain c;
             c.prepare (fs, 512);
-            return c.getLatencyFor (s.routing, s.pitch.enabled);
+            return c.getLatencyFor (s.routing);
         }
     };
 
@@ -401,35 +401,7 @@ public:
         const double fs = 48000.0;
         juce::StringArray table;
 
-        beginTest ("Audit: Choir at Mix 100 % leaves no dry (voices start >= 6 ms late)");
-        {
-            const auto b = makeBurst (fs, 2, 4.0);
-            ChainRig rig ("v2,choir");
-            rig.s.choir.enabled = true; rig.s.choir.mix = 1.0f; rig.s.choir.humanize = 0.0f;
-            const double r = burstResidualDb (rig.run (b.signal), b, rig.latency());
-            table.add ("choir | choirMix | true crossfade (both laws) | " + juce::String (r, 1) + " dB");
-            expectLessThan (r, -60.0);
-        }
 
-        beginTest ("Audit: Pitch at Mix 100 % (+7 st) leaves no dry at the input frequency");
-        {
-            ChainRig rig ("v2,pitch");
-            rig.s.pitch.enabled = true; rig.s.pitch.semitones = 7.0f; rig.s.pitch.mix = 1.0f; rig.s.pitch.preserveFormants = false;
-            juce::AudioBuffer<float> in (2, (int) (3.0 * fs));
-            for (int ch = 0; ch < 2; ++ch)
-                for (int i = 0; i < in.getNumSamples(); ++i)
-                    in.setSample (ch, i, 0.25f * (float) std::sin (2.0 * pi * 440.0 * i / fs));
-            const auto out = rig.run (in);
-            const int start = (int) (1.5 * fs) + rig.latency(), len = (int) fs;
-            const double dry = toneMagnitude (out, start, len, 440.0, fs) / toneMagnitude (in, (int) (1.5 * fs), len, 440.0, fs);
-            const double wet = toneMagnitude (out, start, len, 440.0 * std::pow (2.0, 7.0 / 12.0), fs) / 0.25;
-            const double r = juce::Decibels::gainToDecibels (dry, -300.0);
-            logMessage ("pitch +7 st: shifted tone " + juce::String (juce::Decibels::gainToDecibels (wet), 1) + " dB, output "
-                        + juce::String (rmsDb (out, start, len) - rmsDb (in, start, len), 1) + " dB re input, residual at the input frequency " + juce::String (r, 1) + " dB");
-            expectGreaterThan (rmsDb (out, start, len), rmsDb (in, start, len) - 12.0f, "the shifted voice is there");
-            table.add ("pitch | pitchMix | true crossfade, dry latency aligned (both laws) | " + juce::String (r, 1) + " dB");
-            expectLessThan (r, -60.0);
-        }
 
         beginTest ("Audit: Mix 0 % passes the (latency-aligned) dry bit-exactly; 100 % is the processed signal");
         {
@@ -438,10 +410,6 @@ public:
                 { "eq",      "v2,eq",      [] (auto& s, float m) { s.eqOn = true; s.eqMix = m; s.eq.bands[0].on = true; s.eq.bands[0].gain = 9.0f; } },
                 { "comp",    "v2,comp",    [] (auto& s, float m) { s.compOn = true; s.compMix = m; s.comp.thresholdDb = -40.0f; s.comp.ratio = 8.0f; } },
                 { "sat",     "v2,sat",     [] (auto& s, float m) { s.sat.enabled = true; s.sat.mix = m; s.sat.driveDb = 18.0f; } },
-                { "pitch",   "v2,pitch",   [] (auto& s, float m) { s.pitch.enabled = true; s.pitch.mix = m; s.pitch.semitones = 5.0f; } },
-                { "choir",   "v2,choir",   [] (auto& s, float m) { s.choir.enabled = true; s.choir.mix = m; } },
-                { "pulse",   "v2,pulse",   [] (auto& s, float m) { s.pulse.enabled = true; s.pulse.mix = m; s.pulse.depth = 1.0f; } },
-                { "chop",    "v2,chop",    [] (auto& s, float m) { s.chop.enabled = true; s.chop.depth = m; } },
                 { "delay",   "v2,delay:insert",  [] (auto& s, float m) { s.delayOn = true; s.delayMix = m; } },
                 { "reverb",  "v2,reverb:insert", [] (auto& s, float m) { s.reverbOn = true; s.reverbMix = m; } },
                 { "doubler", "v2,doubler", [] (auto& s, float m) { s.doubler.enabled = true; s.doubler.mix = m; } },
@@ -478,28 +446,6 @@ public:
                 }
         }
 
-        beginTest ("Audit: Pulse and Chop at 100 % close fully (the wet is the gated dry by design)");
-        {
-            juce::AudioBuffer<float> in (2, (int) (4.0 * fs));
-            juce::Random rnd (9);
-            for (int ch = 0; ch < 2; ++ch)
-                for (int i = 0; i < in.getNumSamples(); ++i)
-                    in.setSample (ch, i, 0.2f * (rnd.nextFloat() * 2.0f - 1.0f));
-
-            ChainRig pulse ("v2,pulse");
-            pulse.s.pulse.enabled = true; pulse.s.pulse.mix = 1.0f; pulse.s.pulse.depth = 1.0f;
-            pulse.s.pulse.y = { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f };   // a closed segment (the default only touches 0)
-            const auto [plo, phi] = gateRangeDb (pulse.run (in), (int) fs, (int) (2.0 * fs), 240);
-            ChainRig chop ("v2,chop");
-            chop.s.chop.enabled = true; chop.s.chop.depth = 1.0f;
-            const auto [clo, chi] = gateRangeDb (chop.run (in), (int) fs, (int) (2.0 * fs), 240);
-            logMessage ("pulse depth/mix 100 %: closed " + juce::String (plo - phi, 1) + " dB below open; chop depth 100 %: "
-                        + juce::String (clo - chi, 1) + " dB");
-            table.add ("pulse | pulseMix | true crossfade (both laws); wet = gain-modulated dry | closed phase " + juce::String (plo - phi, 1) + " dB");
-            table.add ("chop | chopDepth (no Mix) | depth crossfade (both laws); wet = gated / repeated dry | muted step " + juce::String (clo - chi, 1) + " dB");
-            expectLessThan (plo - phi, -60.0, "pulse closes");
-            expectLessThan (clo - chi, -60.0, "chop mutes");
-        }
 
         beginTest ("Audit: Vocal Check is read-only (bit-exact pass-through)");
         {
@@ -831,7 +777,7 @@ public:
             expectEquals (dsp::additiveDryGain (1.0f, MixLaw::trueDryWet), 0.0f);
             for (auto id : { ModuleId::delay, ModuleId::reverb, ModuleId::doubler, ModuleId::smash })
                 expect (dsp::hasAdditiveMix (id));
-            for (auto id : { ModuleId::eq, ModuleId::comp, ModuleId::sat, ModuleId::choir, ModuleId::pitch, ModuleId::pulse })
+            for (auto id : { ModuleId::eq, ModuleId::comp, ModuleId::sat, ModuleId::smooth })
                 expect (! dsp::hasAdditiveMix (id));
         }
     }

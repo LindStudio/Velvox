@@ -79,9 +79,6 @@ public:
             expect (ui::moduleColour (ModuleId::ride) == juce::Colour (0xff00d1ff), "LEVEL RIDE #00D1FF");
             expect (ui::moduleColour (ModuleId::smooth) == juce::Colour (0xff22b8ff), "SMOOTH #22B8FF");
             expect (ui::moduleColour (ModuleId::smash) == juce::Colour (0xff3b82f6), "VOCAL SMASH #3B82F6");
-            expect (ui::moduleColour (ModuleId::choir) == juce::Colour (0xff6366ff), "CHOIR #6366FF");
-            expect (ui::moduleColour (ModuleId::pulse) == juce::Colour (0xff8b5cf6), "PULSE #8B5CF6");
-            expect (ui::moduleColour (ModuleId::chop) == juce::Colour (0xffa855f7), "STUTTER #A855F7");
             expect (ui::moduleColour (ModuleId::delay) == juce::Colour (0xffd946ef), "DELAY #D946EF");
             expect (ui::moduleColour (ModuleId::reverb) == juce::Colour (0xfff472b6), "REVERB #F472B6");
             expect (ui::colours::windowBg == juce::Colour (0xff05060a), "window #05060A");
@@ -239,8 +236,8 @@ public:
             Harness h;
             ui::ChainView view (h.proc);
             view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
-            for (auto id : { ModuleId::ride, ModuleId::smash, ModuleId::smooth, ModuleId::sat, ModuleId::doubler, ModuleId::choir,
-                             ModuleId::chop, ModuleId::pulse, ModuleId::check, ModuleId::pitch, ModuleId::eq, ModuleId::comp })
+            for (auto id : { ModuleId::ride, ModuleId::smash, ModuleId::smooth, ModuleId::sat, ModuleId::doubler, ModuleId::delay,
+                             ModuleId::reverb, ModuleId::check, ModuleId::eq, ModuleId::comp, ModuleId::sat, ModuleId::smooth })
                 view.insertModule (id);
             for (const auto& s : h.proc.getRouting())
                 expect (view.getTileBounds (s.id, s.instance).getWidth() >= 84.0f - 0.01f, "tile width >= 84");
@@ -279,10 +276,7 @@ public:
             expect (found[(int) ModuleId::delay].segments.contains ("delayDivision"), "DELAY time as segments");
             expect (found[(int) ModuleId::delay].toggles.contains ("delaySync") && found[(int) ModuleId::delay].toggles.contains ("delayPingPong"), "DELAY switches");
             expect (found[(int) ModuleId::reverb].choices.contains ("reverbType"), "REVERB room list (dropdown, 0.6)");
-            expect (found[(int) ModuleId::pulse].segments.contains ("pulseRate"), "PULSE rate as segments");
-            expect (found[(int) ModuleId::choir].segments.contains ("choirVoices"), "CHOIR voices as segments");
             expect (found[(int) ModuleId::smooth].segments.contains ("smoothMode") && found[(int) ModuleId::smooth].toggles.contains ("smoothDelta"), "SMOOTH character + delta");
-            expect (found[(int) ModuleId::chop].segments.contains ("chopRate"), "STUTTER rate as segments");
             expect (found[(int) ModuleId::smash].knobs.contains ("smashAmount"), "VOCAL SMASH big knob");
 
             // EQ (0.6): the bands live in the graph and the selected-band row ("Headliner EQ panel"); with no band only Mix
@@ -294,7 +288,6 @@ public:
             expect (found[(int) ModuleId::comp].segments.contains ("compDetector"), "COMPRESSOR detector as segments");
             expect (found[(int) ModuleId::deess].segments.contains ("deessMode") && found[(int) ModuleId::deess].toggles.contains ("deessListen"), "DE-ESSER mode + listen");
             expect (found[(int) ModuleId::sat].segments.contains ("satCharacter"), "SATURATION character as segments");
-            expect (found[(int) ModuleId::pitch].toggles.contains ("pitchPreserveFormants"), "PITCH keep formants switch");
             expect (found[-1].segments.contains ("levelMatchMode") && found[-1].segments.contains ("levelMatchWindow"), "OUTPUT level match as segments");
             expect (found[-1].knobs.contains ("inputGain"), "OUTPUT input gain");
             for (auto* pid : { "compThreshold", "compRatio", "compAttack", "compRelease", "compKnee", "compMakeup", "compMix", "compScHpf" })
@@ -450,7 +443,7 @@ public:
         }
 
         // ---- Findings of the 0.5 review that still apply
-        beginTest ("Review: every delay division and pulse rate stays reachable (overflow segment)");
+        beginTest ("Review: every delay division stays reachable (overflow segment)");
         {
             Harness h;
             auto& state = h.proc.getState();
@@ -474,10 +467,7 @@ public:
             }
 
             // The panels use it for the many-step parameters
-            auto r = h.proc.getRouting();
-            if (! r.contains (ModuleId::pulse)) r.insertDefault (ModuleId::pulse, 0);
-            h.proc.setRouting (r);
-            for (auto id : { ModuleId::delay, ModuleId::pulse })
+            for (auto id : { ModuleId::delay })
             {
                 auto panel = ui::createDetailPanel (h.proc, (int) id);
                 panel->setBounds (panelSize());
@@ -528,8 +518,8 @@ public:
             const std::vector<std::pair<const char*, float>> values { { pid::macroAggression, 30.0f },
                 { pid::rideTarget, -22.0f }, { pid::rideMaxBoost, 5.0f }, { pid::compRatio, 4.5f }, { pid::compThreshold, -24.0f },
                 { pid::deessFreq, 7200.0f }, { pid::delayDivision, 7.0f }, { pid::delayFeedback, 42.0f }, { pid::delayMix, 23.0f },
-                { pid::reverbType, 3.0f }, { pid::reverbDecay, 2.4f }, { pid::reverbMix, 16.0f }, { pid::pulseRate, 4.0f },
-                { pid::choirVoices, 2.0f }, { pid::smoothMode, 1.0f }, { pid::smashAmount, 64.0f }, { pid::chopRate, 2.0f },
+                { pid::reverbType, 3.0f }, { pid::reverbDecay, 2.4f }, { pid::reverbMix, 16.0f },
+                { pid::smoothMode, 1.0f }, { pid::smashAmount, 64.0f },
                 { pid::satDrive, 9.0f }, { pid::hpfFreq, 140.0f }, { pid::outputGain, -2.5f } };
             for (auto& [id, v] : values)
                 h.set (id, v);

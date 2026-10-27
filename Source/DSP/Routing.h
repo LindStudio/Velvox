@@ -11,12 +11,13 @@ namespace velvox::dsp
     // values are persisted - append only, never renumber.
     enum class ModuleId : std::uint8_t
     {
-        eq = 0, comp, deess, sat, doubler, pitch, delay, reverb, chop,
+        eq = 0, comp, deess, sat, doubler, delay, reverb,
         // 0.3
-        pulse, smash, choir, smooth, check, ride
+        smash, smooth, check, ride
+        // 0.7: Pitch, Stutter (chop), Pulse and Choir were removed
     };
 
-    inline constexpr int numModules = 15;
+    inline constexpr int numModules = 11;
 
     const char* moduleKey (ModuleId id) noexcept;          // stable key used in state/presets
     const char* moduleDisplayName (ModuleId id) noexcept;  // UI name
@@ -47,7 +48,7 @@ namespace velvox::dsp
     //  - Plain value type with a fixed capacity: copied lock-free to the audio thread.
     struct Routing
     {
-        static constexpr int capacity = 31;   // == maxChainSlots (every instance of every module)
+        static constexpr int capacity = 26;   // == maxChainSlots (every instance of every module)
 
         std::array<ChainSlot, capacity> slots {};
         int count = 0;

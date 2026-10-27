@@ -50,9 +50,6 @@ namespace velvox::ui
             case M::ride:    return text (levelride_svg, levelride_svgSize);
             case M::smooth:  return text (smooth_svg, smooth_svgSize);
             case M::smash:   return text (vocalsmash_svg, vocalsmash_svgSize);
-            case M::choir:   return text (choir_svg, choir_svgSize);
-            case M::pulse:   return text (pulse_svg, pulse_svgSize);
-            case M::chop:    return text (stutter_svg, stutter_svgSize);
             case M::delay:   return text (delay_svg, delay_svgSize);
             case M::reverb:  return text (reverb_svg, reverb_svgSize);
             case M::eq:      return text (eq_svg, eq_svgSize);
@@ -60,7 +57,6 @@ namespace velvox::ui
             case M::deess:   return text (deess_svg, deess_svgSize);
             case M::sat:     return text (sat_svg, sat_svgSize);
             case M::doubler: return text (doubler_svg, doubler_svgSize);
-            case M::pitch:   return text (pitch_svg, pitch_svgSize);
             case M::check:   return text (check_svg, check_svgSize);
         }
         return {};

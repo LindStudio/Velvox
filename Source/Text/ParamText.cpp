@@ -13,7 +13,7 @@ namespace velvox::i18n
         // Feedback, Q, Gain, Low Cut, High Cut, Send ...) stay English in both languages.
         //
         // Numbered families share one entry: the first digits of the id become "#" ("eqBand3Gain" ->
-        // "eqBand#Gain", "pulseX4" -> "pulseX#") and "{0}" in the name is the number.
+        // "eqBand#Gain", "doublerV2On" -> "doublerV#On") and "{0}" in the name is the number.
         // Names keep the module prefix of the English name ("Comp ", "Sat ", ...): extra instances
         // ("Compressor 2: Threshold") replace it with the instance name, as the English names do.
         struct Entry
@@ -185,21 +185,7 @@ namespace velvox::i18n
                 { "reverbDuckAttack",    { "", "Wie schnell das Reverb heruntergedrückt wird.", {} } },
                 { "reverbDuckRelease",   { "", "Wie schnell das Reverb in den Pausen zurückkommt.", {} } },
 
-                // ---------------- Pitch ----------------
-                { "pitchOn",               { "Pitch An", "Schaltet den kreativen Pitch-Shifter ein. Bringt etwa 15 ms Latenz, solange er an ist (die DAW gleicht sie aus).", {} } },
-                { "pitchSemitones",        { "", "Transposition in Halbtönen.", {} } },
-                { "pitchCents",            { "Pitch Fein", "Feinstimmung in Cent.", {} } },
-                { "pitchPreserveFormants", { "Pitch Formanten erhalten", "An: die Stimme behält beim Verschieben ihren natürlichen Charakter. Aus: die Formanten wandern mit (Micky Maus / Monster).", {} } },
-                { "pitchFormant",          { "", "Verschiebt den Stimmcharakter (Formanten) unabhängig von der Tonhöhe nach oben oder unten.", {} } },
-                { "pitchMix",              { "", "Mischung aus verschobener und originaler Stimme.", {} } },
 
-                // ---------------- Stutter (internal: chop) ----------------
-                { "chopOn",      { "Stutter An", "Schaltet Stutter ein, das tempo-synchrone Gate mit Wiederholungen.", {} } },
-                { "chopPattern", { "Stutter Muster", "16-Schritt-Rhythmus: spielt, stummt oder wiederholt (stottert) die Stimme.",
-                                   { "", "", "Trance-Gate", "", "Galopp", "Halber Takt", "Stutter-Ende", "Stutter Achtel", "", "Chop & Repeat" } } },
-                { "chopRate",    { "", "Länge eines Schritts, synchron zum Host-Tempo.", {} } },
-                { "chopDepth",   { "Stutter Tiefe", "Wie stark das Muster wirkt.", {} } },
-                { "chopSmooth",  { "Stutter Glätten", "Rundet die Kanten jedes Schritts ab (höher = weicher, weniger Klicks).", {} } },
 
                 // ---------------- Macros ----------------
                 { "macroPresence",   { "Präsenz", "Holt die Stimme nach vorn: hellere Höhen, S-Laute bleiben im Zaum.", {} } },
@@ -209,22 +195,6 @@ namespace velvox::i18n
                 { "macroSpace",      { "Raum", "Mehr Raum: Reverb und Delay, die zurücktreten, während du singst.", {} } },
                 { "macroDensity",    { "Dichte", "Dichter und gleichmäßiger: mehr Kompression und etwas Sättigung.", {} } },
 
-                // ---------------- Pulse ----------------
-                { "pulseOn",      { "Pulse An", "Schaltet PULSE ein, den rhythmischen Lautstärke-Former.", {} } },
-                { "pulseRate",    { "", "Länge eines Kurvendurchlaufs, synchron zum Host-Tempo (oder zum eingestellten BPM, wenn der Host keins sendet).", {} } },
-                { "pulseDepth",   { "Pulse Tiefe", "Wie weit die Kurve die Lautstärke an ihren tiefsten Punkten absenkt.", {} } },
-                { "pulseAttack",  { "", "Wie schnell die Lautstärke fallen darf - länger macht harte Einbrüche weicher.", {} } },
-                { "pulseRelease", { "", "Wie schnell die Lautstärke wieder steigen darf.", {} } },
-                { "pulseSmooth",  { "Pulse Glätten", "Letzte Rundung der Lautstärkebewegung gegen Klicks.", {} } },
-                { "pulseInterp",  { "Pulse Übergang", "Wie die Kurve zwischen ihren Punkten verläuft: gerade Linien, S-Kurven oder harte Stufen.",
-                                    { "Linear", "Weich", "Stufen" } } },
-                { "pulseTension", { "Pulse Form", "Biegt jedes Kurvenstück: negativ = schneller Anfang, positiv = langsamer Anfang (mehr Punch).", {} } },
-                { "pulseMix",     { "", "Mischung aus originaler und geformter Stimme.", {} } },
-                { "pulseBpm",     { "", "Tempo, wenn der Host keins meldet.", {} } },
-                { "pulseX#",      { "Pulse Punkt {0} Zeit", "Position des Kurvenpunkts im Durchlauf.", {} } },
-                { "pulseY#",      { "Pulse Punkt {0} Pegel", "Lautstärke des Kurvenpunkts (1 = unverändert).", {} } },
-                { "pulseShape",   { "Pulse Kurve", "Pump-Form: Custom nutzt die gezeichnete Kurve; Classic, Punch, Swell und Gate sind fertige Pumps.", {} } },
-                { "pulseAmount",  { "Pulse Stärke", "Wie stark die Stimme pumpt: 0 = unverändert, 50 = die Depth-Einstellung, 100 = auf dem Beat ganz abgesenkt.", {} } },
 
                 // ---------------- Vocal Smash ----------------
                 { "smashOn",      { "Smash An", "Schaltet VOCAL SMASH ein, einen eigenen Parallel-Compressor.", {} } },
@@ -235,15 +205,6 @@ namespace velvox::i18n
                 { "smashTone",    { "Smash Klang", "Färbt den gequetschten Weg: negativ = wärmer, positiv = heller und präsenter.", {} } },
                 { "smashOutput",  { "Smash Ausgang", "Ausgangspegel des Moduls.", {} } },
 
-                // ---------------- Choir ----------------
-                { "choirOn",       { "Choir An", "Schaltet CHOIR ein, das Doppeln mit vielen Stimmen.", {} } },
-                { "choirVoices",   { "Choir Stimmen", "Anzahl der virtuellen Stimmen um das Original.", {} } },
-                { "choirDetune",   { "", "Tonhöhenunterschied zwischen den Stimmen (jede Stimme bekommt ihren eigenen Versatz).", {} } },
-                { "choirTiming",   { "", "Wie spät die Stimmen zueinander einsetzen - wie Sänger, die nicht ganz zusammen sind.", {} } },
-                { "choirHumanize", { "", "Langsames, unabhängiges Driften von Tonhöhe und Timing je Stimme, damit der Chor nie statisch klingt.", {} } },
-                { "choirWidth",    { "", "Wie weit sich die Stimmen im Stereobild verteilen.", {} } },
-                { "choirDensity",  { "Choir Dichte", "Fülle des Chors: wenig = Stimmen leise im Hintergrund, viel = jede Stimme mit vollem Pegel.", {} } },
-                { "choirMix",      { "", "Verhältnis von Original-Stimme und Chor.", {} } },
 
                 // ---------------- Smooth ----------------
                 { "smoothOn",          { "Smooth An", "Schaltet SMOOTH ein, die adaptive Resonanz-Kontrolle.", {} } },
@@ -339,7 +300,7 @@ namespace velvox::i18n
         // "Compressor 2: Threshold": keep the instance name, drop the module prefix of the first instance
         if (f.extraInstance && english.contains (": "))
         {
-            for (auto* prefix : { "EQ ", "Comp ", "De-Ess ", "Sat ", "Delay ", "Reverb ", "Doubler ", "Smash ", "Choir ", "Smooth ", "Ride " })
+            for (auto* prefix : { "EQ ", "Comp ", "De-Ess ", "Sat ", "Delay ", "Reverb ", "Doubler ", "Smash ", "Smooth ", "Ride " })
                 if (name.startsWith (prefix))
                 {
                     name = name.substring ((int) std::strlen (prefix));

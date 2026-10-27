@@ -93,13 +93,9 @@ namespace velvox::ui
             case ModuleId::deess:   return pid::deessOn;
             case ModuleId::sat:     return pid::satOn;
             case ModuleId::doubler: return pid::doublerOn;
-            case ModuleId::pitch:   return pid::pitchOn;
-            case ModuleId::chop:    return pid::chopOn;
             case ModuleId::delay:   return pid::delayOn;
             case ModuleId::reverb:  return pid::reverbOn;
-            case ModuleId::pulse:   return pid::pulseOn;
             case ModuleId::smash:   return pid::smashOn;
-            case ModuleId::choir:   return pid::choirOn;
             case ModuleId::smooth:  return pid::smoothOn;
             case ModuleId::check:   return pid::checkOn;
             case ModuleId::ride:    return pid::rideOn;

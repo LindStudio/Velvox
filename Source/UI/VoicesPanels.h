@@ -3,20 +3,17 @@
 #include <optional>
 #include "DetailPanels.h"
 #include "../DSP/DoublerModule.h"
-#include "../DSP/ChoirModule.h"
 
 class VelvoxAudioProcessor;
 
-// The two voice panels of 0.6 (spec 5.8, 5.9) on the common frame:
+// The voice panel of 0.6 (spec 5.8) on the common frame (Choir was removed in 0.7):
 //   Doubler - "like Waves Doubler": voice mode Classic / 2 / 4, a stage strip with every voice as a dot
 //             (x = pan, y = gain, draggable; live wobble from the engine) and one compact row of value
 //             fields per voice (on, delay, detune, gain, pan)
-//   Choir   - "half-circle stage": the voices on a half circle around the lead (x = heard pan, further
-//             out = later entry), dragging the stage sets Width
 // The views are public so the tests can drive them like a user.
 namespace velvox::ui
 {
-    // Visual / panel for doubler or choir; nullptr for every other module
+    // Visual / panel for the doubler; nullptr for every other module
     std::unique_ptr<ModuleView> createVoicesModuleView (VelvoxAudioProcessor& p, dsp::ModuleId id, int instance);
     std::unique_ptr<DetailPanel> createVoicesModulePanel (VelvoxAudioProcessor& p, dsp::ModuleId id);
 
@@ -155,62 +152,5 @@ namespace velvox::ui
         std::array<juce::String, 4> rowCaptions;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DoublerStage)
-    };
-
-    //==========================================================================
-    // CHOIR: the voices on a half circle around the lead (ChoirModule::voicePosition): each side's voices in
-    // the order of their heard pans, the outermost at its pan, the others evenly spaced (seatAngle); later
-    // entries stand further out; size / glow = level, a subtle bob = the
-    // live pitch drift. Drag horizontally = Width (Shift / Ctrl fine) · double-click / Alt+click = Width
-    // default · wheel = Width · right-click = panel menu · hover a voice 600 ms = its card.
-    class ChoirStage final : public ModuleView
-    {
-    public:
-        ChoirStage (VelvoxAudioProcessor& p, int instance);
-        ~ChoirStage() override;
-
-        static constexpr float pixelsPerWidth = 220.0f;   // drag distance for the whole Width range
-
-        void update (const LiveData&) override;
-        void paint (juce::Graphics&) override;
-        void resized() override;
-        void mouseMove (const juce::MouseEvent&) override;
-        void mouseExit (const juce::MouseEvent&) override;
-        void mouseDown (const juce::MouseEvent&) override;
-        void mouseDrag (const juce::MouseEvent&) override;
-        void mouseUp (const juce::MouseEvent&) override;
-        void mouseDoubleClick (const juce::MouseEvent&) override;
-        void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
-
-        // ---- State (also for tests)
-        void setSettings (const dsp::ChoirSettings& s);         // what update() does with the settings
-        int numShownVoices() const noexcept { return settings.voices; }
-        juce::Point<float> voicePoint (int voice) const noexcept;   // static position (no live bob)
-        float seatAngle (int voice) const noexcept;                 // radians from straight up, < 0 = left
-        juce::Point<float> leadPoint() const noexcept { return lead; }
-        float getRadius() const noexcept { return radius; }
-        int voiceAt (juce::Point<float>) const noexcept;
-        juce::String cardValue (int voice) const;               // "L80 · -8 ct · -1.2 dB"
-        bool isDragging() const noexcept { return dragging; }
-
-    private:
-        juce::RangedAudioParameter* widthParam() const;
-        void endDrag();
-
-        VelvoxAudioProcessor& proc;
-        const int instance;
-        dsp::ChoirSettings settings;
-        bool on = false, dragging = false, ignoreDrag = false;
-        int hovered = -1;
-        float lastX = 0.0f, dragWidth = 0.0f, leadLevel = 0.0f, correlation = 1.0f;
-        std::array<float, dsp::ChoirModule::maxVoices> liveBob {}, liveLevel {};
-        juce::Point<float> lead;
-        float radius = 100.0f, radiusY = 80.0f;
-        juce::String readout, monoText, widthText;
-        juce::Path arcs;
-        double lastPaint = -1.0;
-        std::unique_ptr<HoverInfo> info;
-
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChoirStage)
     };
 }

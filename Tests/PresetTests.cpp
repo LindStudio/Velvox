@@ -39,7 +39,8 @@ public:
             for (auto* c : { "Clean", "Punchy", "Aggressive", "Wide", "Creative", "Classic (v0.1)", "Utility" })
                 expect (categories.contains (c), juce::String ("missing category ") + c);
             for (auto* n : { "Clean Lead", "Hypertechno Lead", "Aggressive Party Vocal", "Wide Festival Vocal", "Bright Pop Vocal",
-                             "Telephone Vocal", "Vocal Chop", "Wide Adlibs", "Heavy Parallel Compression",
+                             "Telephone Vocal", "Tight Rap Vocal", "Wide Adlibs", "Heavy Parallel Compression",
+                             "Deep Double", "Bright Hook", "Hard Dance Lead", "Festival Choir Hook", "Pumping Party Vocal",
                              "Clean Vocal", "Modern Pop", "Hypertechno Lead v0.1", "Aggressive Vocal", "Wide Vocal" })
                 expect (names.contains (n), juce::String ("missing preset ") + n);
         }
@@ -47,9 +48,9 @@ public:
         beginTest ("New presets use the new modules");
         {
             expectEquals (findPreset ("Hypertechno Lead")->values.at (pid::doublerOn), 1.0f);
-            expectEquals (findPreset ("Vocal Chop")->values.at (pid::chopOn), 1.0f);
+
             expectEquals (findPreset ("Wide Festival Vocal")->values.at (pid::reverbDuckAmount), 7.0f);
-            expectEquals (findPreset ("Octave Down Layer")->values.at (pid::pitchSemitones), -12.0f);
+
             expectEquals (findPreset ("Telephone Vocal")->values.at (pid::lpfOn), 1.0f);
             expectEquals (findPreset ("Heavy Parallel Compression")->values.at (pid::compMix), 40.0f);
         }

@@ -10,8 +10,7 @@ namespace velvox::dsp
     // A pure transform of one block's settings (audio thread, no allocation): the other instances get their
     // on-switches off, so each one fades out exactly as when the user switches it off (gates, module fades,
     // smoothed returns) - click-free. Latency stays: saturation, Smooth and Level Ride report theirs while in the
-    // chain (on or off), and the pitch shifter, whose latency follows its on-switch, stays on with mix 0 (its dry
-    // is latency-aligned). The soloed instance keeps its own settings (a soloed module that is off stays off).
+    // chain (on or off). The soloed instance keeps its own settings (a soloed module that is off stays off).
 
     // Check only measures (no effect on the sound): soloing it would mean nothing
     constexpr bool canSolo (ModuleId id) noexcept { return id != ModuleId::check; }
@@ -31,7 +30,6 @@ namespace velvox::dsp
             if (! keep (ModuleId::delay, k))   b.delayOn = false;
             if (! keep (ModuleId::reverb, k))  b.reverbOn = false;
             if (! keep (ModuleId::smash, k))   b.smash.enabled = false;
-            if (! keep (ModuleId::choir, k))   b.choir.enabled = false;
             if (! keep (ModuleId::smooth, k))  b.smooth.enabled = false;
             if (! keep (ModuleId::ride, k))    b.ride.enabled = false;
             if (k == 0)
@@ -39,12 +37,5 @@ namespace velvox::dsp
             else
                 s.extra[(size_t) k - 1] = b;
         }
-
-        if (! keep (ModuleId::pitch, 0))
-            s.pitch.mix = 0.0f;    // stays on: same latency, heard dry
-        if (! keep (ModuleId::chop, 0))
-            s.chop.enabled = false;
-        if (! keep (ModuleId::pulse, 0))
-            s.pulse.enabled = false;
     }
 }

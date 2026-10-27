@@ -11,11 +11,7 @@
 #include "StereoStage.h"
 #include "DoublerModule.h"
 #include "Ducker.h"
-#include "PitchModule.h"
-#include "ChopModule.h"
-#include "PulseModule.h"
 #include "SmashModule.h"
-#include "ChoirModule.h"
 #include "SmoothModule.h"
 #include "CheckModule.h"
 #include "RideModule.h"
@@ -39,7 +35,6 @@ namespace velvox::dsp
         float delayLawMix = -1.0f, reverbLawMix = -1.0f;   // Mix for the dry gain on the true law (< 0: the Mix); set by macros
         DuckSettings delayDuck, reverbDuck;
         SmashSettings smash;
-        ChoirSettings choir;
         SmoothSettings smooth;
         RideSettings ride;
     };
@@ -57,8 +52,6 @@ namespace velvox::dsp
         bool deessOn = true;    DeEssSettings deess;
         SatSettings sat;
         DoublerSettings doubler;
-        PitchSettings pitch;
-        ChopSettings chop;
         bool delayOn = false;   float delayMix = 0.2f;  DelaySettings delay;
         bool delaySync = false; int delayDivision = 9;  float delayTimeMs = 375.0f;
         bool reverbOn = false;  float reverbMix = 0.18f; ReverbSettings reverb;
@@ -68,9 +61,7 @@ namespace velvox::dsp
         float delayLawMix = -1.0f, reverbLawMix = -1.0f;
 
         // 0.3 modules (all off by default)
-        PulseSettings pulse;
         SmashSettings smash;
-        ChoirSettings choir;
         SmoothSettings smooth;
         bool checkOn = false;
         RideSettings ride;
@@ -128,7 +119,7 @@ namespace velvox::dsp
         // Audio diagnostics (bounded, lock-free; read by the UI). Sample counters
         // give the time of the last event in samples since prepare().
         std::atomic<int> nonFiniteResets { 0 };       // chain reset because something produced NaN/Inf
-        std::atomic<int> structureSwitches { 0 };     // routing / pitch changes applied under a fade
+        std::atomic<int> structureSwitches { 0 };     // routing changes applied under a fade
         std::atomic<int> prepareCount { 0 };
         std::atomic<long long> lastResetAtSample { -1 }, samplesProcessed { 0 };
 
@@ -154,10 +145,9 @@ namespace velvox::dsp
                       const juce::AudioBuffer<float>* sidechain = nullptr) noexcept;
 
         // Latency of the currently active configuration
-        int getLatencySamples() const noexcept { return getLatencyFor (activeRouting, activePitchOn); }
-        // Latency of a routing with the pitch module on / off (for host reporting):
-        // every saturation and smooth instance in the chain plus the pitch shifter while it is on
-        int getLatencyFor (const Routing& routing, bool pitchOn) const noexcept;
+        int getLatencySamples() const noexcept { return getLatencyFor (activeRouting); }
+        // Latency of a routing (for host reporting): every saturation, ride and smooth instance in the chain
+        int getLatencyFor (const Routing& routing) const noexcept;
         // Latency of the active chain in front of a module (tempo-locked modules follow the song position late by it)
         int latencyBefore (ModuleId id) const noexcept;
 
@@ -166,16 +156,13 @@ namespace velvox::dsp
         DeEsserModule& getDeEsser (int instance = 0) noexcept { return deess[(size_t) clampInstance (ModuleId::deess, instance)]; }
         Ducker& getDelayDucker (int instance = 0) noexcept { return delayDucker[(size_t) clampInstance (ModuleId::delay, instance)]; }
         Ducker& getReverbDucker (int instance = 0) noexcept { return reverbDucker[(size_t) clampInstance (ModuleId::reverb, instance)]; }
-        int getChopStep() const noexcept { return chop.getDisplayStep(); }
-        const ChopModule& getChop() const noexcept { return chop; }   // UI: readDisplay() (lock-free)
+        // Host tempo of the last block for the UI (lock-free); 0 when the host reports none
+        double getDisplayTempo() const noexcept { return displayTempo.load (std::memory_order_relaxed); }
         const DelayModule& getDelay (int instance = 0) const noexcept { return delay[(size_t) clampInstance (ModuleId::delay, instance)]; }   // UI: displayTimeMs
-        PulseModule& getPulse() noexcept { return pulse; }
-        const PitchModule& getPitch() const noexcept { return pitch; }   // UI: getDetectedHz (lock-free)
         const SaturationModule& getSaturation (int instance = 0) const noexcept { return saturation[(size_t) clampInstance (ModuleId::sat, instance)]; }   // UI: getMeters()
         SaturationModule& getSaturation (int instance = 0) noexcept { return saturation[(size_t) clampInstance (ModuleId::sat, instance)]; }   // UI: setSoloBand (lock-free)
         EqualizerModule& getEqualizer (int instance = 0) noexcept { return eq[(size_t) clampInstance (ModuleId::eq, instance)]; }   // UI: setAuditionBand (lock-free)
         SmashModule& getSmash (int instance = 0) noexcept { return smash[(size_t) clampInstance (ModuleId::smash, instance)]; }
-        ChoirModule& getChoir (int instance = 0) noexcept { return choir[(size_t) clampInstance (ModuleId::choir, instance)]; }
         DoublerModule& getDoubler (int instance = 0) noexcept { return doubler[(size_t) clampInstance (ModuleId::doubler, instance)]; }
         SmoothModule& getSmooth (int instance = 0) noexcept { return smooth[(size_t) clampInstance (ModuleId::smooth, instance)]; }
         CheckModule& getCheck() noexcept { return check; }
@@ -210,13 +197,10 @@ namespace velvox::dsp
         std::array<DelayModule, maxInstances (ModuleId::delay)> delay;
         std::array<ReverbModule, maxInstances (ModuleId::reverb)> reverb;
         std::array<DoublerModule, maxInstances (ModuleId::doubler)> doubler;
-        PitchModule pitch;
-        ChopModule chop;
-        PulseModule pulse;
         std::array<SmashModule, maxInstances (ModuleId::smash)> smash;
-        std::array<ChoirModule, maxInstances (ModuleId::choir)> choir;
         std::array<SmoothModule, maxInstances (ModuleId::smooth)> smooth;
         CheckModule check;
+        std::atomic<double> displayTempo { 0.0 };
         std::array<RideModule, maxInstances (ModuleId::ride)> ride;
 
         std::array<ModuleGate, maxInstances (ModuleId::eq)> eqGate;
@@ -251,8 +235,6 @@ namespace velvox::dsp
         int routeHold = 0;   // samples of silence after a switch that made the path longer
         bool adoptRoutingImmediately = true;
 
-        // Pitch on/off changes the latency: switched under the same fade
-        bool activePitchOn = false, pendingPitchOn = false;
         bool structureChangePending() const noexcept;
         void applyPendingStructure() noexcept;
         // True when the pending routing differs from the active one only in the insert / send mode of

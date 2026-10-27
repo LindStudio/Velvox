@@ -55,6 +55,18 @@ public:
 
     void runTest() override
     {
+        beginTest ("0.7: Pitch, Stutter, Pulse and Choir are gone");
+        {
+            expectEquals (dsp::numModules, 11);
+            for (auto* key : { "pitch", "chop", "pulse", "choir" })
+                expect (! dsp::moduleFromKey (key).has_value(), key);
+            expectEquals (dsp::Routing::fromString ("eq|pitch|comp|chop|pulse|choir|reverb").toString(),
+                          dsp::Routing::fromString ("eq|comp|reverb").toString());
+            Harness h;
+            for (auto* id : { "pitchOn", "chopOn", "pulseOn", "choirOn" })
+                expect (h.proc.getState().getParameter (id) == nullptr, id);
+        }
+
         beginTest ("Routing model: string, edits, tolerant parsing");
         {
             const auto def = Routing::defaults();
@@ -368,8 +380,8 @@ public:
             expect (! h.proc.getRouting().contains (ModuleId::doubler));
             h.set (pid::doublerOn, 1.0f);
             expect (h.proc.getRouting().contains (ModuleId::doubler), "doubler joined the chain");
-            setId (h, "choirOn_2", 1.0f);
-            expect (h.proc.getRouting().contains (ModuleId::choir, 1), "choir 2 joined the chain");
+            setId (h, "doublerOn_2", 1.0f);
+            expect (h.proc.getRouting().contains (ModuleId::doubler, 1), "doubler 2 joined the chain");
             h.set (pid::macroWidth, 60.0f);   // engages the doubler partially - already there
             expect (h.proc.getRouting().isValid());
         }
@@ -387,7 +399,7 @@ public:
             expectEquals (none, 0);
             expectGreaterThan (one, 0);
             expectEquals (twoSat, 2 * one);
-            expectEquals (h.proc.getChain().getLatencyFor (h.proc.getRouting(), false), twoSat);
+            expectEquals (h.proc.getChain().getLatencyFor (h.proc.getRouting()), twoSat);
         }
 
         beginTest ("Routing / mix-law hand-over: only the message thread writes (SeqLockValue single writer)");
@@ -400,7 +412,7 @@ public:
             expectEquals (onWorker.load(), 0, "a worker thread is not a writer");
         }
 
-        beginTest ("Combined latency: Sat + Smooth + Ride + Pitch + EQ in one chain (44.1 / 192 kHz)");
+        beginTest ("Combined latency: Sat + Smooth + Ride + EQ in one chain (44.1 / 192 kHz)");
         {
             for (double rate : { 44100.0, 192000.0 })
             {
@@ -413,16 +425,12 @@ public:
                 h.set (pid::smoothAmount, 0.0f);
                 h.set (pid::rideOn, 1.0f);
                 h.set (pid::rideAmount, 0.0f);
-                h.set (pid::pitchOn, 1.0f);
-                h.set (pid::pitchSemitones, 0.0f);
-                h.set (pid::pitchCents, 0.0f);
-                h.set (pid::pitchMix, 100.0f);
                 h.proc.updateHostLatency();
                 const auto& r = h.proc.getRouting();
-                for (auto m : { ModuleId::eq, ModuleId::sat, ModuleId::smooth, ModuleId::ride, ModuleId::pitch })
+                for (auto m : { ModuleId::eq, ModuleId::sat, ModuleId::smooth, ModuleId::ride })
                     expect (r.contains (m), juce::String (dsp::moduleKey (m)) + " in the chain");
                 const int reported = h.proc.getLatencySamples();
-                expectEquals (reported, h.proc.getChain().getLatencyFor (r, true));
+                expectEquals (reported, h.proc.getChain().getLatencyFor (r));
                 const juce::String at = " at " + juce::String (rate / 1000.0, 1) + " kHz";
 
                 // Impulse after a settling time: where does it come out?
@@ -496,13 +504,12 @@ public:
 
         beginTest ("Migration: a 0.3 project keeps its order and every audible module; the sound is unchanged");
         {
-            // 0.3 state: full routing string, saturation before EQ, chop on
+            // 0.3 state: full routing string (with the modules removed in 0.7), saturation before EQ
             juce::MemoryBlock v03;
             {
                 Harness h;
                 h.set (pid::satOn, 1.0f);
                 h.set (pid::satDrive, 12.0f);
-                h.set (pid::chopOn, 1.0f);
                 auto state = h.proc.getState().copyState();
                 state.setProperty (statekeys::stateVersion, 3, nullptr);
                 state.setProperty (statekeys::routing, "sat,eq,ride,comp,smash,deess,smooth,doubler,choir,pitch,delay:send,reverb:insert,chop,pulse,check", nullptr);
@@ -512,15 +519,15 @@ public:
             Harness h;
             h.proc.setStateInformation (v03.getData(), (int) v03.getSize());
             const auto r = h.proc.getRouting();
-            expectEquals (r.toString(), juce::String ("v2,sat,eq,comp,deess,delay:send,reverb:insert,chop"));
+            expectEquals (r.toString(), juce::String ("v2,sat,eq,comp,deess,delay:send,reverb:insert"));
 
             // The same chain with every module (0.3 behaviour) sounds identical
             Harness full;
             full.proc.setStateInformation (v03.getData(), (int) v03.getSize());
             // (0.6: without the idle SMOOTH - it now delays by its constant STFT latency even when off, and the
-            // tempo-locked Stutter after it then gates a shifted signal; covered by "SMOOTH in the chain".
+            // signal comes out shifted; covered by "SMOOTH in the chain".
             // The same holds for LEVEL RIDE and its constant lookahead; covered by "LEVEL RIDE: constant lookahead")
-            full.proc.setRouting (Routing::fromString ("v2,sat,eq,comp,smash,deess,doubler,choir,pitch,delay:send,reverb:insert,chop,pulse,check"));
+            full.proc.setRouting (Routing::fromString ("v2,sat,eq,comp,smash,deess,doubler,delay:send,reverb:insert,check"));
             const auto in = h.noise (0.2f, 1.0, 59);
             const double d = maxDiff (h.run (in), full.run (in), 0);
             logMessage ("pruned vs full 0.3 chain: max difference " + juce::String (d, 9));

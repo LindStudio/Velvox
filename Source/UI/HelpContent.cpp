@@ -222,7 +222,7 @@ Headliner nimmt einen begrenzten Abschnitt der Vocal auf, während deine DAW sie
 - Mit einem Beat auf dem Sidechain: sein Pegel und wie stark er den Präsenzbereich der Stimme überlappt. Das ist nur ein Hinweis, nie ein Beweis für Verdeckung – der Beat ist durch Headliner nie zu hören.
 
 ## Was eingestellt wird
-Die Entscheidungen folgen den Messungen: Der Low Cut sitzt deutlich unter den tiefsten gesungenen Noten, Höhen werden nur bei dunklen Aufnahmen angehoben, der Threshold des De-Essers liegt zwischen Vokal- und S-Pegel, die Resonanz-Kontrolle läuft nur, wenn etwas heraussticht, Reverb und Delay werden bei halligen Aufnahmen reduziert oder bleiben aus. Kreative Effekte (Pitch, Stutter, Pulse, Choir) bleiben aus.
+Die Entscheidungen folgen den Messungen: Der Low Cut sitzt deutlich unter den tiefsten gesungenen Noten, Höhen werden nur bei dunklen Aufnahmen angehoben, der Threshold des De-Essers liegt zwischen Vokal- und S-Pegel, die Resonanz-Kontrolle läuft nur, wenn etwas heraussticht, Reverb und Delay werden bei halligen Aufnahmen reduziert oder bleiben aus.
 
 ## Geprüft, bevor er angewendet wird
 Headliner rechnet den aufgenommenen Abschnitt durch die komplette Kette, misst das Ergebnis und korrigiert es dort, wo die Messung verlässlich ist: zu starke oder zu schwache Kompression, S-Laute, die die Kette lauter gemacht hat, verlorener Körper oder zu viel Helligkeit, Mono-Kompatibilität. Zum Schluss wird der Ausgang an die Lautheit des Originals angeglichen (damit der Vergleich fair ist), mit 1 dB Headroom.
@@ -244,7 +244,7 @@ Headliner records a limited section of the vocal while your DAW plays it (about 
 - With a beat on the sidechain: its level and how much it overlaps the voice's presence range. This is only a hint, never proof of masking - the beat is never heard through Headliner.
 
 ## What is set up
-The decisions follow the measurements: the low cut sits well below the lowest sung notes, highs are only raised on dark recordings, the de-esser threshold sits between vowel and S level, resonance control only runs when something sticks out, reverb and delay are reduced or left off on roomy recordings. Creative effects (Pitch, Stutter, Pulse, Choir) stay off.
+The decisions follow the measurements: the low cut sits well below the lowest sung notes, highs are only raised on dark recordings, the de-esser threshold sits between vowel and S level, resonance control only runs when something sticks out, reverb and delay are reduced or left off on roomy recordings.
 
 ## Checked before it is applied
 Headliner renders the captured section through the complete chain, measures the result and corrects it where the measurement is reliable: compression that is too strong or too weak, S sounds that the chain made louder, lost body or too much brightness, mono compatibility. Finally the output is matched to the loudness of the original (so the comparison is fair) with 1 dB of headroom.
@@ -337,7 +337,7 @@ Level matching never happens silently: it only works when you choose it.)~") });
 - Korrelation: +1 ist mono-sicher, um 0 sehr breit, unter 0 löschen sich Teile des Klangs in Mono aus.
 
 ## Modul-Anzeigen
-Jedes Modul zeigt echte Daten aus dem Audio oder aus seinen eigenen Einstellungen: die EQ-Kurve über dem Live-Spektrum, die Pegelreduktion des Compressors, das De-Esser-Band, die Stimmen von Doubler und Choir, die Pulse-Kurve mit dem tatsächlich angewendeten Pegel, den Verlauf von Level Ride und mehr. Nichts auf dem Bildschirm ist simuliert.)~",
+Jedes Modul zeigt echte Daten aus dem Audio oder aus seinen eigenen Einstellungen: die EQ-Kurve über dem Live-Spektrum, die Pegelreduktion des Compressors, das De-Esser-Band, die Stimmen des Doublers, den Verlauf von Level Ride und mehr. Nichts auf dem Bildschirm ist simuliert.)~",
 R"~(## IN and OUT
 - SIMPLE shows them at the bottom, ADVANCED at the right end of the chain row.
 - The bars show the peak level, the number is the loudness in LUFS (short term).
@@ -349,7 +349,7 @@ R"~(## IN and OUT
 - Correlation: +1 is mono-safe, around 0 is very wide, below 0 parts of the sound cancel in mono.
 
 ## Module displays
-Each module shows real data from the audio or from its own settings: the EQ curve over the live spectrum, the compressor's gain reduction, the de-esser band, the doubler and choir voices, the pulse curve with the gain that is applied, the level ride history and more. Nothing on screen is simulated.)~") });
+Each module shows real data from the audio or from its own settings: the EQ curve over the live spectrum, the compressor's gain reduction, the de-esser band, the doubler voices, the level ride history and more. Nothing on screen is simulated.)~") });
 
             p.push_back ({ "problems", t ("Typische Vocal-Probleme lösen", "Fixing common vocal problems"), gWork, t (R"~(- Rumpeln, Plosive, matschiger Bass: EQ Low Cut bei etwa 80 bis 120 Hz. Wenn Plosive den Compressor auslösen, heb das SC-Filter des Compressors an (Mehr).
 - Hohl oder näselnd: EQ, eine Absenkung von 2 bis 4 dB zwischen 300 und 800 Hz mit mittlerem Q.
@@ -358,7 +358,7 @@ Each module shows real data from the audio or from its own settings: the EQ curv
 - Ungleichmäßige Wörter, manche gehen unter: Level Ride vor dem Compressor.
 - Nicht laut oder dicht genug: Vocal Smash unter die Vocal mischen, dann den Compressor für die Kontrolle.
 - Zu trocken oder zu weit hinten: Reverb und Delay mit Ducking (Mehr), damit die Wörter klar bleiben.
-- Zu schmal: Doubler oder Choir, dann Mono im OUTPUT-Panel prüfen.
+- Zu schmal: Doubler, dann Mono im OUTPUT-Panel prüfen.
 - Clipping am Ausgang: Vocal Level senken und Clip Guard anlassen.
 - Kein Plan, wo du anfangen sollst: Öffne VOCAL CHECK, spiel die Vocal eine Weile ab und nutz dann „Anwenden“ bei den Befunden.)~",
 R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosives that trigger the compressor, raise the Compressor's SC filter (More).
@@ -368,7 +368,7 @@ R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosi
 - Uneven words, some disappear: Level Ride before the Compressor.
 - Not loud or dense enough: Vocal Smash blended under the vocal, then the Compressor for control.
 - Too dry or too far back: Reverb and Delay with ducking (More), so the words stay clear.
-- Too narrow: Doubler or Choir, then check Mono in the OUTPUT panel.
+- Too narrow: Doubler, then check Mono in the OUTPUT panel.
 - Clipping output: lower Vocal Level and keep Clip guard on.
 - Not sure where to start: open VOCAL CHECK and play the vocal for a while, then use "Apply" on the findings.)~") });
 
@@ -450,40 +450,10 @@ R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosi
                    "- Mix 40 to 50 %, Width 80 %, Delay 12 to 18 ms, Detune / Mod Depth 6 to 10 ct, Mono safe 50 to 100 %.\n- 4 voices: two tight voices (10 to 20 ms, about 5 ct) wide, two looser ones (25 to 35 ms) further in and 3 to 6 dB lower."),
                 t ("- Zu viel Detune auf einer gestimmten Lead-Vocal.\n- Den Club vergessen: prüf mit Mono im OUTPUT-Panel.",
                    "- Too much Detune on a tuned lead.\n- Forgetting the club: check with Mono in the OUTPUT panel."),
-                t ("Choir ist der große Bruder für ganze Stimmgruppen; beide voll aufgedreht brauchst du selten. Width (Makro-Fader in SIMPEL) steuert den Doubler. Setz den Reverb hinter den Doubler, damit beide Doppelungen denselben Raum bekommen.",
-                   "Choir is the bigger brother for whole groups of voices; you rarely need both at full level. Width (macro fader in SIMPLE) drives the doubler. Put reverb after the doubler so both doubles get the same room.") }));
+                t ("Width (Makro-Fader in SIMPEL) steuert den Doubler. Setz den Reverb hinter den Doubler, damit beide Doppelungen denselben Raum bekommen.",
+                   "Width (macro fader in SIMPLE) drives the doubler. Put reverb after the doubler so both doubles get the same room.") }));
 
-            p.push_back (modulePage (l, gModules, "pitch", "Pitch", {
-                t ("Kreatives Transponieren: verschiebt die Vocal um Halbtöne und Cent, wahlweise mit Formant-Kontrolle. Es ist keine Tonhöhenkorrektur.",
-                   "Creative transposition: shifts the vocal by semitones and cents, with optional formant control. It is not a pitch correction tool."),
-                t ("Für Oktav-Layer, Mickey-Maus-Hooks, dunkle Monsterstimmen und Effekte.",
-                   "For octave layers, chipmunk hooks, dark monster voices and effects."),
-                t ("- Der große Semitones-Regler transponiert in Halbtönen (er rastet ein; der Ring markiert die Oktaven), Fine fügt Cent hinzu.\n- Zwischen den beiden großen Reglern siehst du die gesungene Note (IN) und die Note, die herauskommt (OUT).\n- Formanten erhalten bewahrt den natürlichen Charakter der Stimme; aus verschiebt den Charakter mit der Tonhöhe.\n- Formant verschiebt den Charakter unabhängig von der Tonhöhe.\n- Mix mischt die verschobene Stimme mit dem Original (für Layer).",
-                   "- The big Semitones control transposes in semitones (it snaps; the ring marks the octaves), Fine adds cents.\n- Between the two big controls you see the note that is sung (IN) and the note that comes out (OUT).\n- Keep formants preserves the natural character of the voice; off moves the character with the pitch.\n- Formant moves the character independently of the pitch.\n- Mix blends the shifted voice with the original (for layers)."),
-                t ("- Große Verschiebungen klingen künstlicher, besonders nach unten.\n- Formant hoch = kleinere, hellere Stimme; runter = größere, dunklere Stimme.\n- Mix 50 % = Oktav-Layer; 100 % = nur die verschobene Stimme.",
-                   "- Large shifts sound more artificial, especially downwards.\n- Formant up = smaller, brighter voice; down = bigger, darker voice.\n- Mix 50 % = octave layer; 100 % = only the shifted voice."),
-                t ("- Oktav-Layer: Semitones -12, Formanten erhalten an, Mix 40 bis 50 %.\n- Mickey-Maus-Hook: Semitones +12, Formanten erhalten aus.",
-                   "- Octave layer: Semitones -12, Keep formants on, Mix 40 to 50 %.\n- Chipmunk hook: Semitones +12, Keep formants off."),
-                t ("- Die Latenz vergessen: Solange Pitch an ist, kommen etwa 15 ms hinzu, die FL Studio und andere DAWs automatisch ausgleichen. Live-Abhören durch das Plugin ist verzögert.\n- Es als Tonhöhenkorrektur verwenden.",
-                   "- Forgetting the latency: while Pitch is on it adds about 15 ms, which FL Studio and other DAWs compensate automatically. Live monitoring through the plugin is delayed.\n- Using it as pitch correction."),
-                t ("Setz Pitch vor Doubler / Choir, um die verschobene Stimme zu doppeln, oder dahinter, um den ganzen Stapel zu verschieben. Effekte nach Pitch (Reverb, Delay) folgen der neuen Tonhöhe.",
-                   "Place Pitch before Doubler / Choir to double the shifted voice, or after them to shift the whole stack. Effects after Pitch (reverb, delay) follow the new pitch.") }));
 
-            p.push_back (modulePage (l, gModules, "chop", "Stutter", {
-                t ("Ein tempo-synchrones Gate und Stutter: Ein Muster aus 16 Schritten spielt, stummt oder wiederholt die Vocal im Takt des Songs.",
-                   "A tempo-synced gate and stutter: a 16-step pattern plays, mutes or repeats the vocal in time with the song."),
-                t ("Für Build-ups, rhythmische Breaks und Stutter-Effekte.",
-                   "For build-ups, rhythmic breaks and stutter effects."),
-                t ("- Pattern wählt den Rhythmus aus 16 Schritten (die Anzeige zeigt den aktuellen Schritt).\n- Rate legt die Länge eines Schritts fest, synchron zum Host-Tempo (120 BPM, wenn der Host kein Tempo sendet).\n- Depth bestimmt, wie stark das Muster wirkt.\n- Smooth macht die Kanten jedes Schritts weicher.",
-                   "- Pattern chooses the 16-step rhythm (the display shows the current step).\n- Rate sets the length of one step, synced to the host tempo (120 BPM when the host sends no tempo).\n- Depth sets how strongly the pattern is applied.\n- Smooth softens the edges of each step."),
-                t ("- Weniger Depth = die stummen Schritte sind nur leiser, nicht still.\n- Mehr Smooth = weichere, weniger klickende Kanten; zu viel verwischt den Rhythmus.",
-                   "- Lower Depth = the muted steps are only quieter, not silent.\n- Higher Smooth = softer, less clicky edges; too high blurs the rhythm."),
-                t ("- Depth 100 %, Smooth 3 ms, Rate 1/16.\n- Automatisier den Ein-Schalter in deiner DAW, um das Stutter nur in bestimmten Takten zu nutzen.",
-                   "- Depth 100 %, Smooth 3 ms, Rate 1/16.\n- Automate the power button in your DAW to use the stutter only in certain bars."),
-                t ("- Es versehentlich den ganzen Song über anlassen.\n- Sehr wenig Smooth auf gehaltenen Noten (Klicks).",
-                   "- Leaving it on for the whole song by accident.\n- Very low Smooth on sustained notes (clicks)."),
-                t ("Setz Stutter vor Reverb und Delay, damit die Effekte durch die Lücken ausklingen, oder dahinter, um auch die Effekte zu zerhacken. Pulse ist die weichere Alternative für Lautstärke-Rhythmen.",
-                   "Put Stutter before Reverb and Delay so the effects tail through the gaps, or after them to cut the effects too. Pulse is the smoother alternative for volume rhythms.") }));
 
             p.push_back (modulePage (l, gModules, "delay", "Delay", {
                 t ("Echos der Vocal, mit Filtern auf den Wiederholungen und Ducking, das die Echos absenkt, solange die Vocal singt.",
@@ -517,21 +487,6 @@ R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosi
                 t ("Setz den Reverb ans Ende oder als Send ein. Läuft das Delay als Send, schickt Into reverb die Echos in den Raum. Ducking über den Sidechain-Eingang (z. B. eine Kick) erzeugt pumpende Hallräume.",
                    "Put Reverb last or as a send. With Delay as a send, Into reverb feeds the echoes into the room. Ducking from the sidechain input (e.g. a kick) creates pumping reverbs.") }));
 
-            p.push_back (modulePage (l, gModules, "pulse", "Pulse", {
-                t ("Ein rhythmischer Lautstärke-Former: Eine zeichenbare Kurve senkt und hebt die Lautstärke im Takt des Songs – für Sidechain-artiges Pumpen, Ducking und Stutter.",
-                   "A rhythmic volume shaper: a drawable curve lowers and raises the volume in time with the song - for sidechain-style pumping, ducking and stutters."),
-                t ("Für pumpende Hard-Dance-Vocals, Sidechain-Gefühl ohne Sidechain und rhythmische Gates.",
-                   "For pumping hard dance vocals, sidechain feel without a sidechain, and rhythmic gates."),
-                t ("- Zieh die Punkte in der Anzeige, um die Lautstärke-Kurve zu zeichnen (Zeit von links nach rechts, Pegel von unten nach oben).\n- Cycle legt die Länge eines Kurven-Durchlaufs fest, synchron zum Host-Tempo; Manual BPM gilt, wenn der Host kein Tempo sendet.\n- Depth bestimmt, wie weit die Kurve die Lautstärke herunterzieht; Mix mischt mit dem Original.\n- Curve: Linear, Smooth oder Step zwischen den Punkten; Shape biegt jedes Segment.\n- Attack, Release und Smooth runden die Pegelbewegung ab, um Klicks zu vermeiden.",
-                   "- Drag the points in the display to draw the volume curve (time from left to right, level from bottom to top).\n- Cycle sets the length of one curve cycle, synced to the host tempo; Manual BPM is used when the host sends no tempo.\n- Depth sets how far the curve pulls the volume down; Mix blends with the original.\n- Curve: Linear, Smooth or Step between the points; Shape bends every segment.\n- Attack, Release and Smooth round off the gain movement to avoid clicks."),
-                t ("- Mehr Depth = tiefere Senken.\n- Shape negativ = schneller Anstieg, positiv = langsamer Anstieg (knackigeres Pumpen).\n- Längeres Attack / Release / Smooth = weichere Bewegung.",
-                   "- Higher Depth = deeper dips.\n- Shape negative = fast start, positive = slow start (punchier pumps).\n- Longer Attack / Release / Smooth = softer movement."),
-                t ("- Cycle 1/4, Depth 60 bis 85 %, Curve Smooth.\n- Lass die Kurve auf dem Beat tief beginnen und im ersten Drittel ansteigen.",
-                   "- Cycle 1/4, Depth 60 to 85 %, Curve Smooth.\n- Start the curve low at the beat and let it rise during the first third."),
-                t ("- Sehr kurzes Attack und Smooth mit Step-Kurven: Klicks.\n- Ein Cycle, der nicht zum Kick-Muster passt.",
-                   "- Very short Attack and Smooth with Step curves: clicks.\n- A cycle that does not match the kick pattern."),
-                t ("Setz Pulse spät in die Kette, damit frühere Kompression das Pumpen nicht wieder glättet. Effekte danach (Reverb, Delay) pumpen mit; Effekte davor behalten ihre Fahnen.",
-                   "Place Pulse late in the chain so earlier compression does not undo the pumping. Effects after it (reverb, delay) pump along; effects before it keep their tails.") }));
 
             p.push_back (modulePage (l, gModules, "smash", "Vocal Smash", {
                 t ("Parallelkompression: Eine stark gequetschte Kopie der Vocal wird unter das Original gemischt. Dichte und Lautheit steigen, das Original behält seinen Punch.",
@@ -549,21 +504,6 @@ R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosi
                 t ("Meist nach dem Compressor (erst Kontrolle, dann Dichte) und vor dem De-Esser. Mit Vocal Smash können Compressor und Saturation oft weniger tun.",
                    "Usually after the Compressor (control first, then density) and before the De-Esser. With Smash in use, the Compressor and Saturation can often do less.") }));
 
-            p.push_back (modulePage (l, gModules, "choir", "Choir", {
-                t ("Macht aus einer Stimme eine Doppelung oder einen ganzen Chor: Jede virtuelle Stimme bekommt ihre eigene Tonhöhe, ihr eigenes Timing, ein langsames Driften und eine eigene Stereo-Position.",
-                   "Turns one voice into a double or a whole choir: each virtual voice gets its own pitch, timing, slow drift and stereo position."),
-                t ("Für große Hooks, Festival-Refrains und Backing-Layer.",
-                   "For big hooks, festival choruses and backing layers."),
-                t ("- Voices bestimmt die Zahl der virtuellen Stimmen (2 bis 8).\n- Detune, Timing und Humanize lassen die Stimmen in Tonhöhe, Timing und über die Zeit voneinander abweichen.\n- Width verteilt sie im Stereobild.\n- Density bestimmt, wie präsent die Stimmen sind.\n- Mix mischt den Chor mit dem Original.\n- Die Bühne zeigt die Stimmen auf einem Halbkreis um den Lead (weiter außen = breiter, weiter hinten = späterer Einsatz); zieh sie seitlich, um Width zu ändern. MONO ist die Korrelation des Chors (unter 0 = Mono-Risiko).",
-                   "- Voices sets the number of virtual voices (2 to 8).\n- Detune, Timing and Humanize make the voices differ in pitch, timing and over time.\n- Width spreads them across the stereo field.\n- Density sets how strongly the voices are present.\n- Mix blends the choir with the original.\n- The stage shows the voices on a half circle around the lead (outer = wider, further back = later entry); drag it sideways to change Width. MONO is the correlation of the choir (below 0 = mono risk)."),
-                t ("- Mehr Detune / Timing = lockerer und größer, aber weniger präzise.\n- Mehr Humanize = natürlichere Bewegung.\n- Höherer Mix = der Chor übernimmt das Original.",
-                   "- More Detune / Timing = looser and bigger, but less precise.\n- Higher Humanize = more natural movement.\n- Higher Mix = the choir takes over the original."),
-                t ("- Voices 4 bis 8, Detune 10 bis 16 ct, Timing 15 bis 30 ms, Humanize 50 bis 70 %, Mix 30 bis 45 %.",
-                   "- Voices 4 to 8, Detune 10 to 16 ct, Timing 15 to 30 ms, Humanize 50 to 70 %, Mix 30 to 45 %."),
-                t ("- Ein riesiger Chor auf schnellen, rhythmischen Strophen (er verschmiert den Rhythmus).\n- Die Mono-Anzeige ignorieren: Ein negativer Wert heißt, dass sich Teile in Mono auslöschen.",
-                   "- A huge choir on fast, rhythmic verses (it smears the rhythm).\n- Ignoring the mono bar: a negative value means parts cancel in mono."),
-                t ("Nimm Choir oder Doubler, selten beide voll aufgedreht. Setz den Reverb hinter Choir, damit die Stimmen einen gemeinsamen Raum teilen.",
-                   "Use Choir or Doubler, rarely both at full level. Put Reverb after Choir so the voices share one room.") }));
 
             p.push_back (modulePage (l, gModules, "smooth", "Smooth", {
                 t ("Adaptive Resonanz-Kontrolle: Findet Frequenzen, die klingeln oder aus ihrer Umgebung herausstechen, und senkt sie nur, solange sie herausstechen. Die Anzeige zeigt das Live-Spektrum der Vocal; was gerade entfernt wird, ist pink gezeichnet.",
@@ -610,8 +550,8 @@ R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosi
                    "- Leveling 60 to 70 %, Max boost and Max cut 6 to 8 dB, Speed 50 %.\n- Set Target near the average level of the vocal.\n- Start moderate and raise the intensity step by step."),
                 t ("- Zu viel Boost macht Atmer und Raumgeräusche lauter – heb Ignore below an.\n- Sehr hohes Tempo: Die Vocal beginnt zu wackeln.",
                    "- Too much boost makes breaths and room noise louder - raise Ignore below.\n- Very fast Speed: the vocal starts to wobble."),
-                t ("Setz ihn vor den Compressor: Der muss dann nur noch kurze Spitzen fangen. Pulse und Stutter dahinter werden vom Level Ride nicht wieder ausgeglichen.",
-                   "Place it before the Compressor: the compressor then only has to catch short peaks. Pulse and Stutter after it are not undone by the rider.") }));
+                t ("Setz ihn vor den Compressor: Der muss dann nur noch kurze Spitzen fangen.",
+                   "Place it before the Compressor: the compressor then only has to catch short peaks.") }));
 
             p.push_back (modulePage (l, gModules, "output", "Output", {
                 t ("Die letzte Stufe des Plugins: die Stereobreite des ganzen Ausgangs, Mono-Sicherheit im Bass, der Lautheits-Vergleich und der Clip Guard.",
@@ -699,13 +639,9 @@ namespace velvox::ui::help
             case ModuleId::deess:   return tr ("Zähmt scharfe S- und T-Laute, ohne die Stimme stumpf zu machen", "Tames sharp S and T sounds without dulling the voice");
             case ModuleId::sat:     return tr ("Fügt Obertöne hinzu: Wärme, Biss und Dichte", "Adds harmonics for warmth, grit and density");
             case ModuleId::doubler: return tr ("Zusätzliche Takes links und rechts für eine breite, dichte Vocal", "Extra takes left and right for a wide, thick vocal");
-            case ModuleId::pitch:   return tr ("Kreatives Transponieren (keine Tonhöhenkorrektur)", "Creative transposition (not pitch correction)");
-            case ModuleId::chop:    return tr ("Tempo-synchrone Gate- und Stutter-Muster", "Tempo-synced gate and stutter patterns");
             case ModuleId::delay:   return tr ("Echos neben der Stimme; Ducking hält die Wörter klar", "Echoes beside the voice; ducking keeps the words clear");
             case ModuleId::reverb:  return tr ("Raum und Tiefe; Ducking schafft Platz, solange du singst", "Room and depth; ducking clears space while you sing");
-            case ModuleId::pulse:   return tr ("Rhythmische Lautstärke: Pumpen, Ducking und Stutter, im Takt", "Rhythmic volume shaping: pumping, ducking and stutter, locked to the beat");
             case ModuleId::smash:   return tr ("Parallelkompression: Dichte und Lautheit, das Original behält seinen Punch", "Parallel compression: density and loudness, the original keeps its punch");
-            case ModuleId::choir:   return tr ("Aus einer Stimme eine Doppelung oder ein ganzer Chor – jede Stimme mit eigener Tonhöhe und eigenem Timing", "From one voice to a double or a whole choir - each voice with its own pitch and timing");
             case ModuleId::smooth:  return tr ("Findet klingelnde, harte Frequenzen und zähmt sie nur, solange sie herausstechen", "Finds ringing, harsh frequencies and tames them only while they stick out");
             case ModuleId::check:   return tr ("Analysiert die Vocal an dieser Stelle der Kette und erklärt, was sich verbessern lässt", "Analyzes the vocal at this point of the chain and explains what could be improved");
             case ModuleId::ride:    return tr ("Hebt leise Wörter an, senkt laute ab – natürlich, ohne Pumpen", "Lifts quiet words, lowers loud ones - natural, without pumping");

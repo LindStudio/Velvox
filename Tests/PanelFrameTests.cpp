@@ -325,12 +325,8 @@ public:
             expectEquals (label (pid::deessFreq), juce::String ("FREQUENCY"));
             expectEquals (label (pid::smoothAmount), juce::String ("DEPTH"));
             expectEquals (label (pid::smoothSensitivity), juce::String ("SHARPNESS"));
-            expectEquals (label (pid::chopDepth), juce::String ("DEPTH"));
-            expectEquals (label (pid::pulseAmount), juce::String ("AMOUNT"));
             expectEquals (label (pid::delayTime), juce::String ("TIME"));
             expectEquals (label (pid::reverbSize), juce::String ("SIZE"));
-            expectEquals (label (pid::pitchSemitones), juce::String ("SEMITONES"));
-            expectEquals (label (pid::pitchPreserveFormants), juce::String ("Keep formants"));
             expectEquals (label (pid::satMix), juce::String ("MIX"));
             expectEquals (label (pid::doublerModDepth), juce::String ("MOD DEPTH"));
             expectEquals (ui::eqedit::roleTag ((int) dsp::EqRole::air), juce::String ("AIR"));

@@ -49,7 +49,6 @@ namespace velvox::dsp
         b.delayLawMix = delayLawMix; b.reverbLawMix = reverbLawMix;
         b.delayDuck = delayDuck; b.reverbDuck = reverbDuck;
         b.smash = smash;
-        b.choir = choir;
         b.smooth = smooth;
         b.ride = ride;
         return b;
@@ -68,7 +67,6 @@ namespace velvox::dsp
         delayLawMix = b.delayLawMix; reverbLawMix = b.reverbLawMix;
         delayDuck = b.delayDuck; reverbDuck = b.reverbDuck;
         smash = b.smash;
-        choir = b.choir;
         smooth = b.smooth;
         ride = b.ride;
     }
@@ -106,7 +104,6 @@ namespace velvox::dsp
         prepareAll (reverb, sampleRate, bs);
         prepareAll (doubler, sampleRate, bs);
         prepareAll (smash, sampleRate, bs);
-        prepareAll (choir, sampleRate, bs);
         prepareAll (smooth, sampleRate, bs);
         prepareAll (ride, sampleRate, bs);
         for (auto& d : delayDucker)
@@ -125,12 +122,8 @@ namespace velvox::dsp
         for (auto& g : deessGate)
             g.prepare (sampleRate, bs);
 
-        pitch.prepare (sampleRate, bs);
-        chop.prepare (sampleRate, bs);
-        pulse.prepare (sampleRate, bs);
-
-        // Room for the largest possible latency: every saturation and smooth instance plus pitch
-        int maxLatency = pitch.getLatencySamples();
+        // Room for the largest possible latency: every saturation, ride and smooth instance
+        int maxLatency = 0;
         for (auto& sat : saturation)
             maxLatency += sat.getLatencySamples();
         for (auto& r : ride)
@@ -190,10 +183,7 @@ namespace velvox::dsp
         resetAll (delay);
         resetAll (reverb);
         resetAll (doubler);
-        chop.reset();
-        pulse.reset();
         resetAll (smash);
-        resetAll (choir);
         for (auto& m : smooth)
             m.reset (false);   // a fresh start: nothing to fade in
         resetAll (ride);
@@ -219,13 +209,9 @@ namespace velvox::dsp
             case ModuleId::delay:   delay[(size_t) k].reset(); delayDucker[(size_t) k].reset(); break;
             case ModuleId::reverb:  reverb[(size_t) k].reset(); reverbDucker[(size_t) k].reset(); break;
             case ModuleId::smash:   smash[(size_t) k].reset(); break;
-            case ModuleId::choir:   choir[(size_t) k].reset(); break;
             // joining mid-stream: silent until its delay line is filled, then a fade-in (no restart click)
             case ModuleId::smooth:  smooth[(size_t) k].reset (! adoptRoutingImmediately); break;
             case ModuleId::ride:    ride[(size_t) k].reset(); break;
-            case ModuleId::chop:    chop.reset(); break;
-            case ModuleId::pulse:   pulse.reset(); break;
-            case ModuleId::pitch:
             case ModuleId::check:   break;
         }
     }
@@ -263,7 +249,6 @@ namespace velvox::dsp
             sm.mixLaw = s.mixLaws.lawOf (ModuleId::smash, k);
             smash[(size_t) k].setSettings (sm);
         }
-        if (at (ModuleId::choir))    choir[(size_t) k].setSettings (b.choir);
         if (at (ModuleId::smooth))   smooth[(size_t) k].setSettings (b.smooth);
         if (at (ModuleId::ride))     ride[(size_t) k].setSettings (b.ride);
 
@@ -308,14 +293,12 @@ namespace velvox::dsp
         inputGain.setTargetValue (dbToGain (s.inputGainDb));
         outputGain.setTargetValue (dbToGain (s.outputGainDb));
         wetAmount.setTargetValue (s.bypass ? 0.0f : 1.0f);
+        displayTempo.store (s.hostBpm > 20.0 && s.hostBpm < 999.0 ? s.hostBpm : 0.0, std::memory_order_relaxed);
 
         applyInstance (0, s.instance0(), s);
         for (int k = 1; k <= maxExtraInstances; ++k)
             applyInstance (k, s.extra[(size_t) k - 1], s);
 
-        pitch.setSettings (s.pitch);
-        chop.setSettings (s.chop);
-        pulse.setSettings (s.pulse);
         check.setEnabled (s.checkOn);
         delayIntoReverb.setTargetValue (juce::jlimit (0.0f, 1.0f, s.delayIntoReverb));
 
@@ -325,26 +308,12 @@ namespace velvox::dsp
 
         if (s.routing.isValid())
             pendingRouting = s.routing;
-        // The pitch shifter adds latency only while it is on AND in the chain
-        pendingPitchOn = s.pitch.enabled && pendingRouting.contains (ModuleId::pitch);
 
         if (adoptRoutingImmediately)
         {
             applyPendingStructure();
             adoptRoutingImmediately = false;
         }
-
-        // Tempo-locked modules after latent ones (SMOOTH, saturation, pitch, LEVEL RIDE) see the signal late; the
-        // host shifts the output back by the whole latency, so they follow the song position delayed
-        // by the latency in front of them and stay on the grid
-        const auto transportFor = [&] (ModuleId id)
-        {
-            if (! s.hostPlaying || ! (s.hostBpm > 20.0 && s.hostBpm < 999.0) || fs <= 0.0)
-                return s.hostPpq;
-            return std::max (0.0, s.hostPpq - latencyBefore (id) / fs * s.hostBpm / 60.0);
-        };
-        chop.setTransport (s.hostBpm, transportFor (ModuleId::chop), s.hostPlaying);
-        pulse.setTransport (s.hostBpm, transportFor (ModuleId::pulse), s.hostPlaying);
     }
 
     int VocalChain::latencyBefore (ModuleId id) const noexcept
@@ -360,8 +329,6 @@ namespace velvox::dsp
                 latency += smooth[(size_t) slot.instance].getLatencySamples();
             else if (slot.id == ModuleId::ride)
                 latency += ride[(size_t) slot.instance].getLatencySamples();
-            else if (slot.id == ModuleId::pitch && activePitchOn)
-                latency += pitch.getLatencySamples();
         }
         return latency;
     }
@@ -593,17 +560,9 @@ namespace velvox::dsp
             case ModuleId::sat:     saturation[k].process (io, numChannels, n); break; // own on/off + mix, constant latency
 
             case ModuleId::doubler: doubler[k].process (io, numChannels, n); break; // own on/off, adds voices only
-            case ModuleId::pitch:
-                if (activePitchOn)
-                    pitch.process (io, numChannels, n);
-                break;
-
-            case ModuleId::chop:    chop.process (io, numChannels, n); break; // own on/off, zero latency
 
             // 0.3 modules: each has its own click-free on/off and does nothing at all while off
-            case ModuleId::pulse:   pulse.process (io, numChannels, n); break;
             case ModuleId::smash:   smash[k].process (io, numChannels, n); break;
-            case ModuleId::choir:   choir[k].process (io, numChannels, n); break;
             case ModuleId::smooth:  smooth[k].process (io, numChannels, n); break;
             case ModuleId::check:   check.process (io, numChannels, n); break; // read only
             case ModuleId::ride:    ride[k].process (io, numChannels, n); break;
@@ -821,12 +780,12 @@ namespace velvox::dsp
 
     bool VocalChain::structureChangePending() const noexcept
     {
-        return pendingRouting != activeRouting || pendingPitchOn != activePitchOn;
+        return pendingRouting != activeRouting;
     }
 
     bool VocalChain::onlySilentSendSwitches() const noexcept
     {
-        if (pendingPitchOn != activePitchOn || pendingRouting.size() != activeRouting.size())
+        if (pendingRouting.size() != activeRouting.size())
             return false;
         constexpr float silentReturn = 0.0316f;   // -30 dB
         for (int i = 0; i < activeRouting.size(); ++i)
@@ -856,7 +815,7 @@ namespace velvox::dsp
 
     void VocalChain::applyPendingStructure() noexcept
     {
-        if (activeRouting != pendingRouting || activePitchOn != pendingPitchOn)
+        if (activeRouting != pendingRouting)
             meters.structureSwitches.fetch_add (1, std::memory_order_relaxed);
 
         // Instances that join the chain start from a clean state (no stale tail or
@@ -868,15 +827,11 @@ namespace velvox::dsp
         const int oldLatency = getLatencySamples();
         activeRouting = pendingRouting;
 
-        const bool pitchChanged = pendingPitchOn != activePitchOn;
-        activePitchOn = pendingPitchOn;
-        if (pitchChanged && activePitchOn)
-            pitch.activate();
-        if (pitchChanged || getLatencySamples() != oldLatency)
+        if (getLatencySamples() != oldLatency)
             bypassDelay.setDelay (getLatencySamples());
     }
 
-    int VocalChain::getLatencyFor (const Routing& routing, bool pitchOn) const noexcept
+    int VocalChain::getLatencyFor (const Routing& routing) const noexcept
     {
         int latency = 0;
         for (const auto& slot : routing)
@@ -888,8 +843,6 @@ namespace velvox::dsp
             else if (slot.id == ModuleId::smooth)   // STFT: constant while in the chain (also when off)
                 latency += smooth[(size_t) slot.instance].getLatencySamples();
         }
-        if (pitchOn && routing.contains (ModuleId::pitch))
-            latency += pitch.getLatencySamples();
         return latency;
     }
 }

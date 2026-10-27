@@ -1,4 +1,4 @@
-// 0.3 modules: PULSE, VOCAL SMASH, CHOIR, SMOOTH, VOCAL CHECK, LEVEL RIDE.
+// 0.3 modules: VOCAL SMASH, SMOOTH, VOCAL CHECK, LEVEL RIDE (PULSE and CHOIR were removed in 0.7).
 // Each module is measured on its own with test signals, then all of them
 // together through the real processor.
 
@@ -8,9 +8,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include <complex>
 #include <thread>
-#include "DSP/PulseModule.h"
 #include "DSP/SmashModule.h"
-#include "DSP/ChoirModule.h"
 #include "SyntheticVocal.h"
 #include "DSP/SmoothModule.h"
 #include "DSP/RideModule.h"
@@ -188,137 +186,11 @@ public:
 
     void runTest() override
     {
-        pulseTests();
         smashTests();
-        choirTests();
         smoothTests();
         rideTests();
         checkTests();
         integrationTests();
-    }
-
-    //==========================================================================
-    void pulseTests()
-    {
-        beginTest ("PULSE: curve evaluation (linear, smooth, step, wrap-around)");
-        {
-            PulseSettings s;
-            s.x = { 0.0f, 0.25f, 0.5f, 0.75f, 0.9f, 0.95f };
-            s.y = { 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-            s.interpolation = 0;
-            expectWithinAbsoluteError (PulseModule::evaluate (s, 0.125f), 0.5f, 1.0e-4f);
-            expectWithinAbsoluteError (PulseModule::evaluate (s, 0.4f), 1.0f, 1.0e-4f);
-            expectWithinAbsoluteError (PulseModule::evaluate (s, 0.625f), 0.5f, 1.0e-4f);
-            s.interpolation = 2;
-            expectWithinAbsoluteError (PulseModule::evaluate (s, 0.2f), 0.0f, 1.0e-4f);
-            s.interpolation = 1;
-            expectWithinAbsoluteError (PulseModule::evaluate (s, 0.125f), 0.5f, 1.0e-4f);
-            expectLessThan (PulseModule::evaluate (s, 0.05f), 0.2f * 0.5f + 0.05f);
-            // Unsorted points are sorted internally; the curve wraps from the last point to the first
-            s.x = { 0.8f, 0.2f, 0.5f, 0.6f, 0.7f, 0.9f };
-            s.y = { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f };
-            s.interpolation = 0;
-            // phase 0.05 lies between (0.9, 1) and (0.2 + 1, 0): halfway -> 0.5
-            expectWithinAbsoluteError (PulseModule::evaluate (s, 0.05f), 0.5f, 1.0e-3f);
-        }
-
-        beginTest ("PULSE: curve shapes the gain in sync with the host position");
-        {
-            for (double fs : { 44100.0, 48000.0, 96000.0 })
-            {
-                PulseModule m;
-                m.prepare (fs, chunk);
-                PulseSettings s;
-                s.enabled = true;
-                s.depth = 1.0f;
-                s.rate = 2;               // 1/4 -> one cycle per beat
-                s.interpolation = 0;
-                s.attackMs = 0.5f; s.releaseMs = 0.5f; s.smoothMs = 0.0f;
-                s.x = { 0.0f, 0.45f, 0.5f, 0.95f, 0.97f, 0.99f };
-                s.y = { 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f };
-                m.setSettings (s);
-
-                const double bpm = 120.0;
-                auto b = constant (2, (int) (fs * 2.0), 1.0f);
-                runModule (m, b, [&] (int start) { m.setTransport (bpm, start / fs * bpm / 60.0, true); });
-
-                // Beat = 0.5 s: first half loud, second half silent
-                const int beat = (int) (fs * 0.5);
-                const float high = b.getSample (0, beat + beat / 4);
-                const float low = b.getSample (0, beat + beat * 3 / 4);
-                expectWithinAbsoluteError (high, 1.0f, 0.01f, "curve high at " + juce::String (fs));
-                expectWithinAbsoluteError (low, 0.0f, 0.01f, "curve low at " + juce::String (fs));
-            }
-        }
-
-        beginTest ("PULSE: follows loops / position jumps");
-        {
-            PulseModule m;
-            m.prepare (48000.0, chunk);
-            PulseSettings s;
-            s.enabled = true; s.depth = 1.0f; s.rate = 2; s.interpolation = 0;
-            s.attackMs = 0.5f; s.releaseMs = 0.5f; s.smoothMs = 0.0f;
-            s.x = { 0.0f, 0.45f, 0.5f, 0.95f, 0.97f, 0.99f };
-            s.y = { 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f };
-            m.setSettings (s);
-            auto b = constant (2, 48000, 1.0f);
-            // Host loops: jumps to beat position 7.75 (second half of a beat -> silent) at every block
-            runModule (m, b, [&] (int start) { m.setTransport (120.0, 7.75 + 0.0 * start, true); });
-            expectLessThan (b.getSample (0, 40000), 0.05f, "position from the host, not free running");
-        }
-
-        beginTest ("PULSE: manual BPM when the host sends no tempo");
-        {
-            const double fs = 48000.0;
-            PulseModule m;
-            m.prepare (fs, chunk);
-            PulseSettings s;
-            s.enabled = true; s.depth = 1.0f; s.rate = 2; s.interpolation = 0; s.manualBpm = 150.0f;
-            s.attackMs = 0.5f; s.releaseMs = 0.5f; s.smoothMs = 0.0f;
-            s.x = { 0.0f, 0.45f, 0.5f, 0.95f, 0.97f, 0.99f };
-            s.y = { 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f };
-            m.setSettings (s);
-            auto b = constant (2, (int) fs * 3, 1.0f);
-            runModule (m, b, [&] (int) { m.setTransport (0.0, -1.0, false); });
-
-            // Falling edges below 0.5 are one beat apart: 60 / 150 = 0.4 s
-            std::vector<int> edges;
-            for (int i = 1; i < b.getNumSamples(); ++i)
-                if (b.getSample (0, i - 1) >= 0.5f && b.getSample (0, i) < 0.5f)
-                    edges.push_back (i);
-            expectGreaterThan ((int) edges.size(), 5);
-            const double period = (edges.back() - edges.front()) / (double) (edges.size() - 1) / fs;
-            expectWithinAbsoluteError (period, 0.4, 0.002);
-        }
-
-        beginTest ("PULSE: hard step curve stays click free; mix 0 is transparent");
-        {
-            const double fs = 48000.0;
-            PulseModule m;
-            m.prepare (fs, chunk);
-            PulseSettings s;
-            s.enabled = true; s.depth = 1.0f; s.rate = 4; s.interpolation = 2;  // 1/16 hard steps
-            s.attackMs = 1.0f; s.releaseMs = 3.0f; s.smoothMs = 2.0f;
-            s.y = { 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
-            s.x = { 0.0f, 0.16f, 0.33f, 0.5f, 0.66f, 0.83f };
-            m.setSettings (s);
-            auto b = constant (2, (int) fs * 2, 1.0f);
-            runModule (m, b, [&] (int start) { m.setTransport (174.0, start / fs * 174.0 / 60.0, true); });
-            float maxStep = 0.0f;
-            for (int i = 1; i < b.getNumSamples(); ++i)
-                maxStep = std::max (maxStep, std::abs (b.getSample (0, i) - b.getSample (0, i - 1)));
-            logMessage ("Largest gain step per sample: " + juce::String (maxStep, 4));
-            expectLessThan (maxStep, 0.03f, "no hard gain jumps");
-
-            PulseModule m2;
-            m2.prepare (fs, chunk);
-            s.mix = 0.0f;
-            m2.setSettings (s);
-            const auto in = noiseBuffer (2, 48000, 0.5f, 3);
-            auto out = in;
-            runModule (m2, out, [&] (int start) { m2.setTransport (120.0, start / fs * 2.0, true); });
-            expectEquals (maxAbsDiff (in, out), 0.0, "mix 0 = untouched");
-        }
     }
 
     //==========================================================================
@@ -384,209 +256,6 @@ public:
             const float change = db (rms (out, (int) fs, (int) fs)) - db (rms (in, (int) fs, (int) fs));
             logMessage ("Change on -62 dBFS noise at full blend: " + juce::String (change, 2) + " dB");
             expectLessThan (change, 1.0f);
-        }
-    }
-
-    //==========================================================================
-    void choirTests()
-    {
-        const double fs = 48000.0;
-
-        beginTest ("CHOIR: mix 0 is transparent");
-        {
-            ChoirModule m;
-            m.prepare (fs, chunk);
-            ChoirSettings s;
-            s.enabled = true; s.mix = 0.0f; s.voices = 8;
-            m.setSettings (s);
-            const auto in = noiseBuffer (2, 48000, 0.5f, 11);
-            auto out = in;
-            runModule (m, out);
-            expectEquals (maxAbsDiff (in, out), 0.0);
-        }
-
-        beginTest ("CHOIR: voices are really detuned (constant pitch offsets, not a wobble)");
-        {
-            ChoirModule m;
-            m.prepare (fs, chunk);
-            ChoirSettings s;
-            s.enabled = true; s.voices = 2; s.detuneCents = 30.0f; s.timingMs = 0.0f; s.humanize = 0.0f;
-            s.width = 0.0f; s.mix = 1.0f; s.density = 1.0f;
-            m.setSettings (s);
-
-            juce::AudioBuffer<float> b (2, (int) fs * 6);
-            for (int i = 0; i < b.getNumSamples(); ++i)
-                for (int c = 0; c < 2; ++c)
-                    b.setSample (c, i, 0.3f * (float) std::sin (2.0 * pi * 440.0 * i / fs));
-            runModule (m, b);
-
-            const int start = (int) fs, len = (int) fs * 4;
-            const double down = toneLevel (b, start, len, 440.0 * std::pow (2.0, -30.0 / 1200.0), fs);
-            const double up = toneLevel (b, start, len, 440.0 * std::pow (2.0, 27.0 / 1200.0), fs);
-            const double orig = toneLevel (b, start, len, 440.0, fs);
-            logMessage ("Voice levels: -30 ct " + juce::String (down, 4) + ", +27 ct " + juce::String (up, 4) + ", 440 Hz " + juce::String (orig, 4));
-            expectGreaterThan (down, orig * 2.0, "lower voice at its own pitch");
-            expectGreaterThan (up, orig * 2.0, "upper voice at its own pitch");
-        }
-
-        beginTest ("CHOIR: width spreads the voices; humanize keeps them moving");
-        {
-            const auto in = noiseBuffer (2, (int) fs * 3, 0.3f, 13);
-            for (float w : { 0.0f, 1.0f })
-            {
-                ChoirModule m;
-                m.prepare (fs, chunk);
-                ChoirSettings s;
-                s.enabled = true; s.voices = 8; s.width = w; s.mix = 1.0f;
-                m.setSettings (s);
-                // Mono source so only the choir creates stereo
-                auto b = in;
-                b.copyFrom (1, 0, b, 0, 0, b.getNumSamples());
-                runModule (m, b);
-                const double corr = correlation (b, 0, b, 1, (int) fs, (int) fs * 2);
-                logMessage ("Width " + juce::String (w) + ": L/R correlation " + juce::String (corr, 3));
-                if (w == 0.0f) expectGreaterThan (corr, 0.98);
-                else           expectLessThan (corr, 0.8);
-                expectWithinAbsoluteError ((double) m.outputCorrelation.load(), corr, 0.15, "mono meter reports it");
-            }
-
-            ChoirModule m;
-            m.prepare (fs, chunk);
-            ChoirSettings s;
-            s.enabled = true; s.voices = 4; s.humanize = 1.0f;
-            m.setSettings (s);
-            auto b = noiseBuffer (2, (int) fs * 4, 0.3f, 15);
-            float minC = 1.0e9f, maxC = -1.0e9f;
-            runModule (m, b, [&] (int) { const float c = m.voiceCents[0].load(); minC = std::min (minC, c); maxC = std::max (maxC, c); });
-            logMessage ("Voice 1 pitch drift over 4 s: " + juce::String (maxC - minC, 2) + " ct");
-            expectGreaterThan (maxC - minC, 1.0f);
-        }
-
-        // 0.6 quality (QUALITY_BASELINE #7): the default choir was narrow (L/R 0.94 vs 0.79 Waves Doubler4)
-        // and rough (AM 2.12 vs 1.62 dB). Proxies of the bench metrics on a synthetic vocal / a 440 Hz tone.
-        beginTest ("CHOIR: wide image at the default settings (vocal)");
-        {
-            VocalSpec vs;
-            vs.seconds = 8.0;
-            const auto voice = makeVocal (vs);
-            ChoirModule m;
-            m.prepare (fs, chunk);
-            ChoirSettings s;
-            s.enabled = true;   // defaults: 4 voices, detune 10, timing 18, humanize 50 %, width 80 %, density 50 %, mix 35 %
-            m.setSettings (s);
-            juce::AudioBuffer<float> b (2, voice.numSamples());
-            for (int c = 0; c < 2; ++c)
-                b.copyFrom (c, 0, voice.vocal[0].data(), voice.numSamples());
-            runModule (m, b);
-            const double corr = correlation (b, 0, b, 1, (int) fs, b.getNumSamples() - (int) fs);
-            logMessage ("default choir on a vocal: L/R correlation " + juce::String (corr, 3));
-            expectLessThan (corr, 0.88);
-        }
-
-        beginTest ("CHOIR: low AM roughness at the default settings (6 tones)");
-        {
-            // One tone alone depends on the beat phases the voices happen to have (same levels: 0.7-3.1 dB),
-            // so the mean over six tones is pinned (0.5 engine: 2.02 dB in the bench, Doubler4 2.57 dB)
-            double total = 0.0;
-            for (double f : { 196.0, 262.0, 330.0, 523.0, 659.0, 880.0 })
-            {
-                ChoirModule m;
-                m.prepare (fs, chunk);
-                ChoirSettings s;
-                s.enabled = true;
-                m.setSettings (s);
-                juce::AudioBuffer<float> b (2, (int) (4.5 * fs));
-                for (int i = 0; i < b.getNumSamples(); ++i)
-                    for (int c = 0; c < 2; ++c)
-                        b.setSample (c, i, 0.25f * (float) std::sin (2.0 * pi * f * i / fs));
-                runModule (m, b);
-                std::vector<double> e;
-                const int w = (int) (0.02 * fs);
-                for (int st = (int) (0.5 * fs); st + w < b.getNumSamples(); st += w / 2)
-                {
-                    double sum = 0.0;
-                    for (int i = st; i < st + w; ++i)
-                    {
-                        const double mono = 0.5 * (b.getSample (0, i) + b.getSample (1, i));
-                        sum += mono * mono;
-                    }
-                    e.push_back (10.0 * std::log10 (sum / w + 1e-20));
-                }
-                double mean = 0.0, q = 0.0;
-                for (auto x : e) mean += x;
-                mean /= (double) e.size();
-                for (auto x : e) q += (x - mean) * (x - mean);
-                total += std::sqrt (q / (double) e.size());
-            }
-            const double rough = total / 6.0;
-            logMessage ("default choir: AM roughness " + juce::String (rough, 3) + " dB (mean of 6 tones)");
-            expectLessThan (rough, 2.0);
-        }
-
-        beginTest ("CHOIR: a solo voice is a clean detune (no shifter AM)");
-        {
-            ChoirModule m;
-            m.prepare (fs, chunk);
-            ChoirSettings s;
-            s.enabled = true; s.voices = 2; s.detuneCents = 20.0f; s.humanize = 0.0f; s.width = 0.0f; s.mix = 1.0f; s.density = 1.0f;
-            m.setSettings (s);
-            juce::AudioBuffer<float> b (2, (int) (4.0 * fs));
-            for (int i = 0; i < b.getNumSamples(); ++i)
-                for (int c = 0; c < 2; ++c)
-                    b.setSample (c, i, 0.25f * (float) std::sin (2.0 * pi * 440.0 * i / fs));
-            runModule (m, b);
-            // Each voice's tone must keep its level (a dual-tap shifter's crossfade combs it up and down)
-            const double fLo = 440.0 * std::pow (2.0, -20.0 / 1200.0), fHi = 440.0 * std::pow (2.0, 18.0 / 1200.0);
-            for (double f : { fLo, fHi })
-            {
-                double lo = 1.0e9, hi = 0.0;
-                for (int st = (int) (0.5 * fs); st + (int) fs <= b.getNumSamples(); st += (int) (0.125 * fs))
-                {
-                    const double a = toneLevel (b, st, (int) fs, f, fs);
-                    lo = std::min (lo, a);
-                    hi = std::max (hi, a);
-                }
-                logMessage ("voice at " + juce::String (f, 2) + " Hz: level " + juce::String (lo, 4) + " .. " + juce::String (hi, 4));
-                expectLessThan (hi / lo, 1.15, "steady voice level");
-            }
-        }
-
-        beginTest ("CHOIR: UI positions follow the voices (half-circle stage)");
-        {
-            ChoirSettings s;
-            s.voices = 4; s.width = 0.5f; s.timingMs = 30.0f;
-            for (int v = 0; v < 4; ++v)
-            {
-                const auto p = ChoirModule::voicePosition (v, s);
-                expectWithinAbsoluteError (p.pan, ChoirModule::stagePan (ChoirModule::shapes()[(size_t) v].pan, 0.5f), 1.0e-6f);
-                expect (p.pan * ChoirModule::shapes()[(size_t) v].pan > 0.0f, "on its own side");
-                expectGreaterOrEqual (p.depth, 0.0f);
-                expectLessOrEqual (p.depth, 1.0f);
-                expectGreaterThan (p.level, 0.0f);
-            }
-            expectEquals (ChoirModule::voicePosition (5, s).level, 0.0f, "voices beyond the count are silent");
-            expect (std::abs (ChoirModule::shapes()[0].pan) >= 0.95f && std::abs (ChoirModule::shapes()[1].pan) >= 0.95f, "outer voices at the edges");
-            expect (ChoirModule::shapes()[0].pan * ChoirModule::shapes()[1].pan < 0.0f, "alternating sides");
-        }
-
-        beginTest ("CHOIR: voice count changes during playback without clicks");
-        {
-            ChoirModule m;
-            m.prepare (fs, chunk);
-            ChoirSettings s;
-            s.enabled = true; s.mix = 0.5f;
-            auto b = juce::AudioBuffer<float> (2, (int) fs * 2);
-            for (int i = 0; i < b.getNumSamples(); ++i)
-                for (int c = 0; c < 2; ++c)
-                    b.setSample (c, i, 0.3f * (float) std::sin (2.0 * pi * 220.0 * i / fs));
-            int k = 0;
-            runModule (m, b, [&] (int) { s.voices = 2 + 2 * ((k++ / 20) % 4); m.setSettings (s); });
-            float maxStep = 0.0f;
-            for (int i = 1; i < b.getNumSamples(); ++i)
-                maxStep = std::max (maxStep, std::abs (b.getSample (0, i) - b.getSample (0, i - 1)));
-            // A 220 Hz sine at 0.3 changes by at most ~0.009 per sample; voices add similar slopes
-            expectLessThan (maxStep, 0.06f);
-            expect (allFinite (b));
         }
     }
 
@@ -1202,11 +871,10 @@ public:
             for (auto [fs, bs, channels] : { std::tuple<double, int, int> { 44100.0, 37, 2 }, { 48000.0, 512, 1 }, { 96000.0, 1024, 2 } })
             {
                 Harness h (fs, bs, channels);
-                for (auto* id : { pid::pulseOn, pid::smashOn, pid::choirOn, pid::smoothOn, pid::checkOn, pid::rideOn,
+                for (auto* id : { pid::smashOn, pid::smoothOn, pid::checkOn, pid::rideOn,
                                   pid::eqOn, pid::compOn, pid::deessOn, pid::reverbOn })
                     h.set (id, 1.0f);
                 h.set (pid::smashBlend, 80.0f);
-                h.set (pid::choirVoices, 3.0f);
                 const auto in = h.noise (0.4f, 3.0, 31);
                 const auto out = h.run (in, bs);
                 expect (allFinite (out), "finite at " + juce::String (fs) + " / " + juce::String (bs));
@@ -1222,12 +890,12 @@ public:
             const auto in = h.sine (300.0, 0.3f, 4.0);
             juce::AudioBuffer<float> out (in);
             juce::MidiBuffer midi;
-            const char* ids[] { pid::pulseOn, pid::smashOn, pid::choirOn, pid::smoothOn, pid::rideOn };
+            const char* ids[] { pid::smashOn, pid::smoothOn, pid::rideOn };
             int block = 0;
             for (int start = 0; start < out.getNumSamples(); start += 512, ++block)
             {
                 if (block % 10 == 0)
-                    h.set (ids[(block / 10) % 5], (block / 50) % 2 == 0 ? 1.0f : 0.0f);
+                    h.set (ids[(block / 10) % std::size (ids)], (block / 30) % 2 == 0 ? 1.0f : 0.0f);
                 juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), 2, start, std::min (512, out.getNumSamples() - start));
                 h.proc.processBlock (view, midi);
             }
@@ -1262,50 +930,6 @@ public:
             expectWithinAbsoluteError (s.extra[0].smooth.weightGain[1], 5.0f, 1.0e-3f, "second instance has its own curve");
         }
 
-        beginTest ("Stutter / Pulse after a latent SMOOTH stay on the host grid");
-        {
-            // The host shifts the output back by the reported latency, so a tempo-locked gate after
-            // SMOOTH must gate the delayed signal at the delayed song position: "smooth, chop" has to
-            // sound like "chop, smooth"
-            const auto render = [&] (const char* routing, const char* gateOn)
-            {
-                Harness h;
-                h.neutral();
-                velvox::test::ScanPlayHead head;
-                head.playing = true;
-                head.bpm = 120.0;
-                h.proc.setPlayHead (&head);
-                h.set (pid::smoothOn, 1.0f);
-                h.set (pid::smoothAmount, 0.0f);
-                h.set (gateOn, 1.0f);
-                h.proc.setRouting (Routing::fromString (routing));
-                const auto in = h.sine (300.0, 0.3f, 2.0);
-                juce::AudioBuffer<float> out (in);
-                juce::MidiBuffer midi;
-                for (int start = 0; start < out.getNumSamples(); start += 512)
-                {
-                    head.ppq = start / h.fs * head.bpm / 60.0;
-                    juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), 2, start, std::min (512, out.getNumSamples() - start));
-                    h.proc.processBlock (view, midi);
-                }
-                h.proc.setPlayHead (nullptr);
-                return out;
-            };
-            for (auto* gate : { pid::chopOn, pid::pulseOn })
-            {
-                const bool chop = juce::String (gate) == pid::chopOn;
-                const auto before = render (chop ? "smooth,chop" : "smooth,pulse", gate);
-                const auto after = render (chop ? "chop,smooth" : "pulse,smooth", gate);
-                // Skip the start-up: the legacy routing string completes the chain with every module, so
-                // LEVEL RIDE's lookahead (0.6) is in it too - the output starts ~4870 samples late and the
-                // gate's slew from its start state differs there between the two orders
-                double d = 0.0;
-                for (int i = 12000; i < before.getNumSamples(); ++i)
-                    d = std::max (d, (double) std::abs (before.getSample (0, i) - after.getSample (0, i)));
-                logMessage (juce::String (gate) + ": max difference smooth-first vs gate-first " + juce::String (d, 6));
-                expectLessThan (d, 1.0e-3, gate);
-            }
-        }
 
         beginTest ("SMOOTH in the chain: constant latency reported, output and bypass aligned");
         {
@@ -1342,13 +966,13 @@ public:
         beginTest ("Old projects: the 0.3 modules stay off and change nothing");
         {
             Harness h;
-            for (auto* id : { pid::pulseOn, pid::smashOn, pid::choirOn, pid::smoothOn, pid::checkOn, pid::rideOn })
+            for (auto* id : { pid::smashOn, pid::smoothOn, pid::checkOn, pid::rideOn })
                 expectEquals (h.get (id), 0.0f);
             for (auto& p : getFactoryPresets())
                 if (p.category == "Classic (v0.1)")
                 {
                     p.applyTo (h.proc.getState());
-                    for (auto* id : { pid::pulseOn, pid::smashOn, pid::choirOn, pid::smoothOn, pid::rideOn })
+                    for (auto* id : { pid::smashOn, pid::smoothOn, pid::rideOn })
                         expectEquals (h.get (id), 0.0f, p.name + " keeps " + id + " off");
                 }
         }

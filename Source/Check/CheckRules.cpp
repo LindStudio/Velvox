@@ -507,7 +507,7 @@ namespace velvox::check
                 if (corrDeficit > -0.1f || r.monoLossDb > 3.0f)
                 {
                     const float c = std::max (conf (corrDeficit, 0.0f, 0.4f), conf (r.monoLossDb, 3.0f, 6.0f));
-                    auto& f = add ("mono", Category::stereo, c, r.correlation < 0.0f ? Severity::high : Severity::medium, ModuleId::choir,
+                    auto& f = add ("mono", Category::stereo, c, r.correlation < 0.0f ? Severity::high : Severity::medium, ModuleId::doubler,
                                    txt ("Mono-Problem (Korrelation {0})", "Mono problem (correlation {0})", { numV (r.correlation, 2) }),
                                    txt ("Breite 70 %", "Width 70 %"),
                                    txt ("Korrelation links/rechts {0}, Mono-Verlust {1} dB.", "Left/right correlation {0}, mono loss {1} dB.",
@@ -515,7 +515,6 @@ namespace velvox::check
                                    txt ("Club-Anlagen und Handys spielen oft mono: Teile der Stimme löschen sich dort aus.",
                                         "Club systems and phones often play mono: parts of the voice cancel out there."));
                     f.action.params.push_back ({ pid::stereoWidth, 70.0f, K::atMost, 100.0f });
-                    f.action.params.push_back ({ pid::choirWidth, -30.0f, K::amount, 0.0f });
                     f.action.params.push_back ({ pid::doublerMonoSafe, 80.0f, K::atLeast, 0.0f });
                 }
             }

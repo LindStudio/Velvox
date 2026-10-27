@@ -13,7 +13,6 @@ namespace velvox
         constexpr float room = 0.0f, plate = 1.0f;
         constexpr float warm = 0.0f, tape = 1.0f, tube = 2.0f, hard = 3.0f;   // saturation characters
         constexpr float rms = 1.0f;                                         // compressor detector
-        constexpr float chopHyperDrive = 3.0f, chop1_16 = 1.0f;             // chop pattern / rate indices
 
         struct Value
         {
@@ -146,7 +145,6 @@ namespace velvox
                       { delayLowCut, 500 }, { delayHighCut, 7000 }, { delayPingPong, 1 }, { delayDuckAmount, 8 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 18 }, { reverbDecay, 1.8f }, { reverbPreDelay, 30 },
                       { reverbSize, 65 }, { reverbLowCut, 400 }, { reverbDuckAmount, 8 },
-                      { pulseOn, 1 }, { pulseRate, 2 }, { pulseDepth, 30 }, { pulseTension, 10 }, { pulseRelease, 20 },
                       { checkOn, 1 },
                       { stereoWidth, 115 }, { monoBelow, 150 }, { outputGain, 3.0f },
                   }),
@@ -159,8 +157,7 @@ namespace velvox
                       { compOn, 1 }, { compThreshold, -22 }, { compRatio, 3 }, { compAttack, 8 }, { compRelease, 120 }, { compMakeup, 3 },
                       { smashOn, 1 }, { smashAmount, 40 }, { smashBlend, 25 },
                       { deessOn, 1 }, { deessThreshold, -32 }, { deessRange, 6 },
-                      { choirOn, 1 }, { choirVoices, 3 }, { choirDetune, 16 }, { choirTiming, 32 }, { choirHumanize, 70 },
-                      { choirWidth, 100 }, { choirDensity, 70 }, { choirMix, 45 },
+                      
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 30 }, { reverbDecay, 3.2f }, { reverbPreDelay, 40 },
                       { reverbSize, 85 }, { reverbLowCut, 300 }, { reverbDuckAmount, 6 },
                       { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 30 }, { delayMix, 14 }, { delayPingPong, 1 },
@@ -177,10 +174,8 @@ namespace velvox
                       { compOn, 1 }, { compThreshold, -26 }, { compRatio, 5 }, { compAttack, 2 }, { compRelease, 60 }, { compMakeup, 5 },
                       { smashOn, 1 }, { smashAmount, 85 }, { smashBlend, 50 }, { smashAttack, 0.8f }, { smashRelease, 50 }, { smashTone, 40 },
                       { deessOn, 1 }, { deessThreshold, -34 }, { deessRange, 8 },
-                      { pulseOn, 1 }, { pulseRate, 2 }, { pulseDepth, 85 }, { pulseInterp, 1 }, { pulseTension, 45 },
-                      { pulseAttack, 0.5f }, { pulseRelease, 8 }, { pulseSmooth, 1.5f },
-                      { pulseX[0], 0.0f }, { pulseX[1], 0.04f }, { pulseX[2], 0.35f }, { pulseX[3], 0.6f }, { pulseX[4], 0.8f }, { pulseX[5], 0.97f },
-                      { pulseY[0], 0.0f }, { pulseY[1], 0.0f }, { pulseY[2], 0.8f }, { pulseY[3], 1.0f }, { pulseY[4], 1.0f }, { pulseY[5], 1.0f },
+                      
+                      
                       { reverbOn, 1 }, { reverbType, room }, { reverbMix, 12 }, { reverbDecay, 1.0f },
                       { outputGain, 4.0f },
                   }),
@@ -227,7 +222,6 @@ namespace velvox
                       { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 3 }, { compRelease, 70 },
                       { compMakeup, 4 },
                       { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 6 },
-                      { chopOn, 1 }, { chopPattern, chopHyperDrive }, { chopRate, chop1_16 }, { chopDepth, 100 }, { chopSmooth, 3 },
                       { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_16 }, { delayFeedback, 30 }, { delayMix, 15 },
                       { delayPingPong, 1 }, { delayLowCut, 500 }, { delayHighCut, 7000 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 18 }, { reverbDecay, 1.8f }, { reverbSize, 60 },
@@ -242,7 +236,6 @@ namespace velvox
                       { compOn, 1 }, { compThreshold, -24 }, { compRatio, 4 }, { compAttack, 5 }, { compRelease, 90 },
                       { compMakeup, 4 },
                       { deessOn, 1 }, { deessFreq, 6500 }, { deessThreshold, -32 }, { deessRange, 6 },
-                      { pitchOn, 1 }, { pitchSemitones, -12 }, { pitchPreserveFormants, 1 }, { pitchMix, 35 },
                       { satOn, 1 }, { satCharacter, tube }, { satDrive, 8 }, { satMix, 45 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 16 }, { reverbDecay, 2.0f }, { reverbDuckAmount, 5 },
                       { outputGain, 6.0f },
@@ -254,7 +247,6 @@ namespace velvox
                       { hpfOn, 1 }, { hpfFreq, 200 }, { hpfSlope, slope24 },
                       { compOn, 1 }, { compThreshold, -22 }, { compRatio, 4 }, { compMakeup, 3 },
                       { deessOn, 1 }, { deessFreq, 8000 }, { deessThreshold, -30 }, { deessRange, 8 },
-                      { pitchOn, 1 }, { pitchSemitones, 12 }, { pitchPreserveFormants, 0 }, { pitchMix, 100 },
                       { delayOn, 1 }, { delaySync, 1 }, { delayDivision, div1_8D }, { delayFeedback, 30 }, { delayMix, 16 },
                       { delayPingPong, 1 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 20 }, { reverbDecay, 1.8f }, { reverbDuckAmount, 6 },
