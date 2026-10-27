@@ -2,7 +2,23 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
-## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/i18n`
+## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/modules-0.7`
+
+### Entfernt – 0.7 (Jakob, 2026-10-27)
+- **Pitch, Stutter, Pulse und Choir sind ganz raus:** keine Module, Parameter, Panels, Hilfeseiten und Presets
+  mehr dafür. Der Host sieht entsprechend weniger Parameter. **Alte Projekte** mit diesen Modulen laden ohne
+  sie (nur Testprojekte vorhanden, keine Migration). Die Kette kennt jetzt 11 Module, der Modul-Browser hat
+  keine Gruppe „Rhythmus“ mehr.
+- **Werks-Presets angepasst:** Hard Dance Lead, Festival Choir Hook (jetzt vier Doubler-Stimmen) und Pumping
+  Party Vocal (geducktes Viertel-Delay + Raum) behalten ihren Namen; Vocal Chop → **Tight Rap Vocal**,
+  Octave Down Layer → **Deep Double**, Chipmunk Hook → **Bright Hook**.
+- Vocal Check: der Mono-Hinweis verweist auf den Doubler. Das Delay-Echobild liest das Song-Tempo jetzt
+  direkt aus der Kette (vorher über Pulse).
+
+### Neu – Maskottchen und SIMPEL
+- Das Teufelchen in SIMPEL (unten links, Klick = Vocal Check), Statuszeile, Vorher/Nachher oben rechts,
+  Sprechblase mit „Vocal analysieren“ / „Details“. Nach dem Auto Mix zeigen die SIMPEL-Regler, was er
+  eingestellt hat.
 
 ### Neu – Sprache Deutsch / English
 - **Die ganze Oberfläche gibt es auf Deutsch und Englisch:** Bedienelemente, Infokarten, Menüs, Hilfe, Tour,

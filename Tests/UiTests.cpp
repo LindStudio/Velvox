@@ -7,6 +7,7 @@
 #include "UI/ModuleBrowser.h"
 #include "UI/ModuleViews.h"
 #include "UI/EqPanel.h"
+#include "UI/HelpContent.h"
 #include "PluginEditor.h"
 
 using namespace velvox;
@@ -187,6 +188,28 @@ public:
             click (f.view, f.view.getAddCardBounds().getCentre());
             expectEquals (index, 5, "behind the five serial modules (delay and reverb are inserts in a fresh chain)");
             expect (atEnd);
+        }
+
+        beginTest ("0.7: the module browser and the help offer exactly the 11 remaining modules");
+        {
+            Harness h;
+            ui::ModuleBrowser browser (h.proc);
+            browser.setBounds (0, 0, ui::baseWidth, ui::baseHeight);
+            browser.open (1, false);
+            juce::StringArray keys;
+            for (auto id : browser.visibleModules())
+                keys.add (dsp::moduleKey (id));
+            keys.sort (false);
+            juce::StringArray expected { "eq", "comp", "deess", "sat", "doubler", "delay", "reverb", "smash", "smooth", "check", "ride" };
+            expected.sort (false);
+            expectEquals (keys.joinIntoString (","), expected.joinIntoString (","));
+            for (int i = 0; i < dsp::numModules; ++i)
+                expect (ui::help::shortDescription (i).isNotEmpty(), dsp::moduleKey ((ModuleId) i));
+            for (auto lang : { i18n::Language::german, i18n::Language::english })
+                for (const auto& page : ui::help::pages (lang))
+                    for (auto* gone : { "Pitch", "Stutter", "Pulse", "Choir" })
+                        expect (page.title != gone && page.key != juce::String (gone).toLowerCase() && page.key != "chop",
+                                "help page " + page.title);
         }
 
         beginTest ("Module row: readable cards, horizontal scrolling, visual order = DSP order");
