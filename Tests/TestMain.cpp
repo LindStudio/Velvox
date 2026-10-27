@@ -4,6 +4,7 @@
 #include "PluginEditor.h"
 #include "UI/UserSettings.h"
 #include "UI/EqPanel.h"
+#include "UI/MascotView.h"
 #include "AutoMix/AutoMixEngine.h"
 #include "SyntheticVocal.h"
 #include "PopScan.h"
@@ -333,6 +334,7 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //          e.g. "reso;more;route:v2|eq|smooth;set:smoothOn=1,smoothAmount=70"
 //          0.6.1 chain tokens: "solo:<selection code>" (module solo), "scroll:<px>|end" (chain row scrolled),
 //          "hover:<selection code>" (mouse over that tile; "hover:<code>:s" over its S)
+//          "mascot:<seconds>,<score>[,<input dB>]" (the devil in SIMPEL after that long singing with that Vocal Check score)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
                            const juce::String& mode, int selection, const juce::String& rawOverlay)
 {
@@ -340,7 +342,7 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     // One parser for every overlay form: ';' tokens, each a flag, a route, a set: list or the overlay itself
     bool reso = false, moreOpen = false, hasSet = false, hoverPoint = false;
     int soloBand = -1;   // "bandsolo:<band>": EQ band / Saturation band soloed (0.6.1); "hoverpoint": EQ hot spot shown
-    juce::String overlay, routeText, soloText, scrollText, hoverText;
+    juce::String overlay, routeText, soloText, scrollText, hoverText, mascotText;
     juce::StringArray assignments;
     for (auto token : juce::StringArray::fromTokens (rawOverlay, ";", ""))
     {
@@ -353,6 +355,8 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
             hoverText = token.fromFirstOccurrenceOf (":", false, false);
         else if (token == "reso")
             reso = true;
+        else if (token.startsWith ("mascot:"))
+            mascotText = token.fromFirstOccurrenceOf (":", false, false);
         else if (token.startsWith ("bandsolo:"))
             soloBand = token.fromFirstOccurrenceOf (":", false, false).getIntValue();
         else if (token == "hoverpoint")
@@ -596,6 +600,28 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     {
         pump (overlay == "capturing" ? 12 : 1);
         juce::MessageManager::getInstance()->runDispatchLoopUntil (40);
+    }
+
+    if (mascotText.isNotEmpty())
+    {
+        std::function<ui::MascotView* (juce::Component&)> find = [&find] (juce::Component& c) -> ui::MascotView*
+        {
+            if (auto* m = dynamic_cast<ui::MascotView*> (&c))
+                return m;
+            for (auto* child : c.getChildren())
+                if (auto* m = find (*child))
+                    return m;
+            return nullptr;
+        };
+        if (auto* mascot = find (*editor))
+        {
+            const auto parts = juce::StringArray::fromTokens (mascotText, ",", "");
+            ui::mascot::Inputs in;
+            in.score = parts.size() > 1 ? parts[1].getIntValue() : -1;
+            in.inputDb = parts.size() > 2 ? parts[2].getFloatValue() : -20.0f;
+            for (int i = 0; i < juce::roundToInt (parts[0].getDoubleValue() * 60.0); ++i)
+                mascot->tick (in, 1.0 / 60.0);
+        }
     }
 
     const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);

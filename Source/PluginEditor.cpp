@@ -210,6 +210,7 @@ HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
     };
     simpleView.onAnalyse = [this] { startAnalysis(); };
     simpleView.onShowDetails = [this] { showMixDetails(); };
+    simpleView.onVocalCheck = [this] { setTab (Tab::vocalCheck); };
     mixView.onAnalyse = [this] { detailsOverlay.setVisible (false); startAnalysis(); };
     mixView.onOpenModule = [this] (int id) { detailsOverlay.setVisible (false); openModule (id); };
 

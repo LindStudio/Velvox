@@ -79,6 +79,8 @@ set(VELVOX_SOURCES
     Source/UI/Segments.cpp
     Source/UI/ValueText.cpp
     Source/UI/SimpleView.cpp
+    Source/UI/MascotClips.cpp
+    Source/UI/MascotView.cpp
     Source/UI/PresetBrowser.cpp
     Source/UI/Spectrum.cpp
     Source/UI/ModuleViews.cpp
@@ -148,7 +150,11 @@ juce_add_binary_data(VelvoxAssets
         Resources/Icons/doubler.svg Resources/Icons/pitch.svg Resources/Icons/check.svg
         Resources/Images/HeadlinerIcon.png
         Resources/Images/HeadlinerWordmark.png
-        Resources/Images/HeadlinerLogo.png)
+        Resources/Images/HeadlinerLogo.png
+        # Mascot sprite clips (tools/mascot/pack_mascot.py, format in Source/UI/MascotClips.h)
+        Resources/Mascot/wakeUp.vms Resources/Mascot/idle.vms Resources/Mascot/bad.vms Resources/Mascot/problem.vms
+        Resources/Mascot/okay.vms Resources/Mascot/good.vms Resources/Mascot/super.vms Resources/Mascot/spin.vms
+        Resources/Mascot/working.vms Resources/Mascot/walk.vms Resources/Mascot/call.vms)
 
 set(VELVOX_COMMON_LIBS
     VelvoxAssets
@@ -277,4 +283,9 @@ endif()
 # Audition (0.6.1: EQ band solo, Saturation band solo; monitoring states, not parameters)
 if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Tests/AuditionTests.cpp Tests/I18nTests.cpp)
+endif()
+
+# Mascot (the Vocalypse devil in SIMPEL)
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/MascotTests.cpp)
 endif()

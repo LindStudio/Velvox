@@ -186,6 +186,26 @@ Okay → Gut → Super steigt auch messbar in der Bewegungsenergie (mittlere Ges
   (zu / halb / offen mit Zunge + Reißzähnen). `--mouths zu,halb,offen` rendert jede Pose einmal pro Mund (Unterordner).
 - Test: `velvox-bench\2026-10-27\mascot\mund_test.png`.
 
+### Im Plugin (2026-10-27, Jakob: „mach alles auf Plugin-Größe … baue es gleich ein“)
+- **Pipeline:** `render_mascot.py --mode all --rate 30 --size 480 --mouths zu,halb,offen` (≈ 35 min) →
+  `pack_mascot.py <render> Resources/Mascot` → 11 Dateien `*.vms` (17 MB, Binärdaten des Plugins).
+  Bild 239 × 240 px (stehende Figur 211 px hoch = scharf bis 2× Designgröße), Farbe JPEG 80 + Alpha-PNG
+  (256 Farben gaben Stufen im Glanz), Mund halb/offen nur als kleine Ausschnitte. Ruhige Clips (Ruhe, Telefon,
+  Schimpfen, Winken) mit 15 fps, Tänze 30 fps. Lange Schleifen auf das nahtloseste 3–5-s-Fenster gekürzt,
+  das Plugin blendet am Schleifenpunkt 0,25 s über.
+- **Code:** `Source/UI/MascotBrain.h` (welcher Clip wann, Mund nach Pegel – reine Logik, Tests in
+  `Tests/MascotTests.cpp`), `MascotClips.*` (Format `.vms`), `MascotView.*` (zeichnen, Überblendung, Klick nur auf der Figur).
+- **Zustände:** Öffnen = Aufwachen · Stille > 2 s = Ruhe · Auto Mix hört/analysiert = Rennen · Gesang = Tanz nach
+  Vocal-Check-Score (< 40 Telefon, < 60 Schimpfen, < 75 okay, < 90 gut, sonst super; ±3 Hysterese, 2,5 s Mindestdauer),
+  Score ≥ 95 = einmal Drehsprung (höchstens 1×/min). Score kommt nur, solange der Vocal Check an ist; sonst „okay“.
+- **SIMPEL nach dem freigegebenen Konzept (Artboard „Teufel“):** Status oben links („Auto Mix bereit · noch nicht
+  analysiert“), Vorher/Nachher oben rechts, unten das Teufelchen + Sprechblase mit „Vocal analysieren“ und „Details“,
+  Hinweis „Klick auf mich = Vocal Check“. Klick auf ihn öffnet den Vocal Check.
+- Screenshots: `VelvoxTests --snapshot out.png Init 1000 beginner -1 "mascot:<s>,<score>,<dB>"`.
+- **Noch offen:** VOCAL-CHECK-Tab im Header entfernen (laut Konzept; ADVANCED braucht dann einen anderen Weg),
+  Tour mit großer Figur (`walk`/`call` sind schon im Plugin, aber noch nicht benutzt), Sprechblase je Zustand
+  mit Aktionsknöpfen (Konzept: „Ja, mach das“ beim Vocal Check), Umbenennung Headliner → Vocalypse.
+
 ## Nächste Schritte (am PC mit Blender)
 1. `git fetch origin` und Branch `feature/i18n` holen (enthält diese Datei und `art/mascot/`).
 2. ZIP `art/mascot/devil-3d/devil_rig_allmoves.zip` in einen eigenen leeren Ordner entpacken.
