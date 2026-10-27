@@ -112,6 +112,37 @@ Frage von Jakob: Plugin-Farben deshalb ändern? **Empfehlung: nein, Palette beha
 - Kleine Brücke möglich: Flammen-Orange als Akzent nur rund um das Maskottchen (Sprechblase, Vocal-Check-Ergebnis „super“).
 Endgültige Entscheidung liegt bei Jakob.
 
+## Assistent-Konzept (von Jakob freigegeben: „perfekt“)
+Canvas-Artboards 8–12 (`Teufel.dc.html` = Komponente mit Prop `szene`, dazu 4 Hüllen per `dc-import`).
+Freigestellte Figur + Köpfe liegen als Assets im Canvas (aus `concepts/RedDevil.png` und `RedDevilGesichter.png`).
+- Das Teufelchen ist der **Assistent für alles**: Tour, Auto Mix, Ergebnis, Vocal Check, Fehlersuche.
+- **Fester Platz in SIMPEL unten links**: Kopf (Ausdruck je nach Lage) + Sprechblase mit 1–2 Aktionsknöpfen.
+  **Klick auf den Kopf = Vocal Check.** VOCAL-CHECK-Tab im Header fällt weg; Vorher/Nachher sitzt rechts über dem Spektrum;
+  die alte Knopfreihe unter dem Spektrum wandert in die Sprechblase.
+- **Tour:** Bildschirm abgedunkelt, die erklärte Stelle leuchtet (Cyan-Rahmen), daneben die ganze Figur groß mit
+  Sprechblase, „TOUR · n / 6“, Weiter / Zurück / Tour beenden.
+- Zustände → Gesicht: Tour/Ruhe = neutral · Analyse = „Ooh“ · Auto Mix fertig = schreit vor Freude ·
+  Problem gefunden = Zähne zusammen · kein Signal = traurig.
+- **Ton: frech und locker, duzt.** Beispiele: „Spiel den Song ab, ich hör mir deine Stimme an.“ ·
+  „Autsch, bei 6,8 kHz zischt es ordentlich. Soll ich den De-Esser stärker machen?“ ·
+  „Ich hör gar nichts. Ist die Spur scharf geschaltet?“
+
+## Name des Teufelchens (offen, Jakob entscheidet am anderen PC)
+Kandidaten von Jakob: **Cheeko**, **Memphy**, **Nando**. Websuche (nur USA/Web, EU-Register nicht geprüft):
+- **Cheeko** – keine Treffer; von „cheeky“ = frech. Claudes Empfehlung.
+- **Memphy** – keine Treffer; erinnert an Memphis (Elvis, Blues) + Mephisto. Rückfrage offen: wirklich „Memphy“ oder „Mephi“?
+- **Nando** – riskant: Nando's (weltbekannte Hähnchenkette, Flammen, Rot) – berühmte Marke, falsche Assoziation.
+Weitere Ideen aus der Liste: Mephi, Pepper, Ziggy, Puck, Nicky, Brimmy, Chili, Ember, Impy, Riffy.
+Nicht nehmen: Vox (Verstärker-Marke), Sparky (Maskottchen Arizona State), Jinx/Fizz (League of Legends), Diablo, Hellboy, Lucifer.
+Gewählten Namen vor Release mit „Vocalypse“ vom Markenanwalt prüfen lassen.
+
+## Hut kommt weg (Jakob, 2026-10-27)
+Jakob entfernt das Partyhütchen. Achtung: Das 3D-Modell in `devil-3d/` hat den Hut noch (ein einziges Mesh).
+Zwei Wege: (a) Hut in Blender wegschneiden, Loch am Kopf schließen, Textur dort rot übermalen – günstig, Rig und
+Bewegungen bleiben; (b) neues Bild ohne Hut → Meshy neu (Modell, Rig, alle 12 Bewegungen neu exportieren).
+Empfehlung: zuerst (a) probieren. Falls Jakob schon ein neues Modell ohne Hut gemacht hat, das nehmen und die
+Bewegungsliste oben gleich halten. Auch die Canvas-Freisteller (Artboards 8–12) zeigen noch den Hut.
+
 ## Nächste Schritte (am PC mit Blender)
 1. `git fetch origin` und Branch `feature/i18n` holen (enthält diese Datei und `art/mascot/`).
 2. ZIP `art/mascot/devil-3d/devil_rig_allmoves.zip` in einen eigenen leeren Ordner entpacken.
