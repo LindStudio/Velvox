@@ -26,29 +26,50 @@ namespace velvox::ui
         }
     }
 
+    // The tour in both languages: the main action first, then comparing and fine-tuning, then the
+    // ADVANCED parts. Built once per language (never frozen in one), so a language switch shows the
+    // matching table.
+    static std::vector<TutorialOverlay::Step> buildSteps (bool german)
+    {
+        const auto t = [german] (const char* de, const char* en) { return juce::String::fromUTF8 (german ? de : en); };
+        return {
+            { "analyse", t ("Vocal analysieren", "Analyze vocal"),
+              t ("Spiel deine Vocal in der DAW ab und klick auf „Vocal analysieren“: Headliner hört einen Abschnitt an und stellt die Module ein. Die Wiedergabe läuft dabei einfach weiter.",
+                 "Play your vocal in the DAW and click \"Analyze vocal\": Headliner listens to a section and sets up the modules. Playback simply keeps running.") },
+            { "analyse", t ("Vorher / Nachher", "Before / After"),
+              t ("Nach der Analyse vergleicht Vorher / Nachher den Mix mit dem Zustand davor. Details zeigt, was eingestellt wurde und warum.",
+                 "After the analysis, Before / After compares the mix with the state before. Details shows what was set up and why.") },
+            { "macros", t ("Die sechs Makros", "The six macros"),
+              t ("Presence, Space, Width, Punch, Warmth und Vocal Level bewegen mehrere Module auf einmal. Zieh einen Fader, halte Shift für feine Schritte, Doppelklick setzt zurück, ein Klick auf den Wert lässt dich ihn eintippen.",
+                 "Presence, Space, Width, Punch, Warmth and Vocal Level move several modules at once. Drag a fader, hold Shift for fine moves, double-click to reset, click the value to type it.") },
+            { "presets", "Presets",
+              t ("Die Pfeile blättern durch die Presets; ein Klick auf den Namen öffnet die Liste mit Suche, Kategorien, Favoriten und deinen eigenen Presets (speichern, umbenennen, löschen).",
+                 "The arrows step through the presets; click the name for the list with search, categories, favorites and your own presets (save, rename, delete).") },
+            { "tabs", t ("Dein Mix und VOCAL CHECK", "Your mix and VOCAL CHECK"),
+              t ("Der erste Tab ist dein Mix: AUTO MIX in SIMPEL, MODULE (die Kette) in ADVANCED. VOCAL CHECK ist eine Diagnose der Aufnahme mit Vorschlägen; er ändert den Klang nie von selbst.",
+                 "The first tab is your mix: AUTO MIX in SIMPLE, MODULES (the chain) in ADVANCED. VOCAL CHECK is a diagnosis of the recording with suggestions; it never changes the sound by itself.") },
+            { "modes", t ("SIMPEL und ADVANCED", "SIMPLE and ADVANCED"),
+              t ("SIMPEL zeigt das Spektrum und die sechs Makros – genug für die meisten Mixe. ADVANCED zeigt die Modul-Kette mit dem vollen Panel des gewählten Moduls. Ein Wechsel ändert nie einen Wert.",
+                 "SIMPLE shows the spectrum and the six macros - enough for most mixes. ADVANCED shows the module chain with the full panel of the selected module. Switching never changes a value.") },
+            { "chain", t ("Die Kette (ADVANCED)", "The chain (ADVANCED)"),
+              t ("Jede Kachel ist ein Modul in der Reihenfolge der Bearbeitung. Klick öffnet sein Panel, Ziehen ändert die Reihenfolge, Rechtsklick bietet Duplizieren, Entfernen, Zurücksetzen und Als Send / Als Insert. Die +-Kachel fügt ein Modul hinzu.",
+                 "Each tile is one module in processing order. Click a tile to open its panel, drag it to reorder, right-click for Duplicate, Remove, Reset and As send / As insert. The + tile adds a module.") },
+            { "body", t ("Modul-Panels", "Module panels"),
+              t ("Oben ein großes Live-Bild, darunter die Hauptregler, alles Weitere unter „Mehr“. Lass die Maus auf einem Regler ruhen, um zu lesen, was er tut. Strg+Z macht jede Änderung rückgängig.",
+                 "A large live picture on top, the main controls below, everything else behind \"More\". Rest the mouse on a control to read what it does. Ctrl+Z undoes any change.") },
+            { "global", "Bypass",
+              t ("Bypass spielt die unbearbeitete Vocal; ein bernsteinfarbener Rahmen zeigt, dass er an ist. Stell den fairen Vergleich (Details) auf Wie Bypass, damit dich die Lautheit nicht täuscht.",
+                 "Bypass plays the unprocessed vocal; an amber frame shows it is on. Set the fair compare (Details) to Like bypass so loudness does not fool you.") },
+            { "help", t ("Hilfe und Einstellungen", "Help and settings"),
+              t ("Der ? öffnet die komplette Anleitung, offline; in jedem Modul die Seite dieses Moduls. Das Zahnrad daneben stellt Sprache, Ansicht beim Öffnen und Fenstergröße ein.",
+                 "The ? opens the complete guide, offline; inside a module, the page for that module. The gear next to it sets the language, the start view and the window size.") },
+        };
+    }
+
     const std::vector<TutorialOverlay::Step>& TutorialOverlay::steps()
     {
-        static const std::vector<Step> s {
-            { "modes", "SIMPEL and ADVANCED",
-              "SIMPEL shows the spectrum of your vocal and six macro faders - enough for most mixes. ADVANCED shows the module chain with the full panel of the selected module. Switching never changes a value." },
-            { "analyse", "Vocal analysieren",
-              "Play your vocal in the DAW and click Vocal analysieren: Headliner listens to a section and sets up the modules. Afterwards Vorher / Nachher compares with the state before, Details shows what was done." },
-            { "macros", "The six macros",
-              "Presence, Space, Width, Punch, Warmth and Vocal Level move several modules at once. Drag a fader, hold Shift for fine moves, double-click to reset, click the value to type it." },
-            { "presets", "Presets",
-              "The arrows step through the presets; click the name for the list with search, categories, favourites and your own presets (save, rename, delete)." },
-            { "tabs", "Your mix and VOCAL CHECK",
-              "The first tab is your mix: AUTO MIX in simple mode, MODULE (the chain) in advanced mode. VOCAL CHECK is a diagnosis of the recording with suggestions; it never changes the sound by itself." },
-            { "chain", "The chain (ADVANCED)",
-              "Each tile is one module in processing order: name, icon, on/off. Click a tile to open its panel, drag it to reorder, right-click for duplicate, remove, reset, Als Send / Als Insert and undo. The + tile adds a module." },
-            { "body", "Module panels",
-              "A large live picture on top, the main controls below, everything else behind Mehr. Rest the mouse on a control to read what it does. Ctrl+Z undoes any change." },
-            { "global", "Bypass",
-              "Bypass plays the unprocessed vocal; an amber frame shows it is active. Set the fair compare (Details) to Bypass match so loudness does not fool you." },
-            { "help", "Help",
-              "The complete guide, offline. Inside every module the ? button opens the page for that module." },
-        };
-        return s;
+        static const std::vector<Step> de = buildSteps (true), en = buildSteps (false);
+        return i18n::isGerman() ? de : en;
     }
 
     TutorialOverlay::TutorialOverlay()

@@ -2,6 +2,7 @@
 
 #include "Widgets.h"
 #include "HelpContent.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
@@ -64,6 +65,6 @@ namespace velvox::ui
         Nav nav { *this };
         PageView page;
         juce::Viewport navViewport, pageViewport;
-        juce::TextButton closeButton { "Close" }, tutorialButton { "Start the tutorial" };
+        juce::TextButton closeButton, tutorialButton;
     };
 }
