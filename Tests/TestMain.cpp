@@ -177,15 +177,15 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         << ", tail " << juce::String (p.tailSeconds, 2) << " s (" << p.tailCount << "), stereo " << (p.stereoContent ? "yes, corr " + juce::String (p.correlation, 2) : juce::String ("no")) << "\n\n"
         << "ISSUES\n";
     for (auto& i : p.issues)
-        rep << "  [" << (i.confidence == Confidence::measured ? "measured" : i.confidence == Confidence::likely ? "likely" : "possible") << "] " << i.title << " - " << i.detail << "\n";
+        rep << "  [" << (i.confidence == Confidence::measured ? "measured" : i.confidence == Confidence::likely ? "likely" : "possible") << "] " << velvox::i18n::show (i.title) << " - " << velvox::i18n::show (i.detail) << "\n";
     rep << "\nDECISIONS\n";
     for (auto& d : r.plan.decisions)
-        rep << "  " << (d.outputStage ? juce::String ("Output") : juce::String (velvox::dsp::moduleDisplayName (d.module))) << ": " << d.title
-            << (d.measured ? "  (measured)" : "  (rule)") << "\n      " << d.reason << "\n";
+        rep << "  " << (d.outputStage ? juce::String ("Output") : juce::String (velvox::dsp::moduleDisplayName (d.module))) << ": " << velvox::i18n::show (d.title)
+            << (d.measured ? "  (measured)" : "  (rule)") << "\n      " << velvox::i18n::show (d.reason) << "\n";
     for (auto& n : r.plan.notes)
-        rep << "  note: " << n << "\n";
+        rep << "  note: " << velvox::i18n::show (n) << "\n";
     for (auto& a : r.adjustments)
-        rep << "  verify: " << a << "\n";
+        rep << "  verify: " << velvox::i18n::show (a) << "\n";
     rep << "\nRESULT (captured section)\n"
         << "  " << juce::String (r.original.lufs, 1) << " -> " << juce::String (r.processed.lufs, 1) << " LUFS, peak " << juce::String (r.processed.peakDb, 1)
         << " dBFS, comp GR median " << juce::String (r.processed.compGrMedianDb, 1) << " dB (max " << juce::String (r.processed.compGrMaxDb, 1)
@@ -322,7 +322,7 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 // Language: environment variable HEADLINER_LANG = de (default) / en.
 // overlay: "help:<page>", "welcome", "settings", "tutorial:<step>", "bypass", "hide:<key,key>", "focus:<moduleId>", "edit",
 //          "intro" (analysis popup), "listening", "capturing", "analysing", "mixed" (overview after a synthetic auto mix),
-//          "mixed+done" (with the confirmation card), "more" (the panel's Mehr drawer open), "details" (auto-mix report),
+//          "mixed+done" (with the confirmation card), "mixed+details" (report after the mix), "more" (the panel's Mehr drawer open), "details" (auto-mix report),
 //          "eq" (EQ panel with user bands, a macro band and a selection), "eqmore" (+ Mehr, migrated legacy curve),
 //          "eqcard" (+ a point being dragged: its value card)
 //          "set:<id>=<value>,...[,more][|<overlay>]" (parameters in real units, applied after the preset; then ~1.4 s of
@@ -560,7 +560,7 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
                                                     g, g, now, at, now, 0, false));
                 }
         }
-        if (overlay == "details")
+        if (overlay == "details" || overlay == "mixed+details")
             ed->showMixDetails();
         if (overlay == "mixed+done")
             ed->getAnalysisOverlay().showProgress();

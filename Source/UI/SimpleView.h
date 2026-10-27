@@ -10,8 +10,9 @@ namespace velvox::ui
 {
     // Simple mode, variant A3 (spec 2.3):
     //   left    live spectrum of the vocal: before = dashed line, after = filled curve;
-    //           under it "Vocal analysieren" (runs the automatic mix), after an analysis a small
-    //           Vorher | Nachher switch, and "Details" (report, Density, fair compare)
+    //           under it "Vocal analysieren" (runs the automatic mix; "Neu analysieren" once there is
+    //           a mix), after an analysis a small Vorher | Nachher switch, and "Details" (report,
+    //           Density, fair compare)
     //   right   the six macros as horizontal faders with value text:
     //           PRESENCE, SPACE, WIDTH, PUNCH (macroAggression), WARMTH, VOCAL LEVEL (outputGain)
     //   bottom  small IN / OUT meters with loudness
@@ -50,8 +51,7 @@ namespace velvox::ui
 
         VelvoxAudioProcessor& proc;
         SpectrumView spectrumView;
-        juce::TextButton analyse { juce::String::fromUTF8 ("Vocal analysieren") },
-                         before { "Vorher" }, after { "Nachher" }, details { "Details" };
+        juce::TextButton analyse, before, after, details { "Details" };   // texts set in the constructor (language)
         std::vector<std::unique_ptr<HSlider>> macros;
         CompactMeters meters;
         juce::Rectangle<int> spectrumPanel, macroPanel, meterStrip, buttonRow;

@@ -1,4 +1,5 @@
 #include "AutoEq.h"
+#include "ReportText.h"
 
 namespace velvox::automix::autoeq
 {
@@ -8,12 +9,10 @@ namespace velvox::automix::autoeq
 
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-        juce::String db (float v) { return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB"; }
-        juce::String hz (float f)
-        {
-            return f >= 1000.0f ? juce::String (f / 1000.0f, 1) + " kHz" : juce::String (juce::roundToInt (f)) + " Hz";
-        }
+        // Titles and reasons end up in the saved report: both languages
+        using txt::both;
+        using txt::db;
+        using txt::hz;
 
         EqBand bandOf (EqBandType type, float freq, float gain, float q)
         {
@@ -131,17 +130,19 @@ namespace velvox::automix::autoeq
         switch (role)
         {
             case EqRole::autoNotch1: case EqRole::autoNotch2: case EqRole::autoNotch3:
-                return de ("Resonanz ") + hz (b.freq) + " " + db (g) + de (" (schmal, Q ") + juce::String (juce::roundToInt (b.q)) + ")";
+                return both ("Resonanz {0} {1} (schmal, Q {2})", "Resonance {0} {1} (narrow, Q {2})", { hz (b.freq), db (g), juce::String (juce::roundToInt (b.q)) });
             case EqRole::warmth:
-                return (g < 0.0f ? de ("Tiefen ") : de ("Wärme ")) + db (g) + de (" (Shelf ") + hz (b.freq) + ")";
+                return g < 0.0f ? both ("Tiefen {0} (Shelf {1})", "Lows {0} (shelf {1})", { db (g), hz (b.freq) })
+                                : both ("Wärme {0} (Shelf {1})", "Warmth {0} (shelf {1})", { db (g), hz (b.freq) });
             case EqRole::autoMix:
-                return de ("Tiefmitten ") + db (g) + de (" bei ") + hz (b.freq);
+                return both ("Tiefmitten {0} bei {1}", "Low mids {0} at {1}", { db (g), hz (b.freq) });
             case EqRole::autoTone:
-                return de ("Präsenz ") + db (g) + de (" bei ") + hz (b.freq) + de (" (breit)");
+                return both ("Präsenz {0} bei {1} (breit)", "Presence {0} at {1} (broad)", { db (g), hz (b.freq) });
             case EqRole::air:
-                return (b.freq >= 10500.0f && g > 0.0f ? de ("Luft ") : de ("Höhen ")) + db (g) + de (" (Shelf ") + hz (b.freq) + ")";
+                return b.freq >= 10500.0f && g > 0.0f ? both ("Luft {0} (Shelf {1})", "Air {0} (shelf {1})", { db (g), hz (b.freq) })
+                                                      : both ("Höhen {0} (Shelf {1})", "Highs {0} (shelf {1})", { db (g), hz (b.freq) });
             default:
-                return de ("EQ ") + db (g) + de (" bei ") + hz (b.freq);
+                return both ("EQ {0} bei {1}", "EQ {0} at {1}", { db (g), hz (b.freq) });
         }
     }
 
@@ -233,19 +234,27 @@ namespace velvox::automix::autoeq
             switch (role)
             {
                 case EqRole::autoMix:
-                    return g < 0.0f ? de ("250-500 Hz ist ") + db (l.lowMid) + de (" gegenüber dem Kern - leicht mulmig. Ein breiter Schnitt macht Platz für Kick und Bass.")
-                                    : de ("250-500 Hz liegt nur bei ") + db (l.lowMid) + de (" gegenüber dem Kern - eine breite Anhebung gibt der Stimme Fülle.");
+                    return g < 0.0f ? both ("250-500 Hz ist {0} gegenüber dem Kern - leicht mulmig. Ein breiter Schnitt macht Platz für Kick und Bass.",
+                                            "250-500 Hz is {0} against the core - slightly muddy. A broad cut makes room for kick and bass.", { db (l.lowMid) })
+                                    : both ("250-500 Hz liegt nur bei {0} gegenüber dem Kern - eine breite Anhebung gibt der Stimme Fülle.",
+                                            "250-500 Hz is only {0} against the core - a broad boost gives the voice fullness.", { db (l.lowMid) });
                 case EqRole::warmth:
-                    return g < 0.0f ? de ("Viel Grundton-Energie (100-300 Hz: ") + db (l.body) + de (") - wirkt im Club-Mix schnell dröhnend.")
-                                    : de ("Wenig Körper (100-300 Hz: ") + db (l.body) + de (") - eine Anhebung gibt Wärme.");
+                    return g < 0.0f ? both ("Viel Grundton-Energie (100-300 Hz: {0}) - wirkt im Club-Mix schnell dröhnend.",
+                                            "A lot of fundamental energy (100-300 Hz: {0}) - quickly sounds boomy in a club mix.", { db (l.body) })
+                                    : both ("Wenig Körper (100-300 Hz: {0}) - eine Anhebung gibt Wärme.",
+                                            "Little body (100-300 Hz: {0}) - a boost adds warmth.", { db (l.body) });
                 case EqRole::autoTone:
-                    return g < 0.0f ? de ("2-5 kHz liegt bei ") + db (l.presence) + de (" gegenüber dem Kern (über 2 kHz: ") + db (l.top)
-                                          + de (") - der breite Schnitt sitzt dort, wo die Schärfe liegt, und lässt die Luft darüber stehen.")
-                                    : de ("Dunkel (über 2 kHz: ") + db (l.top) + de (") - eine breite Anhebung bringt die Stimme nach vorne.");
+                    return g < 0.0f ? both ("2-5 kHz liegt bei {0} gegenüber dem Kern (über 2 kHz: {1}) - der breite Schnitt sitzt dort, wo die Schärfe liegt, und lässt die Luft darüber stehen.",
+                                            "2-5 kHz is at {0} against the core (above 2 kHz: {1}) - the broad cut sits where the harshness is and leaves the air above it alone.",
+                                            { db (l.presence), db (l.top) })
+                                    : both ("Dunkel (über 2 kHz: {0}) - eine breite Anhebung bringt die Stimme nach vorne.",
+                                            "Dark (above 2 kHz: {0}) - a broad boost brings the voice forward.", { db (l.top) });
                 default:
-                    return g < 0.0f ? de ("Die Aufnahme ist sehr hell (über 2 kHz: ") + db (l.top) + de (") - ein breiter Shelf nimmt die Schärfe.")
-                                    : de ("Wenig Höhen (über 2 kHz: ") + db (l.top) + de (", über 10 kHz: ") + db (l.air) + ")"
-                                          + (ctx.noisy || ctx.sibilant ? de (" - begrenzt wegen Rauschen/S-Lauten.") : de (" - etwas Glanz hilft der Stimme durch dichte Dance-Mixe."));
+                    return g < 0.0f ? both ("Die Aufnahme ist sehr hell (über 2 kHz: {0}) - ein breiter Shelf nimmt die Schärfe.",
+                                            "The recording is very bright (above 2 kHz: {0}) - a broad shelf takes off the harshness.", { db (l.top) })
+                                    : both ("Wenig Höhen (über 2 kHz: {0}, über 10 kHz: {1})", "Few highs (above 2 kHz: {0}, above 10 kHz: {1})", { db (l.top), db (l.air) })
+                                          + (ctx.noisy || ctx.sibilant ? both (" - begrenzt wegen Rauschen/S-Lauten.", " - limited because of noise/sibilance.")
+                                                                       : both (" - etwas Glanz hilft der Stimme durch dichte Dance-Mixe.", " - a little sheen helps the voice through dense dance mixes."));
             }
         }
     }
@@ -296,8 +305,9 @@ namespace velvox::automix::autoeq
                 const auto role = notchRoles[n++];
                 const auto b = bandOf (EqBandType::bell, r.hz, gain, q);
                 moves.push_back ({ role, b, titleOf (role, b),
-                                   de ("Schmale Spitze ") + db (remaining) + de (" über ihrer Umgebung, in der ganzen Aufnahme vorhanden "
-                                                                                  "(Raum oder Mikrofon) - ein schmaler Schnitt nimmt nur sie heraus."), true });
+                                   both ("Schmale Spitze {0} über ihrer Umgebung, in der ganzen Aufnahme vorhanden (Raum oder Mikrofon) - ein schmaler Schnitt nimmt nur sie heraus.",
+                                         "Narrow peak {0} above its surroundings, present in the whole recording (room or microphone) - a narrow cut takes out only that.",
+                                         { db (remaining) }), true });
             }
         }
 
@@ -346,7 +356,8 @@ namespace velvox::automix::autoeq
         {
             const auto b = bandOf (EqBandType::bell, 3000.0f, 1.0f, 0.9f);
             moves.push_back ({ EqRole::autoTone, b, titleOf (EqRole::autoTone, b),
-                               de ("Der Beat ist im Präsenzbereich lauter als die Stimme (Sidechain-Messung, nur ein Hinweis) - daher nur eine kleine Anhebung."), false });
+                               both ("Der Beat ist im Präsenzbereich lauter als die Stimme (Sidechain-Messung, nur ein Hinweis) - daher nur eine kleine Anhebung.",
+                                     "The beat is louder than the voice in the presence range (sidechain measurement, only a hint) - so only a small boost."), false });
         }
         return moves;
     }
@@ -407,7 +418,7 @@ namespace velvox::automix::autoeq
             if (std::abs (g) < 0.25f)
                 m.band.gain = 0.0f;
             m.title = titleOf (role, m.band);
-            m.reason = de ("Nach der Messung der ganzen Kette: ") + reasonFor (role, g, v, ctx);
+            m.reason = both ("Nach der Messung der ganzen Kette: {0}", "After measuring the whole chain: {0}", { reasonFor (role, g, v, ctx) });
             if (has)
                 it->band = m.band;
             else

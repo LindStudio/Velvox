@@ -9,6 +9,7 @@
 #include "PluginEditor.h"
 #include "StateKeys.h"
 #include "UI/UserSettings.h"
+#include "Text/I18n.h"
 #include <thread>
 
 using namespace velvox;
@@ -121,6 +122,7 @@ public:
         optimizerTests();
         workflowTests();
         editorTests();
+        languageTests();
     }
 
     //==========================================================================
@@ -710,7 +712,7 @@ public:
         {
             const auto softer = [] (const std::vector<std::pair<juce::String, MixPlan>>& cands)
             {
-                return std::find_if (cands.begin(), cands.end(), [] (auto& c) { return c.first.startsWith (juce::String::fromUTF8 ("Höhen sanfter")); });
+                return std::find_if (cands.begin(), cands.end(), [] (auto& c) { return i18n::show (c.first).startsWith (juce::String::fromUTF8 ("Höhen sanfter")); });
             };
 
             VocalSpec b; b.seconds = 12.0; b.tiltDb = 4.0f; b.sibilance = 1.6f; b.f0 = 300.0f;
@@ -826,10 +828,10 @@ public:
             expect (am.getReport().steps.size() >= 3);
             for (auto& st : am.getReport().steps)
             {
-                logMessage ("    step: " + st.title + " | " + st.reason);
-                expect (! st.title.contains ("Hall-Hall"), "reverb title reads naturally: " + st.title);
+                logMessage ("    step: " + i18n::show (st.title) + " | " + i18n::show (st.reason));
+                expect (! i18n::show (st.title).contains ("Hall-Hall"), "reverb title reads naturally: " + i18n::show (st.title));
             }
-            expect (am.getReport().steps.size() > 0 && am.getReport().steps[0].title.startsWith ("Low Cut"), "low cut decided by the analysis");
+            expect (am.getReport().steps.size() > 0 && i18n::show (am.getReport().steps[0].title).startsWith ("Low Cut"), "low cut decided by the analysis");
             expect (liveLowCutHz (h) > 0.0f, "low cut on");
             expect (h.get (pid::levelMatchMode) > 0.5f, "fair compare enabled");
             expect (h.proc.getRouting().isValid());
@@ -1036,6 +1038,7 @@ public:
             expectEquals (ed.getAutoMixView().getNumStepRows(),
                           (int) (report.steps.size() + (size_t) report.notes.size() + (size_t) report.adjustments.size()));
             expect (ed.getSimpleView().getBeforeButton().isVisible(), "Vorher / Nachher available");
+            expectEquals (ed.getSimpleView().getAnalyseButton().getButtonText(), juce::String ("Neu analysieren"), "after a mix the main button analyses again");
             for (auto& key : report.changedModules)
                 if (auto m = dsp::moduleFromKey (key))
                     expect (ed.getChainView().isAutoMixModule (*m), "auto badge on " + key);
@@ -1051,6 +1054,168 @@ public:
             expect (ed.isMixDetailsOpen());
             ed.getAutoMixView().onOpenModule ((int) ModuleId::comp);
             expect (ed.isAdvanced() && ed.getDetail() != nullptr && ! ed.isMixDetailsOpen(), "a step opens the module");
+        }
+    }
+    //==========================================================================
+    // 1.0: every text of the report is stored in both languages (it is built on the analysis
+    // thread and saved with the project) and shown in the current one
+    static bool looksGerman (const juce::String& s)
+    {
+        if (s.containsAnyOf (juce::String::fromUTF8 ("äöüÄÖÜß")))
+            return true;
+        for (auto* w : { " und ", " der ", " die ", " das ", " mit ", " nicht ", " wird ", " bei ", "Gesang", "gegenüber", "geduckt",
+                         "Okt.", "Schwelle", "Kompressor", "Sättigung", "Höhen", "Variante", "Ausgang", "Spitze" })
+            if (s.contains (juce::String::fromUTF8 (w)))
+                return true;
+        return false;
+    }
+
+    void languageTests()
+    {
+        beginTest ("Language: the report is stored in both languages and survives save / load");
+        {
+            Harness h;
+            auto& am = h.proc.getAutoMix();
+            am.dismissPrompt();
+            VocalSpec s; s.seconds = 14.0; s.channels = 2; s.f0 = 140.0f; s.tiltDb = 4.0f; s.sibilance = 1.6f;
+            const auto result = am.runSynchronously (makeVocal (s));
+            expect (result.ok, result.error);
+            if (! result.ok)
+                return;
+            am.applyResult (result);
+
+            juce::MemoryBlock state;
+            h.proc.getStateInformation (state);
+            Harness h2;
+            h2.proc.setStateInformation (state.getData(), (int) state.getSize());
+            const auto& a = am.getReport();
+            const auto& b = h2.proc.getAutoMix().getReport();
+            expect (b.valid && b.steps.size() == a.steps.size() && b.findings.size() == a.findings.size()
+                    && b.notes.size() == a.notes.size() && b.adjustments.size() == a.adjustments.size(), "same report after loading");
+
+            juce::StringArray texts;
+            for (auto& st : b.steps) { texts.add (st.title); texts.add (st.reason); }
+            for (auto& f : b.findings) { texts.add (f.title); texts.add (f.detail); }
+            texts.addArray (b.notes);
+            texts.addArray (b.adjustments);
+            for (size_t i = 0; i < a.steps.size() && i < b.steps.size(); ++i)
+                expect (a.steps[i].title == b.steps[i].title && a.steps[i].reason == b.steps[i].reason, "step survives save / load");
+            expect (texts.size() > 6, "the report has texts");
+            expect (i18n::isPacked (b.steps[0].title), "step titles are packed");
+            expect (b.findings.empty() || i18n::isPacked (b.findings[0].title), "findings are packed");
+
+            // German (the default of the tests)
+            expect (i18n::show (b.steps[0].title).startsWith ("Low Cut") && i18n::show (b.steps[0].title).contains ("dB/Okt."), i18n::show (b.steps[0].title));
+
+            {
+                i18n::ScopedLanguage en (i18n::Language::english);
+                const auto lowCut = i18n::show (b.steps[0].title);
+                expect (lowCut.startsWith ("Low Cut") && lowCut.endsWith ("dB/oct"), "English low cut: " + lowCut);
+                for (auto& t : texts)
+                {
+                    const auto shown = i18n::show (t);
+                    expect (shown.isNotEmpty() && ! i18n::isPacked (shown), "plain text shown");
+                    expect (! looksGerman (shown), "English report text: " + shown);
+                }
+                bool output = false;
+                for (auto& st : b.steps)
+                    output = output || (st.moduleKey == "output" && i18n::show (st.title).startsWith ("Output ") && i18n::show (st.title).contains ("LUFS, peak"));
+                expect (output, "the output step in English");
+            }
+            for (auto& t : texts)
+                expect (i18n::show (t, i18n::Language::german).isNotEmpty(), "German part present");
+        }
+
+        beginTest ("Language: candidate names, stage texts and errors carry both languages");
+        {
+            VocalSpec s; s.seconds = 12.0; s.tiltDb = 4.0f; s.sibilance = 1.6f; s.f0 = 300.0f;
+            const auto profile = VocalProfiler::analyse (makeVocal (s));
+            const auto cands = AutoMixEngine::candidatesFor (AutoMixPlanner::plan (profile, defaults()), profile);
+            expectEquals (i18n::show (cands.front().first, i18n::Language::english), juce::String ("Base plan"));
+            expectEquals (i18n::show (cands.front().first, i18n::Language::german), juce::String ("Basisplan"));
+            for (auto& [candidate, plan] : cands)
+                expect (! looksGerman (i18n::show (candidate, i18n::Language::english)), "English candidate name: " + i18n::show (candidate, i18n::Language::english));
+
+            juce::StringArray stages;
+            const auto r = AutoMixEngine::run (makeVocal (s), defaults(), {}, [&stages] (float, const juce::String& st) { stages.addIfNotAlreadyThere (st); });
+            expect (r.ok);
+            expect (stages.size() >= 4, "stages reported");
+            for (auto& st : stages)
+                expect (i18n::isPacked (st) && ! looksGerman (i18n::show (st, i18n::Language::english)), "English stage: " + i18n::show (st, i18n::Language::english));
+            expect (stages.contains (i18n::both ("Aufnahme wird analysiert", "Analyzing the recording")));
+
+            VocalSpec tiny; tiny.seconds = 1.0;
+            const auto refused = AutoMixEngine::run (makeVocal (tiny), defaults());
+            expect (! refused.ok && refused.error.isNotEmpty());
+            expect (i18n::show (refused.error, i18n::Language::english).startsWith ("Too little singing"), i18n::show (refused.error, i18n::Language::english));
+        }
+
+        beginTest ("Language: a report from an older project (plain German) is shown as it is");
+        {
+            MixReport old;
+            old.valid = true;
+            old.steps.push_back ({ "eq", juce::String::fromUTF8 ("Low Cut 90 Hz, 12 dB/Okt."), juce::String::fromUTF8 ("Tiefe gesungene Töne liegen um 150 Hz."), true });
+            old.notes.add (juce::String::fromUTF8 ("Keine Sättigung: bereits dicht und hell."));
+            const auto back = MixReport::fromValueTree (old.toValueTree());
+            i18n::ScopedLanguage en (i18n::Language::english);
+            expectEquals (i18n::show (back.steps[0].title), juce::String::fromUTF8 ("Low Cut 90 Hz, 12 dB/Okt."));
+            expectEquals (i18n::show (back.notes[0]), juce::String::fromUTF8 ("Keine Sättigung: bereits dicht und hell."));
+        }
+
+        beginTest ("Language: the analysis card, the overview and SIMPLE in English");
+        {
+            // The editor applies the language of the user settings: English there, German again afterwards
+            struct English
+            {
+                English()  { ui::settings::set (ui::settings::language, "en"); ui::settings::applyLanguage(); }
+                ~English() { ui::settings::set (ui::settings::language, "de"); ui::settings::applyLanguage(); }
+            } english;
+            Harness h;
+            {
+                std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+                auto& ov = asVelvox (*e).getAnalysisOverlay();
+                expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::intro);
+                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Analyze audio"));
+                expectEquals (ov.getSecondaryButton().getButtonText(), juce::String ("Later"));
+                click (ov.getSecondaryButton());
+                expectEquals (asVelvox (*e).getSimpleView().getAnalyseButton().getButtonText(), juce::String ("Analyze vocal"));
+                click (asVelvox (*e).getSimpleView().getAnalyseButton());
+                expect (ov.getView() == ui::AnalysisOverlay::View::listening);
+                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Analyze now"));
+                expectEquals (ov.getSecondaryButton().getButtonText(), juce::String ("Cancel"));
+                ov.update();
+                expect (ov.getStatusText().startsWith ("Waiting for a signal"), ov.getStatusText());
+                click (ov.getSecondaryButton());
+            }
+
+            VocalSpec s; s.seconds = 14.0;
+            const auto result = h.proc.getAutoMix().runSynchronously (makeVocal (s));
+            expect (result.ok, "ok");
+            h.proc.getAutoMix().applyResult (result);
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            auto& ed = asVelvox (*e);
+            expectEquals (ed.getSimpleView().getAnalyseButton().getButtonText(), juce::String ("Analyze again"));
+            expectEquals (ed.getSimpleView().getBeforeButton().getButtonText(), juce::String ("Before"));
+            expectEquals (ed.getSimpleView().getAfterButton().getButtonText(), juce::String ("After"));
+            expect (! looksGerman (ed.getSimpleView().getAnalyseButton().getTooltip()), ed.getSimpleView().getAnalyseButton().getTooltip());
+
+            // The done card stays until it is clicked
+            auto& ov = ed.getAnalysisOverlay();
+            ov.showProgress();
+            expect (ov.getView() == ui::AnalysisOverlay::View::done);
+            expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("View result"));
+            ov.update();
+            expect (ov.getStatusText().contains ("modules set"), ov.getStatusText());
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (40);
+            const auto until = juce::Time::getMillisecondCounterHiRes() + 2800.0;
+            while (juce::Time::getMillisecondCounterHiRes() < until)
+            {
+                ov.update();
+                juce::Thread::sleep (100);
+            }
+            expect (ov.isOpen(), "the done card does not close by itself");
+            click (ov.getPrimaryButton());
+            expect (! ov.isOpen(), "closed by the click");
         }
     }
 };

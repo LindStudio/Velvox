@@ -1,15 +1,16 @@
 #include "AnalysisOverlay.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
+        using i18n::tr;
         using Phase = automix::AutoMixController::Phase;
 
         constexpr int cardW = 620, cardH = 470;
 
-        juce::String seconds (float s) { return juce::String (s, 1).replaceCharacter ('.', ','); }
+        juce::String seconds (float s) { return i18n::number (s, 1); }
 
         void drawParagraph (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> r, float size, juce::Colour c)
         {
@@ -114,19 +115,17 @@ namespace velvox::ui
         view = v;
         viewStartMs = juce::Time::getMillisecondCounterHiRes();
         warning.clear();
-        if (v == View::done)
-            doneAtMs = viewStartMs;
         if (v == View::listening || v == View::intro)
             shownProgress.snap (0.0f);
 
         switch (v)
         {
-            case View::intro:     primary.setButtonText ("Audio analysieren"); secondary.setButtonText (de ("Später")); break;
-            case View::listening: primary.setButtonText ("Jetzt analysieren"); secondary.setButtonText ("Abbrechen"); break;
-            case View::capturing: primary.setButtonText ("Jetzt analysieren"); secondary.setButtonText ("Abbrechen"); break;
-            case View::analysing: primary.setButtonText ("Bitte warten"); secondary.setButtonText ("Abbrechen"); break;
-            case View::done:      primary.setButtonText ("Ergebnis ansehen"); secondary.setButtonText (de ("Schließen")); break;
-            case View::failed:    primary.setButtonText ("Erneut versuchen"); secondary.setButtonText (de ("Schließen")); break;
+            case View::intro:     primary.setButtonText (tr ("Audio analysieren", "Analyze audio")); secondary.setButtonText (tr ("Später", "Later")); break;
+            case View::listening: primary.setButtonText (tr ("Jetzt analysieren", "Analyze now")); secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
+            case View::capturing: primary.setButtonText (tr ("Jetzt analysieren", "Analyze now")); secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
+            case View::analysing: primary.setButtonText (tr ("Bitte warten", "Please wait")); secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
+            case View::done:      primary.setButtonText (tr ("Ergebnis ansehen", "View result")); secondary.setButtonText (tr ("Schließen", "Close")); break;
+            case View::failed:    primary.setButtonText (tr ("Erneut versuchen", "Try again")); secondary.setButtonText (tr ("Schließen", "Close")); break;
         }
         primary.setVisible (v != View::analysing);
         primary.setEnabled (v != View::listening);
@@ -175,12 +174,14 @@ namespace velvox::ui
 
             case View::listening:
             {
-                newStatus = de ("Warte auf Signal am Eingang …");
+                newStatus = tr ("Warte auf Signal am Eingang …", "Waiting for a signal at the input …");
                 const double waited = (now - viewStartMs) * 0.001;
                 if (level > -60.0f && level <= -50.0f)
-                    newWarning = de ("Signal ist sehr leise. Headliner beginnt ab etwa -50 dBFS - Spurpegel oder Input-Gain anheben.");
+                    newWarning = tr ("Signal ist sehr leise. Headliner beginnt ab etwa -50 dBFS - Spurpegel oder Input-Gain anheben.",
+                                     "The signal is very quiet. Headliner starts at about -50 dBFS - raise the track level or input gain.");
                 else if (waited > 6.0 && level <= -60.0f)
-                    newWarning = de ("Kein Signal erkannt. Läuft die Wiedergabe, und ist die Vocal-Spur auf diesen Mixer-Kanal geroutet?");
+                    newWarning = tr ("Kein Signal erkannt. Läuft die Wiedergabe, und liegt Headliner auf der Spur mit deiner Vocal?",
+                                     "No signal detected. Is playback running, and is Headliner on the track with your vocal?");
                 break;
             }
 
@@ -188,43 +189,44 @@ namespace velvox::ui
             {
                 const auto& c = st.capture;
                 target = c.fraction();
-                newStatus = seconds (c.voicedSeconds) + de (" von ") + seconds (c.targetSeconds) + de (" s Gesang erfasst");
+                newStatus = i18n::format (tr ("{0} von {1} s Gesang erfasst", "{0} of {1} s of singing captured"),
+                                          { seconds (c.voicedSeconds), seconds (c.targetSeconds) });
                 if (c.clipSamples > 0)
-                    newWarning = de ("Übersteuerung im Eingang erkannt (") + juce::String (c.clipSamples)
-                               + de (" Samples). Headliner kann Verzerrung nicht entfernen - besser den Pegel senken und neu starten.");
+                    newWarning = i18n::format (tr ("Übersteuerung im Eingang erkannt ({0} Samples). Headliner kann Verzerrung nicht entfernen - besser den Pegel senken und neu starten.",
+                                                   "Clipping detected at the input ({0} samples). Headliner can't remove distortion - better lower the level and start again."),
+                                               { juce::String (c.clipSamples) });
                 else if (c.transportStopped && level < -60.0f)
-                    newWarning = c.enough() ? de ("Wiedergabe gestoppt. Starte sie erneut, um weiter zu erfassen - oder analysiere die bisherigen ")
-                                                  + seconds (c.voicedSeconds) + " s."
-                                            : de ("Wiedergabe gestoppt - bisher zu wenig Gesang. Starte die Wiedergabe erneut, Headliner erfasst weiter.");
+                    newWarning = c.enough() ? i18n::format (tr ("Wiedergabe gestoppt. Starte sie erneut, um weiter zu erfassen - oder analysiere die bisherigen {0} s.",
+                                                                "Playback stopped. Start it again to keep capturing - or analyze the {0} s so far."),
+                                                            { seconds (c.voicedSeconds) })
+                                            : tr ("Wiedergabe gestoppt - bisher zu wenig Gesang. Starte die Wiedergabe erneut, Headliner erfasst weiter.",
+                                                  "Playback stopped - not enough singing yet. Start playback again and Headliner keeps capturing.");
                 else if (level < -60.0f && (now - viewStartMs) > 3000.0)
-                    newWarning = de ("Gerade kein Signal - Pausen werden übersprungen.");
+                    newWarning = tr ("Gerade kein Signal - Pausen werden übersprungen.", "No signal right now - gaps are skipped.");
                 primary.setEnabled (c.enough());
                 break;
             }
 
             case View::analysing:
                 target = juce::jlimit (0.0f, 1.0f, st.analysisFraction);
-                newStatus = (st.stage.isNotEmpty() ? st.stage : de ("Analyse läuft")) + de (" …");
+                newStatus = (st.stage.isNotEmpty() ? i18n::show (st.stage) : tr ("Analyse läuft", "Analyzing")) + juce::String::fromUTF8 (" …");
                 break;
 
             case View::done:
             {
                 const auto& r = controller.getReport();
                 target = 1.0f;
-                newStatus = juce::String ((int) r.changedModules.size()) + de (" Module eingestellt - ") + seconds (r.voicedSeconds)
-                          + de (" s Gesang analysiert.");
+                newStatus = i18n::format (tr ("{0} Module eingestellt - {1} s Gesang analysiert.", "{0} modules set - {1} s of singing analyzed."),
+                                          { juce::String ((int) r.changedModules.size()), seconds (r.voicedSeconds) });
                 if (r.conservative)
-                    newWarning = de ("Wenig Material: Headliner hat nur vorsichtige Einstellungen verwendet.");
-                if (now - doneAtMs > 2600.0)
-                {
-                    close();
-                    return;
-                }
+                    newWarning = tr ("Wenig Material: Headliner hat nur vorsichtige Einstellungen verwendet.",
+                                     "Little material: Headliner used only cautious settings.");
+                // Stays until clicked: the confirmation is not missed while listening to the DAW
                 break;
             }
 
             case View::failed:
-                newStatus = st.error;
+                newStatus = i18n::show (st.error);
                 break;
         }
 
@@ -333,35 +335,41 @@ namespace velvox::ui
         switch (view)
         {
             case View::intro:
-                title = "Let's mix your vocal.";
-                body = de ("Headliner analysiert zuerst deine Vocal und erstellt daraus eine passende Bearbeitung - Klang, Dynamik, S-Laute und Raum. "
-                           "Starte die Wiedergabe deiner Vocal in der DAW. Headliner analysiert einen begrenzten Abschnitt und erstellt anschließend automatisch deinen Vocal-Mix.");
+                title = tr ("Lass uns deine Vocal mixen.", "Let's mix your vocal.");
+                body = tr ("Headliner analysiert zuerst deine Vocal und erstellt daraus eine passende Bearbeitung - Klang, Dynamik, S-Laute und Raum. "
+                           "Starte die Wiedergabe deiner Vocal in der DAW. Headliner analysiert einen begrenzten Abschnitt und erstellt anschließend automatisch deinen Vocal-Mix.",
+                           "Headliner first analyzes your vocal and builds a matching treatment from it - tone, dynamics, sibilance and space. "
+                           "Start playing your vocal in the DAW. Headliner analyzes a limited section and then creates your vocal mix automatically.");
                 break;
             case View::listening:
-                title = de ("Spiel deine Vocal ab");
-                body = de ("Starte jetzt die Wiedergabe in FL Studio. Headliner hört nur zu - der Klang wird erst nach der Analyse verändert.");
+                title = tr ("Spiel deine Vocal ab", "Play your vocal");
+                body = tr ("Starte jetzt die Wiedergabe in deiner DAW. Headliner hört nur zu - der Klang wird erst nach der Analyse verändert.",
+                           "Start playback in your DAW now. Headliner only listens - the sound changes only after the analysis.");
                 break;
             case View::capturing:
-                title = de ("Headliner hört zu");
-                body = de ("Ein begrenzter Abschnitt wird erfasst; Pausen werden übersprungen. Die Erfassung stoppt automatisch, sobald genug Gesang da ist.");
+                title = tr ("Headliner hört zu", "Headliner is listening");
+                body = tr ("Ein begrenzter Abschnitt wird erfasst; Pausen werden übersprungen. Die Erfassung stoppt automatisch, sobald genug Gesang da ist.",
+                           "A limited section is captured; gaps are skipped. Capturing stops by itself as soon as there is enough singing.");
                 break;
             case View::analysing:
-                title = de ("Dein Mix wird erstellt");
-                body = de ("Analyse, Planung und Prüfung der ganzen Kette laufen im Hintergrund. Die Wiedergabe wird nicht unterbrochen.");
+                title = tr ("Dein Mix wird erstellt", "Creating your mix");
+                body = tr ("Analyse, Planung und Prüfung der ganzen Kette laufen im Hintergrund. Die Wiedergabe wird nicht unterbrochen.",
+                           "Analysis, planning and checking of the whole chain run in the background. Playback is not interrupted.");
                 break;
             case View::done:
-                title = de ("Dein Vocal-Mix ist aktiv");
-                body = de ("Hör dir das Ergebnis in der DAW an. Mit „Vorher / Mix“ vergleichst du in gleicher Lautheit, jedes Modul bleibt frei einstellbar.");
+                title = tr ("Dein Vocal-Mix ist aktiv", "Your vocal mix is active");
+                body = tr ("Hör dir das Ergebnis in der DAW an. Mit „Vorher / Nachher“ vergleichst du in gleicher Lautheit, jedes Modul bleibt frei einstellbar.",
+                           "Listen to the result in your DAW. \"Before / After\" compares at the same loudness, and every module stays fully adjustable.");
                 break;
             case View::failed:
-                title = de ("Analyse nicht möglich");
-                body = de ("Es wurde nichts verändert.");
+                title = tr ("Analyse nicht möglich", "Analysis not possible");
+                body = tr ("Es wurde nichts verändert.", "Nothing was changed.");
                 break;
         }
 
         g.setColour (colours::text);
         g.setFont (font (view == View::intro ? 30.0f : 25.0f, true));
-        g.drawText (title, r.removeFromTop (38.0f), juce::Justification::centred, false);
+        g.drawFittedText (title, r.removeFromTop (38.0f).toNearestInt(), juce::Justification::centred, 1, 0.85f);
         r.removeFromTop (10.0f);
         auto bodyArea = r.removeFromTop (76.0f).reduced (8.0f, 0.0f);
         drawParagraph (g, body, bodyArea, 15.0f, colours::textDim);
@@ -370,19 +378,19 @@ namespace velvox::ui
         if (view == View::intro)
         {
             r.removeFromTop (4.0f);
-            const char* tips[] {
-                "Möglichst eine unbearbeitete oder nur leicht bearbeitete Vocal verwenden",
-                "Ausreichend Pegel, aber keine Übersteuerung im Eingang",
-                "Die Vocal-Spur auf diesen Mixer-Kanal routen",
+            const juce::String tips[] {
+                tr ("Möglichst eine unbearbeitete oder nur leicht bearbeitete Vocal verwenden", "Use an unprocessed or only lightly processed vocal if you can"),
+                tr ("Ausreichend Pegel, aber keine Übersteuerung im Eingang", "Enough level, but no clipping at the input"),
+                tr ("Headliner auf die Spur mit deiner Vocal legen", "Put Headliner on the track with your vocal"),
             };
-            for (auto* tip : tips)
+            for (auto& tip : tips)
             {
                 auto row = r.removeFromTop (24.0f).reduced (24.0f, 0.0f);
                 g.setGradientFill (auroraGradient (row.getTopLeft(), row.getTopLeft().translated (8.0f, 8.0f)));
                 g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre ({ row.getX() + 4.0f, row.getCentreY() }));
                 g.setColour (colours::text.withAlpha (0.86f));
                 g.setFont (font (14.0f));
-                g.drawText (de (tip), row.withTrimmedLeft (18.0f), juce::Justification::centredLeft, true);
+                g.drawFittedText (tip, row.withTrimmedLeft (18.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.85f);
             }
         }
         else
@@ -393,20 +401,32 @@ namespace velvox::ui
 
             if (view == View::listening || view == View::capturing)
             {
-                // Live input level bar
-                auto bar = r.removeFromTop (22.0f).withSizeKeepingCentre (300.0f, 6.0f);
-                g.setColour (colours::accent.withAlpha (0.08f));
-                g.fillRoundedRectangle (bar, 3.0f);
-                const float lv = juce::jlimit (0.0f, 1.0f, juce::jmap (level, -70.0f, 0.0f, 0.0f, 1.0f));
-                if (lv > 0.0f)
-                {
-                    g.setGradientFill (auroraGradient (bar.getTopLeft(), bar.getTopRight()));
-                    g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * lv), 3.0f);
-                }
+                // Live input level as a segmented level meter (label, segments, value) - in the
+                // colours of a level meter, not the gradient of the progress ring, so it never
+                // reads as a second progress bar
+                auto row = r.removeFromTop (38.0f).withSizeKeepingCentre (380.0f, 16.0f);
                 g.setColour (colours::textFaint);
-                g.setFont (font (12.0f));
-                g.drawText ("Eingang " + (level > -99.0f ? juce::String (juce::roundToInt (level)) + " dBFS RMS" : juce::String ("-")),
-                            r.removeFromTop (16.0f), juce::Justification::centred, false);
+                g.setFont (semiBold (11.0f, 0.12f));
+                g.drawText (tr ("PEGEL", "LEVEL"), row.removeFromLeft (64.0f), juce::Justification::centredLeft, false);
+                g.setColour (colours::textDim);
+                g.setFont (font (12.5f));
+                g.drawText (level > -99.0f ? juce::String (juce::roundToInt (level)) + " dBFS" : juce::String ("-"),
+                            row.removeFromRight (76.0f), juce::Justification::centredRight, false);
+                row.removeFromRight (10.0f);
+
+                constexpr int segments = 30;
+                const float lowDb = -70.0f, gap = 2.0f;
+                const float segW = (row.getWidth() - gap * (segments - 1)) / (float) segments;
+                const auto meter = row.withSizeKeepingCentre (row.getWidth(), 10.0f);
+                for (int i = 0; i < segments; ++i)
+                {
+                    const float segDb = lowDb - lowDb * (float) (i + 1) / (float) segments;   // top of this segment
+                    const auto seg = juce::Rectangle<float> (meter.getX() + (float) i * (segW + gap), meter.getY(), segW, meter.getHeight());
+                    const juce::Colour hue = segDb > -6.0f ? colours::warning : segDb > -18.0f ? colours::bypass : colours::ok;
+                    const bool lit = level >= segDb - (-lowDb / (float) segments);
+                    g.setColour (lit ? hue.withAlpha (0.9f) : colours::accent.withAlpha (0.07f));
+                    g.fillRoundedRectangle (seg, 1.5f);
+                }
             }
 
             if (warning.isNotEmpty())
@@ -443,6 +463,13 @@ namespace velvox::ui
     void AnalysisOverlay::resized()
     {
         layoutButtons();
+    }
+
+    void AnalysisOverlay::mouseUp (const juce::MouseEvent& e)
+    {
+        // The confirmation stays until it is clicked (anywhere on the card or around it)
+        if (view == View::done && ! e.mouseWasDraggedSinceMouseDown())
+            close();
     }
 
     bool AnalysisOverlay::keyPressed (const juce::KeyPress& key)

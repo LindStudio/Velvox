@@ -1,11 +1,12 @@
 #include "SimpleView.h"
 #include "../PluginProcessor.h"
+#include "../Text/I18n.h"
 
 namespace velvox::ui
 {
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
+        using i18n::tr;
 
         void drawPanel (juce::Graphics& g, juce::Rectangle<int> area)
         {
@@ -39,8 +40,10 @@ namespace velvox::ui
         addAndMakeVisible (spectrumView);
 
         analyse.getProperties().set ("primary", true);
-        analyse.setTooltip (de ("Headliner hört einen Abschnitt deiner Vocal während der Wiedergabe und stellt die Module ein. "
-                                "Der Zustand davor bleibt über Vorher / Nachher erreichbar."));
+        analyse.setTooltip (tr ("Headliner hört einen Abschnitt deiner Vocal während der Wiedergabe und stellt die Module ein. "
+                                "Der Zustand davor bleibt über Vorher / Nachher erreichbar.",
+                                "Headliner listens to a section of your vocal during playback and sets up the modules. "
+                                "The state before stays available with Before / After."));
         analyse.onClick = [this] { if (onAnalyse) onAnalyse(); };
 
         for (auto* b : { &before, &after })
@@ -48,17 +51,19 @@ namespace velvox::ui
             b->getProperties().set ("segment", true);
             b->setColour (juce::TextButton::buttonOnColourId, colours::cyan);
         }
-        before.setTooltip (de ("Die Einstellungen vor der Analyse (echter Parameterwechsel)"));
-        after.setTooltip (de ("Der automatische Mix mit deinen Änderungen"));
+        before.setButtonText (tr ("Vorher", "Before"));
+        after.setButtonText (tr ("Nachher", "After"));
+        before.setTooltip (tr ("Die Einstellungen vor der Analyse (echter Parameterwechsel)", "The settings before the analysis (a real parameter switch)"));
+        after.setTooltip (tr ("Der automatische Mix mit deinen Änderungen", "The automatic mix with your changes"));
         before.onClick = [this] { proc.getAutoMix().showPrevious (true); updateCompare(); };
         after.onClick = [this] { proc.getAutoMix().showPrevious (false); updateCompare(); };
 
-        details.setTooltip (de ("Was der Auto-Mix gemacht hat, Density und fairer Vergleich"));
+        details.setTooltip (tr ("Was der Auto-Mix gemacht hat, Density und fairer Vergleich", "What the auto mix did, Density and fair comparison"));
         details.onClick = [this] { if (onShowDetails) onShowDetails(); };
 
         for (auto* b : { &analyse, &before, &after, &details })
             addAndMakeVisible (b);
-        meters.setTooltip (juce::String::fromUTF8 ("Pegel und Lautheit (LUFS) am Eingang und Ausgang"));
+        meters.setTooltip (tr ("Pegel und Lautheit (LUFS) am Eingang und Ausgang", "Level and loudness (LUFS) at the input and output"));
         addAndMakeVisible (meters);
 
         for (const auto& m : macroDefs())
@@ -84,8 +89,9 @@ namespace velvox::ui
 
     void SimpleView::updateCompare()
     {
-        // Vorher / Nachher only exists after an analysis
+        // Vorher / Nachher only exists after an analysis; after one the main button analyses again
         auto& am = proc.getAutoMix();
+        analyse.setButtonText (am.hasMix() ? tr ("Neu analysieren", "Analyze again") : tr ("Vocal analysieren", "Analyze vocal"));
         const bool can = am.hasMix() && am.hasPrevious();
         if (before.isVisible() != can)
         {

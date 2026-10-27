@@ -1,12 +1,15 @@
 #include "AutoMixEngine.h"
 #include "../Parameters/SettingsReader.h"
+#include "ReportText.h"
 
 namespace velvox::automix
 {
     namespace
     {
-        juce::String de (const char* utf8) { return juce::String::fromUTF8 (utf8); }
-        juce::String db (float v) { return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB"; }
+        // Candidate names, titles, notes and adjustments end up in the saved report: both languages
+        using txt::both;
+        using txt::db;
+        using txt::num;
 
         // Keeps the overview true to an EQ role band the verification changed: the decision that
         // shows `before` gets the new title, a new band gets a decision, a flattened one loses it
@@ -260,7 +263,7 @@ namespace velvox::automix
         using dsp::EqBandType;
         using M = dsp::ModuleId;
         std::vector<std::pair<juce::String, MixPlan>> out;
-        out.push_back ({ de ("Basisplan"), base });
+        out.push_back ({ both ("Basisplan", "Base plan"), base });
         const auto add = [&out, &base] (const juce::String& name, const std::function<bool (MixPlan&)>& modify)
         {
             MixPlan c = base;
@@ -271,7 +274,7 @@ namespace velvox::automix
         const auto style = styleOf (profile);
 
         // Dynamics: lighter
-        add (de ("Dynamik leichter"), [&] (MixPlan& c)
+        add (both ("Dynamik leichter", "Lighter dynamics"), [&] (MixPlan& c)
         {
             if (! c.on (pid::compOn))
                 return false;
@@ -284,7 +287,7 @@ namespace velvox::automix
         });
 
         // Dynamics: denser (never on an already squashed take)
-        add (de ("Dynamik dichter"), [&] (MixPlan& c)
+        add (both ("Dynamik dichter", "Denser dynamics"), [&] (MixPlan& c)
         {
             if (! c.on (pid::compOn) || profile.heavilyCompressed)
                 return false;
@@ -305,7 +308,7 @@ namespace velvox::automix
         });
 
         // Saturation: the other way round
-        add (base.on (pid::satOn) ? de ("Ohne Sättigung") : de ("Mit Sättigung"), [&] (MixPlan& c)
+        add (base.on (pid::satOn) ? both ("Ohne Sättigung", "Without saturation") : both ("Mit Sättigung", "With saturation"), [&] (MixPlan& c)
         {
             if (c.on (pid::satOn))
             {
@@ -325,7 +328,7 @@ namespace velvox::automix
         // Softer highs: the planner only ever lifts the top end. On a take that is already
         // brighter than the window (> -7 dB above 2 kHz against the core) a broad shelf from
         // 5 kHz takes the edge off; the render decides whether that is worth it.
-        add (de ("Höhen sanfter"), [&] (MixPlan& c)
+        add (both ("Höhen sanfter", "Softer highs"), [&] (MixPlan& c)
         {
             // 0.6.1: not when the base plan already cuts the highs (AutoEq)
             const float air = roleGain (c, current, EqRole::air);
@@ -339,7 +342,7 @@ namespace velvox::automix
         // Tone after the dynamics: the high shelf (and a presence boost) moves into a second
         // EQ instance behind compressor, de-esser and resonance control. A boost before the
         // compressor makes it react to the highs and lifts the S sounds into the de-esser.
-        add (de ("Höhen nach der Dynamik (EQ 2)"), [&] (MixPlan& c)
+        add (both ("Höhen nach der Dynamik (EQ 2)", "Highs after the dynamics (EQ 2)"), [&] (MixPlan& c)
         {
             const auto air = roleBand (c, current, EqRole::air);
             const float high = air.has_value() && air->on ? air->gain : 0.0f;
@@ -388,7 +391,7 @@ namespace velvox::automix
         });
 
         // Effects drier / wetter
-        add (de ("Effekte trockener"), [&] (MixPlan& c)
+        add (both ("Effekte trockener", "Drier effects"), [&] (MixPlan& c)
         {
             if (! c.on (pid::reverbOn) && ! c.on (pid::delayOn))
                 return false;
@@ -396,7 +399,7 @@ namespace velvox::automix
             c.set (pid::delayMix, c.get (pid::delayMix) * 0.65f);
             return true;
         });
-        add (style == VocalStyle::sustained ? de ("Mehr Raum (Large Hall)") : de ("Mehr Raum"), [&] (MixPlan& c)
+        add (style == VocalStyle::sustained ? both ("Mehr Raum (Large Hall)", "More space (Large Hall)") : both ("Mehr Raum", "More space"), [&] (MixPlan& c)
         {
             if (! c.on (pid::reverbOn) || style == VocalStyle::spoken || profile.reverberant)
                 return false;
@@ -412,7 +415,7 @@ namespace velvox::automix
         });
 
         // De-esser stronger (when S sounds were an issue)
-        add (de ("De-Esser stärker"), [&] (MixPlan& c)
+        add (both ("De-Esser stärker", "Stronger De-Esser"), [&] (MixPlan& c)
         {
             if (! c.on (pid::deessOn) || ! profile.sibilanceValid || profile.sibilanceVsVowelDb < -8.0f)
                 return false;
@@ -445,32 +448,36 @@ namespace velvox::automix
             }), plan.decisions.end());
 
             if (auto* d = plan.find (M::comp))
-                d->title = de ("Kompressor ") + juce::String (plan.get (pid::compRatio), 1) + de (":1, Schwelle ") + db (plan.get (pid::compThreshold));
+                d->title = both ("Kompressor {0}:1, Schwelle {1}", "Compressor {0}:1, threshold {1}",
+                                 { num (plan.get (pid::compRatio), 1), db (plan.get (pid::compThreshold)) });
             if (auto* d = plan.find (M::reverb))
             {
-                static const char* types[] { "Room-Hall", "Plate-Hall", "Hall", "Large Hall", "Ambience", "Atmosphere", "Cinematic", "Ethereal" };
-                d->title = juce::String (types[juce::jlimit (0, 7, (int) plan.get (pid::reverbType))]) + " "
-                         + juce::String (juce::roundToInt (plan.get (pid::reverbMix))) + " %, "
-                         + juce::String (plan.get (pid::reverbDecay), 1).replaceCharacter ('.', ',') + de (" s, geduckt");
+                d->title = both ("{0} {1} %, {2} s, geduckt", "{0} {1} %, {2} s, ducked",
+                                 { txt::reverbType (juce::jlimit (0, 7, (int) plan.get (pid::reverbType))),
+                                   juce::String (juce::roundToInt (plan.get (pid::reverbMix))), num (plan.get (pid::reverbDecay), 1) });
             }
             if (plan.on (pid::smashOn) && plan.find (M::smash) == nullptr)
-                plan.decisions.push_back ({ M::smash, false, de ("Parallelkompression ") + juce::String (juce::roundToInt (plan.get (pid::smashBlend))) + " % Blend",
-                                            de ("Die Variante mit mehr Dichte schnitt in der Messung besser ab."), true });
+                plan.decisions.push_back ({ M::smash, false,
+                                            both ("Parallelkompression {0} % Blend", "Parallel compression {0} % blend", { juce::String (juce::roundToInt (plan.get (pid::smashBlend))) }),
+                                            both ("Die Variante mit mehr Dichte schnitt in der Messung besser ab.", "The denser variant scored better in the measurement."), true });
             if (plan.on (pid::satOn) && plan.find (M::sat) == nullptr)
-                plan.decisions.push_back ({ M::sat, false, de ("Sättigung Tape, ") + juce::String (juce::roundToInt (plan.get (pid::satMix))) + " %",
-                                            de ("Leichte Obertöne - die Variante mit Sättigung schnitt in der Messung besser ab."), true });
+                plan.decisions.push_back ({ M::sat, false,
+                                            both ("Sättigung Tape, {0} %", "Saturation Tape, {0} %", { juce::String (juce::roundToInt (plan.get (pid::satMix))) }),
+                                            both ("Leichte Obertöne - die Variante mit Sättigung schnitt in der Messung besser ab.",
+                                                  "Light harmonics - the variant with saturation scored better in the measurement."), true });
             if (plan.routing.contains (M::eq, 1))
             {
                 const float g = roleGain (plan, current, dsp::EqRole::air, 1);
-                juce::String title = de ("EQ 2 nach der Dynamik");
-                if (g > 0.0f)
-                    title << de (": Höhen ") << db (g);
+                const juce::String title = g > 0.0f ? both ("EQ 2 nach der Dynamik: Höhen {0}", "EQ 2 after the dynamics: highs {0}", { db (g) })
+                                                    : both ("EQ 2 nach der Dynamik", "EQ 2 after the dynamics");
                 plan.decisions.push_back ({ M::eq, false, title,
-                                            de ("Die Höhenanhebung sitzt hinter Kompressor und De-Esser: Der Kompressor reagiert nicht mehr auf die Höhen, "
-                                                "und die S-Laute werden vor der Anhebung kontrolliert."), true });
+                                            both ("Die Höhenanhebung sitzt hinter Kompressor und De-Esser: Der Kompressor reagiert nicht mehr auf die Höhen, "
+                                                  "und die S-Laute werden vor der Anhebung kontrolliert.",
+                                                  "The high boost sits after the compressor and De-Esser: the compressor no longer reacts to the highs, "
+                                                  "and the S sounds are controlled before the boost."), true });
             }
-            plan.notes.push_back (de ("Variante \"") + candidateName + de ("\" gewählt: Bewertung ") + juce::String (before.total(), 2)
-                                  + " -> " + juce::String (after.total(), 2) + " (" + after.describe() + ").");
+            plan.notes.push_back (both ("Variante \"{0}\" gewählt: Bewertung {1} -> {2} ({3}).", "Variant \"{0}\" chosen: score {1} -> {2} ({3}).",
+                                        { candidateName, num (before.total(), 2), num (after.total(), 2), after.describe() }));
         }
     }
 
@@ -481,22 +488,24 @@ namespace velvox::automix
         AutoMixResult r;
         const auto startMs = juce::Time::getMillisecondCounterHiRes();
         const auto stop = [&shouldStop] { return shouldStop && shouldStop(); };
-        const auto report = [&progress] (float f, const char* stage) { if (progress) progress (f, juce::String::fromUTF8 (stage)); };
+        // The stage text is shown later on the message thread: both languages
+        const auto report = [&progress] (float f, const char* german, const char* english) { if (progress) progress (f, both (german, english)); };
 
-        report (0.05f, "Aufnahme wird analysiert");
+        report (0.05f, "Aufnahme wird analysiert", "Analyzing the recording");
         r.profile = VocalProfiler::analyse (audio, 5.0f, shouldStop);
         if (stop())
         {
-            r.error = de ("Abgebrochen.");
+            r.error = both ("Abgebrochen.", "Canceled.");
             return r;
         }
         if (r.profile.voicedSeconds < 2.0f)
         {
-            r.error = de ("Zu wenig Gesang erfasst - bitte die Vocal-Spur abspielen und erneut analysieren.");
+            r.error = both ("Zu wenig Gesang erfasst - bitte die Vocal-Spur abspielen und erneut analysieren.",
+                            "Too little singing captured - play the vocal track and analyze again.");
             return r;
         }
 
-        report (0.3f, "Mix wird geplant");
+        report (0.3f, "Mix wird geplant", "Planning the mix");
         r.plan = AutoMixPlanner::plan (r.profile, current);
         r.original = measure (audio);
         r.original.sibilanceVsVowelDb = r.profile.sibilanceVsVowelDb;
@@ -509,10 +518,10 @@ namespace velvox::automix
         {
             if (stop())
             {
-                r.error = de ("Abgebrochen.");
+                r.error = both ("Abgebrochen.", "Canceled.");
                 return r;
             }
-            report (0.35f + 0.12f * (float) round, "Mix wird geprüft");
+            report (0.35f + 0.12f * (float) round, "Mix wird geprüft", "Checking the mix");
             m = renderChecked (audio, current, plan, r.profile);
             ++r.iterations;
             bool changed = false;
@@ -524,13 +533,13 @@ namespace velvox::automix
                 if (m.compGrMedianDb > 6.5f)
                 {
                     plan.set (pid::compThreshold, thr + std::min (4.0f, m.compGrMedianDb - 4.5f));
-                    r.adjustments.push_back (de ("Kompressor entschärft (") + juce::String (m.compGrMedianDb, 1) + de (" dB Reduktion gemessen)."));
+                    r.adjustments.push_back (both ("Kompressor entschärft ({0} dB Reduktion gemessen).", "Compressor eased ({0} dB of reduction measured).", { num (m.compGrMedianDb, 1) }));
                     changed = true;
                 }
                 else if (m.compGrMedianDb < 0.8f && ! r.profile.heavilyCompressed && thr > -50.0f)
                 {
                     plan.set (pid::compThreshold, thr - 2.0f);
-                    r.adjustments.push_back (de ("Kompressor-Schwelle gesenkt (kaum Reduktion gemessen)."));
+                    r.adjustments.push_back (both ("Kompressor-Schwelle gesenkt (kaum Reduktion gemessen).", "Compressor threshold lowered (hardly any reduction measured)."));
                     changed = true;
                 }
             }
@@ -546,13 +555,13 @@ namespace velvox::automix
                 {
                     plan.set (pid::deessThreshold, thr - 3.0f);
                     plan.set (pid::deessRange, std::min (10.0f, plan.get (pid::deessRange) + 2.0f));
-                    r.adjustments.push_back (de ("De-Esser verstärkt (S-Laute nach der Kette noch ") + db (m.sibilanceVsVowelDb) + ").");
+                    r.adjustments.push_back (both ("De-Esser verstärkt (S-Laute nach der Kette noch {0}).", "De-Esser strengthened (sibilance still {0} after the chain).", { db (m.sibilanceVsVowelDb) }));
                     changed = true;
                 }
                 else if (m.sibilanceVsVowelDb < r.profile.sibilanceVsVowelDb - 10.0f)
                 {
                     plan.set (pid::deessThreshold, thr + 3.0f);
-                    r.adjustments.push_back (de ("De-Esser zurückgenommen (S-Laute wurden zu stark gedämpft)."));
+                    r.adjustments.push_back (both ("De-Esser zurückgenommen (S-Laute wurden zu stark gedämpft).", "De-Esser backed off (S sounds were reduced too much)."));
                     changed = true;
                 }
             }
@@ -563,10 +572,12 @@ namespace velvox::automix
                 && m.sibilanceVsVowelDb > std::max (-8.0f, r.original.sibilanceVsVowelDb + 2.0f))
             {
                 AutoMixPlanner::configureDeEsser (plan, r.profile, current.count (pid::inputGain) ? current.at (pid::inputGain) : 0.0f, 4.0f);
-                plan.decisions.push_back ({ dsp::ModuleId::deess, false, de ("De-Esser ab ") + juce::String (juce::roundToInt (plan.get (pid::deessFreq))) + " Hz, max. 4 dB",
-                                            de ("Nach der Kette standen die S-Laute ") + db (m.sibilanceVsVowelDb - r.original.sibilanceVsVowelDb)
-                                                + de (" stärker hervor als im Original - dezent ausgeglichen."), true });
-                r.adjustments.push_back (de ("De-Esser ergänzt (die Kette hob die S-Laute an)."));
+                plan.decisions.push_back ({ dsp::ModuleId::deess, false,
+                                            both ("De-Esser ab {0} Hz, max. 4 dB", "De-Esser from {0} Hz, max. 4 dB", { juce::String (juce::roundToInt (plan.get (pid::deessFreq))) }),
+                                            both ("Nach der Kette standen die S-Laute {0} stärker hervor als im Original - dezent ausgeglichen.",
+                                                  "After the chain the S sounds stood out {0} more than in the original - gently evened out.",
+                                                  { db (m.sibilanceVsVowelDb - r.original.sibilanceVsVowelDb) }), true });
+                r.adjustments.push_back (both ("De-Esser ergänzt (die Kette hob die S-Laute an).", "De-Esser added (the chain lifted the S sounds)."));
                 changed = true;
             }
 
@@ -577,8 +588,9 @@ namespace velvox::automix
                 const auto before = *air;
                 air->gain = std::max (0.0f, air->gain - 1.5f);
                 setRoleBand (plan, current, 0, dsp::EqRole::air, *air, false);
-                updateEqDecision (plan, dsp::EqRole::air, before, *air, de ("Höhenanhebung verringert: die Kette hob die Höhen schon an."));
-                r.adjustments.push_back (de ("Höhenanhebung verringert (Kette wurde zu hell)."));
+                updateEqDecision (plan, dsp::EqRole::air, before, *air, both ("Höhenanhebung verringert: die Kette hob die Höhen schon an.",
+                                                                              "High boost reduced: the chain already lifted the highs."));
+                r.adjustments.push_back (both ("Höhenanhebung verringert (Kette wurde zu hell).", "High boost reduced (the chain got too bright)."));
                 changed = true;
                 airAdjusted = true;
             }
@@ -597,7 +609,7 @@ namespace velvox::automix
                     if (setRoleBand (plan, current, 0, c.role, c.band, true) < 0)
                         continue;
                     updateEqDecision (plan, c.role, before.has_value() ? *before : dsp::EqBand {}, c.band, c.reason);
-                    r.adjustments.push_back (de ("Klang nachgeregelt: ") + c.title + ".");
+                    r.adjustments.push_back (both ("Klang nachgeregelt: {0}.", "Tone readjusted: {0}.", { c.title }));
                     changed = true;
                 }
             }
@@ -605,7 +617,7 @@ namespace velvox::automix
             if (m.topDb < r.original.topDb - 5.0f && plan.on (pid::smoothOn) && plan.get (pid::smoothAmount) > 20.0f)
             {
                 plan.set (pid::smoothAmount, plan.get (pid::smoothAmount) - 10.0f);
-                r.adjustments.push_back (de ("Resonanzkontrolle verringert (Höhen gingen verloren)."));
+                r.adjustments.push_back (both ("Resonanzkontrolle verringert (Höhen gingen verloren).", "Resonance control reduced (highs were lost)."));
                 changed = true;
             }
 
@@ -614,7 +626,7 @@ namespace velvox::automix
             {
                 lowCut->freq *= 0.85f;
                 setRoleBand (plan, current, 0, dsp::EqRole::lowCut, *lowCut, false);
-                r.adjustments.push_back (de ("Low Cut gesenkt (zu viel Körper ging verloren)."));
+                r.adjustments.push_back (both ("Low Cut gesenkt (zu viel Körper ging verloren).", "Low Cut lowered (too much body was lost)."));
                 changed = true;
             }
 
@@ -622,7 +634,7 @@ namespace velvox::automix
             if (m.monoLossDb < -1.5f && plan.on (pid::doublerOn))
             {
                 plan.set (pid::doublerMix, plan.get (pid::doublerMix) * 0.6f);
-                r.adjustments.push_back (de ("Doubler reduziert (Pegelverlust in Mono)."));
+                r.adjustments.push_back (both ("Doubler reduziert (Pegelverlust in Mono).", "Doubler reduced (level loss in mono)."));
                 changed = true;
             }
 
@@ -653,10 +665,10 @@ namespace velvox::automix
             {
                 if (stop())
                 {
-                    r.error = de ("Abgebrochen.");
+                    r.error = both ("Abgebrochen.", "Canceled.");
                     return r;
                 }
-                report (0.55f + 0.25f * (float) i / (float) variants.size(), "Varianten werden verglichen");
+                report (0.55f + 0.25f * (float) i / (float) variants.size(), "Varianten werden verglichen", "Comparing variants");
                 r.candidates.push_back (score (variants[i].first, variants[i].second, i == 0));
             }
 
@@ -691,12 +703,12 @@ namespace velvox::automix
             {
                 plan = variants[best].second;
                 syncDecisions (plan, variants[best].first, r.candidates[0].score, r.candidates[best].score, current);
-                r.adjustments.push_back (de ("Variante gewählt: ") + variants[best].first);
+                r.adjustments.push_back (both ("Variante gewählt: ", "Variant chosen: ") + variants[best].first);
             }
         }
 
         // ---- Output level: match the target loudness, then keep peaks below -1 dBFS
-        report (0.85f, "Pegel wird angepasst");
+        report (0.85f, "Pegel wird angepasst", "Adjusting the level");
         m = renderChecked (audio, current, plan, r.profile);
         ++r.iterations;
         float out = plan.get (pid::outputGain) + (target - m.lufs);
@@ -717,14 +729,14 @@ namespace velvox::automix
         Decision outDecision;
         outDecision.outputStage = true;
         outDecision.measured = true;
-        outDecision.title = de ("Ausgang ") + juce::String (m.lufs, 1) + " LUFS, Spitze " + db (m.peakDb);
-        outDecision.reason = de ("Lautheit an das Original angeglichen (") + juce::String (r.original.lufs, 1)
-                           + de (" LUFS), damit der Vergleich fair bleibt.")
-                           + (peakLimited ? de (" Etwas leiser, um 1 dB Reserve zu halten.") : juce::String())
-                           + de (" Clip Guard bleibt als Schutz aktiv.");
+        outDecision.title = both ("Ausgang {0} LUFS, Spitze {1}", "Output {0} LUFS, peak {1}", { num (m.lufs, 1), db (m.peakDb) });
+        outDecision.reason = both ("Lautheit an das Original angeglichen ({0} LUFS), damit der Vergleich fair bleibt.",
+                                   "Loudness matched to the original ({0} LUFS) so the comparison stays fair.", { num (r.original.lufs, 1) })
+                           + (peakLimited ? both (" Etwas leiser, um 1 dB Reserve zu halten.", " A little quieter to keep 1 dB of headroom.") : juce::String())
+                           + both (" Clip Guard bleibt als Schutz aktiv.", " Clip Guard stays on as a safeguard.");
         plan.decisions.push_back (outDecision);
 
-        report (1.0f, "Fertig");
+        report (1.0f, "Fertig", "Done");
         r.seconds = (juce::Time::getMillisecondCounterHiRes() - startMs) * 0.001;
         r.ok = true;
         return r;
