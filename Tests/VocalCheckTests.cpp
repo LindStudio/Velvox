@@ -5,6 +5,7 @@
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
 #include "DSP/VocalAnalyzer.h"
+#include "Text/I18n.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -80,7 +81,7 @@ public:
             for (auto& f : r.findings)
             {
                 logMessage ("  [" + juce::String (f.certainty == Finding::Certainty::sure ? "likely" : "observation") + ", "
-                            + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %] " + f.title + " | " + f.detail);
+                            + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %] " + i18n::show (f.title) + " | " + i18n::show (f.detail));
                 expect (f.title.isNotEmpty() && f.detail.isNotEmpty() && f.why.isNotEmpty() && f.advice.isNotEmpty(), "complete: " + f.title);
                 expect (f.confidence > 0.0f && f.confidence < 1.0f, "confidence in range: " + f.title);
             }
@@ -119,7 +120,7 @@ public:
             int problems = 0;
             for (auto& f : rc.findings)
             {
-                logMessage ("  clean take: " + f.title + " (" + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %)");
+                logMessage ("  clean take: " + i18n::show (f.title) + " (" + juce::String (juce::roundToInt (f.confidence * 100.0f)) + " %)");
                 problems += f.certainty == Finding::Certainty::sure && f.category != check::Category::dynamics ? 1 : 0;   // phrase dynamics are a mix target, not a recording problem
             }
             expectEquals (problems, 0, "no likely problem in a clean synthetic take");
@@ -160,7 +161,7 @@ public:
             expect (f1 != nullptr, "rumble measured at VOCAL CHECK (before the EQ)");
             if (f1 != nullptr)
             {
-                logMessage ("  " + f1->title + " -> " + f1->handlingText);
+                logMessage ("  " + i18n::show (f1->title) + " -> " + f1->handlingText);
                 expect (f1->handling == Finding::Handling::handledLater, "the EQ after VOCAL CHECK takes care of it");
             }
 
@@ -175,7 +176,7 @@ public:
             const auto* f2 = eqFinding (before);
             if (f2 != nullptr)
             {
-                logMessage ("  " + f2->title + " -> " + f2->handlingText);
+                logMessage ("  " + i18n::show (f2->title) + " -> " + f2->handlingText);
                 expect (f2->handling == Finding::Handling::appliedBefore);
             }
 

@@ -8,6 +8,7 @@
 #include "UI/VocalCheckView.h"
 #include "UI/UserSettings.h"
 #include "StateKeys.h"
+#include "Text/I18n.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -108,8 +109,8 @@ public:
                     continue;
                 expect (tile->getIgnoreButton().isVisible(), "Ignorieren on every tile");
                 expect (tile->getApplyButton().isVisible() == vc.canApply (tile->getId()), "Anwenden iff applicable: " + tile->getId());
-                expectEquals (tile->getProblemText(), visible[(size_t) i]->problem);
-                expectEquals (tile->getFixText(), visible[(size_t) i]->fix);
+                expectEquals (tile->getProblemText(), i18n::show (visible[(size_t) i]->problem));
+                expectEquals (tile->getFixText(), i18n::show (visible[(size_t) i]->fix));
                 if (vc.canApply (tile->getId()))
                     expect (tile->getApplyButton().getTooltip().isNotEmpty(), "preview as tooltip");
             }
@@ -223,6 +224,67 @@ public:
                     && ! view->getGenreButton (check::Genre::party).getToggleState());
             expectEquals (view->getGenreButton (check::Genre::pop).getButtonText(), juce::String ("Pop"));
             expectEquals (view->getGenreButton (check::Genre::acoustic).getButtonText(), juce::String ("Akustik"));
+        }
+
+        beginTest ("View in English: buttons, genres, status, tiles and the preview");
+        {
+            Harness h;
+            analysedTake (h);   // the analysis is made in German; the view is built after the switch
+            i18n::ScopedLanguage en (i18n::Language::english);
+            auto view = make (h);
+            auto& vc = h.proc.getVocalCheck();
+            int applicable = 0;
+            for (auto* f : vc.visibleFindings())
+                applicable += vc.canApply (f->id) ? 1 : 0;
+            expectEquals (view->getApplyAllButton().getButtonText(), "Apply all (" + juce::String (applicable) + ")");
+            expectEquals (view->getGenreButton (check::Genre::party).getButtonText(), juce::String ("Party"));
+            expectEquals (view->getGenreButton (check::Genre::acoustic).getButtonText(), juce::String ("Acoustic"));
+            expect (view->getStatusText().startsWith ("Capture"), view->getStatusText());
+            expect (view->getStatusText().contains ("s of voice"), view->getStatusText());
+            expect (! view->getStatusText().contains (","), "decimal point: " + view->getStatusText());
+            expectGreaterThan (view->getNumTiles(), 0);
+            for (int i = 0; i < view->getNumTiles(); ++i)
+            {
+                auto* t = view->getTileAt (i);
+                expectEquals (t->getIgnoreButton().getButtonText(), juce::String ("Ignore"));
+                expectEquals (t->getApplyButton().getButtonText(), juce::String ("Apply"));
+                for (const auto& s : { t->getProblemText(), t->getFixText(), t->getTooltip() })
+                {
+                    expect (! i18n::isPacked (s), s);
+                    for (const char* german : { "\xc3\xa4", "\xc3\xb6", "\xc3\xbc", "\xc3\x9f", " bei ", " um ", " und ", "Ziel" })
+                        expect (! s.contains (juce::String::fromUTF8 (german)), "English tile text: " + s);
+                }
+            }
+            if (auto* rumble = view->getTile ("rumble"))
+                expect (rumble->getProblemText().startsWith ("Rumble below 90 Hz"), rumble->getProblemText());
+            const auto preview = ui::checkPreviewText (h.proc, vc.preview ("rumble"));
+            expect (preview.contains ("Insert EQ"), preview);
+            click (view->getTileAt (0)->getIgnoreButton());
+            runLoop (30);
+            view->refreshNow();
+            expect (view->getIgnoredToggle().getButtonText().startsWith ("1 ignored"), view->getIgnoredToggle().getButtonText());
+
+            h.set (pid::checkOn, 0.0f);
+            view->refreshNow();
+            expectEquals (view->getEnableButton().getButtonText(), juce::String ("Turn on"));
+            expectEquals (view->getStatusText(), juce::String ("Off"));
+
+            ui::CheckSummary summary (h.proc);
+            expectEquals (summary.getCountText(), juce::String ("Off"));
+            expect (summary.getOpenButton().getButtonText().startsWith ("Open VOCAL CHECK"));
+        }
+
+        beginTest ("View in English: the empty state before any voice");
+        {
+            Harness h;
+            h.neutral();
+            h.set (pid::checkOn, 1.0f);
+            h.proc.pumpAnalyzer();
+            h.proc.refreshAnalysis();
+            i18n::ScopedLanguage en (i18n::Language::english);
+            auto view = make (h);
+            expectEquals (view->getStatusText(), juce::String ("Sing or play back to analyze"));
+            expectEquals (view->getApplyAllButton().getButtonText(), juce::String ("Apply all"));
         }
 
         beginTest ("View: without enough voice the score is a dash with a short status; switched off it offers Einschalten");

@@ -1,6 +1,7 @@
 #include "VocalCheckController.h"
 #include "CheckRules.h"
 #include "../StateKeys.h"
+#include "../Text/I18n.h"
 
 namespace velvox::check
 {
@@ -58,7 +59,8 @@ namespace velvox::check
     ResolvedFix VocalCheckController::preview (const juce::String& id) const
     {
         if (const auto* f = finding (id))
-            return planFix (f->action, "Vocal Check: " + f->problem, context());
+            // The undo name in the language of the moment (the finding text holds both languages)
+            return planFix (f->action, "Vocal Check: " + i18n::show (f->problem), context());
         return {};
     }
 
@@ -99,12 +101,12 @@ namespace velvox::check
         for (const auto* f : visibleFindings())
             if (canApply (f->id))
             {
-                fixes.emplace_back (f->action, f->problem);
+                fixes.emplace_back (f->action, i18n::show (f->problem));
                 ids.push_back (f->id);
             }
         if (fixes.empty())
             return 0;
-        const auto fix = planFixes (fixes, context(), juce::String::fromUTF8 ("Vocal Check: Alles anwenden"));
+        const auto fix = planFixes (fixes, context(), "Vocal Check: " + i18n::tr ("Alles anwenden", "Apply all"));
         if (fix.empty())
             return 0;
         write (fix, ids);
