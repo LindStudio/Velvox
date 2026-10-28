@@ -1,4 +1,5 @@
 #include "VocalProfile.h"
+#include "AutoEq.h"
 #include "../DSP/Loudness.h"
 #include "../DSP/BreathModule.h"
 #include "ReportText.h"
@@ -866,7 +867,8 @@ namespace velvox::automix
                         p.beatOverVocalDb[(size_t) b] = toDb (bAvg[(size_t) b] / count) - toDb (vAvg[(size_t) b] / count);
                     p.beatPresenceVsVocalDb = range (bAvg, 2000, 5000) - range (vAvg, 2000, 5000);
                     p.beatLowMidVsVocalDb = range (bAvg, 250, 500) - range (vAvg, 250, 500);
-                    p.maskingHint = p.beatPresenceVsVocalDb > 3.0f;
+                    // As the auto EQ sees it: at the output level, where the beat covers most
+                    p.maskingHint = autoeq::maskingOf (p).presenceDb > autoeq::unmaskFromDb;
                 }
             }
         }
@@ -952,9 +954,13 @@ namespace velvox::automix
                  both ("Korrelation links/rechts {0}.", "Left/right correlation {0}.", { num (p.correlation, 2) }), 30.0f);
 
         if (p.maskingHint)
-            add ("masking", C::possible, both ("Beat überlagert den Präsenzbereich", "Beat covers the presence range"),
-                 both ("Der Beat ist bei 2-5 kHz {0} lauter als die Stimme. Das ist nur ein Hinweis, kein Beweis für Verdeckung.",
-                       "At 2-5 kHz the beat is {0} louder than the voice. This is only a hint, not proof of masking.", { db (p.beatPresenceVsVocalDb) }), 12.0f);
+        {
+            const auto mask = autoeq::maskingOf (p);
+            add ("masking", C::measured, both ("Beat verdeckt die Stimme bei {0}", "The beat covers the voice at {0}", { hz (mask.hz) }),
+                 both ("Dort ist der Beat {0} lauter als die Stimme, gemessen am Sidechain bei Stimme 1 LU über dem Beat.",
+                       "There the beat is {0} louder than the voice, measured on the sidechain with the voice 1 LU above the beat.",
+                       { db (mask.presenceDb) }), 12.0f);
+        }
 
         std::stable_sort (p.issues.begin(), p.issues.end(), [] (const Issue& a, const Issue& b)
         {

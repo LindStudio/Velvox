@@ -87,5 +87,7 @@ Rules (only with `beatPresent`): dense beat (`beatGapShare < 0.15`) → reverb m
 
 **Files:** Modify `Source/Assistant/AssistantPlanner.cpp` (line ~600: replace the "not implemented yet" note with the measured comparison: the band where the beat covers most, in dB), `Source/AutoMix/VocalProfiler.cpp` (masking issue text uses the new region), `CHANGELOG.md`, `docs/HANDOFF.md`, `docs/ARCHITECTURE.md` (one paragraph). Tests: `Tests/AssistantTests.cpp`.
 
-- [ ] Failing test: asking "die Stimme geht im Beat unter" with a beat profile → the note names a frequency and dB, no "noch nicht implementiert".
-- [ ] Implement, full gate (`scripts\build.ps1` + pluginval 10), commit `Assistant and Vocal Check: measured masking against the beat; changelog`.
+**Changed while implementing:** the assistant (`AssistantView`) is not part of the editor any more, and its context has no auto-mix profile; it stays as it is. The Vocal Check / report finding "masking" now uses the same measurement as the auto EQ (frequency + dB, confidence measured).
+
+- [x] Failing test (`Tests/BeatTests.cpp`): the presence-heavy beat is reported with its frequency, measured; a dark beat is not reported.
+- [x] Implement, full gate (`scripts\build.ps1` + pluginval 10), commit `Vocal Check: measured masking against the beat; changelog`.

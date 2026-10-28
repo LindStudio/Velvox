@@ -102,7 +102,15 @@ public:
                              - (region (dense, 2000, 5000) - region (dense, 300, 1000));
             logMessage ("presence lift of the bright beat against the neutral one: " + juce::String (lift, 1) + " dB");
             expectGreaterThan (lift, 6.0f);
-            expect (bright.maskingHint, "the old hint still follows the 2-5 kHz comparison");
+            expect (bright.maskingHint && bright.hasIssue ("masking"), "the presence-heavy beat is reported");
+            if (const auto* issue = bright.issue ("masking"))
+            {
+                const auto text = i18n::show (issue->title, i18n::Language::english);
+                logMessage (text + " / " + i18n::show (issue->detail, i18n::Language::english));
+                expect (text.contains ("kHz") && issue->confidence == Confidence::measured, text);
+            }
+            const auto dark = VocalProfiler::analyse (withBeat (vocal, makeBeat (BeatKind::dark, 48000.0, 12.0, -16.0f)));
+            expect (dark.beatPresent && ! dark.hasIssue ("masking"), "a beat that leaves the presence free is not reported");
         }
 
         beginTest ("Beat: density (gap share)");

@@ -27,6 +27,20 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
   Control, wenn Atmer hörbar sind.
 - **Alte Projekte:** beide Module sind nicht in der Kette, der Klang und die Latenz bleiben gleich.
 
+### Neu – Der Auto Mix hört den Beat (Jakob, 2026-10-28)
+Mit dem Beat am Sidechain-Eingang (mindestens 3 s Beat während der Aufnahme) misst der Auto Mix die Stimme
+gegen den Beat, Band für Band, nur dort, wo der Beat spielt. Ohne Beat bleibt alles wie bisher.
+- **Pegel:** Die Stimme kommt 1 LU über den Beat. Spitzen bleiben bei höchstens −1 dBFS; reicht das nicht,
+  sagt der Bericht, um wie viel sie darunter bleibt. Annahme: Der Sidechain bekommt den Beat so laut, wie er
+  spielt (Send nach dem Fader, 0 dB).
+- **EQ:** Statt der festen +1 dB bei 3 kHz hebt er nur dort an, wo der Beat die Stimme messbar verdeckt
+  (1,5–6 kHz, +0,5 bis +2,5 dB). Bei einer schon scharfen Stimme nicht, das steht im Bericht. Drängt der
+  Beat die Tiefmitten, wird ein vorhandener Mulm-Schnitt 1 dB tiefer.
+- **Hall und Delay:** Bei dichtem Beat (kaum Lücken) 30 % weniger Hall und 2 % weniger Delay, bei einem Beat
+  mit Lücken 2 % mehr Hall (nicht bei einer Aufnahme mit eigenem Raum).
+- **Vocal Check / Bericht:** „Beat verdeckt die Stimme bei 3,8 kHz“ mit dem gemessenen Wert statt des
+  ungefähren Hinweises auf 2–5 kHz.
+
 ### Neu – Maskottchen und SIMPEL
 - Das Teufelchen in SIMPEL (unten links, Klick = Vocal Check), Statuszeile, Vorher/Nachher oben rechts,
   Sprechblase mit „Vocal analysieren“ / „Details“. Nach dem Auto Mix zeigen die SIMPEL-Regler, was er

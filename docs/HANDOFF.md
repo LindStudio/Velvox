@@ -1,14 +1,19 @@
 # HEADLINER – Übergabe für die nächste Session
 
 ## STAND 2026-10-28 – HIER WEITERMACHEN
-Branch **`feature/modules-0.7`**, am PC „Shadow“ weitergemacht (Commits `37210de`, `37a1056`, noch nicht gepusht).
+Branch **`feature/modules-0.7`**, am PC „Shadow“ weitergemacht (alle Commits des Tages noch nicht gepusht).
 - Punkte 1, 2 und der Changelog-Teil von 4 unten sind **erledigt**: voller Lauf 37.527 Checks grün, pluginval 10 SUCCESS.
   Das Review (neu gemacht, die `.superpowers`-Ledger liegen nur am anderen PC) fand einen echten Fehler, der jetzt behoben ist:
   Room Noise / Breath Control klickten beim Einfügen während der Wiedergabe → jetzt `reset (fadeIn)` wie Smooth, Test in
   `Tests/RoutingTests.cpp`. Bekannt, nicht behoben: unter 44,1 kHz (22,05/24 kHz) senkt Breath Control die ersten ~15 ms
   eines Atmers nicht ab, weil die Look-ahead-Zeit dort kürzer ist als Erkennung + halbes Fenster.
 - Punkt 3 entschieden: Modulnamen bleiben Englisch. Jakob 2026-10-28: noch nicht pushen, noch nicht installieren.
-- Weiter mit Punkt 5 (Beat als Sidechain).
+- Punkt 5 **erledigt**: „Der Auto Mix hört den Beat“, Plan `docs/superpowers/plans/2026-10-28-automix-hears-the-beat.md`
+  (Jakob wählte „Auto Mix hört den Beat“ und „Zum Beat einpegeln“: Stimme 1 LU über dem Beat). Tests: `Tests/BeatTests.cpp`,
+  synthetische Beats `Tests/SyntheticBeat.h`. Ohne Beat bleibt alles gleich (AutoMix-/AutoEq-Suites unverändert grün).
+  Der Assistent (`Source/Assistant`, `AssistantView`) ist nicht mehr im Editor eingebunden und wurde nicht angefasst.
+  Noch nicht mit echten Beats geprüft (keine `velvox-data` auf diesem PC).
+- Als Nächstes: Punkt 6 (neues Maskottchen, Jakob liefert Bilder). Pushen und Installieren erst nach Jakobs OK.
 
 ## STAND 2026-10-27 ABEND
 Branch **`feature/modules-0.7`** (baut auf `feature/i18n` auf). Jakob hat unterbrochen („ich mach morgen weiter“).
