@@ -335,7 +335,7 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //          0.6.1 chain tokens: "solo:<selection code>" (module solo), "scroll:<px>|end" (chain row scrolled),
 //          "hover:<selection code>" (mouse over that tile; "hover:<code>:s" over its S)
 //          "mascot:<seconds>,<score>[,<input dB>[,talk]]" (Memphy in SIMPEL after that long singing with that Vocal
-//          Check score; "talk" = while he talks)
+//          Check score; "talk" = while he talks; a further ",blink" = at the moment his eyes are closed)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
                            const juce::String& mode, int selection, const juce::String& rawOverlay)
 {
@@ -623,6 +623,9 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
             in.talking = parts.size() > 3 && parts[3] == "talk";
             for (int i = 0; i < juce::roundToInt (parts[0].getDoubleValue() * 60.0); ++i)
                 mascot->tick (in, 1.0 / 60.0);
+            // "blink": on until his eyes are closed
+            for (int i = 0; parts.contains ("blink") && i < 240 * 12 && mascot->getBrain().blink() < 0.95f; ++i)
+                mascot->tick (in, 1.0 / 240.0);
         }
     }
 

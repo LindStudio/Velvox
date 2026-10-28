@@ -39,8 +39,9 @@ namespace velvox::ui
         }
 
         // How long a line stays and how long he talks (reading pace)
-        double lineSeconds (const juce::String& s) { return 1.5 + 0.055 * s.length(); }
-        double talkSeconds (const juce::String& s) { return 0.4 + 0.045 * s.length(); }
+        // (Jakob 2026-10-28: longer - about 7 s for a short line, 12 s for a long one)
+        double lineSeconds (const juce::String& s) { return 3.0 + 0.08 * s.length(); }
+        double talkSeconds (const juce::String& s) { return 0.6 + 0.05 * s.length(); }
     }
 
     void SimpleView::startIntro()

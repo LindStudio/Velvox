@@ -82,6 +82,10 @@ namespace velvox::ui
 
         for (auto* b : { &germanButton, &englishButton, &analyseButton, &startButton, &pluginButton, &backButton, &nextButton, &skipButton })
             addChildComponent (b);
+        // Memphy greets on the welcome card (Jakob 2026-10-28); just a picture there, no Vocal Check click
+        addChildComponent (mascot);
+        mascot.setInterceptsMouseClicks (false, false);
+        mascot.setTooltip ({});
 
         using i18n::tr;
         analyseButton.setButtonText (tr ("Vocal analysieren", "Analyze vocal"));
@@ -127,6 +131,8 @@ namespace velvox::ui
     void TutorialOverlay::start (bool withWelcome)
     {
         spotValid = false;
+        welcomeTime = 0.0;
+        lastTick = 0.0;
         setVisible (true);
         toFront (true);
         goTo (withWelcome ? -1 : 0);
@@ -198,10 +204,14 @@ namespace velvox::ui
             b->setVisible (welcome && isVisible());
         for (auto* b : { &backButton, &nextButton, &skipButton })
             b->setVisible (! welcome && isVisible());
+        mascot.setVisible (welcome && isVisible());
 
         const auto card = cardBounds();
         if (welcome)
         {
+            // Top right, his frame on the card, his head over its top edge
+            mascot.setBounds (card.getRight() - space::xl - 130, card.getY() - 46, 130, 130);
+
             // Bottom up: secondary row, primary action, divider, language
             auto r = card.reduced (space::xxl, space::xl);
             auto secondary = r.removeFromBottom (34);
@@ -262,8 +272,20 @@ namespace velvox::ui
 
     void TutorialOverlay::tick()
     {
-        if (! isVisible() || step < 0)
+        if (! isVisible())
             return;
+        if (step < 0)
+        {
+            // Memphy on the welcome card: says hello for a few seconds, then listens
+            const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+            const double dt = lastTick > 0.0 ? juce::jlimit (0.0, 0.1, now - lastTick) : 1.0 / 60.0;
+            lastTick = now;
+            welcomeTime += dt;
+            mascot::Inputs in;
+            in.talking = welcomeTime > 0.8 && welcomeTime < 4.5;
+            mascot.tick (in, dt);
+            return;
+        }
         bool moving = false;
         for (auto& s : spot)
             moving = s.tick (0.22f) || moving;

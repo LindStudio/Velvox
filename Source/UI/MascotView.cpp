@@ -11,6 +11,72 @@ namespace velvox::ui
             "listening_png", "talking_png", "wink_png", "celebrate_png", "sad_png",
             "shocked_png", "thinking_png", "proud_png", "annoyed_png"
         };
+
+        // His open eyes in each picture (centre x, y and radii in the 384 px picture; measured 2026-10-28 and
+        // checked against the extent of the eye whites),
+        // for the blink. Celebrating his eyes are closed; winking only one is open.
+        struct Eye { float x, y, rx, ry; };
+        struct Eyes { int count; Eye eye[2]; };
+        constexpr Eyes eyesOf[mascot::numMoods] {
+            { 2, { { 195, 150, 30, 27 }, { 280, 151, 19, 23 } } },   // listening
+            { 2, { { 136, 156, 21, 24 }, { 218, 156, 27, 26 } } },   // talking
+            { 1, { { 149, 160, 26, 25 }, {} } },                    // wink
+            { 0, {} },                                               // celebrate
+            { 2, { { 164, 184, 28, 16 }, { 243, 188, 24, 16 } } },   // sad
+            { 2, { { 151, 150, 39, 36 }, { 225, 147, 38, 41 } } },   // shocked
+            { 2, { { 159, 144, 27, 27 }, { 243, 130, 22, 25 } } },   // thinking
+            { 2, { { 134, 147, 29, 25 }, { 224, 140, 24, 23 } } },   // proud
+            { 2, { { 142, 150, 28, 14 }, { 235, 149, 25, 16 } } },   // annoyed
+        };
+    }
+
+    // The lids close over his open eyes from the top: skin from just above the eye, a dark lid line
+    void MascotView::paintBlink (juce::Graphics& g, const juce::Image& img, mascot::Mood mood, float amount,
+                                 const juce::AffineTransform& toView) const
+    {
+        const auto& eyes = eyesOf[(size_t) mood];
+        if (amount <= 0.01f || eyes.count == 0)
+            return;
+        const float px = 384.0f / (float) img.getWidth();
+        for (int i = 0; i < eyes.count; ++i)
+        {
+            const auto e = eyes.eye[i];
+            // The skin next to the eye: of a few points around it the one closest to his skin red (brows,
+            // the black outline and the ears are near some of them)
+            juce::Colour skin (0xffe8463f);
+            float best = 1.0e9f;
+            for (const auto off : { juce::Point<float> (0.0f, e.ry + 8.0f), { -e.rx - 8.0f, 0.0f }, { e.rx + 8.0f, 0.0f },
+                                    { 0.0f, -e.ry - 6.0f }, { -e.rx * 0.8f, e.ry + 6.0f }, { e.rx * 0.8f, e.ry + 6.0f } })
+            {
+                const auto c = img.getPixelAt (juce::roundToInt ((e.x + off.x) / px), juce::roundToInt ((e.y + off.y) / px));
+                const float d = std::abs (c.getRed() - 232.0f) + std::abs (c.getGreen() - 70.0f) + std::abs (c.getBlue() - 64.0f)
+                              + (c.getAlpha() < 250 ? 1000.0f : 0.0f);
+                if (d < best)
+                {
+                    best = d;
+                    skin = c;
+                }
+            }
+            // Slightly larger than the eye so its own outline closes with it
+            const auto oval = juce::Rectangle<float> (e.rx * 2.3f, e.ry * 2.3f).withCentre ({ e.x, e.y });
+            const float lidY = oval.getY() + oval.getHeight() * amount;
+            juce::Path lid;
+            lid.addEllipse (oval);
+            juce::Path cover;
+            cover.addRectangle (oval.withBottom (lidY));
+            juce::Graphics::ScopedSaveState s (g);
+            g.addTransform (toView);
+            g.reduceClipRegion (lid, {});
+            g.setColour (skin.withAlpha (1.0f));
+            g.fillPath (cover);
+            // The lid's edge: a line that sags a little, like a closed eye at the end of the blink
+            juce::Path edge;
+            const float sag = e.ry * 0.25f * amount;
+            edge.startNewSubPath (oval.getX(), lidY - sag * 0.6f);
+            edge.quadraticTo (e.x, lidY + sag, oval.getRight(), lidY - sag * 0.6f);
+            g.setColour (juce::Colour (0xff1a1014));
+            g.strokePath (edge, juce::PathStrokeType (3.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
     }
 
     juce::Image MascotView::sticker (mascot::Mood mood)
@@ -161,6 +227,11 @@ namespace velvox::ui
             draw (brain.fadeFrom(), 1.0f);
         draw (brain.mood(), 1.0f - fade);
         g.setOpacity (1.0f);
+
+        // He blinks (not in the middle of a cross-fade)
+        if (fade <= 0.0f)
+            paintBlink (g, sticker (brain.mood()), brain.mood(), brain.blink(),
+                        juce::AffineTransform::scale (area.getWidth() / 384.0f, area.getHeight() / 384.0f).translated (area.getX(), area.getY()).followedBy (t));
     }
 
     void MascotView::mouseUp (const juce::MouseEvent& e)

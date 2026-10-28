@@ -149,6 +149,24 @@ public:
             expect (b.mood() == Mood::celebrate && lift > 0.03f, "he hops");
         }
 
+        beginTest ("He blinks every few seconds, quickly");
+        {
+            Brain b (3);
+            int blinks = 0, closedFrames = 0;
+            bool wasClosed = false;
+            for (int i = 0; i < 60 * 30; ++i)
+            {
+                b.update (silence(), 1.0 / 60.0);
+                const bool closed = b.blink() > 0.8f;
+                closedFrames += closed ? 1 : 0;
+                blinks += closed && ! wasClosed ? 1 : 0;
+                wasClosed = closed;
+            }
+            logMessage (juce::String (blinks) + " blinks in 30 s");
+            expect (blinks >= 5 && blinks <= 20, juce::String (blinks));
+            expect (closedFrames < 60 * 30 / 20, "the eyes are open nearly all the time");
+        }
+
         beginTest ("Tour scenes: pops in shocked, then winks; at the end the thumbs up");
         {
             Brain b;
@@ -223,6 +241,14 @@ public:
                 return;
             }
             expectEquals (ui::TutorialOverlay::steps().front().target, juce::String ("mascot"));
+            tour->start (true);
+            auto& greeter = tour->getWelcomeMascot();
+            expect (greeter.isVisible(), "Memphy on the welcome card");
+            const auto card = greeter.getBounds();
+            expect (card.getRight() > tour->getWidth() / 2, "top right of the card");
+            tour->goTo (0);
+            expect (! greeter.isVisible(), "only on the welcome card");
+            tour->finish (ui::TutorialOverlay::Outcome::later);
             tour->start (false);
             expect (mascot->getBrain().mood() == Mood::shocked);
             juce::StringArray lines;

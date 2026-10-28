@@ -41,6 +41,7 @@ namespace velvox::ui
         juce::Rectangle<float> stickerArea() const;   // the sticker image at rest, in local coordinates
         juce::Rectangle<float> frameArea() const;     // the comic frame his body sits in (his head pops out)
         void paintFrame (juce::Graphics&, juce::Rectangle<float> frame) const;
+        void paintBlink (juce::Graphics&, const juce::Image& picture, mascot::Mood, float amount, const juce::AffineTransform& toView) const;
         juce::AffineTransform motion() const;          // pop, breathing, bounce, hop around his feet
 
         mascot::Brain brain;

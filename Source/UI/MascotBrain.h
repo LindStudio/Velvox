@@ -39,13 +39,14 @@ namespace velvox::ui::mascot
         static constexpr double minHold = 1.5;          // s a mood shows before another may take over
         static constexpr double silenceToIdle = 2.0;    // s of silence before he stops reacting to the singing
         static constexpr double proudFor = 4.0;         // s of thumbs up after a mix
-        static constexpr double popTime = 0.28;         // s of the pop when the mood changes
-        static constexpr double fadeTime = 0.15;        // s cross-fade between two stickers
+        static constexpr double popTime = 0.6;          // s of the pop when the mood changes (a damped spring)
+        static constexpr double fadeTime = 0.2;         // s cross-fade between two stickers
+        static constexpr double blinkTime = 0.16;       // s an eye blink takes (closing and opening)
         static constexpr float signalDb = -55.0f;
         static constexpr int badBelow = 45, goodFrom = 75, greatFrom = 90;
         static constexpr int hysteresis = 3;            // score points around the borders
 
-        explicit Brain (unsigned seed = 1) : rng (seed == 0 ? 1u : seed) {}
+        explicit Brain (unsigned seed = 1) : rng (seed == 0 ? 1u : seed) { blinkIn = 1.5 + 3.0 * unit(); }
 
         // Tour: pops in shocked, then winks; at the end the thumbs up
         void playIntro() { scene = { { Mood::shocked, 1.4 }, { Mood::wink, 2.2 } }; nextScene(); }
@@ -59,6 +60,7 @@ namespace velvox::ui::mascot
             clock += dt;
             proudLeft = in.mixFinished ? proudFor : std::max (0.0, proudLeft - dt);
             updateTalk (in.talking, dt);
+            updateBlink (dt);
 
             if (sceneLeft > 0.0)
             {
@@ -81,23 +83,28 @@ namespace velvox::ui::mascot
         Mood fadeFrom() const noexcept { return from; }
         float fadeAmount() const noexcept { return time < fadeTime ? (float) (1.0 - time / fadeTime) : 0.0f; }
 
-        // Motion of the sticker, for the view: scale around his feet and a lift in sticker heights
+        // Motion of the sticker, for the view: scale around his feet and a lift in sticker heights.
+        // Everything is a smooth curve (Jakob 2026-10-28: "smoother"): the pop is a damped spring, the talking
+        // bounce a smoothed envelope, the hop a sine squared.
         float scale() const noexcept
         {
-            float s = 1.0f + 0.012f * (float) std::sin (clock * 2.0 * 3.14159265 / 3.2);   // breathing
-            if (time < popTime)                                                               // pop: 0.85 -> 1.06 -> 1
-            {
-                const double t = time / popTime;
-                s *= (float) (t < 0.6 ? 0.85 + 0.21 * (t / 0.6) : 1.06 - 0.06 * ((t - 0.6) / 0.4));
-            }
-            return s * (1.0f + 0.035f * talkBounce);
+            float s = 1.0f + 0.012f * (float) std::sin (clock * 2.0 * pi / 3.2);   // breathing
+            if (time < popTime)                                                    // 0.88, a soft overshoot, settles
+                s *= (float) (1.0 - 0.12 * std::exp (-time * 9.0) * std::cos (time * 16.0));
+            return s * (1.0f + 0.03f * talkBounce);
         }
         float lift() const noexcept
         {
             if (now == Mood::celebrate)   // hops
-                return 0.06f * (float) std::abs (std::sin (clock * 3.14159265 * 1.6));
-            return 0.02f * talkBounce;
+            {
+                const double h = std::sin (clock * pi * 1.5);
+                return 0.055f * (float) (h * h);
+            }
+            return 0.018f * talkBounce;
         }
+
+        // Eye blink: 0 = open, 1 = closed (the view draws the lids)
+        float blink() const noexcept { return blinkT < blinkTime ? (float) std::sin (pi * blinkT / blinkTime) : 0.0f; }
 
     private:
         Mood desired (const Inputs& in)
@@ -147,22 +154,34 @@ namespace velvox::ui::mascot
             time = 0.0;
         }
 
-        // Talking: a bounce every 120 - 240 ms, like syllables
+        // Talking: a pulse every 140 - 260 ms, like syllables; the bounce follows it smoothly
         void updateTalk (bool talking, double dt)
         {
-            if (! talking)
+            if (talking)
             {
-                talkBounce = std::max (0.0f, talkBounce - (float) dt * 8.0f);
-                return;
+                syllable -= dt;
+                if (syllable <= 0.0)
+                {
+                    syllable = 0.14 + 0.12 * unit();
+                    talkTarget = 1.0f;
+                }
             }
-            syllable -= dt;
-            if (syllable <= 0.0)
-            {
-                syllable = 0.12 + 0.12 * unit();
-                talkBounce = 1.0f;
-            }
-            talkBounce = std::max (0.0f, talkBounce - (float) dt * 6.0f);
+            talkTarget = std::max (0.0f, talkTarget - (float) dt * 5.0f);
+            talkBounce += (talkTarget - talkBounce) * (float) std::min (1.0, dt / 0.045);
         }
+
+        // A blink every 2 - 6 s, now and then a double blink
+        void updateBlink (double dt)
+        {
+            blinkT += dt;
+            blinkIn -= dt;
+            if (blinkIn > 0.0)
+                return;
+            blinkT = 0.0;
+            blinkIn = unit() < 0.2 ? blinkTime + 0.12 : 2.0 + 4.0 * unit();
+        }
+
+        static constexpr double pi = 3.14159265358979;
 
         double unit() noexcept
         {
@@ -175,6 +194,7 @@ namespace velvox::ui::mascot
         std::deque<std::pair<Mood, double>> scene;
         double sceneLeft = 0.0;
         double time = 10.0, clock = 0.0, silent = 1.0e9, proudLeft = 0.0, syllable = 0.0;   // silent until the first signal
-        float talkBounce = 0.0f;
+        double blinkT = 10.0, blinkIn = 3.0;
+        float talkBounce = 0.0f, talkTarget = 0.0f;
     };
 }

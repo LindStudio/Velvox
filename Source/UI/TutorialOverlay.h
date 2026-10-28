@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Widgets.h"
+#include "MascotView.h"
 #include "../Text/I18n.h"
 
 namespace velvox::ui
@@ -44,6 +45,7 @@ namespace velvox::ui
         juce::Button& getAnalyseButton() noexcept { return analyseButton; }
         juce::Button& getTourButton() noexcept { return startButton; }
         juce::Button& getPluginButton() noexcept { return pluginButton; }
+        MascotView& getWelcomeMascot() noexcept { return mascot; }
 
         void paint (juce::Graphics&) override;
         void resized() override;
@@ -61,6 +63,8 @@ namespace velvox::ui
         std::array<Smoothed, 4> spot {};   // animated spotlight x, y, w, h
         bool spotValid = false;
 
+        MascotView mascot;          // Memphy on the welcome card, popping out over its top edge
+        double welcomeTime = 0.0, lastTick = 0.0;
         juce::TextButton germanButton { "Deutsch" }, englishButton { "English" };
         juce::TextButton analyseButton, startButton, pluginButton;
         juce::TextButton backButton, nextButton, skipButton;
