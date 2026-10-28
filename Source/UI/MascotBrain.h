@@ -91,7 +91,7 @@ namespace velvox::ui::mascot
             float s = 1.0f + 0.012f * (float) std::sin (clock * 2.0 * pi / 3.2);   // breathing
             if (time < popTime)                                                    // 0.88, a soft overshoot, settles
                 s *= (float) (1.0 - 0.12 * std::exp (-time * 9.0) * std::cos (time * 16.0));
-            return s * (1.0f + 0.03f * talkBounce);
+            return s * (1.0f + 0.022f * talkBounce);
         }
         float lift() const noexcept
         {
@@ -100,7 +100,7 @@ namespace velvox::ui::mascot
                 const double h = std::sin (clock * pi * 1.5);
                 return 0.055f * (float) (h * h);
             }
-            return 0.018f * talkBounce;
+            return 0.01f * talkBounce;
         }
 
         // Eye blink: 0 = open, 1 = closed (the view draws the lids)
@@ -154,7 +154,8 @@ namespace velvox::ui::mascot
             time = 0.0;
         }
 
-        // Talking: a pulse every 140 - 260 ms, like syllables; the bounce follows it smoothly
+        // Talking: a nod every 0.35 - 0.6 s, like the stress of a sentence (every syllable looked like fast
+        // jumping, Jakob 2026-10-28); the bounce follows it smoothly
         void updateTalk (bool talking, double dt)
         {
             if (talking)
@@ -162,12 +163,12 @@ namespace velvox::ui::mascot
                 syllable -= dt;
                 if (syllable <= 0.0)
                 {
-                    syllable = 0.14 + 0.12 * unit();
+                    syllable = 0.35 + 0.25 * unit();
                     talkTarget = 1.0f;
                 }
             }
-            talkTarget = std::max (0.0f, talkTarget - (float) dt * 5.0f);
-            talkBounce += (talkTarget - talkBounce) * (float) std::min (1.0, dt / 0.045);
+            talkTarget = std::max (0.0f, talkTarget - (float) dt * 3.0f);
+            talkBounce += (talkTarget - talkBounce) * (float) std::min (1.0, dt / 0.09);
         }
 
         // A blink every 2 - 6 s, now and then a double blink
