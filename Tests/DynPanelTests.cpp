@@ -197,6 +197,13 @@ public:
             expect (g != nullptr, "the visual is the de-esser graph");
             if (g != nullptr)
                 expect (g->getEditedParameters().contains (pid::deessFreq) && g->getEditedParameters().contains (pid::deessRange));
+            // Review 2026-10-28 (item 14): one word for solo everywhere
+            for (auto* c : panel->getMainControls())
+                if (auto* t = dynamic_cast<juce::ToggleButton*> (c))
+                {
+                    expectEquals (t->getButtonText(), juce::String ("S-Laute solo"));
+                    expect (t->getTooltip().startsWith ("Solo"), t->getTooltip());
+                }
         }
 
         beginTest ("Vocal Smash panel: big SMASH and the GR column in the visual; Blend Tone Output; Mehr Attack Release");

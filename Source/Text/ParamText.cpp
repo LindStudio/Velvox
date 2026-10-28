@@ -83,7 +83,7 @@ namespace velvox::i18n
                 { "deessFreq",      { "De-Ess Frequenz", "Untere Kante des S-Bands, das abgesenkt wird.", {} } },
                 { "deessThreshold", { "", "Pegel der S-Laute, ab dem die Absenkung beginnt.", {} } },
                 { "deessRange",     { "", "Größte Absenkung des S-Bands (Stärke).", {} } },
-                { "deessListen",    { "De-Ess Abhören", "Spielt nur das erkannte S-Band, zum Einstellen.", {} } },
+                { "deessListen",    { "De-Ess Solo", "Solo: spielt nur das erkannte S-Band, zum Einstellen.", {} } },
                 { "deessMode",      { "De-Ess Modus", "Split band senkt nur die S-Frequenzen ab; Wideband senkt bei jedem S die ganze Stimme.", {} } },
                 { "deessDetection", { "De-Ess Erkennung", "Relativ vergleicht das S-Band mit der ganzen Stimme, so werden laute und leise Phrasen gleich behandelt.",
                                       { "Absolut", "Relativ" } } },

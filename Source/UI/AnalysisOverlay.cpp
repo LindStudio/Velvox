@@ -120,7 +120,7 @@ namespace velvox::ui
 
         switch (v)
         {
-            case View::intro:     primary.setButtonText (tr ("Audio analysieren", "Analyze audio")); secondary.setButtonText (tr ("Später", "Later")); break;
+            case View::intro:     primary.setButtonText (tr ("Vocal analysieren", "Analyze vocal")); secondary.setButtonText (tr ("Später", "Later")); break;
             case View::listening: primary.setButtonText (tr ("Jetzt analysieren", "Analyze now")); secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
             case View::capturing: primary.setButtonText (tr ("Jetzt analysieren", "Analyze now")); secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
             case View::analysing: primary.setButtonText (tr ("Bitte warten", "Please wait")); secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
@@ -240,6 +240,19 @@ namespace velvox::ui
         }
     }
 
+    juce::String AnalysisOverlay::introText()
+    {
+        return tr ("Headliner hört sich deine Vocal an und stellt dann Klang, Dynamik, S-Laute und Raum für sie ein.",
+                   "Headliner listens to your vocal and then sets up tone, dynamics, sibilance and space for it.");
+    }
+
+    juce::StringArray AnalysisOverlay::introSteps()
+    {
+        return { tr ("Song abspielen - am besten mit der unbearbeiteten Vocal", "Play your song - ideally with the unprocessed vocal"),
+                 tr ("Headliner hört zu - ca. 15 s Gesang, Pausen zählen nicht", "Headliner listens - about 15 s of singing, gaps don't count"),
+                 tr ("Fertig - vergleiche Vorher / Nachher", "Done - compare Before / After") };
+    }
+
     void AnalysisOverlay::paint (juce::Graphics& g)
     {
         g.fillAll (colours::scrim.withMultipliedAlpha (0.85f));
@@ -336,10 +349,7 @@ namespace velvox::ui
         {
             case View::intro:
                 title = tr ("Lass uns deine Vocal mixen.", "Let's mix your vocal.");
-                body = tr ("Headliner analysiert zuerst deine Vocal und erstellt daraus eine passende Bearbeitung - Klang, Dynamik, S-Laute und Raum. "
-                           "Starte die Wiedergabe deiner Vocal in der DAW. Headliner analysiert einen begrenzten Abschnitt und erstellt anschließend automatisch deinen Vocal-Mix.",
-                           "Headliner first analyzes your vocal and builds a matching treatment from it - tone, dynamics, sibilance and space. "
-                           "Start playing your vocal in the DAW. Headliner analyzes a limited section and then creates your vocal mix automatically.");
+                body = introText();
                 break;
             case View::listening:
                 title = tr ("Spiel deine Vocal ab", "Play your vocal");
@@ -371,26 +381,26 @@ namespace velvox::ui
         g.setFont (font (view == View::intro ? 30.0f : 25.0f, true));
         g.drawFittedText (title, r.removeFromTop (38.0f).toNearestInt(), juce::Justification::centred, 1, 0.85f);
         r.removeFromTop (10.0f);
-        auto bodyArea = r.removeFromTop (76.0f).reduced (8.0f, 0.0f);
+        auto bodyArea = r.removeFromTop (view == View::intro ? 44.0f : 76.0f).reduced (8.0f, 0.0f);
         drawParagraph (g, body, bodyArea, 15.0f, colours::textDim);
 
-        // ---- Intro: preparation tips; others: status and warning
+        // ---- Intro: three numbered steps; others: status and warning
         if (view == View::intro)
         {
-            r.removeFromTop (4.0f);
-            const juce::String tips[] {
-                tr ("Möglichst eine unbearbeitete oder nur leicht bearbeitete Vocal verwenden", "Use an unprocessed or only lightly processed vocal if you can"),
-                tr ("Ausreichend Pegel, aber keine Übersteuerung im Eingang", "Enough level, but no clipping at the input"),
-                tr ("Headliner auf die Spur mit deiner Vocal legen", "Put Headliner on the track with your vocal"),
-            };
-            for (auto& tip : tips)
+            r.removeFromTop (6.0f);
+            const auto steps = introSteps();
+            for (int i = 0; i < steps.size(); ++i)
             {
-                auto row = r.removeFromTop (24.0f).reduced (24.0f, 0.0f);
-                g.setGradientFill (auroraGradient (row.getTopLeft(), row.getTopLeft().translated (8.0f, 8.0f)));
-                g.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre ({ row.getX() + 4.0f, row.getCentreY() }));
-                g.setColour (colours::text.withAlpha (0.86f));
-                g.setFont (font (14.0f));
-                g.drawFittedText (tip, row.withTrimmedLeft (18.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.85f);
+                auto row = r.removeFromTop (34.0f).reduced (24.0f, 0.0f);
+                const auto badge = juce::Rectangle<float> (24.0f, 24.0f).withCentre ({ row.getX() + 12.0f, row.getCentreY() });
+                g.setGradientFill (auroraGradient (badge.getTopLeft(), badge.getBottomRight()));
+                g.fillEllipse (badge);
+                g.setColour (colours::background);
+                g.setFont (semiBold (13.0f));
+                g.drawText (juce::String (i + 1), badge, juce::Justification::centred, false);
+                g.setColour (colours::text.withAlpha (0.9f));
+                g.setFont (font (14.5f));
+                g.drawFittedText (steps[i], row.withTrimmedLeft (38.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.85f);
             }
         }
         else

@@ -45,7 +45,7 @@ namespace velvox::ui::help
 - Vergleiche mit Vorher / Nachher neben dem Knopf und stell mit den sechs Fadern fein nach.
 
 ## SIMPEL und ADVANCED
-- SIMPEL: das Live-Spektrum deiner Vocal (vorher = gestrichelte Linie, nachher = gefüllte Kurve), „Vocal analysieren“ und sechs Makro-Fader: Presence, Space, Width, Punch, Warmth, Vocal Level. Unten kleine IN- und OUT-Meter.
+- SIMPEL: das Live-Spektrum deiner Vocal (unbearbeitet = gestrichelte Linie, bearbeitet = gefüllte Kurve), „Vocal analysieren“ und sechs Makro-Fader: Presence, Space, Width, Punch, Warmth, Vocal Level. Unten kleine IN- und OUT-Meter.
 - ADVANCED: oben die Modul-Kette, darunter das Panel des gewählten Moduls – ein großes Live-Bild, die Hauptregler und alles Weitere unter „Mehr“.
 
 ## Die Tabs
@@ -67,7 +67,7 @@ R"~(Headliner is an automatic vocal mixer for EDM, hypertechno, hard dance, part
 - Compare with Before / After next to the button, and fine-tune with the six faders.
 
 ## SIMPLE and ADVANCED
-- SIMPLE: the live spectrum of your vocal (before = dashed line, after = filled curve), "Analyze vocal", and six macro faders: Presence, Space, Width, Punch, Warmth, Vocal Level. Small IN and OUT meters at the bottom.
+- SIMPLE: the live spectrum of your vocal (unprocessed = dashed line, processed = filled curve), "Analyze vocal", and six macro faders: Presence, Space, Width, Punch, Warmth, Vocal Level. Small IN and OUT meters at the bottom.
 - ADVANCED: the module chain on top and the panel of the selected module below - a large live picture, the main controls, and everything else behind "More".
 
 ## The tabs

@@ -1002,7 +1002,13 @@ public:
                 auto& ov = asVelvox (*e).getAnalysisOverlay();
                 expect (ov.isOpen(), "popup on the first open of a new instance");
                 expect (ov.getView() == ui::AnalysisOverlay::View::intro);
-                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Audio analysieren"));
+                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Vocal analysieren"), "one word per thing (review 2026-10-28)");
+                // The intro in three numbered steps instead of the same sentence twice
+                const auto steps = ui::AnalysisOverlay::introSteps();
+                expectEquals (steps.size(), 3);
+                expect (steps[0].contains ("Song") && steps[1].contains ("15 s") && steps[2].contains ("Vorher / Nachher"), steps.joinIntoString (" | "));
+                const auto body = ui::AnalysisOverlay::introText();
+                expect (body.indexOf ("analysiert") == body.lastIndexOf ("analysiert"), "not twice: " + body);
                 click (ov.getSecondaryButton());   // "Später"
                 expect (! ov.isOpen());
             }
@@ -1242,7 +1248,8 @@ public:
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
                 auto& ov = asVelvox (*e).getAnalysisOverlay();
                 expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::intro);
-                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Analyze audio"));
+                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Analyze vocal"));
+                expect (ui::AnalysisOverlay::introSteps()[1].contains ("15 s"), "English steps");
                 expectEquals (ov.getSecondaryButton().getButtonText(), juce::String ("Later"));
                 click (ov.getSecondaryButton());
                 expectEquals (asVelvox (*e).getSimpleView().getAnalyseButton().getButtonText(), juce::String ("Analyze vocal"));

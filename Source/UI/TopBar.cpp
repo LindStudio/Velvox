@@ -299,7 +299,7 @@ namespace velvox::ui
         undoButton = std::make_unique<HistoryButton> (false);
         redoButton = std::make_unique<HistoryButton> (true);
         undoButton->setTooltip (i18n::tr ("Rückgängig (Strg+Z)", "Undo (Ctrl+Z)"));
-        redoButton->setTooltip (i18n::tr ("Wiederherstellen (Strg+Y)", "Redo (Ctrl+Y)"));
+        redoButton->setTooltip (i18n::tr ("Wiederholen (Strg+Y)", "Redo (Ctrl+Y)"));
         undoButton->onClick = [this] { if (onUndo) onUndo(); else proc.getUndo().undo(); refresh(); };
         redoButton->onClick = [this] { if (onRedo) onRedo(); else proc.getUndo().redo(); refresh(); };
         addAndMakeVisible (*undoButton);

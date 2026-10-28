@@ -43,6 +43,9 @@ namespace velvox::ui
 
         // For tests
         juce::TextButton& getPrimaryButton() noexcept { return primary; }
+        // The intro: one sentence and three numbered steps (review 2026-10-28), in the interface language
+        static juce::String introText();
+        static juce::StringArray introSteps();
         juce::TextButton& getSecondaryButton() noexcept { return secondary; }
         juce::String getStatusText() const { return status; }
         juce::String getWarningText() const { return warning; }

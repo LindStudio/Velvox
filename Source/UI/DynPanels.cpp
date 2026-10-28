@@ -1422,7 +1422,7 @@ namespace velvox::ui
             {
                 auto& mode = segments (pid::deessMode, { "Split", "Wide" });
                 setCaption (mode, i18n::tr ("Modus", "Mode"));
-                auto& listen = toggle (pid::deessListen, i18n::tr ("Abhören", "Listen"));
+                auto& listen = toggle (pid::deessListen, i18n::tr ("S-Laute solo", "Sibilance solo"));
                 auto& detection = segments (pid::deessDetection);
                 setCaption (detection, i18n::tr ("Erkennung", "Detection"));
                 auto& threshold = knob (pid::deessThreshold, "Threshold");

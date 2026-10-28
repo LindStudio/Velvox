@@ -250,7 +250,7 @@ namespace velvox
             { pid::deessFreq,      "De-Ess Freq",      "De-Esser", T::Float, 2000.0f, 12000.0f, 6500.0f, 5500.0f, "Hz", {}, "Lower edge of the sibilance band that gets reduced." },
             { pid::deessThreshold, "De-Ess Threshold", "De-Esser", T::Float, -60.0f, 0.0f, -30.0f, 0.0f, "dB", {}, "Sibilance level at which reduction starts." },
             { pid::deessRange,     "De-Ess Range",     "De-Esser", T::Float, 0.0f, 24.0f, 6.0f, 0.0f, "dB", {}, "Maximum reduction of the sibilance band (intensity)." },
-            { pid::deessListen,    "De-Ess Listen",    "De-Esser", T::Bool, 0, 1, 0, 0, "", {}, "Solo the detected sibilance band for tuning." },
+            { pid::deessListen,    "De-Ess Solo",      "De-Esser", T::Bool, 0, 1, 0, 0, "", {}, "Solo: only the detected sibilance band, for tuning." },
 
             // ---------------- Saturation ----------------
             { pid::satOn,     "Sat On",     "Saturation", T::Bool, 0, 1, 0, 0, "", {}, "Enables the saturation stage." },

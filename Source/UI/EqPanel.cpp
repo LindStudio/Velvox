@@ -744,8 +744,10 @@ namespace velvox::ui
     {
         int b = bandAt (e.position);
         // On its headphone the point stays hovered (the hot spot sits beside it)
-        if (const int icon = auditionIconAt (e.position); b < 0 && icon >= 0)
+        const int icon = auditionIconAt (e.position);
+        if (b < 0 && icon >= 0)
             b = icon;
+        setTooltip (icon >= 0 ? tr ("Solo (halten und ziehen: Sweep)", "Solo (hold and drag: sweep)") : juce::String());
         if (b != hovered)
         {
             hovered = b;
