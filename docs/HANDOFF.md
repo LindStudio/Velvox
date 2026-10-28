@@ -21,7 +21,13 @@ Branch **`feature/modules-0.7`**, am PC „Shadow“ weitergemacht (alle Commits
 - **Noch offen aus Jakobs `Character\TODO.txt` (Drive):** Saturation verzerrt die Vocal stark · Auto Mix klingt dumpf · Website: Kauf-Button weg („bald verfügbar“),
   Newsletter-Anmeldung (früher Zugang + Rabattcode per Mail), Impressum von lind-studio.com übernehmen, Datenschutz
   inkl. E-Mail-Erfassung · Idee für später: Belohnung für gute Rezensionen.
-- Pushen und Installieren erst nach Jakobs OK.
+- **Review-Punkte geplant, NICHT begonnen:** `docs/superpowers/plans/2026-10-28-review-umsetzung.md` (14 Punkte mit Jakobs
+  Entscheidungen, Punkt 10 abgelehnt). Erst anfangen, wenn Jakob es sagt. Review-Website:
+  https://claude.ai/artifact/NwwJ1YbUGzf2B3VyNftHae
+- Memphy ist heute fertig geworden als Comic-Figur im violetten Speedlines-Rahmen (Kopf schaut heraus), blinzelt, auch auf
+  der Willkommenskarte. Der komplette Testlauf lief zuletzt vor den Memphy-Feinschliffen (Rahmen, Blinzeln, Willkommen) –
+  vor dem nächsten Push `scripts\build.ps1` + pluginval laufen lassen.
+- Pushen erst nach Jakobs OK.
 
 ## STAND 2026-10-27 ABEND
 Branch **`feature/modules-0.7`** (baut auf `feature/i18n` auf). Jakob hat unterbrochen („ich mach morgen weiter“).
