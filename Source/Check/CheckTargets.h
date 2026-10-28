@@ -21,9 +21,10 @@ namespace velvox::check
         // Band levels relative to the 300 Hz - 2 kHz core of the voice (dB)
         Window body { -9.0f, -1.0f };       // 100 - 300 Hz
         Window lowMid { -7.0f, 0.0f };      // 250 - 500 Hz
-        Window top { -16.0f, -7.0f };       // above 2 kHz
-        Window air { -32.0f, -16.0f };      // 10 - 16 kHz
-        float presenceMax = -4.0f;          // 2 - 5 kHz
+        // 2026-10-29: the auto mix's windows, calibrated on finished professional vocals (AutoEq.h)
+        Window top { -11.0f, -3.0f };       // above 2 kHz
+        Window air { -22.0f, -13.0f };      // 10 - 16 kHz
+        float presenceMax = -5.0f;          // 2 - 5 kHz
         float rumbleMax = -24.0f;           // 40 - 90 Hz
         float sibilanceMax = -6.0f;         // S frames against vowel frames (objective; shown as a fact)
         float sibilancePeakMax = -9.0f;     // loudest 5-10 kHz moments against the vowels (the rule)

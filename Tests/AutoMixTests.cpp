@@ -6,6 +6,7 @@
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
 #include "AutoMix/AutoMixEngine.h"
+#include "Parameters/EqBands.h"
 #include "PluginEditor.h"
 #include "StateKeys.h"
 #include "UI/UserSettings.h"
@@ -337,6 +338,34 @@ public:
             const auto pn = VocalProfiler::analyse (makeVocal (noisy));
             expect (pn.snrValid && pn.hasIssue ("noise"), "noise floor detected, snr " + juce::String (pn.snrDb));
 
+            // 2026-10-29 (Jakob: "keine dummen Entscheidungen", calibrated on finished professional vocals)
+            {
+                const auto eqGain = [] (const MixPlan& plan, dsp::EqRole role)
+                {
+                    auto values = plan.values;
+                    const auto a = eqbands::accessFor (values);
+                    const int b = eqbands::findBand (a, 0, role);
+                    return b >= 0 && eqbands::readBand (a, 0, b).on ? eqbands::readBand (a, 0, b).gain : 0.0f;
+                };
+                // A dark voice: 2-5 kHz is lifted or left, never cut
+                const auto darkPlan = AutoMixPlanner::plan (pd, {});
+                expect (eqGain (darkPlan, dsp::EqRole::autoTone) >= 0.0f, "no presence cut on a dark voice: " + juce::String (eqGain (darkPlan, dsp::EqRole::autoTone)));
+                expect (eqGain (darkPlan, dsp::EqRole::air) >= 0.0f, "no high cut on a dark voice");
+                expect (eqGain (darkPlan, dsp::EqRole::autoTone) + eqGain (darkPlan, dsp::EqRole::air) > 0.0f, "the dark voice gets brighter");
+                // SMOOTH on every vocal with enough material, gently where nothing sticks out
+                const auto cleanPlan = AutoMixPlanner::plan (c, {});
+                expectEquals (cleanPlan.get (pid::smoothOn), 1.0f, "SMOOTH as basic care");
+                expect (cleanPlan.get (pid::smoothAmount) <= 20.0f, "gently: " + juce::String (cleanPlan.get (pid::smoothAmount)));
+                // Room noise: gently, and never on a take with room / reverb (its floor is the tail)
+                const auto noisyPlan = AutoMixPlanner::plan (pn, {});
+                expect (noisyPlan.get (pid::denoiseOn) < 0.5f || noisyPlan.get (pid::denoiseAmount) <= 50.0f,
+                        "room noise at most 50 %: " + juce::String (noisyPlan.get (pid::denoiseAmount)));
+                VocalSpec roomNoise = room;
+                roomNoise.noiseDb = -46.0f;
+                expectEquals (AutoMixPlanner::plan (VocalProfiler::analyse (makeVocal (roomNoise)), {}).get (pid::denoiseOn), 0.0f,
+                              "no room noise reduction on a reverberant take");
+            }
+
             VocalSpec clip = clean; clip.clipGain = 6.0f;
             const auto pc = VocalProfiler::analyse (makeVocal (clip));
             expect (pc.clipRuns > 0 && pc.hasIssue ("clipping"), "clipping");
@@ -400,8 +429,10 @@ public:
             VocalSpec bright; bright.tiltDb = 4.0f; bright.seconds = 14.0;
             const auto pd = planFor (dark), pb = planFor (bright);
             expect (airGain (pd) > 1.0f, "dark voice gets more highs");
-            // 0.6.1: a very bright take gets a broad shelf cut (at most -4 dB), never a lift
-            expect (airGain (pb) <= 0.0f && airGain (pb) >= -4.0f, "bright voice gets no extra highs: " + juce::String (airGain (pb), 1));
+            // 0.6.1: a very bright take gets a broad shelf cut (at most -4 dB); 2026-10-29: at most a small lift of the air
+            // above 10 kHz where it lies below finished professional vocals - and always far less than the dark voice
+            expect (airGain (pb) <= 1.0f && airGain (pb) >= -4.0f && airGain (pb) < airGain (pd),
+                    "bright voice gets no real extra highs: " + juce::String (airGain (pb), 1) + " vs dark " + juce::String (airGain (pd), 1));
 
             VocalSpec sib; sib.sibilance = 1.6f; sib.seconds = 14.0;
             VocalSpec soft; soft.sibilance = 0.05f; soft.seconds = 14.0;
@@ -520,7 +551,8 @@ public:
             expect (out.lufs <= target + 1.0f, "not louder than the target (fair compare): " + juce::String (out.lufs));
             expect (out.lufs >= target - 6.0f, "close to the target: " + juce::String (out.lufs));
             expect (out.compGrMedianDb <= 7.0f, "no over-compression: " + juce::String (out.compGrMedianDb));
-            expect (out.topDb <= r.original.topDb + 6.0f, "no excessive top-end boost");
+            // 2026-10-29: a very dark take may be lifted into the professional window (-11 dB above 2 kHz), not beyond
+            expect (out.topDb <= std::max (r.original.topDb + 6.0f, -9.0f), "no excessive top-end boost: " + juce::String (out.topDb, 1));
             expect (out.bodyDb >= r.original.bodyDb - 9.0f, "no unnatural loss of body");
             // S sounds: never pushed above a natural level (about -8 dB under the vowels),
             // and never more than slightly above where they were
@@ -625,7 +657,7 @@ public:
             RenderMetrics m;
             m.valid = true;
             m.lufs = -18.0f; m.peakDb = -6.0f;
-            m.bodyDb = -4.0f; m.lowMidDb = -3.0f; m.topDb = -11.0f; m.airDb = -24.0f; m.presenceDb = -8.0f;
+            m.bodyDb = -4.0f; m.lowMidDb = -3.0f; m.topDb = -7.0f; m.airDb = -16.0f; m.presenceDb = -8.0f;   // professional vocals (2026-10-29)
             m.dynamicsDb = 6.0f; m.dynamicsValid = true; m.crestDb = 12.0f;
             m.correlation = 0.95f; m.monoLossDb = 0.0f;
             const auto original = m;

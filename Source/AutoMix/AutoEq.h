@@ -24,10 +24,14 @@ namespace velvox::automix::autoeq
     inline constexpr float minNarrowQ = 10.0f, maxNarrowQ = 16.0f;
     inline constexpr float minMoveDb = 1.0f;           // smaller new broad moves are not worth a band
 
-    // The tonal windows of the objective (AutoMixObjective.cpp evaluate) - the target curve
+    // The tonal windows of the objective (AutoMixObjective.cpp evaluate) - the target curve.
+    // 2026-10-29 (Jakob: "Profis boosten die Höhen eher"): calibrated on finished professional vocals (8 song
+    // stems, measured like the plugin: middle half presence -11.5 .. -5.2, above 2 kHz -8.7 .. -3.3, air
+    // -17.3 .. -14.6 dB against the core). The old windows (top -16 .. -7, air -32 .. -16, no floor for the
+    // presence) were about 5 dB too dark: the auto mix cut 2-5 kHz on dark voices instead of lifting it.
     struct Window { float lo, hi; };
-    inline constexpr Window bodyWindow { -9.0f, -1.0f }, lowMidWindow { -7.0f, 0.0f }, topWindow { -16.0f, -7.0f },
-                            airWindow { -32.0f, -16.0f }, presenceWindow { -100.0f, -4.0f };
+    inline constexpr Window bodyWindow { -9.0f, -1.0f }, lowMidWindow { -7.0f, 0.0f }, topWindow { -11.0f, -3.0f },
+                            airWindow { -22.0f, -13.0f }, presenceWindow { -12.0f, -5.0f };
 
     // Roles the automatic mix owns in EQ 1: it rewrites or clears them on every run. User bands
     // (none) and Vocal Check bands (presence, mud) are never written.

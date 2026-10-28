@@ -1,5 +1,6 @@
 #include "AutoMixObjective.h"
 #include "AutoMixEngine.h"
+#include "AutoEq.h"
 
 namespace velvox::automix
 {
@@ -57,10 +58,14 @@ namespace velvox::automix
         // notes above 250 Hz) has no fundamentals in the 100-300 Hz body band, so there
         // only too much body counts.
         const bool highVoice = profile.pitchValid && profile.f0LowHz > 250.0f;
-        b.tonal = 0.6f * window (m.bodyDb, highVoice ? -200.0f : -9.0f, -1.0f)
-                + 0.8f * window (m.lowMidDb, -7.0f, 0.0f)
-                + 1.0f * window (m.topDb, -16.0f, -7.0f)
-                + 0.4f * window (m.airDb, -32.0f, -16.0f, 3.0f);
+        // (2026-10-29: the windows of AutoEq.h, calibrated on finished professional vocals; a presence
+        // below the professional range now costs too - a dark voice gets lifted, not cut further)
+        using namespace autoeq;
+        b.tonal = 0.6f * window (m.bodyDb, highVoice ? -200.0f : bodyWindow.lo, bodyWindow.hi)
+                + 0.8f * window (m.lowMidDb, lowMidWindow.lo, lowMidWindow.hi)
+                + 1.0f * window (m.topDb, topWindow.lo, topWindow.hi)
+                + 0.4f * window (m.airDb, airWindow.lo, airWindow.hi, 3.0f)
+                + 0.8f * window (m.presenceDb, presenceWindow.lo, 100.0f);
 
         // ---- Dynamics: a lead vocal in an EDM mix sits steady and upfront. Calibrated on the
         // blind listening test of 2026-10-24: the denser, more compressed versions won
@@ -78,7 +83,7 @@ namespace velvox::automix
         }
 
         // ---- Harshness: presence far forward
-        b.harshness = 1.0f * window (m.presenceDb, -100.0f, -4.0f);
+        b.harshness = 1.0f * window (m.presenceDb, -100.0f, autoeq::presenceWindow.hi);
 
         // ---- Stereo / mono compatibility
         b.stereo = 2.0f * window (m.monoLossDb, -1.0f, 100.0f, 1.0f) + 1.0f * window (m.correlation, 0.5f, 1.0f, 0.25f);

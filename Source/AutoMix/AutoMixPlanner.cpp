@@ -233,9 +233,13 @@ namespace velvox::automix
         // ================= Clean-up first: room noise and breaths (0.7) =================
         plan.set (pid::denoiseOn, 0.0f);
         plan.set (pid::breathOn, 0.0f);
-        if (p.snrValid && p.snrDb < 40.0f)
+        // 2026-10-29: not on a take that already has room or reverb - between the lines lies its tail, not noise
+        // (the benchmark set it on 7 of 8 finished professional vocals)
+        // ... and gently: on sustained singing without real pauses the "floor" is often quiet singing, which a strong
+        // reduction would eat (the benchmark asked for 80 % on clean VocalSet takes) - below 35 dB, 15 .. 50 %
+        if (p.snrValid && p.snrDb < 35.0f && ! someRoom && ! compressed)   // a finished (heavily compressed) vocal: its floor is the mix
         {
-            const float amount = (float) juce::roundToInt (juce::jlimit (20.0f, 80.0f, juce::jmap (p.snrDb, 40.0f, 20.0f, 20.0f, 80.0f)));
+            const float amount = (float) juce::roundToInt (juce::jlimit (15.0f, 50.0f, juce::jmap (p.snrDb, 35.0f, 20.0f, 15.0f, 50.0f)));
             plan.set (pid::denoiseOn, 1.0f);
             plan.set (pid::denoiseAmount, amount);
             plan.routing.insertDefault (M::denoise, 0);
@@ -244,7 +248,8 @@ namespace velvox::automix
                           "Only {0} dB between voice and noise - the noise between the lines gets quieter.", { juce::String (juce::roundToInt (p.snrDb)) }),
                     true);
         }
-        if (p.breathShare > 0.02f)
+        // 2026-10-29: audible breaths are common - measured 0 .. 3.6 % of the blocks on 31 takes; from 1 % on it lowers them
+        if (p.breathShare > 0.01f)
         {
             const float amount = p.pitchedShare < 0.45f ? 40.0f : 50.0f;   // rap / speech: a little more natural breath
             plan.set (pid::breathOn, 1.0f);
@@ -348,7 +353,7 @@ namespace velvox::automix
                         setRoleBand (plan, current, 0, role, *b, false);
                     }
         }
-        if (const auto* air = moveFor (dsp::EqRole::air); (air == nullptr || air->band.gain <= 0.0f) && (harsh || p.presenceDb > -4.0f))
+        if (const auto* air = moveFor (dsp::EqRole::air); (air == nullptr || air->band.gain <= 0.0f) && (harsh || p.presenceDb > autoeq::presenceWindow.hi))
             plan.notes.push_back (both ("Keine Höhenanhebung: Die Aufnahme ist bereits hell genug.",
                                         "No high boost: the recording is already bright enough."));
         if (const auto mask = autoeq::maskingOf (p); harsh && autoeq::unmaskGainDb (mask.presenceDb, false) > 0.0f)
@@ -471,11 +476,14 @@ namespace velvox::automix
                 highRes = &r;
                 break;
             }
-        const bool smooth = p.enoughMaterial && (harsh || highRes != nullptr);
+        // 2026-10-29 (Jakob: "Smooth hilft bei jeder Vocal"): SMOOTH only takes down what sticks out, so it runs on
+        // every vocal with enough material - gently (20 %) where nothing stands out, more on harsh or resonant ones
+        const bool smooth = p.enoughMaterial;
         plan.set (pid::smoothOn, smooth ? 1.0f : 0.0f);
         if (smooth)
         {
-            const float amount = likely (p, "harsh") || (highRes != nullptr && highRes->strong) ? 45.0f : 30.0f;
+            const bool marked = harsh || highRes != nullptr;
+            const float amount = likely (p, "harsh") || (highRes != nullptr && highRes->strong) ? 45.0f : (marked ? 30.0f : 20.0f);
             plan.set (pid::smoothAmount, amount);
             plan.set (pid::smoothSensitivity, 50.0f);
             plan.set (pid::smoothLow, 1000.0f);
@@ -487,9 +495,11 @@ namespace velvox::automix
             decide (M::smooth, both ("Resonanzkontrolle {0} %", "Resonance control {0} %", { juce::String ((int) amount) }),
                     highRes != nullptr ? both ("Schmale Spitze um {0} - SMOOTH senkt sie nur, wenn sie hervorsticht.",
                                                "Narrow peak around {0} - SMOOTH lowers it only when it sticks out.", { hz (highRes->hz) })
-                                       : both ("Betonte obere Mitten ({0}) - SMOOTH glättet nur die herausstechenden Bänder.",
-                                               "Emphasized upper mids ({0}) - SMOOTH smooths only the bands that stick out.", { db (p.presenceDb) }),
-                    true);
+                                       : harsh ? both ("Betonte obere Mitten ({0}) - SMOOTH glättet nur die herausstechenden Bänder.",
+                                                       "Emphasized upper mids ({0}) - SMOOTH smooths only the bands that stick out.", { db (p.presenceDb) })
+                                               : both ("Sanft als Grundpflege: SMOOTH glättet nur Resonanzen, die beim Singen kurz hervorstechen.",
+                                                       "Gentle, as basic care: SMOOTH only smooths resonances that briefly stick out while singing."),
+                    marked);
         }
 
         // ================= Saturation: density and colour =================

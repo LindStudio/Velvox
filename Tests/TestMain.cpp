@@ -175,7 +175,7 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         << ", presence " << juce::String (p.presenceDb, 1) << ", sibilance " << juce::String (p.sibilanceBandDb, 1) << ", air " << juce::String (p.airDb, 1)
         << ", top " << juce::String (p.topDb, 1) << " dB; tilt " << juce::String (p.tiltDbPerOctave, 1) << " dB/oct\n"
         << "  S vs vowels " << (p.sibilanceValid ? juce::String (p.sibilanceVsVowelDb, 1) + " dB at " + juce::String (p.sibilanceHz, 0) + " Hz" : juce::String ("n/a"))
-        << ", tail " << juce::String (p.tailSeconds, 2) << " s (" << p.tailCount << "), stereo " << (p.stereoContent ? "yes, corr " + juce::String (p.correlation, 2) : juce::String ("no")) << "\n\n"
+        << ", tail " << juce::String (p.tailSeconds, 2) << " s (" << p.tailCount << "), breaths " << juce::String (100.0f * p.breathShare, 1) << " %, stereo " << (p.stereoContent ? "yes, corr " + juce::String (p.correlation, 2) : juce::String ("no")) << "\n\n"
         << "ISSUES\n";
     for (auto& i : p.issues)
         rep << "  [" << (i.confidence == Confidence::measured ? "measured" : i.confidence == Confidence::likely ? "likely" : "possible") << "] " << velvox::i18n::show (i.title) << " - " << velvox::i18n::show (i.detail) << "\n";

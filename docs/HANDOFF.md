@@ -1,5 +1,50 @@
 # HEADLINER – Übergabe für die nächste Session
 
+## STAND 2026-10-29 NACHT (dieser PC) – HIER WEITERMACHEN: Auto Mix „trainieren“
+Jakob 2026-10-28 abends: „Auto Mix nimmt immer Höhen raus, Profis boosten eher; nimmt nie Breath Control/Smooth;
+für jede Stimmart passen, keine dummen Entscheidungen, wir trainieren jetzt das Plugin (ohne meine Hilfe)“.
+Erledigt und committet vorher: Score-Abzeichen bei Memphy statt über dem Tab, Spektrum bleibt bei Pause stehen,
+Memphy ruhiger (Stimmung durch den Gesang höchstens alle 4 s, kleinere Pops/Hüpfer).
+
+**Letzter Commit = WIP, Tests NICHT grün** (voller Lauf: 23 Fehler, Liste unten). Bench-Daten und Werkzeuge:
+- Trainingssatz `%USERPROFILE%\dev\velvox-bench\2026-10-29\train\`: `dry\` (23 trockene Stimmen: 5 Jakob-Aufnahmen
+  aus FL „Recorded“, seine Vergleichs-Vocal, Splice MYLK dry, 16 VocalSet-Excerpts ohne Held-out f9/m10/m11), `pro\`
+  (8 fertige Profi-Vocals: Song-Stems aus FL „Rendered“ + Taylor Swift Acapella). Läufe: `base_*` (vorher), `r1_*`, `r2_*`.
+- `python tools/bench/vocal_profile.py <ordner>` (Bänder ggü. Kern), `python tools/bench/summarise_reports.py <bench-aus>`
+  (Module pro Mix, EQ-Züge, markiert „DUMB“ = breite Präsenz/Höhen-Absenkung auf dunkler Stimme).
+- Bench: `VelvoxTests --bench <dry> <aus>` (~1 min/Datei). Nie zwei VelvoxTests gleichzeitig (gemeinsame Settings-Datei).
+
+**Befund:** Die Zielfenster waren ~5 dB zu dunkel. Profi-Vocals (Plugin-Einheiten, mittlere Hälfte): Präsenz 2–5 kHz
+−11,5…−5,2, über 2 kHz −8,7…−3,3, Luft −17,3…−14,6 dB ggü. dem Kern. Alt: top −16…−7, air −32…−16, Präsenz ohne
+Untergrenze → der Auto Mix senkte 2–5 kHz bei 9/23 dunklen Stimmen um bis zu 4 dB.
+
+**Geändert (WIP-Commit):**
+- `AutoEq.h` Fenster: top −11…−3, air −22…−13, presence −12…−5 (auch im Objective `AutoMixObjective.cpp`, neu: Präsenz
+  unter −12 kostet; harshness-Grenze −5); Vocal-Check-Ziele (`CheckTargets.*`) gleich gezogen (Pop/Akustik etwas dunkler).
+- `AutoEq.cpp rangeOf`: 2–5 kHz nur absenken, wenn heller als Profi-Niveau (oder hart); Präsenz-Anhebung auch bei
+  Rauschen/S-Lauten (dann max. 2 dB).
+- Planer: Smooth immer (genug Material), 20 % als Grundpflege, 30/45 % bei Schärfe/Resonanz; Room Noise nur < 35 dB SNR,
+  15…50 %, nicht bei halligen oder stark komprimierten (fertigen) Takes; Breath Control ab 1 % Atem-Anteil (gemessen
+  0…3,6 %). Variante „Höhen sanfter“ an `topWindow.hi` gekoppelt. Bericht zeigt „breaths x %“.
+- Ergebnis Runde 2 (dry, Median nach Mix): Präsenz −12,3 → −10,4, Höhen −11,8 → −9,1 (jetzt im Profi-Bereich), keine
+  „DUMB“-Entscheidung mehr; Smooth 22/23, Breath 9/23. Luft bleibt bei −26 (Profi −17): Anhebung ist auf 4 dB
+  (2 dB bei Rauschen) begrenzt – bewusst, sonst wird Rauschen/Zischeln lauter.
+
+**Offen (in dieser Reihenfolge):**
+1. Die 23 Testfehler: fast alles Goldens des alten Auto Mix bzw. der alten Fenster → bewusst neu setzen, nicht wegdrücken
+   (`.superpowers/sdd/open-failures.txt`): Vocal Check 0.6 „Targets: party = the auto-mix objective windows“ (5),
+   Velvox EQ auto-mix „result unchanged … dark low / dark 44.1 / bright sibilant / clean dry / stereo with rumble“ (14),
+   Velvox auto EQ „broad moves follow the target curve“ (3) und „a resonance gets a notch … without SMOOTH“ (1 – Smooth
+   läuft jetzt immer; Test anpassen: Notch ja, SMOOTH nur sanft 20 %).
+2. Voller Lauf grün, pluginval 10, installieren (FL schließen), Jakob die Vorher/Nachher-Renders seiner Vocal geben
+   (`VelvoxTests --automix` auf `train\dry\jakob_vergleich.wav`).
+3. Jakobs Fragen beantworten (noch nicht geschehen): Reihenfolge – Level Ride VOR dem Kompressor ist Profi-Praxis (Rider
+   gleicht Phrasen aus, der Kompressor arbeitet dann gleichmäßig); De-Esser nach Kompressor, Höhen-Anhebung idealerweise
+   nach der Dynamik (Variante EQ 2 existiert). Smooth/Breath kamen selten, weil die Schwellen zu streng waren (s. o.).
+4. Bekannte Grenze: Auf fertigen Profi-Vocals setzt der Auto Mix trotzdem Hall/Doubler/Delay (er erkennt „schon nass“
+   nicht sicher) – Eingabe sollte die trockene Vocal sein.
+- Alles NICHT gepusht. Installiert ist der Stand 963cde1 (vor Badge/Spektrum/Memphy/Auto-Mix).
+
 ## STAND 2026-10-28 ABEND (dieser PC) – HIER WEITERMACHEN
 Branch **`feature/modules-0.7`**, Version **0.7.0**. Die Review-Punkte aus
 `docs/superpowers/plans/2026-10-28-review-umsetzung.md` sind **alle umgesetzt** (Punkt 10 hatte Jakob abgelehnt).

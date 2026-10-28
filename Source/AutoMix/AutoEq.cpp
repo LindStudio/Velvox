@@ -186,7 +186,10 @@ namespace velvox::automix::autoeq
             {
                 case EqRole::autoMix:  return { cut, highVoice || ctx.noisy ? 0.0f : 3.0f * scale };
                 case EqRole::warmth:   return { cut, highVoice || ctx.noisy || ! p.pitchValid ? 0.0f : maxBroadBoostDb * scale };
-                case EqRole::autoTone: return { cut, ctx.harsh || ctx.noisy || ctx.sibilant ? 0.0f : 3.0f * scale };
+                // 2026-10-29: 2-5 kHz is only cut on a take that is brighter there than finished professional vocals
+                // (or harsh); a dark voice gets a lift instead - also when it is noisy or sibilant, just a smaller one
+                case EqRole::autoTone: return { ctx.harsh || p.presenceDb > presenceWindow.hi ? cut : 0.0f,
+                                                ctx.harsh ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : 3.0f) * scale };
                 default:               return { cut, ctx.harsh ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : maxBroadBoostDb) * scale };
             }
         }
@@ -204,7 +207,7 @@ namespace velvox::automix::autoeq
              + 0.8f * w (l.lowMid, lowMidWindow.lo + m, lowMidWindow.hi - m, 2.0f)
              + 1.0f * w (l.top, topWindow.lo + m, topWindow.hi - m, 2.0f)
              + 0.4f * w (l.air, airWindow.lo + m, airWindow.hi - m, 3.0f)
-             + 1.0f * w (l.presence, presenceWindow.lo, presenceWindow.hi - m, 2.0f);
+             + 1.0f * w (l.presence, presenceWindow.lo + m, presenceWindow.hi - m, 2.0f);
     }
 
     namespace

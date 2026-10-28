@@ -326,17 +326,17 @@ namespace velvox::automix
         });
 
         // Softer highs: the planner only ever lifts the top end. On a take that is already
-        // brighter than the window (> -7 dB above 2 kHz against the core) a broad shelf from
+        // brighter than the window (above its top, 2026-10-29: -3 dB above 2 kHz against the core) a broad shelf from
         // 5 kHz takes the edge off; the render decides whether that is worth it.
         add (both ("Höhen sanfter", "Softer highs"), [&] (MixPlan& c)
         {
             // 0.6.1: not when the base plan already cuts the highs (AutoEq)
             const float air = roleGain (c, current, EqRole::air);
-            if (profile.topDb <= -7.0f || air > 0.2f || air < -0.9f || ! c.routing.contains (M::eq))
+            if (profile.topDb <= autoeq::topWindow.hi || air > 0.2f || air < -0.9f || ! c.routing.contains (M::eq))
                 return false;
             c.set (pid::eqOn, 1.0f);
             return setRoleBand (c, current, 0, EqRole::air,
-                                eqBand (EqBandType::highShelf, 5000.0f, -juce::jlimit (1.5f, 4.0f, 1.0f + 0.4f * (profile.topDb + 7.0f)), 0.7071f), true) >= 0;
+                                eqBand (EqBandType::highShelf, 5000.0f, -juce::jlimit (1.5f, 4.0f, 1.0f + 0.4f * (profile.topDb - autoeq::topWindow.hi)), 0.7071f), true) >= 0;
         });
 
         // Tone after the dynamics: the high shelf (and a presence boost) moves into a second

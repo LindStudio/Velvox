@@ -11,15 +11,15 @@ namespace velvox::check
             case Genre::party:
                 break;
             case Genre::pop:
-                t.top = { -17.0f, -7.0f };
+                t.top = { -12.0f, -4.0f };
                 t.phrase = { 3.0f, 8.0f };
                 t.crestMin = 6.0f;
                 t.lraMax = 12.0f;
                 t.tailMax = 1.2f;
                 break;
             case Genre::acoustic:
-                t.top = { -19.0f, -8.0f };
-                t.air = { -34.0f, -16.0f };
+                t.top = { -14.0f, -5.0f };   // acoustic: a little darker than pop (2026-10-29 targets)
+                t.air = { -26.0f, -14.0f };
                 t.phrase = { 4.0f, 10.0f };
                 t.crestMin = 7.0f;
                 t.crestMax = 22.0f;
