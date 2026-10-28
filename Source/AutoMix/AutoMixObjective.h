@@ -35,6 +35,11 @@ namespace velvox::automix
     enum class VocalStyle { spoken, sung, sustained };
     VocalStyle styleOf (const VocalProfile& p) noexcept;
 
+    // The beat on the sidechain (plan 2026-10-28): dense = hardly any gaps for an effect tail
+    // (gap share < 0.15), sparse = clear gaps (> 0.3). The space window moves with it.
+    enum class BeatDensity { none, dense, medium, sparse };
+    BeatDensity beatDensityOf (const VocalProfile& p) noexcept;
+
     // `effectsPlanned`: the plan adds reverb or delay (then a too dry result also costs)
     ObjectiveBreakdown evaluate (const RenderMetrics& m, const RenderMetrics& original, const VocalProfile& profile,
                                  float targetLufs, bool isBasePlan, bool effectsPlanned);

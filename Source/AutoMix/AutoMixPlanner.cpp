@@ -4,6 +4,7 @@
 #include "../Parameters/RoutingMigration.h"
 #include "../Parameters/EqBands.h"
 #include "AutoEq.h"
+#include "AutoMixObjective.h"
 #include "ReportText.h"
 
 namespace velvox::automix
@@ -564,6 +565,18 @@ namespace velvox::automix
             if (spoken)         { revMix = std::min (revMix, 8.0f); decay = 1.0f; type = 0; }
             else if (largeHall) { decay = 2.3f; preDelay = 40.0f; type = 3; }   // the long tail already reads wetter
             else if (sustained) { revMix = std::min (revMix + 2.0f, 16.0f); decay = 1.9f; }
+            // The beat on the sidechain: a dense one leaves no gaps for the tail, one with gaps leaves room
+            // (not for a take with a room of its own)
+            const auto density = someRoom && beatDensityOf (p) == BeatDensity::sparse ? BeatDensity::medium : beatDensityOf (p);
+            if (density == BeatDensity::dense)
+                revMix = std::round (revMix * 0.7f);
+            else if (density == BeatDensity::sparse)
+                revMix = std::min (revMix + 2.0f, 16.0f);
+            const juce::String beatReason = density == BeatDensity::dense
+                ? both (" Dichter Beat (kaum Lücken gemessen): weniger Hall, damit die Stimme vorne bleibt.",
+                        " Dense beat (hardly any gaps measured): less reverb so the voice stays in front.")
+                : density == BeatDensity::sparse ? both (" Beat mit Lücken: etwas mehr Raum.", " Beat with gaps: a little more room.")
+                                                 : juce::String();
             plan.set (pid::reverbOn, 1.0f);
             plan.set (pid::reverbType, (float) type);
             plan.set (pid::reverbMix, revMix);
@@ -587,7 +600,8 @@ namespace velvox::automix
                                       : sustained ? both ("Viele gehaltene Töne: etwas längere Plate für Tiefe; Ducking hält die Wörter vorne.",
                                                           "Many held notes: a slightly longer plate for depth; ducking keeps the words up front.")
                                                   : both ("Räumliche Tiefe; 30 ms Pre-Delay und Ducking halten die Wörter vorne.",
-                                                          "Spatial depth; 30 ms pre-delay and ducking keep the words up front."), true);
+                                                          "Spatial depth; 30 ms pre-delay and ducking keep the words up front.")
+                        + beatReason, true);
 
             const bool delay = ! someRoom && ! plan.conservative;   // echoes on a roomy take only add wash
             plan.set (pid::delayOn, delay ? 1.0f : 0.0f);
@@ -597,7 +611,8 @@ namespace velvox::automix
                 plan.set (pid::delayDivision, spoken ? 9.0f : 7.0f);   // 1/4 for spoken, 1/8 dotted for sung
                 plan.set (pid::delayTime, spoken ? 400.0f : 300.0f);  // used only without host tempo
                 plan.set (pid::delayFeedback, spoken ? 12.0f : 22.0f);
-                plan.set (pid::delayMix, spoken ? 6.0f : 9.0f);
+                const float delayMix = (spoken ? 6.0f : 9.0f) - (density == BeatDensity::dense ? 2.0f : 0.0f);
+                plan.set (pid::delayMix, delayMix);
                 plan.set (pid::delayLowCut, 350.0f);
                 plan.set (pid::delayHighCut, 5000.0f);
                 plan.set (pid::delayPingPong, 1.0f);
@@ -606,11 +621,12 @@ namespace velvox::automix
                 plan.set (pid::delayDuckAttack, 10.0f);
                 plan.set (pid::delayDuckRelease, 300.0f);
                 plan.set (pid::delayToReverb, 15.0f);
-                decide (M::delay, spoken ? both ("Delay 1/4, 6 %, geduckt", "Delay 1/4, 6 %, ducked")
-                                         : both ("Delay 1/8 punktiert, 9 %, geduckt", "Delay 1/8 dotted, 9 %, ducked"),
+                decide (M::delay, spoken ? both ("Delay 1/4, {0} %, geduckt", "Delay 1/4, {0} %, ducked", { juce::String ((int) delayMix) })
+                                         : both ("Delay 1/8 punktiert, {0} %, geduckt", "Delay 1/8 dotted, {0} %, ducked", { juce::String ((int) delayMix) }),
                         both ("Tempo-synchrones Echo (folgt dem Songtempo, ohne Tempo-Info {0} ms). Es kommt erst in den Pausen hervor.",
                               "Tempo-synced echo (follows the song tempo, {0} ms without tempo info). It comes out only in the gaps.",
-                              { spoken ? "400" : "300" }), false);
+                              { spoken ? "400" : "300" })
+                            + (density == BeatDensity::dense ? both (" Dichter Beat: leiser.", " Dense beat: quieter.") : juce::String()), false);
             }
         }
 

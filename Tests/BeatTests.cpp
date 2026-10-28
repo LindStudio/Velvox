@@ -147,6 +147,90 @@ public:
 
         levelTests();
         eqTests();
+        spaceTests();
+    }
+
+    void spaceTests()
+    {
+        const auto vocal = makeVocal (vocalSpec());
+        const float vocalLufs = lufsOf (vocal);
+        const auto profileWith = [&] (const CapturedAudio& v, BeatKind kind)
+        {
+            return VocalProfiler::analyse (withBeat (v, makeBeat (kind, 48000.0, 12.0, vocalLufs + 3.0f)));
+        };
+
+        beginTest ("Beat space: a dense beat gets less reverb and delay, one with gaps a little more");
+        {
+            const auto none = AutoMixPlanner::plan (VocalProfiler::analyse (vocal), defaults());
+            const auto dense = AutoMixPlanner::plan (profileWith (vocal, BeatKind::dense), defaults());
+            const auto sparse = AutoMixPlanner::plan (profileWith (vocal, BeatKind::sparse), defaults());
+            expect (none.on (pid::reverbOn) && dense.on (pid::reverbOn) && sparse.on (pid::reverbOn));
+            logMessage ("reverb mix: no beat " + juce::String (none.get (pid::reverbMix)) + ", dense " + juce::String (dense.get (pid::reverbMix))
+                        + ", sparse " + juce::String (sparse.get (pid::reverbMix)));
+            expectLessThan (dense.get (pid::reverbMix), none.get (pid::reverbMix));
+            expectGreaterThan (sparse.get (pid::reverbMix), none.get (pid::reverbMix));
+            if (none.on (pid::delayOn))
+            {
+                expectEquals (dense.get (pid::delayMix), none.get (pid::delayMix) - 2.0f);
+                expectEquals (sparse.get (pid::delayMix), none.get (pid::delayMix));
+            }
+            bool reported = false;
+            for (auto& d : dense.decisions)
+                reported = reported || i18n::show (d.reason, i18n::Language::english).contains ("Dense beat");
+            expect (reported, "the reverb decision names the dense beat");
+        }
+
+        beginTest ("Beat space: the objective wants it drier over a dense beat");
+        {
+            const auto plain = VocalProfiler::analyse (vocal);
+            const auto dense = profileWith (vocal, BeatKind::dense);
+            RenderMetrics m;
+            m.valid = m.gapValid = true;
+            m.lufs = -18.0f;
+            m.peakDb = -6.0f;
+            RenderMetrics original;
+            const auto space = [&] (const VocalProfile& p, float gap)
+            {
+                m.gapDb = gap;
+                return evaluate (m, original, p, -18.0f, true, true).space;
+            };
+            float gap = -60.0f;   // the wettest gap level that costs nothing without a beat
+            while (gap < 0.0f && space (plain, gap) > 0.0f)
+                gap += 0.5f;
+            while (gap < 0.0f && space (plain, gap + 0.5f) == 0.0f)
+                gap += 0.5f;
+            logMessage ("wettest free gap level without a beat: " + juce::String (gap, 1) + " dB");
+            expectEquals (space (plain, gap), 0.0f);
+            expectGreaterThan (space (dense, gap), 0.0f);
+        }
+
+        beginTest ("Beat space: a roomy take stays without reverb whatever the beat");
+        {
+            auto s = vocalSpec();
+            s.roomSeconds = 2.0f;
+            s.roomMix = 0.6f;
+            const auto roomy = makeVocal (s);
+            // Some room of its own: a little reverb, a beat with gaps adds none
+            const float base = AutoMixPlanner::plan (VocalProfiler::analyse (roomy), defaults()).get (pid::reverbMix);
+            const float sparse = AutoMixPlanner::plan (profileWith (roomy, BeatKind::sparse), defaults()).get (pid::reverbMix);
+            expect (profileWith (roomy, BeatKind::sparse).reverberant);
+            expectEquals (sparse, base, "a take with its own room gets no extra reverb from a sparse beat");
+            // Clearly roomy (the issue is likely): no reverb at all, whatever the beat
+            for (auto kind : { BeatKind::dense, BeatKind::sparse })
+            {
+                auto p = profileWith (roomy, kind);
+                bool found = false;
+                for (auto& i : p.issues)
+                    if (i.key == "reverberant")
+                    {
+                        i.confidence = Confidence::likely;
+                        found = true;
+                    }
+                if (! found)
+                    p.issues.push_back ({ "reverberant", "Raum", "", Confidence::likely, 10.0f });
+                expect (! AutoMixPlanner::plan (p, defaults()).on (pid::reverbOn));
+            }
+        }
     }
 
     void eqTests()

@@ -34,6 +34,13 @@ namespace velvox::automix
         return VocalStyle::sung;
     }
 
+    BeatDensity beatDensityOf (const VocalProfile& p) noexcept
+    {
+        if (! p.beatPresent)
+            return BeatDensity::none;
+        return p.beatGapShare < 0.15f ? BeatDensity::dense : (p.beatGapShare > 0.3f ? BeatDensity::sparse : BeatDensity::medium);
+    }
+
     ObjectiveBreakdown evaluate (const RenderMetrics& m, const RenderMetrics& original, const VocalProfile& profile,
                                  float targetLufs, bool isBasePlan, bool effectsPlanned)
     {
@@ -80,9 +87,12 @@ namespace velvox::automix
         // take has nearly nothing there; the window depends on the style.
         if (m.gapValid)
         {
+            // Over a dense beat a tail has nowhere to go: 3 dB drier; a beat with gaps leaves 2 dB more room
+            const auto density = beatDensityOf (profile);
+            const float beatShift = density == BeatDensity::dense ? -3.0f : (density == BeatDensity::sparse ? 2.0f : 0.0f);
             const auto style = styleOf (profile);
-            const float lo = style == VocalStyle::spoken ? -40.0f : (style == VocalStyle::sustained ? -30.0f : -34.0f);
-            const float hi = style == VocalStyle::spoken ? -24.0f : (style == VocalStyle::sustained ? -13.0f : -17.0f);
+            const float lo = (style == VocalStyle::spoken ? -40.0f : (style == VocalStyle::sustained ? -30.0f : -34.0f)) + beatShift;
+            const float hi = (style == VocalStyle::spoken ? -24.0f : (style == VocalStyle::sustained ? -13.0f : -17.0f)) + beatShift;
             // Too wet blurs the words (a take that already has room keeps it); too dry only
             // costs when the plan adds space at all (a roomy take stays dry on purpose)
             const float origGap = original.gapValid ? original.gapDb : -120.0f;

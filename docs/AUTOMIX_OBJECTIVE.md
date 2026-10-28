@@ -44,7 +44,7 @@ Standard s = 2 dB, d. h. 2 dB außerhalb kosten 1.
 | sibilance | S/Vokal-Verhältnis | ≤ −6 dB (1,2); nicht mehr als 10 dB unter dem Original (0,8, Lispeln) |
 | harshness | 2–5 kHz relativ zum Kern | ≤ −4 dB (1,0) |
 | stereo | Mono-Verlust, Korrelation | Verlust ≤ 1 dB (2,0, s = 1); Korrelation ≥ 0,5 (1,0, s = 0,25) |
-| space | Effektpegel in den Lücken nach Wörtern | Stil-abhängig: Sprache −40…−24, Gesang −34…−17, getragen −30…−13 dB; zu trocken kostet nur, wenn der Plan Effekte vorsieht; ein schon halliger Take behält seinen Raum |
+| space | Effektpegel in den Lücken nach Wörtern | Stil-abhängig: Sprache −40…−24, Gesang −34…−17, getragen −30…−13 dB; zu trocken kostet nur, wenn der Plan Effekte vorsieht; ein schon halliger Take behält seinen Raum; mit Beat am Sidechain: dichter Beat (Lückenanteil < 0,15) −3 dB, Beat mit Lücken (> 0,3) +2 dB |
 | artifacts | Zuwachs Spitze−Lautheit gegenüber dem Original, Peak bei Ziel-Lautheit | Zuwachs ≤ 3 dB (0,3, s = 2); Peak ≤ −1 dBFS (0,25, s = 2). Beides kostet nur Lautheit (die Ausgangsstufe regelt immer auf −1 dBFS), bei gleicher Lautheit im Hörtest nicht hörbar – deshalb mild. Clipping-Runs im Float-Render werden berichtet, nicht bewertet (im Ergebnis clippt nichts). De-Essing gilt nicht als Artefakt. Fehlgeschlagener Render = 10⁶ |
 | change | Abweichung vom Basisplan | fest 0,25 – eine Variante muss sich lohnen |
 

@@ -78,10 +78,10 @@ Rule: in 1.5–6 kHz find the band region (3 adjacent bands, smoothed) where `be
 
 **Files:** Modify `Source/AutoMix/AutoMixPlanner.cpp` (space section, line ~540), `Source/AutoMix/AutoMixObjective.cpp` (dynamics window), `docs/AUTOMIX_OBJECTIVE.md`. Test: `Tests/AutoMixTests.cpp`.
 
-Rules (only with `beatPresent`): dense beat (`beatGapShare < 0.15`) → reverb mix × 0.7 (rounded), delay mix − 2 %, decision reason adds „dichter Beat: weniger Hall, damit die Stimme vorne bleibt“ / "dense beat: less reverb so the voice stays in front"; sparse beat (`> 0.3`) → reverb mix + 2 % (max 16), reason „Beat mit Lücken: etwas mehr Raum“ / "beat with gaps: a little more room". Objective: over a dense beat the dynamics window is 3–6 dB instead of 4–8 dB (steadier voice against a wall of sound); otherwise unchanged.
+Rules (only with `beatPresent`): dense beat (`beatGapShare < 0.15`) → reverb mix × 0.7 (rounded), delay mix − 2 %, decision reason adds „dichter Beat: weniger Hall, damit die Stimme vorne bleibt“ / "dense beat: less reverb so the voice stays in front"; sparse beat (`> 0.3`) → reverb mix + 2 % (max 16), reason „Beat mit Lücken: etwas mehr Raum“ / "beat with gaps: a little more room". Objective: the space window (gap level after words) moves −3 dB over a dense beat, +2 dB over a sparse one, so the candidate search does not undo the planner. **Changed while implementing:** the dynamics window is already 3–6 dB since the listening test of 2026-10-24 (the header comment was out of date), so it stays as it is. A take with some room of its own gets no extra reverb from a sparse beat.
 
-- [ ] Failing tests: (a) same sung vocal: dense beat → reverb mix lower than without beat, sparse → higher, no beat → unchanged; (b) objective: dynamicsDb 7 is penalised with dense beat, not without; (c) roomy take stays without reverb whatever the beat.
-- [ ] Implement, run – PASS. Commit `Auto mix: reverb, delay and dynamics follow how dense the beat is`.
+- [x] Failing tests (`Tests/BeatTests.cpp`): (a) same sung vocal: dense beat → reverb mix lower than without beat, sparse → higher; delay −2 % over a dense beat; (b) objective: the wettest gap level that is free without a beat costs over a dense beat; (c) a take with some room: no extra reverb from a sparse beat; clearly roomy: no reverb whatever the beat.
+- [x] Implement, run – PASS. Commit `Auto mix: reverb and delay follow how dense the beat is`.
 
 ### Task 6: Assistant, Vocal Check, docs, changelog
 
