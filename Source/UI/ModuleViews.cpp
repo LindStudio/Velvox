@@ -100,6 +100,22 @@ namespace velvox::ui
         class OutputView final : public ModuleView
         {
         public:
+            OutputView()
+            {
+                legend.setItems ({ { i18n::tr ("Eingang", "Input"), colours::accent.withAlpha (0.5f), LegendItem::Style::line },
+                                   { i18n::tr ("Ausgang", "Output"), colours::teal, LegendItem::Style::fill } });
+                addAndMakeVisible (legend);
+            }
+
+            void resized() override
+            {
+                // As paint lays it out: top right of the loudness history, beside its title
+                auto r = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
+                r.removeFromLeft (std::max (80.0f, std::min (r.getHeight(), r.getWidth() - 24.0f - 120.0f)) + 24.0f);
+                legend.setBounds (r.toNearestInt().removeFromTop (Legend::height).removeFromRight (legend.getIdealWidth()).translated (0, -3));
+                legend.setVisible (r.getWidth() >= 90.0f + (float) legend.getIdealWidth());
+            }
+
             void update (const LiveData& d) override
             {
                 live = &d;
@@ -155,12 +171,7 @@ namespace velvox::ui
                 }
 
                 // Loudness history
-                label (g, i18n::tr ("Lautheit", "Loudness"), r.withHeight (12.0f));
-                if (r.getWidth() >= 260.0f)   // the legend only where it fits beside the title (Mehr open: narrow)
-                {
-                    label (g, i18n::tr ("Eingang", "Input"), r.withHeight (12.0f).withTrimmedRight (90.0f), juce::Justification::topRight, colours::textFaint);
-                    label (g, i18n::tr ("Ausgang", "Output"), r.withHeight (12.0f), juce::Justification::topRight, colours::teal);
-                }
+                label (g, i18n::tr ("Lautheit", "Loudness"), r.withHeight (12.0f));   // the legend (a child) sits right of it
                 auto plot = r.withTrimmedTop (18.0f);
                 hGrid (g, plot, { -12.0f, -18.0f, -24.0f, -30.0f, -36.0f }, -42.0f, -6.0f, " LUFS");
                 const auto in = historyPath (live->inputLufs, plot, -42.0f, -6.0f);
@@ -174,6 +185,7 @@ namespace velvox::ui
 
         private:
             const LiveData* live = nullptr;
+            Legend legend;
         };
 
         //======================================================================

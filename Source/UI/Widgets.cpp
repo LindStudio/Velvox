@@ -962,4 +962,70 @@ namespace velvox::ui
         const float exponent = juce::jlimit (-2.0f, 2.0f, wheelDeltaY) * (fine ? 0.58f : 2.9f);
         return juce::jlimit (minQ, maxQ, currentQ * std::pow (2.0f, exponent));
     }
+
+    //==========================================================================
+    namespace
+    {
+        constexpr float legendSwatch = 14.0f, legendGap = 6.0f, legendSpacing = 14.0f, legendPad = 6.0f;
+        juce::Font legendFont() { return font (11.0f); }
+    }
+
+    void Legend::setItems (std::vector<LegendItem> newItems)
+    {
+        items = std::move (newItems);
+        repaint();
+    }
+
+    int Legend::getIdealWidth() const
+    {
+        float w = legendPad * 2.0f;
+        for (size_t i = 0; i < items.size(); ++i)
+            w += legendSwatch + legendGap + (float) juce::GlyphArrangement::getStringWidthInt (legendFont(), items[i].text)
+                 + (i + 1 < items.size() ? legendSpacing : 0.0f);
+        return (int) std::ceil (w);
+    }
+
+    void Legend::draw (juce::Graphics& g, juce::Rectangle<float> box, const std::vector<LegendItem>& items)
+    {
+        if (items.empty())
+            return;
+        // A dark backing so it reads over curves and fills
+        g.setColour (colours::panelInset.withAlpha (0.72f));
+        g.fillRoundedRectangle (box, 5.0f);
+
+        float x = box.getX() + legendPad;
+        const float cy = box.getCentreY();
+        g.setFont (legendFont());
+        for (const auto& item : items)
+        {
+            const auto sw = juce::Rectangle<float> (x, cy - 4.0f, legendSwatch, 8.0f);
+            g.setColour (item.colour);
+            switch (item.style)
+            {
+                case LegendItem::Style::line:
+                    g.drawLine (sw.getX(), cy, sw.getRight(), cy, 2.0f);
+                    break;
+                case LegendItem::Style::dashed:
+                {
+                    const float dashes[] { 3.0f, 2.5f };
+                    g.drawDashedLine ({ sw.getX(), cy, sw.getRight(), cy }, dashes, 2, 1.4f);
+                    break;
+                }
+                case LegendItem::Style::fill:
+                    g.setColour (item.colour.withMultipliedAlpha (0.55f));
+                    g.fillRoundedRectangle (sw, 2.0f);
+                    g.setColour (item.colour);
+                    g.drawLine (sw.getX(), sw.getY(), sw.getRight(), sw.getY(), 1.4f);
+                    break;
+                case LegendItem::Style::dot:
+                    g.fillEllipse (juce::Rectangle<float> (8.0f, 8.0f).withCentre (sw.getCentre()));
+                    break;
+            }
+            x += legendSwatch + legendGap;
+            const float tw = (float) juce::GlyphArrangement::getStringWidthInt (legendFont(), item.text);
+            g.setColour (colours::textSoft);
+            g.drawText (item.text, juce::Rectangle<float> (x, box.getY(), tw + 2.0f, box.getHeight()), juce::Justification::centredLeft, false);
+            x += tw + legendSpacing;
+        }
+    }
 }

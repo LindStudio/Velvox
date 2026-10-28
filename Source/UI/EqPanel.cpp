@@ -225,6 +225,11 @@ namespace velvox::ui
         spectrumView.setIntensity (0.42f);
         spectrumView.setShowLabels (false);   // the graph draws its own frequency labels below the plot
         addAndMakeVisible (spectrumView);
+        legend.setItems ({ { i18n::tr ("Gesamtkurve", "Total curve"), eqColour, LegendItem::Style::line },
+                           { i18n::tr ("Bänder", "Bands"), eqedit::bandColour (2), LegendItem::Style::dot },
+                           { i18n::tr ("unbearbeitet", "unprocessed"), colours::accent.withAlpha (0.45f), LegendItem::Style::line },
+                           { i18n::tr ("bearbeitet", "processed"), colours::violet, LegendItem::Style::fill } });
+        addAndMakeVisible (legend);
         setWantsKeyboardFocus (true);
         for (int i = 0; i < numPoints; ++i)
             freqs[(size_t) i] = SpectrumSource::minHz * std::pow (SpectrumSource::maxHz / SpectrumSource::minHz, (float) i / (float) (numPoints - 1));
@@ -389,6 +394,7 @@ namespace velvox::ui
         const auto r = plotArea();
         // The spectrum shares the frequency axis; its labels sit in the strip below the plot
         spectrumView.setBounds (juce::Rectangle<float> (r.getX(), r.getY(), r.getWidth(), (float) getHeight() - r.getY() - 4.0f).toNearestInt());
+        legend.setBounds (r.toNearestInt().reduced (8, 6).removeFromTop (Legend::height).removeFromLeft (legend.getIdealWidth()));
         haveCurves = false;
         refreshCurves();
     }
@@ -634,6 +640,10 @@ namespace velvox::ui
             g.drawEllipse (area.reduced (0.5f), 1.0f);
             drawHeadphones (g, area.reduced (4.5f), on ? c.interpolatedWith (juce::Colours::white, 0.4f) : colours::textSoft, on, 1.2f);
         }
+
+        // The legend over the curves (the child itself is painted below them); the card stays on top
+        if (legend.isVisible())
+            Legend::draw (g, legend.getBounds().toFloat(), legend.getItems());
 
         // Hover / drag card with the band's values
         if (cardBand >= 0 && shown[(size_t) cardBand].used)

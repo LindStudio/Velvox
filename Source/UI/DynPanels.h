@@ -223,6 +223,7 @@ namespace velvox::ui
         void parametersEdited() override;
 
     private:
+        Legend legend;   // input, output, S band (review 2026-10-28)
         float shelfShare (float hz) const noexcept;   // share of the reduction at hz (split band: a 2nd-order shelf)
         void rebuildPaths();
 

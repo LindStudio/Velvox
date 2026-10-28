@@ -297,6 +297,33 @@ namespace velvox::ui
 
     // Frequency response, computed with the same filter design as the DSP.
     // Transparent: drawn over a SpectrumView with the same frequency axis.
+    // Small legend that always stays (review 2026-10-28, item 12): a swatch per item - a line, a dashed
+    // line, a filled block or a dot in the item's colour - and its name, in one row. Views place it in a
+    // corner of their picture; it never takes clicks.
+    struct LegendItem
+    {
+        enum class Style { line, dashed, fill, dot };
+        juce::String text;
+        juce::Colour colour;
+        Style style = Style::line;
+    };
+
+    class Legend final : public juce::Component
+    {
+    public:
+        Legend() { setInterceptsMouseClicks (false, false); }
+        void setItems (std::vector<LegendItem> newItems);
+        const std::vector<LegendItem>& getItems() const noexcept { return items; }
+        int getIdealWidth() const;
+        static constexpr int height = 18;
+        void paint (juce::Graphics& g) override { draw (g, getLocalBounds().toFloat(), items); }
+        // For views that draw everything in paintOverChildren (the EQ graph): draw it again on top there
+        static void draw (juce::Graphics&, juce::Rectangle<float> box, const std::vector<LegendItem>&);
+
+    private:
+        std::vector<LegendItem> items;
+    };
+
     class EqCurve final : public juce::Component
     {
     public:

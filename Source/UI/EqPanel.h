@@ -123,6 +123,7 @@ namespace velvox::ui
 
         VelvoxAudioProcessor& proc;
         const int instance;
+        Legend legend;   // sum curve, bands, spectrum (review 2026-10-28); drawn again over the curves
         SpectrumView spectrumView;
 
         eqedit::ShownBands shown {};

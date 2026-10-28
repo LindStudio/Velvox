@@ -67,6 +67,7 @@ namespace velvox::ui
 
         VelvoxAudioProcessor& proc;
         SpectrumView spectrumView;
+        Legend legend;   // unbearbeitet (dashed) / bearbeitet (filled), always visible (review 2026-10-28)
         juce::TextButton analyse, before, after, details { "Details" };   // texts set in the constructor (language)
         std::vector<std::unique_ptr<HSlider>> macros;
         CompactMeters meters;

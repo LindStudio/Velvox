@@ -143,6 +143,9 @@ namespace velvox::ui
         spectrumView.setInputDashed (true);
         spectrumView.setRange (-84.0f, -6.0f);
         addAndMakeVisible (spectrumView);
+        legend.setItems ({ { tr ("unbearbeitet", "unprocessed"), colours::textSoft.withAlpha (0.8f), LegendItem::Style::dashed },
+                           { tr ("bearbeitet", "processed"), colours::blue.interpolatedWith (colours::teal, 0.4f), LegendItem::Style::fill } });
+        addAndMakeVisible (legend);
 
         analyse.getProperties().set ("primary", true);
         analyse.setTooltip (tr ("Headliner hört einen Abschnitt deiner Vocal während der Wiedergabe und stellt die Module ein. "
@@ -355,6 +358,7 @@ namespace velvox::ui
         auto row = inner.removeFromBottom (104);
         inner.removeFromBottom (12);
         spectrumView.setBounds (inner.reduced (1));
+        legend.setBounds (spectrumView.getBounds().reduced (8).removeFromTop (Legend::height).removeFromRight (legend.getIdealWidth()));
 
         auto seg = top.removeFromRight (164).reduced (3, 2);
         before.setBounds (seg.removeFromLeft (seg.getWidth() / 2));

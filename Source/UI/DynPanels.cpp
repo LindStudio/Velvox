@@ -758,6 +758,11 @@ namespace velvox::ui
         spectrum = std::make_unique<SpectrumSource> (proc.getChain().getDeEsser (instance).spectrumTap, unusedTap);
         settingsKey.fill (-1.0e9f);
         parametersEdited();
+        const auto hue = moduleColour (ModuleId::deess);
+        legend.setItems ({ { i18n::tr ("Eingang", "Input"), colours::textMuted, LegendItem::Style::line },
+                           { i18n::tr ("Ausgang", "Output"), hue, LegendItem::Style::fill },
+                           { i18n::tr ("S-Bereich", "S range"), hue.withAlpha (0.45f), LegendItem::Style::fill } });
+        addAndMakeVisible (legend);
     }
 
     juce::Rectangle<float> DeEssGraph::plotArea() const noexcept
@@ -884,7 +889,11 @@ namespace velvox::ui
         repaint();
     }
 
-    void DeEssGraph::resized() { rebuildPaths(); }
+    void DeEssGraph::resized()
+    {
+        rebuildPaths();
+        legend.setBounds (plotArea().toNearestInt().reduced (8, 6).removeFromTop (Legend::height).removeFromLeft (legend.getIdealWidth()));
+    }
 
     void DeEssGraph::rebuildPaths()
     {

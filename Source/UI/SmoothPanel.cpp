@@ -323,6 +323,12 @@ namespace velvox::ui
             colHz[(size_t) i] = SpectrumSource::minHz * std::pow (ratio, ((float) i + 0.5f) / (float) numColumns);
         inputDb.fill (spectrumBottomDb - 30.0f);
         removedDb.fill (0.0f);
+        const auto hue = moduleColour (ModuleId::smooth);
+        legend.setItems ({ { i18n::tr ("Gewichtung", "Weighting"), hue.interpolatedWith (juce::Colours::white, 0.35f), LegendItem::Style::line },
+                           { i18n::tr ("Ausgang", "Output"), hue, LegendItem::Style::fill },
+                           { i18n::tr ("Eingang", "Input"), colours::textFaint, LegendItem::Style::line },
+                           { i18n::tr ("Absenkung", "Reduction"), juce::Colour (0xfff472b6), LegendItem::Style::fill } });
+        addAndMakeVisible (legend);
         paramKey.fill (-1.0e9f);
         readParameters();
         rebuildCurve();
@@ -541,6 +547,8 @@ namespace velvox::ui
 
     void SmoothGraph::resized()
     {
+        // In the strip above the plot, right (the MAX read-out sits left)
+        legend.setBounds (getLocalBounds().reduced (10, 0).removeFromTop (Legend::height + 1).removeFromRight (legend.getIdealWidth()));
         rebuildCurve();
         rebuildSpectrum();
     }

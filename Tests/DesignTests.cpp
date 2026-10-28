@@ -137,6 +137,75 @@ public:
             expectWithinAbsoluteError ((float) k.slider.getDoubleClickReturnValue(), 3.0f, 1.0e-4f, "double-click value = default 3:1");
         }
 
+        // Review 2026-10-28 (item 12): legends where a picture mixes several things, always visible
+        beginTest ("Review: SIMPEL spectrum, EQ, De-Esser, Smooth and Output show a legend that stays");
+        {
+            Harness h;
+            auto r = h.proc.getRouting();
+            for (auto id : { ModuleId::eq, ModuleId::deess, ModuleId::smooth })
+                if (! r.contains (id))
+                    r.insertDefault (id, 0);
+            h.proc.setRouting (r);
+            const auto findLegends = [] (juce::Component& root)
+            {
+                std::vector<const ui::Legend*> found;
+                std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+                {
+                    if (auto* l = dynamic_cast<ui::Legend*> (&c); l != nullptr && l->isVisible())
+                        found.push_back (l);
+                    for (auto* child : c.getChildren())
+                        walk (*child);
+                };
+                walk (root);
+                return found;
+            };
+            const auto check = [&] (juce::Component& view, const juce::String& where)
+            {
+                const auto legends = findLegends (view);
+                expect (! legends.empty(), where + ": a legend");
+                for (auto* l : legends)
+                {
+                    expect (l->getItems().size() >= 2, where + ": at least two entries");
+                    expect (l->getWidth() >= l->getIdealWidth() && l->getHeight() >= ui::Legend::height - 2, where + ": room for its text");
+                    expect (view.getLocalBounds().contains (l->getBoundsInParent()) || l->getParentComponent() != &view, where + ": inside");
+                    for (auto& item : l->getItems())
+                        expect (item.text.isNotEmpty(), where);
+                }
+            };
+            for (auto lang : { i18n::Language::german, i18n::Language::english })
+            {
+                i18n::ScopedLanguage scoped (lang);
+                for (int id : { (int) ModuleId::eq, (int) ModuleId::deess, (int) ModuleId::smooth, -1 })
+                {
+                    auto panel = ui::createDetailPanel (h.proc, id);
+                    panel->setBounds (panelSize());
+                    panel->refresh();
+                    check (*panel, id < 0 ? juce::String ("output") : juce::String (dsp::moduleKey ((ModuleId) id)));
+                }
+                std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+                auto& ed = *e;
+                ui::SimpleView* simple = nullptr;
+                std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+                {
+                    if (auto* s = dynamic_cast<ui::SimpleView*> (&c)) simple = s;
+                    for (auto* child : c.getChildren()) walk (*child);
+                };
+                walk (ed);
+                expect (simple != nullptr);
+                if (simple != nullptr)
+                {
+                    check (*simple, "simple");
+                    const auto l = findLegends (*simple);
+                    if (! l.empty())
+                    {
+                        expect (l[0]->getItems()[0].style == ui::LegendItem::Style::dashed, "before = dashed");
+                        expect (l[0]->getBounds().getRight() <= simple->getSpectrumArea().getRight()
+                                && l[0]->getY() >= simple->getSpectrumArea().getY(), "top right in the spectrum");
+                    }
+                }
+            }
+        }
+
         // Review 2026-10-28 (item 11): the Output read-outs say what they are; "Wie Bypass" is not squeezed
         beginTest ("Review: Output panel names its read-outs in words, every Level Match segment fits its text");
         {

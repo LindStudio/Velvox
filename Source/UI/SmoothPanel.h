@@ -129,6 +129,7 @@ namespace velvox::ui
         juce::PopupMenu buildEdgeMenu (Edge e);
 
     private:
+        Legend legend;   // curve, output, input, removed (review 2026-10-28)
         void readParameters();
         void rebuildCurve();
         void rebuildSpectrum();
