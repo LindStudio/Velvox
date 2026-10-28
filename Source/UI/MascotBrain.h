@@ -52,6 +52,8 @@ namespace velvox::ui::mascot
         void playIntro() { scene = { { Mood::shocked, 1.4 }, { Mood::wink, 2.2 } }; nextScene(); }
         void playBow() { scene = { { Mood::proud, 3.5 } }; nextScene(); }
         bool sceneRunning() const noexcept { return sceneLeft > 0.0 || ! scene.empty(); }
+        void stopScene() noexcept { scene.clear(); sceneLeft = 0.0; }   // the tour moved on: back to the usual moods
+        static constexpr double noBlinkAfterSwitch = 0.5;   // s: a blink in the cross-fade looked like a flicker
 
         void update (const Inputs& in, double dt)
         {
@@ -152,6 +154,9 @@ namespace velvox::ui::mascot
             from = now;
             now = m;
             time = 0.0;
+            // A blink that is under way ends, the next one waits until the new sticker has settled
+            blinkT = 10.0;
+            blinkIn = std::max (blinkIn, noBlinkAfterSwitch);
         }
 
         // Talking: a nod every 0.35 - 0.6 s, like the stress of a sentence (every syllable looked like fast
@@ -178,6 +183,11 @@ namespace velvox::ui::mascot
             blinkIn -= dt;
             if (blinkIn > 0.0)
                 return;
+            if (time + dt < noBlinkAfterSwitch)   // the mood changed just now (time is updated after this)
+            {
+                blinkIn = noBlinkAfterSwitch - time;
+                return;
+            }
             blinkT = 0.0;
             blinkIn = unit() < 0.2 ? blinkTime + 0.12 : 2.0 + 4.0 * unit();
         }

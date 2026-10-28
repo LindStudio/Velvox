@@ -33,6 +33,7 @@ namespace velvox::ui
         const mascot::Brain& getBrain() const noexcept { return brain; }
         void playIntro() { brain.playIntro(); repaint(); }
         void playBow() { brain.playBow(); repaint(); }
+        void stopScene() { brain.stopScene(); repaint(); }
 
         // The sticker of a mood (embedded PNG, decoded once)
         static juce::Image sticker (mascot::Mood mood);

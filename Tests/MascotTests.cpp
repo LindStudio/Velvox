@@ -168,6 +168,34 @@ public:
             expect (closedFrames < 60 * 30 / 20, "the eyes are open nearly all the time");
         }
 
+        // Review 2026-10-28 (item 4): a blink during the cross-fade looked like a flicker
+        beginTest ("No blink while the mood changes: never within 0.5 s of a switch");
+        {
+            int switches = 0, bad = 0;
+            for (unsigned seed = 1; seed <= 12; ++seed)
+            {
+                Brain b (seed);
+                auto last = b.mood();
+                double since = 10.0;
+                for (int i = 0; i < 60 * 60; ++i)
+                {
+                    auto in = silence();
+                    in.talking = (i / 100) % 2 == 0;   // on / off every 1.67 s: a switch each time
+                    b.update (in, 1.0 / 60.0);
+                    if (b.mood() != last)
+                    {
+                        last = b.mood();
+                        since = 0.0;
+                        ++switches;
+                    }
+                    since += 1.0 / 60.0;
+                    bad += b.blink() > 0.0f && since < 0.5 ? 1 : 0;
+                }
+            }
+            expect (switches > 100, juce::String (switches));
+            expectEquals (bad, 0, "frames with closing eyes right after a switch");
+        }
+
         beginTest ("Tour scenes: pops in shocked, then winks; at the end the thumbs up");
         {
             Brain b;
@@ -271,6 +299,39 @@ public:
             tour->finish (ui::TutorialOverlay::Outcome::finished);
             expect (mascot->getBrain().mood() == Mood::proud, "thumbs up at the end");
             expect (simple->isVisible(), "back in SIMPEL to see it");
+        }
+
+        // Review 2026-10-28 (item 4): the tour card never covers its target; Memphy is quiet once the tour moves on
+        beginTest ("Tour: the card sits beside its target, never on it; Memphy stops talking after step 1");
+        {
+            if (tour == nullptr || simple == nullptr || mascot == nullptr)
+                return;
+            tour->start (false);
+            const int n = (int) ui::TutorialOverlay::steps().size();
+            for (int i = 0; i < n; ++i)
+            {
+                tour->goTo (i);
+                const auto t = tour->getTargetBounds();
+                const auto card = tour->getCardBounds();
+                const bool huge = (double) t.getWidth() * t.getHeight() > 0.4 * tour->getWidth() * tour->getHeight();
+                const auto& key = ui::TutorialOverlay::steps()[(size_t) i].target;
+                expect (tour->getLocalBounds().contains (card), key + ": inside the window");
+                if (! huge)
+                    expect (! card.intersects (t), key + ": card " + card.toString() + " over target " + t.toString());
+            }
+
+            tour->goTo (0);
+            for (int i = 0; i < 60 * 6; ++i)
+                simple->tick (1.0 / 60.0);
+            const auto talking = simple->getBubbleText();
+            expect (simple->isTourTalking(), "step 1: he introduces himself");
+            tour->goTo (1);
+            expect (! simple->isTourTalking(), "the next step: he stops at once");
+            for (int i = 0; i < 60 * 3; ++i)
+                simple->tick (1.0 / 60.0);
+            expect (simple->getBubbleText() != talking && ! simple->isTourTalking(), "back to his usual line: " + simple->getBubbleText());
+            expect (mascot->getBrain().mood() != Mood::talking, "and listens");
+            tour->finish (ui::TutorialOverlay::Outcome::later);
         }
 
         // Review 2026-10-28 (item 13): the bubble fits its text, the buttons right under it; "click me" as a chip

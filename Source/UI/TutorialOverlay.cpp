@@ -177,7 +177,7 @@ namespace velvox::ui
         return juce::Rectangle<float> (spot[0].current, spot[1].current, spot[2].current, spot[3].current).expanded (holePad);
     }
 
-    juce::Rectangle<int> TutorialOverlay::cardBounds() const
+    juce::Rectangle<int> TutorialOverlay::cardBounds (Side* side) const
     {
         const auto area = getLocalBounds().reduced (space::l);
         if (step < 0)
@@ -185,16 +185,28 @@ namespace velvox::ui
 
         const int h = stepCardHeight (steps()[(size_t) step]);
         const auto t = target.expanded ((int) holePad);
-        juce::Rectangle<int> c (cardW, h);
-
-        if (t.getBottom() + space::l + h <= area.getBottom())
-            c.setPosition (t.getCentreX() - cardW / 2, t.getBottom() + space::l);
-        else if (t.getY() - space::l - h >= area.getY())
-            c.setPosition (t.getCentreX() - cardW / 2, t.getY() - space::l - h);
-        else   // tall target: inside it, near its top
-            c.setPosition (t.getCentreX() - cardW / 2, t.getY() + space::xl);
-
-        return c.constrainedWithin (area);
+        const auto fits = [&] (juce::Rectangle<int> c)
+        {
+            c = c.constrainedWithin (area);
+            return ! c.intersects (t) && area.contains (c);
+        };
+        const juce::Rectangle<int> candidates[] {
+            { t.getCentreX() - cardW / 2, t.getBottom() + space::l, cardW, h },   // below
+            { t.getCentreX() - cardW / 2, t.getY() - space::l - h, cardW, h },    // above
+            { t.getX() - space::l - cardW, t.getCentreY() - h / 2, cardW, h },    // left
+            { t.getRight() + space::l, t.getCentreY() - h / 2, cardW, h },        // right
+        };
+        for (int i = 0; i < 4; ++i)
+            if (fits (candidates[i]))
+            {
+                if (side != nullptr)
+                    *side = (Side) i;
+                return candidates[i].constrainedWithin (area);
+            }
+        // The target fills the window: inside it, near its top
+        if (side != nullptr)
+            *side = Side::inside;
+        return juce::Rectangle<int> (t.getCentreX() - cardW / 2, t.getY() + space::xl, cardW, h).constrainedWithin (area);
     }
 
     void TutorialOverlay::layoutButtons()
@@ -339,11 +351,31 @@ namespace velvox::ui
         g.setGradientFill (auroraGradient (hole.getTopLeft(), hole.getBottomRight(), 0.95f));
         g.drawRoundedRectangle (hole, radius::card, 1.6f);
 
-        // Explanation card
+        // Explanation card, with a small pointer on the side that faces the target
         const auto& s = steps()[(size_t) step];
         drawGlow (g, { card.getX() + 60.0f, card.getY() }, 200.0f, 0.10f, colours::teal);
         g.setColour (colours::raised);
         g.fillRoundedRectangle (card, radius::card);
+        {
+            Side side = Side::inside;
+            cardBounds (&side);
+            const auto tc = target.toFloat().getCentre();
+            const float k = 8.0f;
+            juce::Path pointer;
+            switch (side)
+            {
+                case Side::below: { const float x = juce::jlimit (card.getX() + 20.0f, card.getRight() - 20.0f, tc.x);
+                                    pointer.addTriangle (x - k, card.getY(), x + k, card.getY(), x, card.getY() - k); break; }
+                case Side::above: { const float x = juce::jlimit (card.getX() + 20.0f, card.getRight() - 20.0f, tc.x);
+                                    pointer.addTriangle (x - k, card.getBottom(), x + k, card.getBottom(), x, card.getBottom() + k); break; }
+                case Side::left:  { const float y = juce::jlimit (card.getY() + 20.0f, card.getBottom() - 20.0f, tc.y);
+                                    pointer.addTriangle (card.getRight(), y - k, card.getRight(), y + k, card.getRight() + k, y); break; }
+                case Side::right: { const float y = juce::jlimit (card.getY() + 20.0f, card.getBottom() - 20.0f, tc.y);
+                                    pointer.addTriangle (card.getX(), y - k, card.getX(), y + k, card.getX() - k, y); break; }
+                case Side::inside: break;
+            }
+            g.fillPath (pointer);
+        }
         drawGlass (g, card, radius::card, 0.03f);
 
         auto r = card.reduced ((float) space::xl, (float) space::xl);

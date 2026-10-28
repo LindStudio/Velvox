@@ -33,6 +33,8 @@ namespace velvox::ui
         // Tour: Memphy falls in, waves and introduces himself in the bubble; at the end he bows and says bye
         void startIntro();
         void startOutro();
+        void stopIntro();                    // the tour moved on: he stops mid-sentence and listens
+        bool isTourTalking() const noexcept { return ! lines.isEmpty(); }
         // For tests: advances Memphy and his lines by dt without audio
         void tick (double dt);
 

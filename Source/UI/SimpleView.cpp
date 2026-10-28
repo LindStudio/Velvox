@@ -54,6 +54,17 @@ namespace velvox::ui
         setSay (tr ("Uiiiiiii…!", "Wheeeeee…!"));
     }
 
+    void SimpleView::stopIntro()
+    {
+        if (lines.isEmpty())
+            return;
+        lines.clear();
+        line = -1;
+        lineTime = 0.0;
+        mascot.stopScene();
+        updateBubble (false, silentFor > mascot::Brain::silenceToIdle);   // the next frame knows if the mix is busy
+    }
+
     void SimpleView::startOutro()
     {
         mascot.playBow();

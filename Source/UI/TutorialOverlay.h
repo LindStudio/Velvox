@@ -46,6 +46,8 @@ namespace velvox::ui
         juce::Button& getTourButton() noexcept { return startButton; }
         juce::Button& getPluginButton() noexcept { return pluginButton; }
         MascotView& getWelcomeMascot() noexcept { return mascot; }
+        juce::Rectangle<int> getCardBounds() const { return cardBounds(); }
+        juce::Rectangle<int> getTargetBounds() const noexcept { return target; }
 
         void paint (juce::Graphics&) override;
         void resized() override;
@@ -53,7 +55,10 @@ namespace velvox::ui
         bool keyPressed (const juce::KeyPress&) override;
 
     private:
-        juce::Rectangle<int> cardBounds() const;
+        // Where the step card goes: below, above, left or right of the target, never on it (review
+        // 2026-10-28); inside only when the target fills the window. The side gets a small pointer.
+        enum class Side { below, above, left, right, inside };
+        juce::Rectangle<int> cardBounds (Side* side = nullptr) const;
         juce::Rectangle<float> spotlight() const;
         void layoutButtons();
         void tick();

@@ -236,6 +236,8 @@ HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
     {
         if (key == "mascot")
             simpleView.startIntro();
+        else
+            simpleView.stopIntro();   // one thing at a time: the tour card talks now (review 2026-10-28)
     };
     tutorial.onClose = [this] (TutorialOverlay::Outcome outcome)
     {
