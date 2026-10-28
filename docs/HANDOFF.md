@@ -7,7 +7,8 @@ Branch **`feature/modules-0.7`**, am PC „Shadow“ weitergemacht (Commits `372
   Room Noise / Breath Control klickten beim Einfügen während der Wiedergabe → jetzt `reset (fadeIn)` wie Smooth, Test in
   `Tests/RoutingTests.cpp`. Bekannt, nicht behoben: unter 44,1 kHz (22,05/24 kHz) senkt Breath Control die ersten ~15 ms
   eines Atmers nicht ab, weil die Look-ahead-Zeit dort kürzer ist als Erkennung + halbes Fenster.
-- Offen: Punkt 3 (Jakobs Antwort zu den Modulnamen), Installieren (FL schließen), Push nur nach Rückfrage, dann Punkt 5.
+- Punkt 3 entschieden: Modulnamen bleiben Englisch. Jakob 2026-10-28: noch nicht pushen, noch nicht installieren.
+- Weiter mit Punkt 5 (Beat als Sidechain).
 
 ## STAND 2026-10-27 ABEND
 Branch **`feature/modules-0.7`** (baut auf `feature/i18n` auf). Jakob hat unterbrochen („ich mach morgen weiter“).
