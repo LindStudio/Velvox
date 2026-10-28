@@ -106,7 +106,7 @@ public:
             expect (b.mood() == Mood::listening);
             run (b, singing (20), 0.5);
             expect (b.mood() == Mood::listening, "a new mood holds a moment before the next one");
-            run (b, singing (20), 1.5);
+            run (b, singing (20), 3.6);   // the singing alone changes his mood at most every 4 s (calmer)
             expect (b.mood() == Mood::sad);
         }
 
@@ -140,14 +140,39 @@ public:
             run (b, singing (82), 0.5);
             expect (b.fadeAmount() == 0.0f);
             expectWithinAbsoluteError (b.scale(), 1.0f, 0.02f, "settled (breathing only)");
-            run (b, singing (95), 2.0);
+            run (b, singing (95), 4.5);   // from one singing mood to the next takes 4 s now (calmer)
             float lift = 0.0f;
             for (int i = 0; i < 60; ++i)
             {
                 b.update (singing (95), 1.0 / 60.0);
                 lift = std::max (lift, b.lift());
             }
-            expect (b.mood() == Mood::celebrate && lift > 0.03f, "he hops");
+            expect (b.mood() == Mood::celebrate && lift > 0.005f && lift < 0.02f, "he hops a little: " + juce::String (lift));
+        }
+
+        // Jakob 2026-10-28: "soll nicht ständig herumspringen" - a jumpy vocal (or many clicks) must not make him jumpy
+        beginTest ("Calm: a score that jumps around changes his mood at most every 4 s; pops, hops and nods stay small");
+        {
+            Brain b (7);
+            run (b, singing (60), 3.0);
+            int switches = 0;
+            auto last = b.mood();
+            float maxScale = 0.0f, maxLift = 0.0f;
+            for (int i = 0; i < 60 * 20; ++i)
+            {
+                const int score = (i / 18) % 2 == 0 ? 30 : 95;   // flips every 0.3 s
+                b.update (singing (score), 1.0 / 60.0);
+                if (b.mood() != last)
+                {
+                    last = b.mood();
+                    ++switches;
+                }
+                maxScale = std::max (maxScale, std::abs (b.scale() - 1.0f));
+                maxLift = std::max (maxLift, b.lift());
+            }
+            expect (switches <= 6, "mood switches in 20 s: " + juce::String (switches));
+            expect (maxScale <= 0.05f, "scale stays within 5 %: " + juce::String (maxScale));
+            expect (maxLift <= 0.02f, "no big jumps: " + juce::String (maxLift));
         }
 
         beginTest ("He blinks every few seconds, quickly");

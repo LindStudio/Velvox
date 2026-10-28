@@ -38,6 +38,7 @@ namespace velvox::ui::mascot
     {
     public:
         static constexpr double minHold = 1.5;          // s a mood shows before another may take over
+        static constexpr double minHoldScore = 4.0;     // s between two moods the singing alone decides (Jakob: calmer)
         static constexpr double silenceToIdle = 2.0;    // s of silence before he stops reacting to the singing
         static constexpr double proudFor = 4.0;         // s of thumbs up after a mix
         static constexpr double popTime = 0.6;          // s of the pop when the mood changes (a damped spring)
@@ -77,7 +78,9 @@ namespace velvox::ui::mascot
                 }
             }
             const Mood want = desired (in);
-            if (want != now && time >= minHold)
+            // Reactions to the singing alone change slowly; what the user does (auto mix, talking, a tip) at once
+            const bool byScore = isScoreMood (want) && isScoreMood (now) && ! sceneMood;   // a scene's last mood ends at once
+            if (want != now && time >= (byScore ? minHoldScore : minHold))
                 switchTo (want);
         }
 
@@ -91,19 +94,19 @@ namespace velvox::ui::mascot
         // bounce a smoothed envelope, the hop a sine squared.
         float scale() const noexcept
         {
-            float s = 1.0f + 0.012f * (float) std::sin (clock * 2.0 * pi / 3.2);   // breathing
+            float s = 1.0f + 0.008f * (float) std::sin (clock * 2.0 * pi / 3.2);   // breathing
             if (time < popTime)                                                    // 0.88, a soft overshoot, settles
-                s *= (float) (1.0 - 0.12 * std::exp (-time * 9.0) * std::cos (time * 16.0));
-            return s * (1.0f + 0.022f * talkBounce);
+                s *= (float) (1.0 - 0.04 * std::exp (-time * 9.0) * std::cos (time * 16.0));   // small (Jakob: calmer)
+            return s * (1.0f + 0.01f * talkBounce);
         }
         float lift() const noexcept
         {
             if (now == Mood::celebrate)   // hops
             {
                 const double h = std::sin (clock * pi * 1.5);
-                return 0.055f * (float) (h * h);
+                return 0.014f * (float) (h * h);
             }
-            return 0.01f * talkBounce;
+            return 0.004f * talkBounce;
         }
 
         // Eye blink: 0 = open, 1 = closed (the view draws the lids)
@@ -123,6 +126,11 @@ namespace velvox::ui::mascot
             if (silent > 0.0)   // a pause between phrases keeps the reaction, a long one ends it
                 return silent > silenceToIdle || ! reacting (now) ? Mood::listening : now;
             return quality (in.score);
+        }
+
+        static bool isScoreMood (Mood m) noexcept
+        {
+            return m == Mood::sad || m == Mood::listening || m == Mood::wink || m == Mood::celebrate;
         }
 
         static bool reacting (Mood m) noexcept { return m == Mood::sad || m == Mood::wink || m == Mood::celebrate; }
@@ -149,11 +157,13 @@ namespace velvox::ui::mascot
             const auto [m, seconds] = scene.front();
             scene.pop_front();
             switchTo (m);
+            sceneMood = true;
             sceneLeft = seconds;
         }
 
         void switchTo (Mood m)
         {
+            sceneMood = false;
             from = now;
             now = m;
             time = 0.0;
@@ -207,6 +217,7 @@ namespace velvox::ui::mascot
         Mood now = Mood::listening, from = Mood::listening;
         std::deque<std::pair<Mood, double>> scene;
         double sceneLeft = 0.0;
+        bool sceneMood = false;   // the current mood came from a scene
         double time = 10.0, clock = 0.0, silent = 1.0e9, proudLeft = 0.0, syllable = 0.0;   // silent until the first signal
         double blinkT = 10.0, blinkIn = 3.0;
         float talkBounce = 0.0f, talkTarget = 0.0f;
