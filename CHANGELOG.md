@@ -14,8 +14,8 @@ Keine Rückwärtskompatibilität (Entwicklungsphase): Defaults und Wertebereiche
   ±0,3 LU zur Eingangslautheit (gemessen an echten VocalSet-Aufnahmen). Die IN/OUT-Meter in SIMPEL haben einen
   Spitzenhalter, und OUT zeigt den Unterschied zum Eingang („−3 LU“).
 - **Vocal Check ist kein Ketten-Modul mehr:** Er misst immer nach der ganzen Kette und ist standardmäßig an.
-  Memphy sagt die Tipps in SIMPEL einzeln an („Ja, mach“ / „Zeig mir“). Am Tab VOCAL CHECK sitzt ein Abzeichen
-  mit Score und Anzahl der Tipps. Der Tab hat einen Knopf „Neu messen“ statt Laufend/Capture/Start/Reset, ein Wort
+  Memphy sagt die Tipps in SIMPEL einzeln an („Ja, mach“ / „Zeig mir“). Neben Memphys Kopf sitzt ein Abzeichen
+  mit Score und Anzahl der Tipps (Klick = Vocal Check; Jakob: nicht über dem Tab). Der Tab hat einen Knopf „Neu messen“ statt Laufend/Capture/Start/Reset, ein Wort
   zum Score, „Alles anwenden“ direkt daneben und unten das Spektrum der Stimme gegen das Ziel des Genres.
 - **Tour:** Die Karte steht neben dem Ziel, nie darauf. Memphy hört auf zu reden, sobald die Tour weitergeht, und
   blinzelt nicht mehr im Moment eines Stimmungswechsels.

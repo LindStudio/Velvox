@@ -71,6 +71,9 @@ namespace velvox::ui
         const juce::String& getTipId() const noexcept { return tipId; }
         juce::TextButton& getTipYesButton() noexcept { return tipYes; }
         juce::TextButton& getTipShowButton() noexcept { return tipShow; }
+        // Jakob 2026-10-28: the Vocal Check score as a badge at Memphy's head ("68 · 3" = score · tips),
+        // a click opens the VOCAL CHECK tab
+        juce::TextButton& getScoreBadge() noexcept { return *scoreBadge; }
 
         struct MacroDef { const char* paramId; const char* label; juce::uint32 colour; };
         static const std::vector<MacroDef>& macroDefs();
@@ -115,6 +118,9 @@ namespace velvox::ui
         bool wasBusy = false;
         ClickHint clickHint;
         juce::TextButton tipYes, tipShow;
+        std::unique_ptr<juce::TextButton> scoreBadge;
+        int badgeScore = -2, badgeTips = -1;
+        void updateScoreBadge();
         juce::String tipId;
         juce::StringArray tipsDone;
         double tipWait = 1.0;   // s until the next tip may come

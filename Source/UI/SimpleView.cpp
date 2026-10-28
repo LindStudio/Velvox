@@ -7,6 +7,30 @@ namespace velvox::ui
 {
     namespace
     {
+        // "68 · 3" in the colour of the score (sad / okay / pleased like Memphy)
+        class ScoreBadge final : public juce::TextButton
+        {
+        public:
+            void paintButton (juce::Graphics& g, bool highlighted, bool) override
+            {
+                const int score = (int) getProperties().getWithDefault ("score", -1);
+                const auto c = score < 45 ? colours::warning : score < 75 ? juce::Colour (0xfffbbf24) : colours::ok;
+                const auto r = getLocalBounds().toFloat().reduced (0.5f);
+                g.setColour (colours::panelInset);
+                g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+                g.setColour (c.withAlpha (highlighted ? 0.32f : 0.2f));
+                g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+                g.setColour (c.withAlpha (0.85f));
+                g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
+                g.setColour (c.interpolatedWith (juce::Colours::white, 0.35f));
+                g.setFont (semiBold (11.0f));
+                g.drawText (getButtonText(), getLocalBounds(), juce::Justification::centred, false);
+            }
+        };
+    }
+
+    namespace
+    {
         using i18n::tr;
 
         void drawPanel (juce::Graphics& g, juce::Rectangle<int> area)
@@ -127,6 +151,7 @@ namespace velvox::ui
     {
         const bool speaking = advanceLines (dt);
         in.talking = speaking && line >= 0 && lineTime < talkSeconds (lines[line]);
+        updateScoreBadge();
         if (! speaking && line < 0 && lines.isEmpty())
             updateTip (in.autoMixBusy, dt);
         else if (tipId.isNotEmpty())
@@ -226,6 +251,9 @@ namespace velvox::ui
         addAndMakeVisible (mascot);
         clickHint.onClick = mascot.onClick;
         addChildComponent (clickHint);
+        scoreBadge = std::make_unique<ScoreBadge>();
+        scoreBadge->onClick = [this] { if (onVocalCheck) onVocalCheck(); };
+        addChildComponent (*scoreBadge);
 
         tipYes.setButtonText (tr ("Ja, mach", "Yes, do it"));
         tipShow.setButtonText (tr ("Zeig mir", "Show me"));
@@ -455,6 +483,24 @@ namespace velvox::ui
         juce::String clickHintText() { return tr ("Klick mich = Vocal Check", "Click me = Vocal Check"); }
     }
 
+    void SimpleView::updateScoreBadge()
+    {
+        auto& vc = proc.getVocalCheck();
+        const int s = vc.score(), tips = s >= 0 ? (int) vc.visibleFindings().size() : 0;
+        if (s == badgeScore && tips == badgeTips)
+            return;
+        badgeScore = s;
+        badgeTips = tips;
+        const auto middot = juce::String::fromUTF8 (" \xc2\xb7 ");
+        scoreBadge->setButtonText (juce::String (s) + middot + juce::String (tips));
+        scoreBadge->setTooltip ("Vocal Check " + juce::String (s) + middot
+                                + (tips == 1 ? tr ("1 Tipp", "1 tip") : i18n::format (tr ("{0} Tipps", "{0} tips"), { juce::String (tips) }))
+                                + tr (" - Klick öffnet den Vocal Check", " - click to open the Vocal Check"));
+        scoreBadge->getProperties().set ("score", s);
+        scoreBadge->setVisible (s >= 0);
+        resized();
+    }
+
     SimpleView::ClickHint::ClickHint()
     {
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
@@ -589,6 +635,15 @@ namespace velvox::ui
         row.removeFromLeft (8);
         bubbleRow = row.withTrimmedBottom (8);   // the click chip below
         layoutBubble();
+
+        // The Vocal Check score at his head, top right of the figure
+        if (scoreBadge != nullptr)
+        {
+            const int bw = juce::GlyphArrangement::getStringWidthInt (semiBold (11.0f), scoreBadge->getButtonText()) + 16;
+            scoreBadge->setBounds (juce::Rectangle<int> (bw, 18).withPosition (juce::roundToInt (place.getRight()) - bw / 2,
+                                                                                juce::roundToInt (place.getY()) + 34)
+                                       .constrainedWithin (spectrumPanel.reduced (4)));
+        }
 
         // "Klick mich = Vocal Check" under his feet, until the first click
         const auto standInView = place;

@@ -501,12 +501,19 @@ public:
             auto& simple = ed.getSimpleView();
             auto& vc = h.proc.getVocalCheck();
 
-            auto& chip = ed.getTopBar().getCheckChip();
-            ed.getTopBar().refresh();
-            expect (chip.isVisible(), "the chip once there is a score");
+            // Jakob 2026-10-28: the score sits at Memphy, not over the VOCAL CHECK tab
+            for (auto* c : ed.getTopBar().getChildren())
+                if (auto* b = dynamic_cast<juce::Button*> (c); b != nullptr && b->isVisible())
+                    expect (! b->getButtonText().contains (juce::String (vc.score())), "no score in the header: " + b->getButtonText());
+            auto& chip = simple.getScoreBadge();
+            simple.tick (1.0);
+            expect (chip.isVisible(), "the badge once there is a score");
             const auto n = (int) vc.visibleFindings().size();
             expect (chip.getButtonText().contains (juce::String (vc.score())) && chip.getButtonText().contains (juce::String (n)),
                     chip.getButtonText());
+            const auto stand = simple.getLocalArea (&simple.getMascot(), simple.getMascot().getStandArea()).toNearestInt();
+            expect (chip.getBounds().getCentreY() < stand.getCentreY() && chip.getRight() > stand.getX() && chip.getX() < stand.getRight() + 24,
+                    "at Memphy's head: " + chip.getBounds().toString() + " / " + stand.toString());
 
             for (int i = 0; i < 60 * 3; ++i)
                 simple.tick (1.0 / 60.0);
@@ -536,7 +543,7 @@ public:
             ed.setTab (VelvoxAudioProcessorEditor::Tab::autoMix);
             click (chip);
             runLoop (30);
-            expect (ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "the chip opens the tab");
+            expect (ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "the badge opens the tab");
         }
 
         beginTest ("Shell: Ctrl+Z after a tile's Anwenden undoes the whole fix");
