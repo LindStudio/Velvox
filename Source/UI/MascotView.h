@@ -2,15 +2,14 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "MascotBrain.h"
-#include "MascotClips.h"
 
 namespace velvox::ui
 {
-    // Memphy, the animated imp (SIMPEL, bottom left). The editor feeds it once per frame; it plays the clip
-    // the Brain picks, swaps in the mouth patch while he talks and cross-fades between clips.
-    // The standing figure fills the stand area (his place in the layout) and scales with the window
-    // (frames are packed for about 2.8x the design size); wider poses reach beyond it, so the component
-    // is larger than the stand area and only takes clicks on the figure itself.
+    // Memphy as a comic sticker (SIMPEL, bottom left). The editor feeds it once per frame; it shows the
+    // sticker of the mood the Brain picks, with its pop, breathing, talking bounce and hop, and cross-fades
+    // between two stickers. The sticker fills the stand area (his place in the layout) and scales with the
+    // window (stickers are 384 px, sharp up to about 3x); parts of the figure pop out over the disc, so
+    // the component is larger than the stand area and only takes clicks on the sticker itself.
     // A click on him opens the Vocal Check (approved assistant concept: no extra button for it).
     class MascotView final : public juce::Component, public juce::SettableTooltipClient
     {
@@ -23,7 +22,7 @@ namespace velvox::ui
         void mouseUp (const juce::MouseEvent&) override;
         bool hitTest (int x, int y) override;
 
-        // Where the standing figure goes, in local coordinates (default: the whole component)
+        // Where the sticker goes, in local coordinates (default: the whole component)
         void setStandArea (juce::Rectangle<float> area) { standArea = area; repaint(); }
         juce::Rectangle<float> getStandArea() const;
 
@@ -34,27 +33,14 @@ namespace velvox::ui
         void playIntro() { brain.playIntro(); repaint(); }
         void playBow() { brain.playBow(); repaint(); }
 
+        // The sticker of a mood (embedded PNG, decoded once)
+        static juce::Image sticker (mascot::Mood mood);
+
     private:
-        struct Cached
-        {
-            mascot::Clip clip = mascot::Clip::idle;
-            int frame = -1;
-            juce::Image image;
-        };
+        juce::Rectangle<float> stickerArea() const;   // the sticker image at rest, in local coordinates
+        juce::AffineTransform motion() const;          // pop, breathing, bounce, hop around his feet
 
-        const juce::Image& frameImage (Cached& slot, mascot::Clip clip, int frame);
-        juce::Rectangle<float> frameArea() const;   // the whole frame image, in local coordinates
-
-        const mascot::ClipLibrary& library;
         mascot::Brain brain;
-        Cached current, fading;
         juce::Rectangle<float> standArea;
-        mascot::Patch mouthPatch;
-        mascot::Clip mouthClip = mascot::Clip::idle;
-        int mouthFrame = -1;
-        mascot::Mouth mouthKind = mascot::Mouth::closed;
-        int lastFrame = -1;
-        mascot::Clip lastClip = mascot::Clip::idle;
-        mascot::Mouth lastMouth = mascot::Mouth::closed;
     };
 }

@@ -75,7 +75,6 @@ set(VELVOX_SOURCES
     Source/UI/ValueText.cpp
     Source/UI/SimpleView.cpp
     Source/UI/CleanupPanels.cpp
-    Source/UI/MascotClips.cpp
     Source/UI/MascotView.cpp
     Source/UI/PresetBrowser.cpp
     Source/UI/Spectrum.cpp
@@ -146,9 +145,10 @@ juce_add_binary_data(VelvoxAssets
         Resources/Images/HeadlinerIcon.png
         Resources/Images/HeadlinerWordmark.png
         Resources/Images/HeadlinerLogo.png
-        # Mascot sprite clips (tools/mascot/pack_mascot.py, format in Source/UI/MascotClips.h)
-        Resources/Mascot/fall.vms Resources/Mascot/wave.vms Resources/Mascot/bow.vms Resources/Mascot/idle.vms
-        Resources/Mascot/relax.vms Resources/Mascot/bad.vms Resources/Mascot/hipHop.vms Resources/Mascot/breakdance.vms)
+        # Memphy's comic stickers, one per mood (tools/mascot/cut_comic.py)
+        Resources/MascotSticker/listening.png Resources/MascotSticker/talking.png Resources/MascotSticker/wink.png
+        Resources/MascotSticker/celebrate.png Resources/MascotSticker/sad.png Resources/MascotSticker/shocked.png
+        Resources/MascotSticker/thinking.png Resources/MascotSticker/proud.png Resources/MascotSticker/annoyed.png)
 
 set(VELVOX_COMMON_LIBS
     VelvoxAssets

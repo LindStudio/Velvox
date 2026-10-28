@@ -79,7 +79,7 @@ namespace velvox::ui
             // The intro lines start once he has landed and waved
             if (mascot.getBrain().sceneRunning())
             {
-                if (mascot.getBrain().clip() == mascot::Clip::wave)
+                if (mascot.getBrain().mood() == mascot::Mood::wink)
                     setSay (tr ("Hey, hallo!", "Hey there!"));
                 return true;
             }
@@ -255,6 +255,7 @@ namespace velvox::ui
         in.inputDb = live.inputDb.ago (0);
         in.score = score;
         in.autoMixBusy = phase == Phase::listening || phase == Phase::capturing || phase == Phase::analysing;
+        in.mixFinished = wasBusy && ! in.autoMixBusy && proc.getAutoMix().hasMix();   // thumbs up for a moment
         advance (in, dt);
         if (in.autoMixBusy != wasBusy)
         {

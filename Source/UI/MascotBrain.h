@@ -2,234 +2,179 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <deque>
-#include <optional>
 
-// Vocalypse mascot Memphy (the Flame Hoodie Imp, Jakob 2026-10-28): which animation plays and which mouth
-// he shows. Pure logic, no images - the view (MascotView) draws what this says.
+// Vocalypse mascot Memphy as a comic sticker (Jakob 2026-10-28: no 3D animation in the plugin, one comic
+// picture per mood; the animated figure lives on the website). Pure logic, no images - the view
+// (MascotView) draws the sticker this says, with a small pop, breathing, a talking bounce and a hop.
 //
-//   idle                Listening Gesture; now and then, at random times, "Relax arms" (once)
-//   auto mix listening  idle (he listens too)
-//   singing             by the Vocal Check score: < badBelow the depressed full turn, >= goodFrom hip hop or
-//                       breakdance (he switches between them), in between and without a score he listens
-//   silence > 2 s       idle
-//   tour                playIntro(): falls in (Fall4), waves (Big Wave Hello); playBow(): Gentleman's Bow
+//   idle                 listening (hand behind his ear)
+//   auto mix analysing   thinking; no signal for 2 s while it waits: annoyed
+//   mix just finished    proud (thumbs up) for a few seconds
+//   singing              by the Vocal Check score: < badBelow sad, >= goodFrom wink, >= greatFrom celebrate,
+//                        in between and without a score he listens
+//   talking              talking (the view's speech lines)
+//   tour                 playIntro(): shocked (pops in), then wink; playBow(): proud
 //
-// A new state waits until the current one has played minHold seconds (one-shots play to their end),
-// scores near a border keep the current state (hysteresis), and every switch cross-fades from the
-// last frame of the old clip - except the fall, which starts from nothing. Loops wrap straight: where the
-// packer cut one, it blended the end into the start (a fade over a frozen frame showed as a hitch).
-// The mouth moves only while he talks (the view's speech lines).
+// A new mood waits until the current one has shown minHold seconds and scores near a border keep the
+// current mood (hysteresis), so he does not flicker; a scene (tour) plays its moods to their end.
 namespace velvox::ui::mascot
 {
-    enum class Clip { fall, wave, bow, idle, relax, bad, hipHop, breakdance };
-    constexpr int numClips = 8;
-
-    enum class Mouth { closed, half, open };
-
-    struct ClipInfo
-    {
-        int frames = 1;
-        double fps = 30.0;
-        bool loops = true;
-    };
+    enum class Mood { listening, talking, wink, celebrate, sad, shocked, thinking, proud, annoyed };
+    constexpr int numMoods = 9;
 
     struct Inputs
     {
         float inputDb = -100.0f;     // input level of this frame
         int score = -1;              // Vocal Check 0..100, -1 = not enough material
         bool autoMixBusy = false;    // listening / capturing / analysing
+        bool mixFinished = false;    // a mix has just been applied (true for one update)
         bool talking = false;        // a speech line is being said
-    };
-
-    struct FrameRef
-    {
-        Clip clip;
-        int frame;
     };
 
     class Brain
     {
     public:
-        static constexpr double minHold = 2.5;          // s a state plays before another may take over
+        static constexpr double minHold = 1.5;          // s a mood shows before another may take over
         static constexpr double silenceToIdle = 2.0;    // s of silence before he stops reacting to the singing
-        static constexpr double fadeTime = 0.25;        // s cross-fade between clips
-        static constexpr double danceSwap = 8.0;        // s of one dance before he may switch to the other
-        static constexpr double relaxMinGap = 15.0, relaxMaxGap = 40.0;   // s of listening between two relaxes
+        static constexpr double proudFor = 4.0;         // s of thumbs up after a mix
+        static constexpr double popTime = 0.28;         // s of the pop when the mood changes
+        static constexpr double fadeTime = 0.15;        // s cross-fade between two stickers
         static constexpr float signalDb = -55.0f;
-        static constexpr int badBelow = 45, goodFrom = 75;
+        static constexpr int badBelow = 45, goodFrom = 75, greatFrom = 90;
         static constexpr int hysteresis = 3;            // score points around the borders
 
-        explicit Brain (const std::array<ClipInfo, numClips>& clipInfo, unsigned seed = 1)
-            : info (clipInfo), rng (seed == 0 ? 1u : seed)
-        {
-            relaxIn = nextRelaxGap();
-        }
+        explicit Brain (unsigned seed = 1) : rng (seed == 0 ? 1u : seed) {}
 
-        // Tour: falls in and waves (then listens); bows
-        void playIntro()
-        {
-            scene = { Clip::fall, Clip::wave };
-            switchTo (popScene(), false);   // he was not there: no cross-fade from the old figure
-        }
-
-        void playBow()
-        {
-            scene = { Clip::bow };
-            switchTo (popScene(), true);
-        }
-
-        // A tour scene (fall, wave, bow) is playing or queued
-        bool sceneRunning() const noexcept { return inScene || ! scene.empty(); }
+        // Tour: pops in shocked, then winks; at the end the thumbs up
+        void playIntro() { scene = { { Mood::shocked, 1.4 }, { Mood::wink, 2.2 } }; nextScene(); }
+        void playBow() { scene = { { Mood::proud, 3.5 } }; nextScene(); }
+        bool sceneRunning() const noexcept { return sceneLeft > 0.0 || ! scene.empty(); }
 
         void update (const Inputs& in, double dt)
         {
-            updateMouth (in.talking, dt);
             silent = in.inputDb > signalDb ? 0.0 : silent + dt;
             time += dt;
-            if (fading)
-                fadeElapsed += dt;
-            if (fading && fadeElapsed >= fadeTime)
-                fading = false;
+            clock += dt;
+            proudLeft = in.mixFinished ? proudFor : std::max (0.0, proudLeft - dt);
+            updateTalk (in.talking, dt);
 
-            if (! current().loops && ! finished())
-                return;   // one-shots play to their end
-            if (! scene.empty())
+            if (sceneLeft > 0.0)
             {
-                switchTo (popScene(), true);
-                return;
-            }
-            inScene = false;
-
-            Clip want = desired (in);
-            if (want == Clip::idle && now == Clip::idle)
-            {
-                relaxIn -= dt;
-                if (relaxIn <= 0.0)
+                sceneLeft -= dt;
+                if (sceneLeft > 0.0)
+                    return;
+                if (! scene.empty())
                 {
-                    relaxIn = nextRelaxGap();
-                    want = Clip::relax;
+                    nextScene();
+                    return;
                 }
             }
-            const bool mayLeave = ! current().loops || time >= minHold;
-            if (want != now && mayLeave)
-                switchTo (want, true);
+            const Mood want = desired (in);
+            if (want != now && time >= minHold)
+                switchTo (want);
         }
 
-        Clip clip() const noexcept { return now; }
+        Mood mood() const noexcept { return now; }
+        // The sticker that is fading out (when a cross-fade runs) and how much of it still shows (1 -> 0)
+        Mood fadeFrom() const noexcept { return from; }
+        float fadeAmount() const noexcept { return time < fadeTime ? (float) (1.0 - time / fadeTime) : 0.0f; }
 
-        int frame() const noexcept { return frameAt (now, time); }
-
-        Mouth mouth() const noexcept { return mouthNow; }
-
-        // The clip that is fading out (nullopt when no cross-fade runs) and how much of it is still visible (1 -> 0)
-        std::optional<FrameRef> fadeFrom() const noexcept { return fading ? std::optional<FrameRef> (from) : std::nullopt; }
-        float fadeAmount() const noexcept { return fading ? (float) (1.0 - fadeElapsed / fadeTime) : 0.0f; }
+        // Motion of the sticker, for the view: scale around his feet and a lift in sticker heights
+        float scale() const noexcept
+        {
+            float s = 1.0f + 0.012f * (float) std::sin (clock * 2.0 * 3.14159265 / 3.2);   // breathing
+            if (time < popTime)                                                               // pop: 0.85 -> 1.06 -> 1
+            {
+                const double t = time / popTime;
+                s *= (float) (t < 0.6 ? 0.85 + 0.21 * (t / 0.6) : 1.06 - 0.06 * ((t - 0.6) / 0.4));
+            }
+            return s * (1.0f + 0.035f * talkBounce);
+        }
+        float lift() const noexcept
+        {
+            if (now == Mood::celebrate)   // hops
+                return 0.06f * (float) std::abs (std::sin (clock * 3.14159265 * 1.6));
+            return 0.02f * talkBounce;
+        }
 
     private:
-        const ClipInfo& current() const noexcept { return info[(size_t) now]; }
-
-        bool finished() const noexcept { return time * current().fps >= current().frames - 1e-6; }
-
-        int frameAt (Clip c, double t) const noexcept
+        Mood desired (const Inputs& in)
         {
-            const auto& ci = info[(size_t) c];
-            const int f = (int) (t * ci.fps + 1e-6);
-            return ci.loops ? f % ci.frames : std::min (f, ci.frames - 1);
-        }
-
-        static bool dancing (Clip c) noexcept { return c == Clip::hipHop || c == Clip::breakdance; }
-        static bool reacting (Clip c) noexcept { return dancing (c) || c == Clip::bad; }
-
-        Clip desired (const Inputs& in)
-        {
+            if (in.talking)
+                return Mood::talking;
             if (in.autoMixBusy)
-                return Clip::idle;
+                return silent > silenceToIdle ? Mood::annoyed : Mood::thinking;
+            if (proudLeft > 0.0)
+                return Mood::proud;
             if (silent > 0.0)   // a pause between phrases keeps the reaction, a long one ends it
-                return silent > silenceToIdle || ! reacting (now) ? Clip::idle : now;
-            const Clip mood = quality (in.score);
-            if (mood != Clip::hipHop)
-                return mood;
-            if (dancing (now))   // keeps his dance, now and then the other one
-                return time >= danceSwap ? (now == Clip::hipHop ? Clip::breakdance : Clip::hipHop) : now;
-            return random() % 2 == 0 ? Clip::hipHop : Clip::breakdance;
+                return silent > silenceToIdle || ! reacting (now) ? Mood::listening : now;
+            return quality (in.score);
         }
 
-        // bad / idle / a dance (hipHop stands for both) for a score, keeping the current state near its borders
-        Clip quality (int score) const noexcept
+        static bool reacting (Mood m) noexcept { return m == Mood::sad || m == Mood::wink || m == Mood::celebrate; }
+
+        // The mood for a score, keeping the current one near its borders
+        Mood quality (int score) const noexcept
         {
             if (score < 0)
-                return Clip::idle;
-            const Clip held = dancing (now) ? Clip::hipHop : now;
-            if (held == Clip::bad && score < badBelow + hysteresis)
-                return Clip::bad;
-            if (held == Clip::hipHop && score >= goodFrom - hysteresis)
-                return Clip::hipHop;
-            if (held == Clip::idle && score >= badBelow - hysteresis && score < goodFrom + hysteresis)
-                return Clip::idle;
-            return score < badBelow ? Clip::bad : score >= goodFrom ? Clip::hipHop : Clip::idle;
+                return Mood::listening;
+            struct Band { Mood mood; int lo, hi; };
+            static constexpr Band bands[] { { Mood::sad, 0, badBelow }, { Mood::listening, badBelow, goodFrom },
+                                            { Mood::wink, goodFrom, greatFrom }, { Mood::celebrate, greatFrom, 101 } };
+            for (const auto& b : bands)
+                if (b.mood == now && score >= b.lo - hysteresis && score < b.hi + hysteresis)
+                    return now;
+            for (const auto& b : bands)
+                if (score >= b.lo && score < b.hi)
+                    return b.mood;
+            return Mood::celebrate;
         }
 
-        Clip popScene()
+        void nextScene()
         {
-            const Clip c = scene.front();
+            const auto [m, seconds] = scene.front();
             scene.pop_front();
-            inScene = true;
-            return c;
+            switchTo (m);
+            sceneLeft = seconds;
         }
 
-        void switchTo (Clip c, bool fade)
+        void switchTo (Mood m)
         {
-            if (fade)
-                startFade ({ now, frame() });
-            else
-                fading = false;
-            now = c;
+            from = now;
+            now = m;
             time = 0.0;
         }
 
-        void startFade (FrameRef old)
-        {
-            from = old;
-            fading = true;
-            fadeElapsed = 0.0;
-        }
-
-        // Talking: a new mouth every 70 - 160 ms (closed between syllables now and then)
-        void updateMouth (bool talking, double dt)
+        // Talking: a bounce every 120 - 240 ms, like syllables
+        void updateTalk (bool talking, double dt)
         {
             if (! talking)
             {
-                mouthNow = Mouth::closed;
-                syllable = 0.0;
+                talkBounce = std::max (0.0f, talkBounce - (float) dt * 8.0f);
                 return;
             }
             syllable -= dt;
-            if (syllable > 0.0)
-                return;
-            syllable = 0.07 + 0.09 * unit();
-            const auto r = random() % 10;
-            const Mouth next = r < 3 ? Mouth::closed : r < 6 ? Mouth::half : Mouth::open;
-            mouthNow = next == mouthNow && next != Mouth::half ? Mouth::half : next;
+            if (syllable <= 0.0)
+            {
+                syllable = 0.12 + 0.12 * unit();
+                talkBounce = 1.0f;
+            }
+            talkBounce = std::max (0.0f, talkBounce - (float) dt * 6.0f);
         }
 
-        double nextRelaxGap() { return relaxMinGap + (relaxMaxGap - relaxMinGap) * unit(); }
-
-        unsigned random() noexcept
+        double unit() noexcept
         {
             rng = rng * 1664525u + 1013904223u;
-            return rng >> 8;
+            return ((rng >> 8) & 0xffff) / 65535.0;
         }
-        double unit() noexcept { return (random() & 0xffff) / 65535.0; }
 
-        std::array<ClipInfo, numClips> info;
         unsigned rng;
-        Clip now = Clip::idle;
-        std::deque<Clip> scene;
-        bool inScene = false;
-        double time = 0.0, silent = 1.0e9, fadeElapsed = 0.0, relaxIn = 0.0, syllable = 0.0;   // silent until the first signal
-        bool fading = false;
-        FrameRef from { Clip::idle, 0 };
-        Mouth mouthNow = Mouth::closed;
+        Mood now = Mood::listening, from = Mood::listening;
+        std::deque<std::pair<Mood, double>> scene;
+        double sceneLeft = 0.0;
+        double time = 10.0, clock = 0.0, silent = 1.0e9, proudLeft = 0.0, syllable = 0.0;   // silent until the first signal
+        float talkBounce = 0.0f;
     };
 }

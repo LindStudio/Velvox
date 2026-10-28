@@ -223,28 +223,17 @@ Okay → Gut → Super steigt auch messbar in der Bewegungsenergie (mittlere Ges
 - **Maskottchen:** Teufel gefällt Jakob nicht mehr. Kandidaten Meteor, Ghettoblaster, Kassette – 3D im Comic-Stil
   (nicht Sticker). Jakob erzeugt Bilder mit den Prompts; danach Umsetzung.
 
-## Memphy – die neue Figur (Jakob, 2026-10-28) – GILT AB JETZT
-Jakob hat eine neue Figur geliefert: den **Flame Hoodie Imp** (roter Kobold, Kappe verkehrt, Flammen-Hoodie,
-Jeans). Die alte Figur (Ember Imp, `devil-3d`, Mund-Decals) ist gelöscht. **Name: Memphy.**
-- **Quellen:** `art/mascot/imp-3d/Meshy_AI_Flame_Hoodie_Imp_bipedFINISHED.zip` (FBX mit allen Animationen +
-  Texturen) und `art/mascot/imp-3d/FaceExpressions.png` (5 Gesichter: neutral, zwinkernd, staunend, wütend, traurig).
-  Auf Drive: `Character\3d\` und `Character\FaceExpressions.png`.
-- **Animationen** (Laufen und Gehen werden nicht benutzt):
-  | Situation | Animation | Gesicht |
-  |---|---|---|
-  | Rumstehen / Zuhören | Listening_Gesture („Hören-Geste“) | neutral, beim Reden Mund zu / Lächeln / offen |
-  | ab und zu, zufällig alle 15–40 s | Relax_arms_then_strike_battle_pose („Entspanne die Arme“) | wie oben |
-  | Tour-Start | Fall4 (nur bis zur Landung) → Big_Wave_Hello („Große Welle Gruß“) | staunend → zwinkernd |
-  | Tour-Ende | Gentlemans_Bow („Gentleman's Bogen“) | zwinkernd |
-  | Gesang schlecht (Vocal Check < 45) | Depressed_Full_Turn_Left („Depressiver Vollkreis“) | traurig |
-  | Gesang gut (≥ 75) | Hip_Hop_Dance / Breakdance_1990, wechselt alle ~8 s | zwinkernd |
-  | dazwischen, ohne Wertung, Auto Mix hört zu | Listening_Gesture | neutral |
-- **Tour:** neuer erster Schritt „Das ist Memphy“. Er fällt rein, winkt und stellt sich in der Sprechblase
-  in 5 frechen Sätzen vor (Name, Vocal analysieren, Klick = Vocal Check, tanzt bei guter Stimme). Am Ende
-  der Tour (Fertig) zurück nach SIMPEL, er verbeugt sich und verabschiedet sich. Texte: `Source/UI/SimpleView.cpp`.
-- **Pipeline** (am PC „Shadow“, Blender 5.1.2 portabel unter `%USERPROFILE%\dev\tools\blender-5.1.2-windows-x64`,
-  Python = Blenders eigenes mit numpy + Pillow):
-  1. `python tools/mascot/make_faces.py <FaceExpressions.png> art/mascot/faces` – Gesichts-Aufkleber
-  2. `blender -b --factory-startup -P tools/mascot/render_mascot.py -- --model <fbx> --out <dir> --mode all --rate 30`
-     (Gesicht wird als Aufkleber auf den Kopf projiziert, folgt dem Kopfknochen; `FACES` im Skript = Gesicht je Animation)
-  3. `python tools/mascot/pack_mascot.py <dir> Resources/Mascot`
+## Memphy im Plugin = Comic-Sticker (Jakob, 2026-10-28, später am Tag) – GILT
+Die 3D-Animation (unten) war Jakob zu ruckelig / zu groß (44 MB); Entscheidung: **im Plugin Comic-Sticker**,
+Memphy als Figur sonst auf Website / Social Media. `cut_comic.py` braucht Python mit Pillow (auf „Shadow“ nach dem
+Löschen von Blender nicht mehr vorhanden). Quelle: Jakobs Higgsfield-Bogen
+`art/mascot/comic/ComicFaces_moreExpression.png` (3 x 3, Befehl siehe Chat 2026-10-28), ausgeschnitten mit
+`tools/mascot/cut_comic.py … --stickers …` → `Resources/MascotSticker/<stimmung>.png` (384 px, zusammen ~1,9 MB).
+Hellfliederfarbene Scheibe mit weißem Rand, damit die schwarzen Comic-Effekte auf dem dunklen Plugin sichtbar bleiben.
+Stimmungen und Logik: `Source/UI/MascotBrain.h`. Ruhigere Variante ohne Action: `art/mascot/comic/calm`.
+
+## Memphy als 3D-Figur – verworfen (Jakob, 2026-10-28)
+Kurz gab es Memphy als Blender-Render (Flame Hoodie Imp, Jakobs FBX mit Animationen, Gesichter als Aufkleber).
+Jakob: zu ruckelig, zu groß; danach **alles 3D gelöscht** (Skripte, Renders, Modell im Repo, Blender auf „Shadow“).
+Jakobs Quellen bleiben auf Drive: `Character\3d\` (FBX-Zip), `Character\FaceExpressions.png`. Name **Memphy** bleibt.
+Die Tour-Idee (er stellt sich in 5 frechen Sätzen vor, Texte in `Source/UI/SimpleView.cpp`) lebt mit den Stickern weiter.

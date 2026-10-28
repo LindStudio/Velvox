@@ -49,11 +49,12 @@ gegen den Beat, Band für Band, nur dort, wo der Beat spielt. Ohne Beat bleibt a
 - **Memphy** (neue Figur, Jakob 2026-10-28: roter Kobold mit Kappe und Flammen-Hoodie) in SIMPEL unten links,
   Klick = Vocal Check. Statuszeile, Vorher/Nachher oben rechts, Sprechblase mit „Vocal analysieren“ /
   „Details“. Nach dem Auto Mix zeigen die SIMPEL-Regler, was er eingestellt hat.
-- Er hört zu (Hören-Geste) und entspannt ab und zu die Arme. Bei guter Stimme (Vocal Check ab 75) tanzt er
-  Hip-Hop oder Breakdance, bei schlechter (unter 45) dreht er sich deprimiert im Kreis. Fünf Gesichter:
-  neutral, zwinkernd, staunend, traurig, beim Reden bewegt sich der Mund.
-- **Tour:** neuer erster Schritt „Das ist Memphy“: Er fällt rein, winkt und stellt sich frech vor (was er kann,
-  Klick = Vocal Check). Am Ende der Tour verbeugt er sich.
+- **Als Comic-Sticker** (Jakob: keine 3D-Animation im Plugin, die animierte Figur gibt es auf der Website):
+  ein Bild je Stimmung – hört zu, redet, zwinkert (Vocal Check ab 75), jubelt (ab 90), traurig (unter 45),
+  denkt nach (Auto Mix analysiert), genervt (Analyse wartet, aber kein Signal), Daumen hoch (Mix fertig),
+  erschrocken. Beim Wechsel ploppt der Sticker kurz auf, er atmet leicht, wippt beim Reden und hüpft beim Jubeln.
+- **Tour:** neuer erster Schritt „Das ist Memphy“: Er ploppt erschrocken rein, zwinkert und stellt sich frech
+  vor (was er kann, Klick = Vocal Check). Am Ende der Tour Daumen hoch.
 
 ### Neu – Sprache Deutsch / English
 - **Die ganze Oberfläche gibt es auf Deutsch und Englisch:** Bedienelemente, Infokarten, Menüs, Hilfe, Tour,
