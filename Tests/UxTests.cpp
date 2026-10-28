@@ -123,7 +123,7 @@ public:
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = asVelvox (*e);
             const juce::Rectangle<int> canvas (0, 0, ui::baseWidth, ui::baseHeight);
-            for (auto* key : { "chain", "presets", "global", "help", "chainAndModules", "body", "modes", "tabs", "macros", "analyse" })
+            for (auto* key : { "chain", "presets", "global", "help", "chainAndModules", "body", "modes", "tabs", "macros", "analyse", "mascot" })
             {
                 // tutorialTarget is private; the overlay resolves it through targetFor
                 const auto r = ed.getTutorial().targetFor (key);

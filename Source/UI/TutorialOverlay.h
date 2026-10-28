@@ -35,6 +35,8 @@ namespace velvox::ui
         // Area of the editor canvas to highlight for a target key
         std::function<juce::Rectangle<int> (const juce::String& target)> targetFor;
         std::function<void (Outcome)> onClose;
+        // A step was entered (not called again when the same step is only laid out anew)
+        std::function<void (const juce::String& target)> onStep;
         // A language was picked on the welcome card (the editor stores it and rebuilds the interface)
         std::function<void (i18n::Language)> onLanguage;
 
@@ -54,7 +56,7 @@ namespace velvox::ui
         void layoutButtons();
         void tick();
 
-        int step = -1;
+        int step = -1, announced = -2;   // announced: the step onStep was last called for
         juce::Rectangle<int> target;
         std::array<Smoothed, 4> spot {};   // animated spotlight x, y, w, h
         bool spotValid = false;

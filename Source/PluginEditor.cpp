@@ -229,8 +229,25 @@ HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
     };
     help.onStartTutorial = [this] { startTutorial (false); };
     tutorial.targetFor = [this] (const juce::String& key) { return tutorialTarget (key); };
+    // Memphy opens the tour: he falls in, waves and introduces himself
+    tutorial.onStep = [this] (const juce::String& key)
+    {
+        if (key == "mascot")
+            simpleView.startIntro();
+    };
     tutorial.onClose = [this] (TutorialOverlay::Outcome outcome)
     {
+        // ... and bows when it is done (in SIMPEL, so you see it)
+        if (outcome == TutorialOverlay::Outcome::finished)
+        {
+            if (mode != Mode::simple || tab != Tab::autoMix)
+            {
+                mode = Mode::simple;
+                tab = Tab::autoMix;
+                applyView (false);
+            }
+            simpleView.startOutro();
+        }
         // Whatever was chosen, the welcome card has asked for the language: keep the current one
         settings::confirmLanguageChoice();
         if (outcome == TutorialOverlay::Outcome::later)
@@ -535,9 +552,9 @@ void HeadlinerView::startTutorial (bool withWelcome)
 
 juce::Rectangle<int> HeadlinerView::tutorialTarget (const juce::String& key)
 {
-    // The tour shows each step in the view it explains: SIMPLE for the analysis and the macros,
+    // The tour shows each step in the view it explains: SIMPLE for Memphy, the analysis and the macros,
     // ADVANCED for the chain and the module panels
-    const bool wantsSimple = key == "analyse" || key == "macros";
+    const bool wantsSimple = key == "mascot" || key == "analyse" || key == "macros";
     const bool wantsAdvanced = key == "chain" || key == "chainAndModules" || key == "body";
     if ((wantsSimple && (mode != Mode::simple || tab != Tab::autoMix))
         || (wantsAdvanced && (mode != Mode::advanced || tab != Tab::autoMix)))
@@ -553,6 +570,7 @@ juce::Rectangle<int> HeadlinerView::tutorialTarget (const juce::String& key)
     if (key == "tabs")    return topBar.getTabArea();
     if (key == "global")  return topBar.getBypassArea();
     if (key == "help")    return topBar.getHelpButton().getBounds();
+    if (key == "mascot")  return simpleView.getMascotArea() + bodyArea().getPosition();
     if (key == "macros")  return simpleView.getMacroArea() + bodyArea().getPosition();
     if (key == "analyse") return simpleView.getSpectrumArea() + bodyArea().getPosition();
     if (key == "body")    return isModulePanelShown() ? panelArea() : bodyArea();

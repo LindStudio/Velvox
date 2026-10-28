@@ -17,6 +17,110 @@ namespace velvox::ui
             g.drawRoundedRectangle (r.reduced (0.5f), 12.0f, 1.0f);
         }
 
+        // Memphy introduces himself in the tour (Jakob 2026-10-28: cheeky and playful, says what you can do with him)
+        juce::StringArray introLines()
+        {
+            return { tr ("Autsch! Okay, bin da. Ich bin Memphy, dein kleiner Mix-Teufel.",
+                         "Ouch! Okay, I'm here. I'm Memphy, your little mix devil."),
+                     tr ("Spiel deinen Song, klick auf „Vocal analysieren“ – ich hör zu und mix dir die Stimme. Kaffee brauch ich keinen.",
+                         "Play your song and hit “Analyze vocal” – I'll listen and mix your voice. No coffee needed."),
+                     tr ("Klick auf mich, dann zeig ich dir im Vocal Check, was deiner Stimme fehlt. Ehrlich, aber nett.",
+                         "Click me and I'll show you in Vocal Check what your voice is missing. Honest, but nice."),
+                     tr ("Singst du richtig gut, tanz ich. Singst du schief … tja, das siehst du mir an.",
+                         "Sing really well and I dance. Sing off-key … well, you'll see it on my face."),
+                     tr ("Jetzt zeig ich dir den Rest. Keine Angst, ich beiß nur ein bisschen.",
+                         "Now let me show you the rest. Don't worry, I only bite a little.") };
+        }
+
+        juce::StringArray byeLines()
+        {
+            return { tr ("Das war's! Danke fürs Zuhören – jetzt bist du dran. Ich wohn hier unten, falls was ist.",
+                         "That's it! Thanks for listening – your turn now. I live down here if you need me.") };
+        }
+
+        // How long a line stays and how long he talks (reading pace)
+        double lineSeconds (const juce::String& s) { return 1.5 + 0.055 * s.length(); }
+        double talkSeconds (const juce::String& s) { return 0.4 + 0.045 * s.length(); }
+    }
+
+    void SimpleView::startIntro()
+    {
+        mascot.playIntro();
+        lines = introLines();
+        line = -1;
+        lineTime = 0.0;
+        setSay (tr ("Uiiiiiii…!", "Wheeeeee…!"));
+    }
+
+    void SimpleView::startOutro()
+    {
+        mascot.playBow();
+        lines = byeLines();
+        line = 0;   // he says it while he bows
+        lineTime = 0.0;
+        setSay (lines[0]);
+    }
+
+    void SimpleView::setSay (const juce::String& text)
+    {
+        if (text != say)
+        {
+            say = text;
+            repaint (bubble);
+        }
+    }
+
+    bool SimpleView::advanceLines (double dt)
+    {
+        if (lines.isEmpty())
+            return false;
+        if (line < 0)
+        {
+            // The intro lines start once he has landed and waved
+            if (mascot.getBrain().sceneRunning())
+            {
+                if (mascot.getBrain().clip() == mascot::Clip::wave)
+                    setSay (tr ("Hey, hallo!", "Hey there!"));
+                return true;
+            }
+            line = 0;
+            lineTime = 0.0;
+            setSay (lines[0]);
+        }
+        lineTime += dt;
+        if (lineTime >= lineSeconds (lines[line]))
+        {
+            if (++line >= lines.size())
+            {
+                lines.clear();
+                line = -1;
+                return false;
+            }
+            lineTime = 0.0;
+            setSay (lines[line]);
+        }
+        return true;
+    }
+
+    void SimpleView::tick (double dt)
+    {
+        mascot::Inputs in;
+        advance (in, dt);
+    }
+
+    void SimpleView::advance (mascot::Inputs in, double dt)
+    {
+        const bool speaking = advanceLines (dt);
+        in.talking = speaking && line >= 0 && lineTime < talkSeconds (lines[line]);
+        mascot.tick (in, dt);
+        silentFor = in.inputDb > mascot::Brain::signalDb ? 0.0 : silentFor + dt;
+        if (! speaking && line < 0 && lines.isEmpty())
+            updateBubble (in.autoMixBusy, silentFor > mascot::Brain::silenceToIdle);
+    }
+
+    juce::Rectangle<int> SimpleView::getMascotArea() const noexcept
+    {
+        return mascot.getBounds().getUnion (bubble);
     }
 
     const std::vector<SimpleView::MacroDef>& SimpleView::macroDefs()
@@ -125,11 +229,7 @@ namespace velvox::ui
         else
             text = tr ("Spiel deinen Song ab und klick auf „Vocal analysieren“. Ich stell dann alles für dich ein.",
                        "Play your song and click “Analyze vocal”. I'll set everything up for you.");
-        if (text != say)
-        {
-            say = text;
-            repaint (bubble);
-        }
+        setSay (text);
     }
 
     void SimpleView::refresh (const LiveData& live)
@@ -139,7 +239,7 @@ namespace velvox::ui
         if (before.isVisible() && before.getToggleState() != proc.getAutoMix().isShowingPrevious())
             updateCompare();
 
-        // The devil: real time between frames (the host may slow the timer down), score twice a second
+        // Memphy: real time between frames (the host may slow the timer down), score twice a second
         const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
         const double dt = lastTick > 0.0 ? juce::jlimit (0.0, 0.1, now - lastTick) : 1.0 / 60.0;
         lastTick = now;
@@ -155,9 +255,7 @@ namespace velvox::ui
         in.inputDb = live.inputDb.ago (0);
         in.score = score;
         in.autoMixBusy = phase == Phase::listening || phase == Phase::capturing || phase == Phase::analysing;
-        mascot.tick (in, dt);
-        silentFor = in.inputDb > mascot::Brain::signalDb ? 0.0 : silentFor + dt;
-        updateBubble (in.autoMixBusy, silentFor > mascot::Brain::silenceToIdle);
+        advance (in, dt);
         if (in.autoMixBusy != wasBusy)
         {
             wasBusy = in.autoMixBusy;

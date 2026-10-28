@@ -33,6 +33,9 @@ namespace velvox::ui
     {
         const auto t = [german] (const char* de, const char* en) { return juce::String::fromUTF8 (german ? de : en); };
         return {
+            { "mascot", t ("Das ist Memphy", "Meet Memphy"),
+              t ("Memphy ist dein Assistent. Er stellt sich kurz vor – hör ihm zu oder klick einfach auf Weiter.",
+                 "Memphy is your assistant. He introduces himself - listen, or just click Next.") },
             { "analyse", t ("Vocal analysieren", "Analyze vocal"),
               t ("Spiel deine Vocal in der DAW ab und klick auf „Vocal analysieren“: Headliner hört einen Abschnitt an und stellt die Module ein. Die Wiedergabe läuft dabei einfach weiter.",
                  "Play your vocal in the DAW and click \"Analyze vocal\": Headliner listens to a section and sets up the modules. Playback simply keeps running.") },
@@ -149,12 +152,16 @@ namespace velvox::ui
         repaint();
         if (isShowing())
             grabKeyboardFocus();
+        if (step >= 0 && step != announced && onStep)
+            onStep (steps()[(size_t) step].target);
+        announced = step;
     }
 
     void TutorialOverlay::finish (Outcome outcome)
     {
         setVisible (false);
         step = -1;
+        announced = -2;
         if (onClose)
             onClose (outcome);
     }

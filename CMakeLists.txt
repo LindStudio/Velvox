@@ -147,9 +147,8 @@ juce_add_binary_data(VelvoxAssets
         Resources/Images/HeadlinerWordmark.png
         Resources/Images/HeadlinerLogo.png
         # Mascot sprite clips (tools/mascot/pack_mascot.py, format in Source/UI/MascotClips.h)
-        Resources/Mascot/wakeUp.vms Resources/Mascot/idle.vms Resources/Mascot/bad.vms Resources/Mascot/problem.vms
-        Resources/Mascot/okay.vms Resources/Mascot/good.vms Resources/Mascot/super.vms Resources/Mascot/spin.vms
-        Resources/Mascot/working.vms Resources/Mascot/walk.vms Resources/Mascot/call.vms)
+        Resources/Mascot/fall.vms Resources/Mascot/wave.vms Resources/Mascot/bow.vms Resources/Mascot/idle.vms
+        Resources/Mascot/relax.vms Resources/Mascot/bad.vms Resources/Mascot/hipHop.vms Resources/Mascot/breakdance.vms)
 
 set(VELVOX_COMMON_LIBS
     VelvoxAssets
@@ -280,7 +279,7 @@ if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Tests/AuditionTests.cpp Tests/I18nTests.cpp)
 endif()
 
-# Mascot (the Vocalypse devil in SIMPEL)
+# Mascot (Memphy, the Vocalypse imp in SIMPEL)
 if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Tests/MascotTests.cpp Tests/DenoiseTests.cpp Tests/BreathTests.cpp)
 endif()

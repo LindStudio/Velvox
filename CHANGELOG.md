@@ -41,10 +41,15 @@ gegen den Beat, Band für Band, nur dort, wo der Beat spielt. Ohne Beat bleibt a
 - **Vocal Check / Bericht:** „Beat verdeckt die Stimme bei 3,8 kHz“ mit dem gemessenen Wert statt des
   ungefähren Hinweises auf 2–5 kHz.
 
-### Neu – Maskottchen und SIMPEL
-- Das Teufelchen in SIMPEL (unten links, Klick = Vocal Check), Statuszeile, Vorher/Nachher oben rechts,
-  Sprechblase mit „Vocal analysieren“ / „Details“. Nach dem Auto Mix zeigen die SIMPEL-Regler, was er
-  eingestellt hat.
+### Neu – Maskottchen Memphy und SIMPEL
+- **Memphy** (neue Figur, Jakob 2026-10-28: roter Kobold mit Kappe und Flammen-Hoodie) in SIMPEL unten links,
+  Klick = Vocal Check. Statuszeile, Vorher/Nachher oben rechts, Sprechblase mit „Vocal analysieren“ /
+  „Details“. Nach dem Auto Mix zeigen die SIMPEL-Regler, was er eingestellt hat.
+- Er hört zu (Hören-Geste) und entspannt ab und zu die Arme. Bei guter Stimme (Vocal Check ab 75) tanzt er
+  Hip-Hop oder Breakdance, bei schlechter (unter 45) dreht er sich deprimiert im Kreis. Fünf Gesichter:
+  neutral, zwinkernd, staunend, traurig, beim Reden bewegt sich der Mund.
+- **Tour:** neuer erster Schritt „Das ist Memphy“: Er fällt rein, winkt und stellt sich frech vor (was er kann,
+  Klick = Vocal Check). Am Ende der Tour verbeugt er sich.
 
 ### Neu – Sprache Deutsch / English
 - **Die ganze Oberfläche gibt es auf Deutsch und Englisch:** Bedienelemente, Infokarten, Menüs, Hilfe, Tour,

@@ -6,8 +6,8 @@
 
 namespace velvox::ui
 {
-    // The animated devil (SIMPEL, bottom left). The editor feeds it once per frame; it plays the clip
-    // the Brain picks, swaps in the mouth patch for the level and cross-fades between clips.
+    // Memphy, the animated imp (SIMPEL, bottom left). The editor feeds it once per frame; it plays the clip
+    // the Brain picks, swaps in the mouth patch while he talks and cross-fades between clips.
     // The standing figure fills the stand area (his place in the layout) and scales with the window
     // (frames are rendered for twice the design size); wider poses reach beyond it, so the component
     // is larger than the stand area and only takes clicks on the figure itself.
@@ -31,11 +31,13 @@ namespace velvox::ui
         void simulateClick() { if (onClick) onClick(); }
 
         const mascot::Brain& getBrain() const noexcept { return brain; }
+        void playIntro() { brain.playIntro(); repaint(); }
+        void playBow() { brain.playBow(); repaint(); }
 
     private:
         struct Cached
         {
-            mascot::Clip clip = mascot::Clip::wakeUp;
+            mascot::Clip clip = mascot::Clip::idle;
             int frame = -1;
             juce::Image image;
         };
@@ -48,11 +50,11 @@ namespace velvox::ui
         Cached current, fading;
         juce::Rectangle<float> standArea;
         mascot::Patch mouthPatch;
-        mascot::Clip mouthClip = mascot::Clip::wakeUp;
+        mascot::Clip mouthClip = mascot::Clip::idle;
         int mouthFrame = -1;
         mascot::Mouth mouthKind = mascot::Mouth::closed;
         int lastFrame = -1;
-        mascot::Clip lastClip = mascot::Clip::wakeUp;
+        mascot::Clip lastClip = mascot::Clip::idle;
         mascot::Mouth lastMouth = mascot::Mouth::closed;
     };
 }

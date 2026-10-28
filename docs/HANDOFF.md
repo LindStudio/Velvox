@@ -13,7 +13,14 @@ Branch **`feature/modules-0.7`**, am PC „Shadow“ weitergemacht (alle Commits
   synthetische Beats `Tests/SyntheticBeat.h`. Ohne Beat bleibt alles gleich (AutoMix-/AutoEq-Suites unverändert grün).
   Der Assistent (`Source/Assistant`, `AssistantView`) ist nicht mehr im Editor eingebunden und wurde nicht angefasst.
   Noch nicht mit echten Beats geprüft (keine `velvox-data` auf diesem PC).
-- Als Nächstes: Punkt 6 (neues Maskottchen, Jakob liefert Bilder). Pushen und Installieren erst nach Jakobs OK.
+- Punkt 6 **erledigt**: neue Figur **Memphy** (Flame Hoodie Imp), alte Figur gelöscht. Alles dazu (Animationen je
+  Situation, Gesichter, Tour, Pipeline mit Blender auf diesem PC): `docs/design/VOCALYPSE_NAME_UND_MASKOTTCHEN.md`,
+  Abschnitt „Memphy“. Renders: `%USERPROFILE%\dev\velvox-bench\2026-10-28\mascot-imp`.
+- **Noch offen aus Jakobs `Character\TODO.txt` (Drive):** EQ: beim Band-Solo springt Q zurück, sobald man links/rechts
+  sweept · Saturation verzerrt die Vocal stark · Auto Mix klingt dumpf · Website: Kauf-Button weg („bald verfügbar“),
+  Newsletter-Anmeldung (früher Zugang + Rabattcode per Mail), Impressum von lind-studio.com übernehmen, Datenschutz
+  inkl. E-Mail-Erfassung · Idee für später: Belohnung für gute Rezensionen.
+- Pushen und Installieren erst nach Jakobs OK.
 
 ## STAND 2026-10-27 ABEND
 Branch **`feature/modules-0.7`** (baut auf `feature/i18n` auf). Jakob hat unterbrochen („ich mach morgen weiter“).

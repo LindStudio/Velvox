@@ -4,7 +4,7 @@
 namespace velvox::ui
 {
     MascotView::MascotView()
-        : library (mascot::ClipLibrary::get()), brain (library.infos())
+        : library (mascot::ClipLibrary::get()), brain (library.infos(), juce::Time::getMillisecondCounter())
     {
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
         setTooltip (i18n::tr ("Klick mich: Vocal Check", "Click me: Vocal Check"));

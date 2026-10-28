@@ -378,8 +378,9 @@ public:
             const auto* controls = ui::help::find ("controls");
             expect (controls != nullptr && controls->body.contains ("Alt") && controls->body.contains ("Shift"), "gestures explained in the help");
 
-            // The tour starts with the main action; the settings (gear) are mentioned
-            expectEquals (ui::TutorialOverlay::steps().front().target, juce::String ("analyse"), "tour starts with the analysis");
+            // The tour starts with Memphy, then the main action; the settings (gear) are mentioned
+            expectEquals (ui::TutorialOverlay::steps().front().target, juce::String ("mascot"), "tour starts with Memphy");
+            expectEquals (ui::TutorialOverlay::steps()[1].target, juce::String ("analyse"), "... then the analysis");
             expect (ui::TutorialOverlay::steps().back().text.contains ("Zahnrad"), "tour mentions the settings");
             expect (start != nullptr && start->body.contains (juce::String::fromUTF8 ("„Vocal analysieren“")), "German help quotes the German button");
         }
@@ -402,7 +403,8 @@ public:
             for (auto& step : ui::TutorialOverlay::steps())
                 modesStep = modesStep || (step.target == "modes" && step.text.contains ("SIMPLE") && step.text.contains ("ADVANCED"));
             expect (modesStep, "English tutorial step for SIMPLE / ADVANCED");
-            expectEquals (ui::TutorialOverlay::steps().front().title, juce::String ("Analyze vocal"));
+            expectEquals (ui::TutorialOverlay::steps().front().title, juce::String ("Meet Memphy"));
+            expectEquals (ui::TutorialOverlay::steps()[1].title, juce::String ("Analyze vocal"));
             expect (ui::TutorialOverlay::steps().back().text.contains ("gear"), "English tour mentions the settings");
 
             // Nothing German left in the English help and tour

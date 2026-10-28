@@ -9,7 +9,7 @@ class VelvoxAudioProcessor;
 
 namespace velvox::ui
 {
-    // Simple mode, variant A3 (spec 2.3) with the devil as assistant (approved concept, canvas artboard "Teufel"):
+    // Simple mode, variant A3 (spec 2.3) with Memphy as assistant (approved concept, canvas artboard "Teufel"):
     //   left    after an analysis a small Vorher | Nachher switch top right, the live spectrum of the
     //           vocal (before = dashed line, after = filled curve), and under it the devil (bottom left;
     //           a click on him opens the Vocal Check) with a speech bubble holding "Vocal analysieren"
@@ -30,6 +30,12 @@ namespace velvox::ui
         // Once per frame from the editor
         void refresh (const LiveData& live);
 
+        // Tour: Memphy falls in, waves and introduces himself in the bubble; at the end he bows and says bye
+        void startIntro();
+        void startOutro();
+        // For tests: advances Memphy and his lines by dt without audio
+        void tick (double dt);
+
         std::function<void()> onAnalyse;      // "Vocal analysieren"
         std::function<void()> onShowDetails;  // report overlay
         std::function<void()> onVocalCheck;   // click on the devil
@@ -45,6 +51,7 @@ namespace velvox::ui
         juce::Rectangle<int> getMeterArea() const noexcept { return meterStrip; }
         CompactMeters& getMeters() noexcept { return meters; }
         MascotView& getMascot() noexcept { return mascot; }
+        juce::Rectangle<int> getMascotArea() const noexcept;   // Memphy and his bubble (the tour's first step)
         const juce::String& getBubbleText() const noexcept { return say; }
 
         struct MacroDef { const char* paramId; const char* label; juce::uint32 colour; };
@@ -54,6 +61,9 @@ namespace velvox::ui
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
         void updateCompare();
         void updateBubble (bool busy, bool silent);
+        void advance (mascot::Inputs in, double dt);
+        bool advanceLines (double dt);   // true while one of his lines is up
+        void setSay (const juce::String& text);
 
         VelvoxAudioProcessor& proc;
         SpectrumView spectrumView;
@@ -62,6 +72,9 @@ namespace velvox::ui
         CompactMeters meters;
         MascotView mascot;
         juce::String say;
+        juce::StringArray lines;   // what he is saying in the tour (empty = the usual bubble)
+        int line = -1;             // -1 = waiting for him to land and wave
+        double lineTime = 0.0;
         double lastTick = 0.0, scoreAge = 1.0e9, silentFor = 0.0;
         int score = -1;
         bool wasBusy = false;

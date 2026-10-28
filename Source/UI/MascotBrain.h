@@ -2,26 +2,27 @@
 
 #include <algorithm>
 #include <array>
+#include <deque>
 #include <optional>
 
-// Vocalypse mascot (the 3D devil, docs/design/VOCALYPSE_NAME_UND_MASKOTTCHEN.md): which animation
-// plays and which mouth he shows. Pure logic, no images - the view (MascotView) draws what this says.
+// Vocalypse mascot Memphy (the Flame Hoodie Imp, Jakob 2026-10-28): which animation plays and which mouth
+// he shows. Pure logic, no images - the view (MascotView) draws what this says.
 //
-//   plugin opens        wake-up (once), then idle
-//   silence > 2 s       idle (breathes, looks around)
-//   auto mix listening  idle (stands and listens; running on the spot looked odd - Jakob, 2026-10-27)
-//   singing             a dance picked by the Vocal Check score:
-//                         < 40 bad (on the phone, ignores you) · < 60 problem (scolds) · < 75 okay
-//                         < 90 good · else super · no score yet = okay
-//   score >= 95         one spin jump, then super; at most once a minute
+//   idle                Listening Gesture; now and then, at random times, "Relax arms" (once)
+//   auto mix listening  idle (he listens too)
+//   singing             by the Vocal Check score: < badBelow the depressed full turn, >= goodFrom hip hop or
+//                       breakdance (he switches between them), in between and without a score he listens
+//   silence > 2 s       idle
+//   tour                playIntro(): falls in (Fall4), waves (Big Wave Hello); playBow(): Gentleman's Bow
 //
 // A new state waits until the current one has played minHold seconds (one-shots play to their end),
-// scores near a border keep the current dance (hysteresis), and every switch cross-fades from the
-// last frame of the old clip (also at the wrap of a loop, where the packer may have cut it). The mouth follows the input level (closed / half / open) so he sings along.
+// scores near a border keep the current state (hysteresis), and every switch cross-fades from the
+// last frame of the old clip (also at the wrap of a loop, where the packer may have cut it) - except the
+// fall, which starts from nothing. The mouth moves only while he talks (the view's speech lines).
 namespace velvox::ui::mascot
 {
-    enum class Clip { wakeUp, idle, bad, problem, okay, good, super, spin, working, walk, call };
-    constexpr int numClips = 11;
+    enum class Clip { fall, wave, bow, idle, relax, bad, hipHop, breakdance };
+    constexpr int numClips = 8;
 
     enum class Mouth { closed, half, open };
 
@@ -37,6 +38,7 @@ namespace velvox::ui::mascot
         float inputDb = -100.0f;     // input level of this frame
         int score = -1;              // Vocal Check 0..100, -1 = not enough material
         bool autoMixBusy = false;    // listening / capturing / analysing
+        bool talking = false;        // a speech line is being said
     };
 
     struct FrameRef
@@ -49,19 +51,40 @@ namespace velvox::ui::mascot
     {
     public:
         static constexpr double minHold = 2.5;          // s a state plays before another may take over
-        static constexpr double silenceToIdle = 2.0;    // s of silence before he stops dancing
+        static constexpr double silenceToIdle = 2.0;    // s of silence before he stops reacting to the singing
         static constexpr double fadeTime = 0.25;        // s cross-fade between clips
-        static constexpr double spinCooldown = 60.0;    // s between two spin jumps
+        static constexpr double danceSwap = 8.0;        // s of one dance before he may switch to the other
+        static constexpr double relaxMinGap = 15.0, relaxMaxGap = 40.0;   // s of listening between two relaxes
         static constexpr float signalDb = -55.0f;
-        static constexpr int hysteresis = 3;            // score points around the dance borders
+        static constexpr int badBelow = 45, goodFrom = 75;
+        static constexpr int hysteresis = 3;            // score points around the borders
 
-        explicit Brain (const std::array<ClipInfo, numClips>& clipInfo) : info (clipInfo) {}
+        explicit Brain (const std::array<ClipInfo, numClips>& clipInfo, unsigned seed = 1)
+            : info (clipInfo), rng (seed == 0 ? 1u : seed)
+        {
+            relaxIn = nextRelaxGap();
+        }
+
+        // Tour: falls in and waves (then listens); bows
+        void playIntro()
+        {
+            scene = { Clip::fall, Clip::wave };
+            switchTo (popScene(), false);   // he was not there: no cross-fade from the old figure
+        }
+
+        void playBow()
+        {
+            scene = { Clip::bow };
+            switchTo (popScene(), true);
+        }
+
+        // A tour scene (fall, wave, bow) is playing or queued
+        bool sceneRunning() const noexcept { return inScene || ! scene.empty(); }
 
         void update (const Inputs& in, double dt)
         {
-            updateMouth (in.inputDb, dt);
+            updateMouth (in.talking, dt);
             silent = in.inputDb > signalDb ? 0.0 : silent + dt;
-            cooldown = std::max (0.0, cooldown - dt);
             const int before = frame();
             time += dt;
             if (fading)
@@ -72,14 +95,28 @@ namespace velvox::ui::mascot
             if (current().loops && frame() < before)
                 startFade ({ now, before });
 
-            const bool oneShotRunning = ! current().loops && ! finished();
-            if (oneShotRunning)
+            if (! current().loops && ! finished())
+                return;   // one-shots play to their end
+            if (! scene.empty())
+            {
+                switchTo (popScene(), true);
                 return;
+            }
+            inScene = false;
 
-            const Clip want = desired (in);
+            Clip want = desired (in);
+            if (want == Clip::idle && now == Clip::idle)
+            {
+                relaxIn -= dt;
+                if (relaxIn <= 0.0)
+                {
+                    relaxIn = nextRelaxGap();
+                    want = Clip::relax;
+                }
+            }
             const bool mayLeave = ! current().loops || time >= minHold;
             if (want != now && mayLeave)
-                switchTo (want);
+                switchTo (want, true);
         }
 
         Clip clip() const noexcept { return now; }
@@ -104,47 +141,54 @@ namespace velvox::ui::mascot
             return ci.loops ? f % ci.frames : std::min (f, ci.frames - 1);
         }
 
+        static bool dancing (Clip c) noexcept { return c == Clip::hipHop || c == Clip::breakdance; }
+        static bool reacting (Clip c) noexcept { return dancing (c) || c == Clip::bad; }
+
         Clip desired (const Inputs& in)
         {
             if (in.autoMixBusy)
                 return Clip::idle;
-            if (silent > 0.0)   // a pause between phrases keeps the dance, a long one ends it
-                return silent > silenceToIdle || ! isDance (now) ? Clip::idle : now;
-            if (in.score >= 95 && cooldown <= 0.0)
-                return Clip::spin;
-            return quality (in.score);
+            if (silent > 0.0)   // a pause between phrases keeps the reaction, a long one ends it
+                return silent > silenceToIdle || ! reacting (now) ? Clip::idle : now;
+            const Clip mood = quality (in.score);
+            if (mood != Clip::hipHop)
+                return mood;
+            if (dancing (now))   // keeps his dance, now and then the other one
+                return time >= danceSwap ? (now == Clip::hipHop ? Clip::breakdance : Clip::hipHop) : now;
+            return random() % 2 == 0 ? Clip::hipHop : Clip::breakdance;
         }
 
-        static bool isDance (Clip c) noexcept
-        {
-            return c == Clip::bad || c == Clip::problem || c == Clip::okay || c == Clip::good || c == Clip::super || c == Clip::spin;
-        }
-
-        // The dance for a score, keeping the current dance while the score is near its borders
+        // bad / idle / a dance (hipHop stands for both) for a score, keeping the current state near its borders
         Clip quality (int score) const noexcept
         {
             if (score < 0)
-                return Clip::okay;
-            struct Band { Clip clip; int lo, hi; };
-            static constexpr Band bands[] { { Clip::bad, 0, 40 }, { Clip::problem, 40, 60 }, { Clip::okay, 60, 75 },
-                                            { Clip::good, 75, 90 }, { Clip::super, 90, 101 } };
-            const Clip held = now == Clip::spin ? Clip::super : now;
-            for (const auto& b : bands)
-                if (b.clip == held && score >= b.lo - hysteresis && score < b.hi + hysteresis)
-                    return held;
-            for (const auto& b : bands)
-                if (score >= b.lo && score < b.hi)
-                    return b.clip;
-            return Clip::super;
+                return Clip::idle;
+            const Clip held = dancing (now) ? Clip::hipHop : now;
+            if (held == Clip::bad && score < badBelow + hysteresis)
+                return Clip::bad;
+            if (held == Clip::hipHop && score >= goodFrom - hysteresis)
+                return Clip::hipHop;
+            if (held == Clip::idle && score >= badBelow - hysteresis && score < goodFrom + hysteresis)
+                return Clip::idle;
+            return score < badBelow ? Clip::bad : score >= goodFrom ? Clip::hipHop : Clip::idle;
         }
 
-        void switchTo (Clip c)
+        Clip popScene()
         {
-            startFade ({ now, frame() });
+            const Clip c = scene.front();
+            scene.pop_front();
+            inScene = true;
+            return c;
+        }
+
+        void switchTo (Clip c, bool fade)
+        {
+            if (fade)
+                startFade ({ now, frame() });
+            else
+                fading = false;
             now = c;
             time = 0.0;
-            if (c == Clip::spin)
-                cooldown = spinCooldown;
         }
 
         void startFade (FrameRef old)
@@ -154,20 +198,41 @@ namespace velvox::ui::mascot
             fadeElapsed = 0.0;
         }
 
-        void updateMouth (float db, double dt)
+        // Talking: a new mouth every 70 - 160 ms (closed between syllables now and then)
+        void updateMouth (bool talking, double dt)
         {
-            // Fast attack, short release: the mouth snaps open on a syllable and closes between them
-            const double tau = db > level ? 0.02 : 0.08;
-            level += (float) ((db - level) * std::min (1.0, dt / tau));
-            mouthNow = level < -40.0f ? Mouth::closed : level < -24.0f ? Mouth::half : Mouth::open;
+            if (! talking)
+            {
+                mouthNow = Mouth::closed;
+                syllable = 0.0;
+                return;
+            }
+            syllable -= dt;
+            if (syllable > 0.0)
+                return;
+            syllable = 0.07 + 0.09 * unit();
+            const auto r = random() % 10;
+            const Mouth next = r < 3 ? Mouth::closed : r < 6 ? Mouth::half : Mouth::open;
+            mouthNow = next == mouthNow && next != Mouth::half ? Mouth::half : next;
         }
 
+        double nextRelaxGap() { return relaxMinGap + (relaxMaxGap - relaxMinGap) * unit(); }
+
+        unsigned random() noexcept
+        {
+            rng = rng * 1664525u + 1013904223u;
+            return rng >> 8;
+        }
+        double unit() noexcept { return (random() & 0xffff) / 65535.0; }
+
         std::array<ClipInfo, numClips> info;
-        Clip now = Clip::wakeUp;
-        double time = 0.0, silent = 1.0e9, cooldown = 0.0, fadeElapsed = 0.0;   // silent until the first signal
+        unsigned rng;
+        Clip now = Clip::idle;
+        std::deque<Clip> scene;
+        bool inScene = false;
+        double time = 0.0, silent = 1.0e9, fadeElapsed = 0.0, relaxIn = 0.0, syllable = 0.0;   // silent until the first signal
         bool fading = false;
-        FrameRef from { Clip::wakeUp, 0 };
-        float level = -100.0f;
+        FrameRef from { Clip::idle, 0 };
         Mouth mouthNow = Mouth::closed;
     };
 }

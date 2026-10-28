@@ -3,13 +3,13 @@
     python tools/mascot/pack_mascot.py <render dir> Resources/Mascot [--height 240] [--quality 85]
 
 <render dir> is the output of
-    render_mascot.py --mode all --rate 30 --mouths zu,halb,offen
-(<anim>/zu|halb|offen/####.png). Every frame is cropped to one common box (the union of all clips,
-so the figure never jumps between clips) and scaled to --height. The closed mouth is the full frame
-(JPEG colour + PNG alpha: a quarter of a PNG, no colour banding on the gloss); half and open are stored
-as small PNG patches where they differ from it. Loops longer than --max-loop frames are cut to the
-most seamless window (closest last/first frame pair) of 3 - 5 s; the plugin cross-fades at the wrap.
-Calm clips (CALM) are stored at 15 fps. Format: Source/UI/MascotClips.h.
+    render_mascot.py --mode all --rate 30
+(<anim>/zu/####.png, plus halb/ and offen/ for the clips he talks in). Every frame is cropped to one
+common box (the union of all clips, so the figure never jumps between clips) and scaled to --height.
+The closed mouth is the full frame (JPEG colour + PNG alpha: a quarter of a PNG, no colour banding on
+the gloss); half and open are stored as small PNG patches where they differ from it. Loops longer than
+their limit are cut to the most seamless window (closest last/first frame pair) of 3/5 of it up to it;
+the plugin cross-fades at the wrap. Calm clips (CALM) are stored at 15 fps. Format: Source/UI/MascotClips.h.
 """
 
 import argparse
@@ -21,22 +21,24 @@ import struct
 import numpy as np
 from PIL import Image, ImageFilter
 
-# Clip order and names as in Source/UI/MascotBrain.h; animation per clip from the design note
+# Clip order and names as in Source/UI/MascotBrain.h; animation per clip from Jakob (2026-10-28)
 CLIPS = [
-    ("wakeUp", "Wake_Up_and_Look_Up", False),
-    ("idle", "Short_Breathe_and_Look_Around", True),
-    ("bad", "Stand_and_Chat", True),
-    ("problem", "Stand_Talking_Angry", True),
-    ("okay", "Arm_Circle_Shuffle", True),
-    ("good", "All_Night_Dance", True),
-    ("super", "Cardio_Dance", True),
-    ("spin", "_360_Power_Spin_Jump", False),
-    ("working", "Running", True),
-    ("walk", "Walking", True),
-    ("call", "Call_Gesture", True),
+    ("fall", "Fall4", False),
+    ("wave", "Big_Wave_Hello", False),
+    ("bow", "Gentlemans_Bow", False),
+    ("idle", "Listening_Gesture", True),
+    ("relax", "Relax_arms_then_strike_battle_pose", False),
+    ("bad", "Depressed_Full_Turn_Left", True),
+    ("hipHop", "Hip_Hop_Dance", True),
+    ("breakdance", "Breakdance_1990", True),
 ]
 FPS = 30
-CALM = {"idle", "bad", "problem", "call"}   # little motion: 15 fps is enough
+CALM = {"idle", "bad"}   # little motion: 15 fps is enough
+# Longest loop in frames at 30 fps; the full turn has to stay whole
+MAX_LOOP = {"bad": 10_000}
+# One-shots that stand still at the end: only their first n frames (30 fps)
+CUT = {"wave": 235, "bow": 380}
+STANDING = "Listening_Gesture"   # the clip that defines where the standing figure is
 PAD = 4
 
 
@@ -121,7 +123,7 @@ def main():
     p.add_argument("out")
     p.add_argument("--height", type=int, default=240)
     p.add_argument("--quality", type=int, default=80, help="JPEG quality of the colour")
-    p.add_argument("--max-loop", type=int, default=150, help="longest loop in frames (5 s)")
+    p.add_argument("--max-loop", type=int, default=150, help="longest loop in frames (5 s), unless MAX_LOOP says otherwise")
     args = p.parse_args()
 
     box = union_box(args.src)
@@ -136,20 +138,24 @@ def main():
     # Where the standing figure is (idle clip): the plugin scales him so this box fills his place;
     # wider poses (lying, arms out, the spin jump) may reach beyond it
     ref = None
-    for path in frames(args.src, "Short_Breathe_and_Look_Around", "zu")[::4]:
+    for path in frames(args.src, STANDING, "zu")[::4]:
         b = load(path).getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
         ref = b if ref is None else (min(ref[0], b[0]), min(ref[1], b[1]), max(ref[2], b[2]), max(ref[3], b[3]))
 
     for name, anim, loops in CLIPS:
         zu = frames(args.src, anim, "zu")
-        halb = frames(args.src, anim, "halb")
-        offen = frames(args.src, anim, "offen")
+        # Mouth variants only where he talks; elsewhere every frame keeps the closed face
+        halb = frames(args.src, anim, "halb") or [None] * len(zu)
+        offen = frames(args.src, anim, "offen") or [None] * len(zu)
         if not zu or len(zu) != len(halb) or len(zu) != len(offen):
             raise SystemExit(f"{anim}: missing frames")
+        if name in CUT:
+            zu, halb, offen = zu[:CUT[name]], halb[:CUT[name]], offen[:CUT[name]]
         fps = FPS // 2 if name in CALM else FPS
         if fps != FPS:
             zu, halb, offen = zu[::2], halb[::2], offen[::2]
-        start, length = loop_window(zu, args.max_loop * fps // FPS) if loops else (0, len(zu))
+        limit = MAX_LOOP.get(name, args.max_loop)
+        start, length = loop_window(zu, limit * fps // FPS) if loops else (0, len(zu))
         zu, halb, offen = (f[start:start + length] for f in (zu, halb, offen))
         data = bytearray(b"VMS3")
         data += struct.pack("<hhhib", fps, size[0], size[1], len(zu), 1 if loops else 0)
@@ -159,7 +165,7 @@ def main():
             colour, alpha = jpeg(base, args.quality), png(base.getchannel("A"))
             data += struct.pack("<i", len(colour)) + colour + struct.pack("<i", len(alpha)) + alpha
             for v in (h, o):
-                pt = patch(base, load(v))
+                pt = patch(base, load(v)) if v else None
                 if pt is None:
                     data += struct.pack("<hhi", 0, 0, 0)
                 else:

@@ -334,7 +334,8 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 //          e.g. "reso;more;route:v2|eq|smooth;set:smoothOn=1,smoothAmount=70"
 //          0.6.1 chain tokens: "solo:<selection code>" (module solo), "scroll:<px>|end" (chain row scrolled),
 //          "hover:<selection code>" (mouse over that tile; "hover:<code>:s" over its S)
-//          "mascot:<seconds>,<score>[,<input dB>]" (the devil in SIMPEL after that long singing with that Vocal Check score)
+//          "mascot:<seconds>,<score>[,<input dB>[,talk]]" (Memphy in SIMPEL after that long singing with that Vocal
+//          Check score; "talk" = while he talks)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
                            const juce::String& mode, int selection, const juce::String& rawOverlay)
 {
@@ -619,6 +620,7 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
             ui::mascot::Inputs in;
             in.score = parts.size() > 1 ? parts[1].getIntValue() : -1;
             in.inputDb = parts.size() > 2 ? parts[2].getFloatValue() : -20.0f;
+            in.talking = parts.size() > 3 && parts[3] == "talk";
             for (int i = 0; i < juce::roundToInt (parts[0].getDoubleValue() * 60.0); ++i)
                 mascot->tick (in, 1.0 / 60.0);
         }

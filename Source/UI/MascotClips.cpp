@@ -7,8 +7,7 @@ namespace velvox::ui::mascot
     {
         // Binary data names of the packed clips, in Clip order (juce_add_binary_data turns "idle.vms" into "idle_vms")
         constexpr const char* resourceNames[numClips] {
-            "wakeUp_vms", "idle_vms", "bad_vms", "problem_vms", "okay_vms", "good_vms",
-            "super_vms", "spin_vms", "working_vms", "walk_vms", "call_vms"
+            "fall_vms", "wave_vms", "bow_vms", "idle_vms", "relax_vms", "bad_vms", "hipHop_vms", "breakdance_vms"
         };
     }
 
