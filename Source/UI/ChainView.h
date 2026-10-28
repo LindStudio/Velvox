@@ -32,6 +32,10 @@ namespace velvox::ui
         // Layout (design units)
         static constexpr int preferredHeight = 88;
         static constexpr float tileW = 96.0f, minTileW = 84.0f, addTileW = 56.0f, outputW = 64.0f, sendGap = 14.0f;
+        // Review 2026-10-28: below minTileW the tiles turn compact (short name, icon, power as a dot) and share
+        // the width down to compactTileW; only then the row scrolls
+        static constexpr float compactLookW = 64.0f, compactTileW = 38.0f, emptyLaneCompactW = 24.0f;
+        bool isCompact() const noexcept { return serialW < compactLookW - 0.01f; }
         static constexpr float nameH = 24.0f, iconH = 36.0f, powerH = 24.0f;
 
         explicit ChainView (VelvoxAudioProcessor& processor);
@@ -149,6 +153,7 @@ namespace velvox::ui
         void drawIcon (juce::Graphics&, dsp::ModuleId id, juce::Rectangle<float> area, float alpha) const;
         juce::Rectangle<float> addCardArea() const;
         juce::Rectangle<float> laneArea() const;
+        float sendColumnsW() const noexcept;
         juce::Rectangle<float> rowArea() const;
         juce::Rectangle<float> outputArea() const;
         float contentWidth() const;

@@ -121,7 +121,6 @@ void VelvoxAudioProcessor::insertEngagedInstances()
         engage (dsp::ModuleId::reverb, b.reverbOn && b.reverbMix > 0.0f);
         if (k == 0)
         {
-            engage (dsp::ModuleId::check, e.checkOn);
             engage (dsp::ModuleId::denoise, e.denoise.enabled);
             engage (dsp::ModuleId::breath, e.breath.enabled);
         }
@@ -181,7 +180,7 @@ void VelvoxAudioProcessor::refreshAnalysis()
     // place: an active module after it works on the problem, one before it is already
     // part of the measurement (and may need more), the auto mix may have set it up.
     const auto routing = getRouting();
-    const int checkAt = routing.indexOf (dsp::ModuleId::check);
+    const int checkAt = routing.size();   // VOCAL CHECK measures after the whole chain (review 2026-10-28)
     const auto& report = autoMix.getReport();
     for (auto& f : latestAnalysis.findings)
     {

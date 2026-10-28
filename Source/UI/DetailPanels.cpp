@@ -806,82 +806,6 @@ namespace velvox::ui
             juce::TextButton* monoButton = nullptr;
         };
 
-        // VOCAL CHECK module in the chain: its live picture (spectrum, balance) and a compact summary
-        // (score, number of findings, link to the VOCAL CHECK tab, where the tiles with Ignorieren /
-        // Anwenden live); analysis mode, Start / Stop, Reset as the main row
-        class CheckPanel final : public DetailPanel
-        {
-        public:
-            explicit CheckPanel (VelvoxAudioProcessor& p)
-                : DetailPanel (p, "Vocal Check", help::shortDescription ((int) ModuleId::check), pid::checkOn),
-                  findings (p)
-            {
-                auto& mode = segments (pid::checkMode, { "Continuous", "Capture" });   // shown as on the VOCAL CHECK tab ("Laufend")
-                setCaption (mode, i18n::tr ("Analyse", "Analysis"));
-                auto& startStop = own (std::make_unique<juce::TextButton> ("Start"));
-                auto& resetButton = own (std::make_unique<juce::TextButton> ("Reset"));
-                start = &startStop;
-                reset = &resetButton;
-                setMainControls ({ &mode, &startStop, &resetButton });
-                placeInVisual ({ &findings, &statusLabel });
-                statusLabel.setFont (font (12.0f));
-                statusLabel.setColour (juce::Label::textColourId, colours::textDim);
-                statusLabel.setJustificationType (juce::Justification::centredLeft);
-
-                startStop.setTooltip (i18n::tr ("Capture: analysiert alles zwischen Start und Stop", "Capture: analyzes everything between Start and Stop"));
-                startStop.onClick = [this]
-                {
-                    auto& a = proc.getAnalyzer();
-                    if (a.isCapturing()) a.stopCapture(); else a.startCapture();
-                    proc.refreshAnalysis();
-                };
-                resetButton.setTooltip (i18n::tr ("Alles bisher Analysierte vergessen (auch Spitzen und Clips)", "Forget everything analyzed so far (also peaks and clips)"));
-                resetButton.onClick = [this] { proc.getAnalyzer().clear(); proc.refreshAnalysis(); };
-                findings.onOpenTab = [this] { if (onShowVocalCheck) onShowVocalCheck(); };
-            }
-
-            void refresh() override
-            {
-                DetailPanel::refresh();
-                auto& a = proc.getAnalyzer();
-                const bool on = apvts.getRawParameterValue (pid::checkOn)->load() > 0.5f;
-                const bool capture = a.getMode() == dsp::VocalAnalyzer::Mode::capture;
-                start->setEnabled (on && capture);
-                start->setButtonText (a.isCapturing() ? "Stop" : "Start");
-                start->setToggleState (a.isCapturing(), juce::dontSendNotification);
-                reset->setEnabled (on);
-
-                const auto& r = proc.getLatestAnalysis();
-                const auto seconds = i18n::number (r.analysedSeconds, 1);
-                const juce::String text = ! on ? i18n::tr ("Aus", "Off")
-                                        : capture ? (a.isCapturing() ? i18n::format ("Capture {0} s", { seconds })
-                                                                     : i18n::format (i18n::tr ("Gestoppt, {0} s", "Stopped, {0} s"), { seconds }))
-                                                  : i18n::format (i18n::tr ("Laufend, letzte {0} s", "Continuous, last {0} s"),
-                                                                  { juce::String (juce::roundToInt (std::min (30.0f, r.analysedSeconds))) });
-                if (statusLabel.getText() != text)
-                    statusLabel.setText (text, juce::dontSendNotification);
-                if (++summaryTick % 6 == 0)
-                    findings.refresh();
-            }
-
-        private:
-            void layoutVisual (juce::Rectangle<int> area) override
-            {
-                auto r = area.reduced (10);
-                auto right = r.removeFromRight (std::min (250, r.getWidth() / 3));
-                findings.setBounds (right.removeFromTop (96));
-                statusLabel.setBounds (right.removeFromTop (22).withTrimmedLeft (6));
-                r.removeFromRight (12);
-                if (auto* v = getVisual())
-                    v->setBounds (r.reduced (1));
-            }
-
-            CheckSummary findings;
-            int summaryTick = 0;
-            juce::Label statusLabel;
-            juce::TextButton* start = nullptr;
-            juce::TextButton* reset = nullptr;
-        };
     }
 
     std::unique_ptr<DetailPanel> createDetailPanel (VelvoxAudioProcessor& p, int id, const SpectrumSource* spectrum, const LiveData* live)
@@ -905,7 +829,7 @@ namespace velvox::ui
                 case ModuleId::reverb:  panel = createReverbPanel (p); break;
                 case ModuleId::smash:   panel = createDynPanel (p, ModuleId::smash); break;
                 case ModuleId::smooth:  panel = createSmoothPanel (p); break;
-                case ModuleId::check:   panel = std::make_unique<CheckPanel> (p); break;
+                case ModuleId::check:   break;   // no chain module (review 2026-10-28): the VOCAL CHECK tab
                 case ModuleId::ride:    panel = createDynPanel (p, ModuleId::ride); break;
                 case ModuleId::denoise:
                 case ModuleId::breath:  panel = createCleanupPanel (p, dsp::selectionModule (id)); break;   // CleanupPanels.cpp

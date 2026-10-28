@@ -127,9 +127,15 @@ namespace velvox::ui
     {
         const bool speaking = advanceLines (dt);
         in.talking = speaking && line >= 0 && lineTime < talkSeconds (lines[line]);
+        if (! speaking && line < 0 && lines.isEmpty())
+            updateTip (in.autoMixBusy, dt);
+        else if (tipId.isNotEmpty())
+            endTip();
+        if (const auto* f = tipId.isNotEmpty() ? proc.getVocalCheck().finding (tipId) : nullptr)
+            in.tip = f->severity >= 0.66f ? 2 : 1;
         mascot.tick (in, dt);
         silentFor = in.inputDb > mascot::Brain::signalDb ? 0.0 : silentFor + dt;
-        if (! speaking && line < 0 && lines.isEmpty())
+        if (! speaking && line < 0 && lines.isEmpty() && tipId.isEmpty())
             updateBubble (in.autoMixBusy, silentFor > mascot::Brain::silenceToIdle);
     }
 
@@ -141,11 +147,14 @@ namespace velvox::ui
     const std::vector<SimpleView::MacroDef>& SimpleView::macroDefs()
     {
         static const std::vector<MacroDef> defs {
+            // Klang
             { pid::macroPresence,   "Presence",    0xff00d1ff },
+            { pid::macroWarmth,     "Warmth",      0xffd946ef },
+            // Raum
             { pid::macroSpace,      "Space",       0xff3b82f6 },
             { pid::macroWidth,      "Width",       0xff6366ff },
+            // Dynamik & Pegel
             { pid::macroAggression, "Punch",       0xff8b5cf6 },
-            { pid::macroWarmth,     "Warmth",      0xffd946ef },
             { pid::outputGain,      "Vocal Level", 0xfff472b6 },
         };
         return defs;
@@ -177,6 +186,23 @@ namespace velvox::ui
         after.setButtonText (tr ("Nachher", "After"));
         before.setTooltip (tr ("Die Einstellungen vor der Analyse (echter Parameterwechsel)", "The settings before the analysis (a real parameter switch)"));
         after.setTooltip (tr ("Der automatische Mix mit deinen Änderungen", "The automatic mix with your changes"));
+        fair.setButtonText (tr ("Gleich laut", "Same loudness"));
+        fair.setTooltip (tr ("Fairer Vergleich: Vorher, Nachher und Bypass gleich laut - du hörst den Klang, nicht die Lautheit",
+                             "Fair comparison: before, after and bypass at the same loudness - you hear the sound, not the level"));
+        fair.getProperties().set ("segment", true);
+        fair.setColour (juce::TextButton::buttonOnColourId, colours::cyan);
+        fair.onClick = [this]
+        {
+            if (auto* p = proc.getState().getParameter (pid::levelMatchMode))
+            {
+                const bool on = p->convertFrom0to1 (p->getValue()) > 0.5f;
+                p->beginChangeGesture();
+                p->setValueNotifyingHost (p->convertTo0to1 (on ? 0.0f : 1.0f));   // off / like bypass
+                p->endChangeGesture();
+            }
+            fair.setToggleState (proc.getState().getRawParameterValue (pid::levelMatchMode)->load() > 0.5f, juce::dontSendNotification);
+        };
+        addChildComponent (fair);
         before.onClick = [this] { proc.getAutoMix().showPrevious (true); updateCompare(); };
         after.onClick = [this] { proc.getAutoMix().showPrevious (false); updateCompare(); };
 
@@ -200,6 +226,25 @@ namespace velvox::ui
         addAndMakeVisible (mascot);
         clickHint.onClick = mascot.onClick;
         addChildComponent (clickHint);
+
+        tipYes.setButtonText (tr ("Ja, mach", "Yes, do it"));
+        tipShow.setButtonText (tr ("Zeig mir", "Show me"));
+        tipYes.getProperties().set ("primary", true);
+        tipYes.setTooltip (tr ("Memphy wendet den Vorschlag an (ein Rückgängig-Schritt)", "Memphy applies the suggestion (one undo step)"));
+        tipShow.setTooltip (tr ("Öffnet den Vocal Check mit allen Vorschlägen", "Opens the Vocal Check with every suggestion"));
+        tipYes.onClick = [this]
+        {
+            const auto id = tipId;
+            endTip();
+            proc.getVocalCheck().apply (id);
+        };
+        tipShow.onClick = [this]
+        {
+            endTip();
+            if (onVocalCheck) onVocalCheck();
+        };
+        addChildComponent (tipYes);
+        addChildComponent (tipShow);
 
         for (const auto& m : macroDefs())
         {
@@ -230,13 +275,15 @@ namespace velvox::ui
         auto& am = proc.getAutoMix();
         analyse.setButtonText (am.hasMix() ? tr ("Neu analysieren", "Analyze again") : tr ("Vocal analysieren", "Analyze vocal"));
         const bool can = am.hasMix() && am.hasPrevious();
-        if (before.isVisible() != can)
+        if (before.isVisible() != can || fair.isVisible() != can)
         {
             before.setVisible (can);
             after.setVisible (can);
+            fair.setVisible (can);
             resized();
             repaint();
         }
+        fair.setToggleState (proc.getState().getRawParameterValue (pid::levelMatchMode)->load() > 0.5f, juce::dontSendNotification);
         before.setToggleState (can && am.isShowingPrevious(), juce::dontSendNotification);
         after.setToggleState (can && ! am.isShowingPrevious(), juce::dontSendNotification);
     }
@@ -264,7 +311,8 @@ namespace velvox::ui
     {
         spectrumView.refresh();
         meters.setLevels (live.inputDb.ago (0), live.outputDb.ago (0), live.inputLufs.ago (0), live.outputLufs.ago (0), live.clipped);
-        if (before.isVisible() && before.getToggleState() != proc.getAutoMix().isShowingPrevious())
+        if (before.isVisible() && (before.getToggleState() != proc.getAutoMix().isShowingPrevious()
+                                   || fair.getToggleState() != (proc.getState().getRawParameterValue (pid::levelMatchMode)->load() > 0.5f)))
             updateCompare();
 
         // Memphy: real time between frames (the host may slow the timer down), score twice a second
@@ -292,11 +340,53 @@ namespace velvox::ui
         }
     }
 
+    juce::StringArray SimpleView::getMacroGroupTitles() const
+    {
+        return { tr ("Klang", "Tone"), tr ("Raum", "Space"), tr ("Dynamik & Pegel", "Dynamics & level") };
+    }
+
+    juce::String SimpleView::getMacroNote (int index) const
+    {
+        const auto& r = proc.getAutoMix().getReport();
+        if (! r.valid || ! juce::isPositiveAndBelow (index, (int) macroDefs().size()))
+            return {};
+        const juce::String id (macroDefs()[(size_t) index].paramId);
+        // Which steps of the mix belong to which fader
+        const auto belongs = [&id] (const automix::MixReport::Line& l)
+        {
+            const auto title = i18n::show (l.title);
+            const bool eq = l.moduleKey == "eq";
+            const bool high = title.contains ("kHz");
+            const bool lowCut = title.containsIgnoreCase ("low cut") || title.containsIgnoreCase ("lowcut");
+            if (id == pid::macroPresence)   return (eq && high) || l.moduleKey == "deess" || l.moduleKey == "smooth";
+            if (id == pid::macroWarmth)     return (eq && ! high && ! lowCut) || l.moduleKey == "sat";
+            if (id == pid::macroSpace)      return l.moduleKey == "reverb" || l.moduleKey == "delay";
+            if (id == pid::macroWidth)      return l.moduleKey == "doubler";
+            if (id == pid::macroAggression) return l.moduleKey == "comp" || l.moduleKey == "smash" || l.moduleKey == "ride";
+            return l.moduleKey == "output";
+        };
+        for (const auto& l : r.steps)
+            if (belongs (l))
+                return tr ("Auto Mix: ", "Auto mix: ") + i18n::show (l.title);
+        return {};
+    }
+
     void SimpleView::paint (juce::Graphics& g)
     {
         drawPanel (g, spectrumPanel);
         drawPanel (g, macroPanel);
         drawPanel (g, meterStrip);
+
+        // Fader groups and what the auto mix did at each fader
+        const auto titles = getMacroGroupTitles();
+        for (int gi = 0; gi < 3; ++gi)
+            drawCaption (g, i18n::upper (titles[gi]), groupHeads[(size_t) gi].toFloat(), juce::Justification::centredLeft, colours::textFaint, 11.0f);
+        g.setFont (font (11.0f));
+        for (int i = 0; i < (int) noteAreas.size(); ++i)
+        {
+            g.setColour (colours::textFaint);
+            g.drawText (getMacroNote (i), noteAreas[(size_t) i], juce::Justification::centredLeft, true);
+        }
 
         // Spectrum inset
         const auto inset = spectrumView.getBounds().toFloat().expanded (1.0f);
@@ -388,6 +478,54 @@ namespace velvox::ui
         g.drawText (clickHintText(), getLocalBounds(), juce::Justification::centred, false);
     }
 
+    void SimpleView::updateTip (bool busy, double dt)
+    {
+        auto& vc = proc.getVocalCheck();
+        if (tipId.isNotEmpty())
+        {
+            // The finding went away or was fixed elsewhere (the tab, an undo): he stops
+            if (busy || vc.finding (tipId) == nullptr || ! vc.canApply (tipId))
+                endTip();
+            return;
+        }
+        tipWait -= dt;
+        if (busy || tipWait > 0.0 || vc.score() < 0)
+            return;
+        for (const auto* f : vc.visibleFindings())
+            if (! tipsDone.contains (f->id) && vc.canApply (f->id))
+            {
+                showTip (f->id);
+                return;
+            }
+    }
+
+    void SimpleView::showTip (const juce::String& id)
+    {
+        const auto* f = proc.getVocalCheck().finding (id);
+        if (f == nullptr)
+            return;
+        tipId = id;
+        tipsDone.add (id);
+        setSay (i18n::format (tr ("{0} - soll ich das richten?", "{0} - shall I fix it?"), { f->problem }));
+        for (auto* b : { &analyse, &details })
+            b->setVisible (false);
+        for (auto* b : { &tipYes, &tipShow })
+            b->setVisible (true);
+        layoutBubble();
+    }
+
+    void SimpleView::endTip()
+    {
+        tipId.clear();
+        tipWait = 2.5;   // one after the other, with a breath between
+        for (auto* b : { &tipYes, &tipShow })
+            b->setVisible (false);
+        for (auto* b : { &analyse, &details })
+            b->setVisible (true);
+        updateBubble (false, silentFor > mascot::Brain::silenceToIdle);
+        layoutBubble();
+    }
+
     void SimpleView::layoutBubble()
     {
         if (bubbleRow.isEmpty())
@@ -408,8 +546,10 @@ namespace velvox::ui
         inner.removeFromTop (bubbleGap);
         auto actions = inner.removeFromTop (bubbleActionsH);
         analyse.setBounds (actions.removeFromLeft (168));
+        tipYes.setBounds (analyse.getBounds());
         actions.removeFromLeft (8);
         details.setBounds (actions.removeFromLeft (86));
+        tipShow.setBounds (details.getBounds());
     }
 
     void SimpleView::resized()
@@ -435,6 +575,8 @@ namespace velvox::ui
         auto seg = top.removeFromRight (164).reduced (3, 2);
         before.setBounds (seg.removeFromLeft (seg.getWidth() / 2));
         after.setBounds (seg);
+        top.removeFromRight (8);
+        fair.setBounds (top.removeFromRight (104).reduced (3, 2));
 
         // He stands on the panel's bottom padding, a little taller than the row (over the empty low end
         // of the spectrum); arms, the lying wake-up and the spin jump reach further, so his component
@@ -456,10 +598,22 @@ namespace velvox::ui
                                  .constrainedWithin (spectrumPanel.reduced (4)));
         clickHint.setVisible (! settings::getBool (settings::mascotClicked));
 
-        // Six faders, evenly spaced
-        auto col = macroPanel.reduced (18, 22);
-        const int rowH = col.getHeight() / (int) macros.size();
-        for (auto& s : macros)
-            s->setBounds (col.removeFromTop (rowH).withSizeKeepingCentre (col.getWidth(), std::min (rowH, 34)));
+        // Three groups of two faders: a heading, then each fader with its note line under it
+        auto col = macroPanel.reduced (18, 18);
+        const int groupH = col.getHeight() / 3;
+        noteAreas.clear();
+        for (int gi = 0; gi < 3; ++gi)
+        {
+            auto group = col.removeFromTop (groupH);
+            groupHeads[(size_t) gi] = group.removeFromTop (20);
+            const int rowH = group.getHeight() / 2;
+            for (int k = 0; k < 2; ++k)
+            {
+                auto row = group.removeFromTop (rowH);
+                auto& s = *macros[(size_t) (gi * 2 + k)];
+                s.setBounds (row.removeFromTop (std::min (34, row.getHeight() - 16)));
+                noteAreas.push_back (row.removeFromTop (16).withTrimmedLeft (14));
+            }
+        }
     }
 }

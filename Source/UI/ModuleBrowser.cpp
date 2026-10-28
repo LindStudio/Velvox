@@ -13,6 +13,7 @@ namespace velvox::ui
         constexpr int cardW = 108, cardH = 76, cardGap = 8, groupGap = 22, captionH = 18, lineGap = 14;
 
         // Display order: by category (spec 2.7), the usual order of a vocal chain inside each
+        // (VOCAL CHECK is no chain module since the review of 2026-10-28: the browser skips it)
         constexpr ModuleId browserOrder[dsp::numModules] {
             ModuleId::eq, ModuleId::deess, ModuleId::smooth,          // Clean-up
             ModuleId::denoise, ModuleId::breath,
@@ -159,6 +160,8 @@ namespace velvox::ui
         const auto words = juce::StringArray::fromTokens (search->getText().toLowerCase(), " ", "");
         for (auto id : browserOrder)
         {
+            if (! dsp::isChainModule (id))
+                continue;
             // The category in both languages (the search finds German and English words)
             const auto [categoryDe, categoryEn] = categoryTexts (categoryOf (id));
             const auto category = juce::String::fromUTF8 (categoryDe) + " " + categoryEn;

@@ -2,6 +2,7 @@
 #include "../PluginProcessor.h"
 #include "../DSP/Instances.h"
 #include "../Text/ParamText.h"
+#include "../Check/CheckRules.h"
 
 // The finding texts (problem, fix, detail, why) hold both languages (i18n::both, see
 // CheckRules.cpp): they are shown with i18n::show.
@@ -19,7 +20,7 @@ namespace velvox::ui
         juce::String seconds (float s) { return i18n::number (s, 1); }
 
         // Layout of the header (design units)
-        constexpr int pad = 16, headerH = 112, ringSize = 88, rightW = 252;
+        constexpr int pad = 16, headerH = 112, ringSize = 88, genreW = 200, statusW = 220;
         constexpr int buttonW = 104, buttonH = 28, tileGap = 8;
 
         const juce::String dash = juce::String::fromUTF8 ("\xe2\x80\x94");
@@ -340,10 +341,154 @@ namespace velvox::ui
     };
 
     //==========================================================================
+    juce::String VocalCheckView::scoreWord (int s)
+    {
+        if (s < 0)
+            return {};
+        // The mascot's borders: below 45 he is sad, from 75 he is pleased, from 90 he celebrates
+        return s < 45 ? tr ("schwach", "weak") : s < 75 ? tr ("okay", "okay") : s < 90 ? tr ("gut", "good") : tr ("sehr gut", "very good");
+    }
+
+    juce::String VocalCheckView::getSummaryText() const
+    {
+        if (score < 0)
+            return {};
+        const int n = (int) proc.getVocalCheck().visibleFindings().size();
+        if (n == 0)
+            return tr ("Nichts mehr zu verbessern", "Nothing left to improve");
+        return n == 1 ? tr ("1 Ding kannst du noch verbessern", "1 thing you can still improve")
+                      : i18n::format (tr ("{0} Dinge kannst du noch verbessern", "{0} things you can still improve"), { juce::String (n) });
+    }
+
+    //==========================================================================
+    VoiceTargetView::VoiceTargetView()
+    {
+        setInterceptsMouseClicks (false, false);
+        addAndMakeVisible (legend);
+    }
+
+    void VoiceTargetView::setData (const dsp::AnalysisResult& r, check::Genre genre)
+    {
+        const juce::String genreNames[] { "Party", "Pop", tr ("Akustik", "Acoustic") };
+        legend.setItems ({ { tr ("Deine Stimme", "Your voice"), checkColour(), LegendItem::Style::line },
+                           { i18n::format (tr ("Ziel {0}", "Target {0}"), { genreNames[juce::jlimit (0, 2, (int) genre)] }),
+                             colours::textSoft.withAlpha (0.6f), LegendItem::Style::fill } });
+        resized();
+
+        std::vector<float> next;
+        if (r.enoughMaterial && r.spectrumDb.size() > 12)
+        {
+            // Relative to the 300 Hz - 2 kHz core, as the targets are
+            double core = 0.0;
+            int n = 0;
+            for (size_t i = 0; i < r.spectrumDb.size(); ++i)
+            {
+                const float hz = r.spectrumLowHz * std::pow (2.0f, (float) i / 12.0f);
+                if (hz >= 300.0f && hz <= 2000.0f)
+                {
+                    core += r.spectrumDb[i];
+                    ++n;
+                }
+            }
+            // A third of an octave smoothed (single harmonics would make it a comb), relative to the core
+            if (n > 0)
+                for (size_t i = 0; i < r.spectrumDb.size(); ++i)
+                {
+                    double sum = 0.0;
+                    int k = 0;
+                    for (size_t j = i >= 2 ? i - 2 : 0; j <= std::min (r.spectrumDb.size() - 1, i + 2); ++j, ++k)
+                        sum += juce::Decibels::decibelsToGain ((double) r.spectrumDb[j]);
+                    next.push_back ((float) juce::Decibels::gainToDecibels (sum / k) - (float) (core / n));
+                }
+            targets = check::targetsFor (r, genre);
+        }
+        lowHz = r.spectrumLowHz;
+        if (next != voiceDb)
+        {
+            voiceDb = std::move (next);
+            repaint();
+        }
+    }
+
+    juce::Rectangle<float> VoiceTargetView::plot() const
+    {
+        return getLocalBounds().toFloat().withTrimmedTop (24.0f).withTrimmedBottom (16.0f).reduced (4.0f, 0.0f);
+    }
+
+    void VoiceTargetView::resized()
+    {
+        legend.setBounds (getLocalBounds().removeFromTop (Legend::height + 2).removeFromRight (legend.getIdealWidth()));
+    }
+
+    void VoiceTargetView::paint (juce::Graphics& g)
+    {
+        const auto p = plot();
+        g.setColour (juce::Colours::black.withAlpha (0.25f));
+        g.fillRoundedRectangle (p, 7.0f);
+        drawCaption (g, tr ("Deine Stimme gegen das Ziel", "Your voice against the target"),
+                     getLocalBounds().toFloat().removeFromTop (20.0f), juce::Justification::centredLeft, colours::textDim, 11.0f);
+
+        constexpr float topDb = 18.0f, bottomDb = -40.0f, lo = 40.0f, hi = 16000.0f;
+        const auto xOf = [&] (float hz) { return p.getX() + p.getWidth() * std::log (hz / lo) / std::log (hi / lo); };
+        const auto yOf = [&] (float db) { return juce::jmap (juce::jlimit (bottomDb, topDb, db), bottomDb, topDb, p.getBottom(), p.getY()); };
+
+        for (float hz : { 100.0f, 1000.0f, 10000.0f })
+        {
+            g.setColour (colours::accent.withAlpha (0.05f));
+            g.fillRect (juce::Rectangle<float> (xOf (hz), p.getY(), 1.0f, p.getHeight()));
+            drawCaption (g, hz >= 1000.0f ? juce::String (juce::roundToInt (hz / 1000.0f)) + "k" : juce::String (juce::roundToInt (hz)),
+                         juce::Rectangle<float> (xOf (hz) - 20.0f, p.getBottom() + 2.0f, 40.0f, 12.0f), juce::Justification::centred, colours::textFaint, 11.0f);
+        }
+        g.setColour (colours::accent.withAlpha (0.08f));
+        g.fillRect (juce::Rectangle<float> (p.getX(), yOf (0.0f), p.getWidth(), 1.0f));
+
+        if (voiceDb.empty())
+        {
+            drawCaption (g, tr ("Erscheint, sobald genug Stimme gemessen ist", "Appears once enough voice was measured"), p,
+                         juce::Justification::centred, colours::textFaint, 12.0f);
+            return;
+        }
+
+        // Target ranges of the genre (as the rules use them), relative to the core
+        struct Range { float fromHz, toHz, lowDb, highDb; };
+        const Range ranges[] {
+            { 40.0f, 90.0f, bottomDb, targets.rumbleMax },
+            { 100.0f, 300.0f, targets.body.lo, targets.body.hi },
+            { 250.0f, 500.0f, targets.lowMid.lo, targets.lowMid.hi },
+            { 2000.0f, 5000.0f, targets.top.lo, targets.presenceMax },
+            { 5000.0f, 10000.0f, targets.top.lo, targets.top.hi },
+            { 10000.0f, 16000.0f, targets.air.lo, targets.air.hi } };
+        for (const auto& t : ranges)
+        {
+            const auto box = juce::Rectangle<float>::leftTopRightBottom (xOf (t.fromHz), yOf (t.highDb), xOf (t.toHz), yOf (t.lowDb));
+            g.setColour (colours::textSoft.withAlpha (0.14f));
+            g.fillRect (box);
+            g.setColour (colours::textSoft.withAlpha (0.35f));
+            g.drawRect (box, 1.0f);
+        }
+
+        // The voice
+        juce::Path voice;
+        bool started = false;
+        for (size_t i = 0; i < voiceDb.size(); ++i)
+        {
+            const float hz = lowHz * std::pow (2.0f, (float) i / 12.0f);
+            if (hz < lo || hz > hi)
+                continue;
+            const juce::Point<float> pt (xOf (hz), yOf (voiceDb[i]));
+            if (! started) voice.startNewSubPath (pt); else voice.lineTo (pt);
+            started = true;
+        }
+        g.setColour (checkColour().withAlpha (0.25f));
+        g.strokePath (voice, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (checkColour());
+        g.strokePath (voice, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+
+    //==========================================================================
     VocalCheckView::VocalCheckView (VelvoxAudioProcessor& p)
         : proc (p),
           power (p.getState(), pid::checkOn, checkColour()),
-          mode (p.getState(), pid::checkMode, { tr ("Laufend", "Continuous"), "Capture" }, checkColour()),
           list (std::make_unique<List> (*this))
     {
         // Captions only: the genre is stored as its index (check::Genre)
@@ -367,22 +512,25 @@ namespace velvox::ui
         }
 
         power.setTooltip (tr ("Vocal Check ein / aus", "Vocal Check on / off"));
-        startStop.setTooltip (tr ("Capture: analysiert alles zwischen Start und Stop", "Capture: analyzes everything between Start and Stop"));
-        reset.setTooltip (tr ("Alles bisher Analysierte vergessen", "Forget everything analyzed so far"));
+        remeasure.setTooltip (tr ("Vergisst die bisherige Messung und hört deiner Stimme neu zu", "Forgets the measurement so far and listens to your voice again"));
         applyAll.setTooltip (tr ("Alle Vorschläge auf einmal anwenden (ein Rückgängig-Schritt)", "Apply all suggestions at once (one undo step)"));
-        for (auto* c : std::initializer_list<juce::Component*> { &power, &mode, &startStop, &reset, &applyAll, &viewport })
+        for (auto* c : std::initializer_list<juce::Component*> { &power, &remeasure, &applyAll, &viewport, &targetView })
             addAndMakeVisible (*c);
 
-        startStop.onClick = [this]
+        remeasure.onClick = [this]
         {
+            // Continuous again (a finished capture ends here), from nothing
+            if (auto* m = proc.getState().getParameter (pid::checkMode))
+            {
+                m->beginChangeGesture();
+                m->setValueNotifyingHost (0.0f);
+                m->endChangeGesture();
+            }
             auto& a = proc.getAnalyzer();
-            if (a.isCapturing()) a.stopCapture(); else a.startCapture();
-            proc.refreshAnalysis();
-            refreshNow();
-        };
-        reset.onClick = [this]
-        {
-            proc.getAnalyzer().clear();
+            if (a.isCapturing())
+                a.stopCapture();
+            a.setMode (dsp::VocalAnalyzer::Mode::continuous);
+            a.clear();
             proc.refreshAnalysis();
             refreshNow();
         };
@@ -499,12 +647,10 @@ namespace velvox::ui
             text = tr ("Aus", "Off");
         else if (! r.enoughMaterial)
             text = tr ("Singe/spiele ab, um zu analysieren", "Sing or play back to analyze");
-        else if (capture)
-            text = i18n::format (a.isCapturing() ? tr ("Capture läuft · {0} s Stimme", "Capturing · {0} s of voice")
-                                                 : tr ("Capture · {0} s Stimme", "Capture · {0} s of voice"),
-                                 { seconds (r.voicedSeconds) });
+        else if (capture && ! a.isCapturing())
+            text = i18n::format (tr ("{0} s Stimme gemessen", "{0} s of voice measured"), { seconds (r.voicedSeconds) });
         else
-            text = i18n::format (tr ("Laufend · {0} s Stimme", "Continuous · {0} s of voice"), { seconds (r.voicedSeconds) });
+            text = i18n::format (tr ("misst gerade · {0} s Stimme", "measuring · {0} s of voice"), { seconds (r.voicedSeconds) });
 
         if (newScore != score || text != status)
         {
@@ -513,12 +659,12 @@ namespace velvox::ui
             repaint (0, 0, getWidth(), headerH);
         }
 
-        startStop.setEnabled (on && capture);
-        startStop.setButtonText (a.isCapturing() ? "Stop" : "Start");
-        reset.setEnabled (on);
+        remeasure.setEnabled (on);
         const auto genre = (int) proc.getVocalCheck().getGenre();
         for (int i = 0; i < 3; ++i)
             genres[(size_t) i]->setToggleState (i == genre, juce::dontSendNotification);
+        targetView.setVisible (on);
+        targetView.setData (r, proc.getVocalCheck().getGenre());
     }
 
     juce::String VocalCheckView::listKey() const
@@ -670,16 +816,20 @@ namespace velvox::ui
         const int w = getWidth();
         const int x = pad + ringSize + 20;
         power.setBounds (x, 16, 22, 22);
-        mode.setBounds (x, 70, 168, 26);
-        startStop.setBounds (x + 176, 70, 70, 26);
-        reset.setBounds (x + 252, 70, 70, 26);
+        // Status, "Neu messen", then the main action right beside them
+        remeasure.setBounds (x + statusW, 70, 112, 26);
+        applyAll.setBounds (remeasure.getRight() + 12, 68, 200, 30);
 
-        const int rx = w - pad - rightW;
+        // The genre, smaller, top right
+        const int rx = w - pad - genreW;
         for (int i = 0; i < 3; ++i)
-            genres[(size_t) i]->setBounds (rx + 2 + i * (rightW - 4) / 3, 32, (rightW - 4) / 3, 24);
-        applyAll.setBounds (rx, 68, rightW, 32);
+            genres[(size_t) i]->setBounds (rx + 2 + i * (genreW - 4) / 3, 30, (genreW - 4) / 3, 22);
 
-        viewport.setBounds (pad - 6, headerH + 8, w - 2 * (pad - 6), getHeight() - headerH - 8 - 10);
+        // The tiles, then the voice against the genre's target in the space below
+        auto body = juce::Rectangle<int> (pad - 6, headerH + 8, w - 2 * (pad - 6), getHeight() - headerH - 8 - 10);
+        viewport.setBounds (body.removeFromTop (juce::roundToInt ((float) body.getHeight() * 0.55f)));
+        body.removeFromTop (8);
+        targetView.setBounds (body.reduced (6, 0));
         layoutList();
     }
 
@@ -697,17 +847,29 @@ namespace velvox::ui
         g.setColour (colours::textStrong);
         g.setFont (semiBold (15.0f, 2.5f / 15.0f));
         g.drawText ("VOCAL CHECK", juce::Rectangle<float> (x + 30.0f, 14.0f, 260.0f, 26.0f), juce::Justification::centredLeft, false);
+        // The score in a word, then what is left to do
+        auto line = juce::Rectangle<float> (x, 42.0f, (float) getWidth() - x - (float) (pad + genreW + 12), 22.0f);
+        if (const auto word = scoreWord (score); word.isNotEmpty())
+        {
+            g.setColour (checkScoreColour (score));
+            g.setFont (font (17.0f, true));
+            const float ww = (float) juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), word) + 10.0f;
+            g.drawText (word, line.removeFromLeft (ww), juce::Justification::centredLeft, false);
+        }
+        g.setColour (colours::textSoft);
+        g.setFont (font (13.5f));
+        g.drawText (getSummaryText(), line, juce::Justification::centredLeft, true);
         g.setColour (colours::textMuted);
         g.setFont (font (12.5f));
-        g.drawText (status, juce::Rectangle<float> (x, 42.0f, 420.0f, 18.0f), juce::Justification::centredLeft, true);
+        g.drawText (status, juce::Rectangle<float> (x, 74.0f, (float) statusW - 8.0f, 18.0f), juce::Justification::centredLeft, true);
 
-        // Genre segment bar
-        const auto rx = (float) (getWidth() - pad - rightW);
+        // Genre segment bar (smaller)
+        const auto rx = (float) (getWidth() - pad - genreW);
         g.setColour (colours::textFaint);
         g.setFont (semiBold (9.5f, 0.2f));
-        g.drawText ("GENRE", juce::Rectangle<float> (rx, 14.0f, (float) rightW, 12.0f), juce::Justification::centredLeft, false);
+        g.drawText ("GENRE", juce::Rectangle<float> (rx, 14.0f, (float) genreW, 12.0f), juce::Justification::centredLeft, false);
         g.setColour (colours::control);
-        g.fillRoundedRectangle ({ rx, 30.0f, (float) rightW, 28.0f }, 7.0f);
+        g.fillRoundedRectangle ({ rx, 29.0f, (float) genreW, 24.0f }, 7.0f);
 
         g.setColour (colours::lineSoft);
         g.fillRect (juce::Rectangle<float> ((float) pad, (float) headerH, b.getWidth() - 2.0f * pad, 1.0f));

@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "../DSP/Routing.h"
+#include "../Text/I18n.h"
 
 // Visual tokens (v0.5 "headliner" identity, see docs/STYLEGUIDE.md).
 // Deep navy canvas, matte cards with a thin slate border, and one light source:
@@ -153,27 +154,70 @@ namespace velvox::ui
         return 0.0f;
     }
 
-    // Module colours of the design (8 design modules verbatim; the other modules sit on the
-    // same cyan -> blue -> violet -> pink run)
+    // Review 2026-10-28: the module colours follow the module's group - Aufräumen teal, Dynamik blue,
+    // Klang violet, Raum pink - each module a shade of its group's colour (VOCAL CHECK: sky, no chain module)
+    enum class ModuleGroup { cleanUp, dynamics, tone, space };
+
+    inline ModuleGroup moduleGroup (dsp::ModuleId id) noexcept
+    {
+        using M = dsp::ModuleId;
+        switch (id)
+        {
+            case M::denoise: case M::breath: case M::eq: case M::check:     return ModuleGroup::cleanUp;
+            case M::ride: case M::comp: case M::smash: case M::deess:       return ModuleGroup::dynamics;
+            case M::smooth: case M::sat: case M::doubler:                   return ModuleGroup::tone;
+            case M::delay: case M::reverb:                                  return ModuleGroup::space;
+        }
+        return ModuleGroup::cleanUp;
+    }
+
+    inline juce::Colour groupColour (ModuleGroup g) noexcept
+    {
+        switch (g)
+        {
+            case ModuleGroup::cleanUp:  return juce::Colour (0xff2dd4bf);
+            case ModuleGroup::dynamics: return juce::Colour (0xff3b82f6);
+            case ModuleGroup::tone:     return juce::Colour (0xffa855f7);
+            case ModuleGroup::space:    return juce::Colour (0xfff472b6);
+        }
+        return juce::Colour (0xff2dd4bf);
+    }
+
+    inline juce::String groupName (ModuleGroup g)
+    {
+        switch (g)
+        {
+            case ModuleGroup::cleanUp:  return i18n::tr ("Aufräumen", "Clean-up");
+            case ModuleGroup::dynamics: return i18n::tr ("Dynamik", "Dynamics");
+            case ModuleGroup::tone:     return i18n::tr ("Klang", "Tone");
+            case ModuleGroup::space:    return i18n::tr ("Raum", "Space");
+        }
+        return {};
+    }
+
     inline juce::Colour moduleColour (dsp::ModuleId id, float alpha = 1.0f)
     {
         using M = dsp::ModuleId;
-        juce::uint32 argb = 0xff00d1ff;
+        juce::uint32 argb = 0xff2dd4bf;
         switch (id)
         {
-            case M::ride:    argb = 0xff00d1ff; break;
-            case M::smooth:  argb = 0xff22b8ff; break;
-            case M::smash:   argb = 0xff3b82f6; break;
-            case M::delay:   argb = 0xffd946ef; break;
-            case M::reverb:  argb = 0xfff472b6; break;
+            // Aufräumen: teal
             case M::eq:      argb = 0xff2dd4bf; break;
+            case M::denoise: argb = 0xff14b8a6; break;
+            case M::breath:  argb = 0xff5eead4; break;
             case M::check:   argb = 0xff38bdf8; break;
-            case M::deess:   argb = 0xff0ea5e9; break;
+            // Dynamik: blue
+            case M::ride:    argb = 0xff60a5fa; break;
             case M::comp:    argb = 0xff2563eb; break;
-            case M::doubler: argb = 0xff818cf8; break;
-            case M::sat:     argb = 0xffec4899; break;
-            case M::denoise: argb = 0xff14b8a6; break;   // 0.7 clean-up modules next to EQ / De-esser
-            case M::breath:  argb = 0xff67e8f9; break;
+            case M::smash:   argb = 0xff3b82f6; break;
+            case M::deess:   argb = 0xff93c5fd; break;
+            // Klang: violet
+            case M::smooth:  argb = 0xffc084fc; break;
+            case M::sat:     argb = 0xffa855f7; break;
+            case M::doubler: argb = 0xff9333ea; break;
+            // Raum: pink
+            case M::delay:   argb = 0xffec4899; break;
+            case M::reverb:  argb = 0xfff472b6; break;
         }
         return juce::Colour (argb).withAlpha (alpha);
     }

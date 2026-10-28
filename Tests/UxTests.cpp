@@ -172,6 +172,8 @@ public:
             };
             for (int id = -1; id < dsp::numModules; ++id)
             {
+                if (id >= 0 && ! dsp::isChainModule ((dsp::ModuleId) id))
+                    continue;   // VOCAL CHECK: the tab, no module panel (review 2026-10-28)
                 ed.selectModule (id);
                 expect (ed.getDetail() != nullptr);
                 ed.getDetail()->getHelpButton().triggerClick();

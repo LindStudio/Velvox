@@ -950,6 +950,7 @@ public:
 
                 h.set (pid::smoothOn, 0.0f);
                 expectEquals (h.proc.getLatencySamples(), fft, "unchanged while the instance stays in the chain");
+                h.set (pid::levelMatchMode, 0.0f);   // the pure input (the fair compare is on by default since the review of 2026-10-28)
                 h.set (pid::bypass, 1.0f);
                 const auto byp = h.run (in);
                 worst = 0.0;
@@ -966,8 +967,9 @@ public:
         beginTest ("Old projects: the 0.3 modules stay off and change nothing");
         {
             Harness h;
-            for (auto* id : { pid::smashOn, pid::smoothOn, pid::checkOn, pid::rideOn })
+            for (auto* id : { pid::smashOn, pid::smoothOn, pid::rideOn })
                 expectEquals (h.get (id), 0.0f);
+            expectEquals (h.get (pid::checkOn), 1.0f, "the diagnosis runs by default; it never changes the sound (review 2026-10-28)");
             for (auto& p : getFactoryPresets())
                 if (p.category == "Classic (v0.1)")
                 {

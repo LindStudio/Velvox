@@ -293,7 +293,7 @@ namespace velvox
               "Keeps everything below this frequency in mono (20 Hz = off)." },
 
             // ---------------- Level matching (0.2) ----------------
-            { pid::levelMatchMode,   "Level Match",        "Output", T::Choice, 0, 2, 0, 0, "", { "Off", "Bypass match", "Auto gain" },
+            { pid::levelMatchMode,   "Level Match",        "Output", T::Choice, 0, 2, 1, 0, "", { "Off", "Bypass match", "Auto gain" },
               "Bypass match: the bypass plays as loud as the processed sound (fair A/B). Auto gain: the processed sound is kept as loud as the input." },
             { pid::levelMatchWindow, "Level Match Window", "Output", T::Choice, 0, 2, 1, 0, "", { "Fast (0.4 s)", "Medium (3 s)", "Slow (10 s)" },
               "How long the loudness is averaged before matching." },
@@ -342,15 +342,16 @@ namespace velvox
               "Ignores low frequencies when detecting, so plosives and bass do not trigger compression (20 Hz = off)." },
 
             // ---------------- Macros (0.2) ----------------
-            { pid::macroPresence,   "Presence",   "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+            // Review 2026-10-28: the five Simple faders are bipolar - 0 in the middle = unchanged, left = less
+            { pid::macroPresence,   "Presence",   "Macros", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Brings the vocal forward: brighter top end, sibilance kept in check." },
-            { pid::macroWarmth,     "Warmth",     "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+            { pid::macroWarmth,     "Warmth",     "Macros", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Fuller, rounder sound: more body, softer highs, gentle saturation." },
-            { pid::macroAggression, "Aggression", "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+            { pid::macroAggression, "Aggression", "Macros", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Harder, more intense: faster heavier compression and more drive." },
-            { pid::macroWidth,      "Width",      "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+            { pid::macroWidth,      "Width",      "Macros", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Wider vocal: doubled voices left and right, wider stereo image. The centre stays intact." },
-            { pid::macroSpace,      "Space",      "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
+            { pid::macroSpace,      "Space",      "Macros", T::Float, -100.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "More room: reverb and delay that step back while you sing." },
             { pid::macroDensity,    "Density",    "Macros", T::Float, 0.0f, 100.0f, 0.0f, 0.0f, "%", {},
               "Thicker and steadier: more compression and a touch of saturation." },
@@ -388,7 +389,7 @@ namespace velvox
             { pid::smoothDelta,       "Smooth Delta",       "Smooth", T::Bool, 0, 1, 0, 0, "", {}, "Listen only to what is being removed (for tuning)." },
 
             // ---------------- VOCAL CHECK (0.3) ----------------
-            { pid::checkOn,   "Check On",   "Check", T::Bool, 0, 1, 0, 0, "", {},
+            { pid::checkOn,   "Check On",   "Check", T::Bool, 0, 1, 1, 0, "", {},
               "Enables VOCAL CHECK. It only listens: the audio passes through unchanged." },
             { pid::checkMode, "Check Mode", "Check", T::Choice, 0, 1, 0, 0, "", { "Continuous", "Capture" },
               "Continuous: rolling analysis of the last ~30 s. Capture: analyses everything from Start until Stop." },

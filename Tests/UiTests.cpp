@@ -200,7 +200,7 @@ public:
             for (auto id : browser.visibleModules())
                 keys.add (dsp::moduleKey (id));
             keys.sort (false);
-            juce::StringArray expected { "eq", "comp", "deess", "sat", "doubler", "delay", "reverb", "smash", "smooth", "check", "ride", "denoise", "breath" };
+            juce::StringArray expected { "eq", "comp", "deess", "sat", "doubler", "delay", "reverb", "smash", "smooth", "ride", "denoise", "breath" };   // no VOCAL CHECK (review 2026-10-28)
             expected.sort (false);
             expectEquals (keys.joinIntoString (","), expected.joinIntoString (","));
             for (int i = 0; i < dsp::numModules; ++i)
@@ -228,16 +228,14 @@ public:
             const auto row = f.view.getRowViewport();
             const auto r0 = f.h.proc.getRouting();
 
+            // Review 2026-10-28: 13 modules do not fit at full size - they turn compact, all visible, no scrolling
             for (const auto& s : r0)
                 if (s.insert)
-                    expect (f.view.getTileBounds (s.id, s.instance).getWidth() >= ui::ChainView::minTileW - 0.01f,
+                    expect (f.view.getTileBounds (s.id, s.instance).getWidth() >= ui::ChainView::compactTileW - 0.01f,
                             juce::String ("card width ") + dsp::moduleDisplayName (s.id));
-            expect (f.view.getMaxScroll() > 0.0f, "13 modules do not fit: the row scrolls");
-
+            expectEquals (f.view.getMaxScroll(), 0.0f, "13 modules: compact, no scrolling");
             f.view.scrollTo (0.0f, false);
-            expect (! f.view.isTileFullyVisible (ModuleId::eq, 1), "last module starts out of view");
-            f.view.scrollToShow (ModuleId::eq, 1, false);
-            expect (f.view.isTileFullyVisible (ModuleId::eq, 1), "scrolled to the selected card");
+            expect (f.view.isTileFullyVisible (ModuleId::eq, 1), "the last module is in view");
 
             const auto checkOrder = [&]
             {
@@ -295,14 +293,13 @@ public:
             browser.setBounds (0, 0, ui::baseWidth, ui::baseHeight);
             browser.open (1, false);
             using C = ui::ModuleBrowser::Category;
-            expectEquals ((int) browser.visibleModules().size(), dsp::numModules, "every module");
+            expectEquals ((int) browser.visibleModules().size(), dsp::numModules - 1, "every chain module (not VOCAL CHECK)");
             const std::vector<std::pair<C, std::vector<ModuleId>>> expected {
                 { C::cleanUp, { ModuleId::eq, ModuleId::deess, ModuleId::smooth, ModuleId::denoise, ModuleId::breath } },
                 { C::dynamics, { ModuleId::comp, ModuleId::smash, ModuleId::ride } },
                 { C::colour, { ModuleId::sat } },
                 { C::widthVoices, { ModuleId::doubler } },
-                { C::space, { ModuleId::delay, ModuleId::reverb } },
-                { C::analysis, { ModuleId::check } } };
+                { C::space, { ModuleId::delay, ModuleId::reverb } } };
             std::vector<ModuleId> order;
             for (auto& [cat, ids] : expected)
             {
@@ -353,15 +350,15 @@ public:
             // Full: greyed with a reason, not choosable, skipped by the highlight
             browser.open (0, true);
             auto r = h.proc.getRouting();
-            if (! r.contains (ModuleId::check))
-                r.insertAt (r.size(), ModuleId::check, 0);
+            if (! r.contains (ModuleId::denoise))
+                r.insertAt (r.size(), ModuleId::denoise, 0);
             h.proc.setRouting (r);
-            expect (browser.reasonUnavailable (ModuleId::check).isNotEmpty(), "reason for check");
+            expect (browser.reasonUnavailable (ModuleId::denoise).isNotEmpty(), "reason for Room Noise");
             expect (browser.reasonUnavailable (ModuleId::reverb).isEmpty());
             chosen = ModuleId::eq;
-            click (browser, browser.cardBoundsFor (ModuleId::check).getCentre().toFloat());
-            expect (chosen == ModuleId::eq && browser.isOpen(), "check is already in the chain (one instance)");
-            browser.setSearchText ("diagnose");
+            click (browser, browser.cardBoundsFor (ModuleId::denoise).getCentre().toFloat());
+            expect (chosen == ModuleId::eq && browser.isOpen(), "Room Noise is already in the chain (one instance)");
+            browser.setSearchText ("raumrauschen");
             expect (! browser.chooseHighlighted(), "Enter does not add a full module");
         }
 

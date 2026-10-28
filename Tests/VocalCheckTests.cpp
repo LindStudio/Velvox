@@ -149,7 +149,8 @@ public:
                 return nullptr;
             };
 
-            // Check first, the EQ (with low cut) after it: the rumble is handled later
+            // Review 2026-10-28: VOCAL CHECK measures after the whole chain - an EQ with low cut is part of the
+            // measurement (the rumble is gone or counted as applied), never "handled later"
             Harness after;
             after.neutral();
             after.set (pid::checkOn, 1.0f);
@@ -158,11 +159,10 @@ public:
             after.proc.setRouting (Routing::fromString ("v2,check,eq,delay:send,reverb:send"));
             runThroughPlugin (after, v);
             const auto* f1 = eqFinding (after);
-            expect (f1 != nullptr, "rumble measured at VOCAL CHECK (before the EQ)");
             if (f1 != nullptr)
             {
                 logMessage ("  " + i18n::show (f1->title) + " -> " + f1->handlingText);
-                expect (f1->handling == Finding::Handling::handledLater, "the EQ after VOCAL CHECK takes care of it");
+                expect (f1->handling != Finding::Handling::handledLater, "the EQ is part of the measurement");
             }
 
             // EQ before the check: measured after it, so it may need more

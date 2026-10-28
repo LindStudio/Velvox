@@ -47,7 +47,13 @@ namespace velvox::ui
         juce::TextButton& getBeforeButton() noexcept { return before; }
         juce::TextButton& getAfterButton() noexcept { return after; }
         juce::TextButton& getDetailsButton() noexcept { return details; }
+        // "Gleich laut" beside Vorher / Nachher (review 2026-10-28): the fair compare (Level Match "Wie Bypass")
+        juce::TextButton& getFairCompareButton() noexcept { return fair; }
         const std::vector<std::unique_ptr<HSlider>>& getMacroSliders() const noexcept { return macros; }
+        // Review 2026-10-28: the faders in three groups (Klang, Raum, Dynamik & Pegel), each with a grey line
+        // under it saying what the auto mix did there (from the mix report; empty without a mix)
+        juce::StringArray getMacroGroupTitles() const;
+        juce::String getMacroNote (int index) const;
         juce::Rectangle<int> getSpectrumArea() const noexcept { return spectrumPanel; }
         juce::Rectangle<int> getMacroArea() const noexcept { return macroPanel; }
         juce::Rectangle<int> getMeterArea() const noexcept { return meterStrip; }
@@ -58,6 +64,13 @@ namespace velvox::ui
         juce::Rectangle<int> getBubbleArea() const noexcept { return bubble; }
         juce::Rectangle<int> getBubbleTextArea() const noexcept { return bubbleText; }
         juce::Component& getClickHint() noexcept { return clickHint; }   // "Klick mich = Vocal Check" under Memphy
+
+        // Review 2026-10-28: Memphy says what VOCAL CHECK found, one tip at a time (not while he talks or the
+        // auto mix listens), with "Ja, mach" (applies the fix, one undo step) and "Zeig mir" (opens the tab).
+        // A tip that was answered does not come back in this session.
+        const juce::String& getTipId() const noexcept { return tipId; }
+        juce::TextButton& getTipYesButton() noexcept { return tipYes; }
+        juce::TextButton& getTipShowButton() noexcept { return tipShow; }
 
         struct MacroDef { const char* paramId; const char* label; juce::uint32 colour; };
         static const std::vector<MacroDef>& macroDefs();
@@ -70,6 +83,9 @@ namespace velvox::ui
         bool advanceLines (double dt);   // true while one of his lines is up
         void setSay (const juce::String& text);
         void layoutBubble();   // the bubble fits the text (review 2026-10-28), the buttons right under it
+        void updateTip (bool busy, double dt);
+        void showTip (const juce::String& id);
+        void endTip();
 
         // The "click me" chip under Memphy, until he was clicked once (user settings)
         class ClickHint final : public juce::Component, public juce::SettableTooltipClient
@@ -86,6 +102,7 @@ namespace velvox::ui
         SpectrumView spectrumView;
         Legend legend;   // unbearbeitet (dashed) / bearbeitet (filled), always visible (review 2026-10-28)
         juce::TextButton analyse, before, after, details { "Details" };   // texts set in the constructor (language)
+        juce::TextButton fair;
         std::vector<std::unique_ptr<HSlider>> macros;
         CompactMeters meters;
         MascotView mascot;
@@ -97,6 +114,12 @@ namespace velvox::ui
         int score = -1;
         bool wasBusy = false;
         ClickHint clickHint;
+        juce::TextButton tipYes, tipShow;
+        juce::String tipId;
+        juce::StringArray tipsDone;
+        double tipWait = 1.0;   // s until the next tip may come
         juce::Rectangle<int> spectrumPanel, macroPanel, meterStrip, bubble, bubbleRow, bubbleText, statusRow;
+        std::array<juce::Rectangle<int>, 3> groupHeads;
+        std::vector<juce::Rectangle<int>> noteAreas;
     };
 }

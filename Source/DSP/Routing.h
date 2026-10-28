@@ -20,6 +20,10 @@ namespace velvox::dsp
 
     inline constexpr int numModules = 13;
 
+    // Review 2026-10-28: VOCAL CHECK keeps its id (parameters, help, findings) but never takes a place in
+    // the chain; the chain feeds it after its serial modules
+    constexpr bool isChainModule (ModuleId id) noexcept { return id != ModuleId::check; }
+
     const char* moduleKey (ModuleId id) noexcept;          // stable key used in state/presets
     const char* moduleDisplayName (ModuleId id) noexcept;  // UI name
     const char* moduleShortName (ModuleId id) noexcept;    // compact name for the chain tiles

@@ -426,7 +426,10 @@ public:
             Harness h;
             withEq (h, 0);
             ui::eqedit::addBand (h.proc, 0, 1000.0f, 3.0f);
-            h.proc.getState().getParameter (pid::macroPresence)->setValueNotifyingHost (0.6f);   // 60 %
+            {
+                auto* presence = h.proc.getState().getParameter (pid::macroPresence);
+                presence->setValueNotifyingHost (presence->convertTo0to1 (60.0f));   // 60 % (bipolar range since the review)
+            }
             ui::EqGraph g (h.proc, nullptr, 0);
             g.setBounds (0, 0, 900, 320);
             auto live = std::make_unique<ui::LiveData>();

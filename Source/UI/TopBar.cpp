@@ -212,6 +212,27 @@ namespace velvox::ui
             bool redo;
         };
 
+        // "68 · 3" in the colour of the score
+        class CheckBadge final : public juce::TextButton
+        {
+        public:
+            void paintButton (juce::Graphics& g, bool highlighted, bool) override
+            {
+                const int score = (int) getProperties().getWithDefault ("score", -1);
+                const auto c = score < 45 ? colours::warning : score < 75 ? juce::Colour (0xfffbbf24) : colours::ok;
+                const auto r = getLocalBounds().toFloat().reduced (0.5f);
+                g.setColour (colours::background);
+                g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+                g.setColour (c.withAlpha (highlighted ? 0.32f : 0.2f));
+                g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+                g.setColour (c.withAlpha (0.8f));
+                g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
+                g.setColour (c.interpolatedWith (juce::Colours::white, 0.35f));
+                g.setFont (semiBold (10.0f));
+                g.drawText (getButtonText(), getLocalBounds(), juce::Justification::centred, false);
+            }
+        };
+
         class GearButton final : public juce::Button
         {
         public:
@@ -296,6 +317,10 @@ namespace velvox::ui
         help.setTooltip (i18n::tr ("Hilfe", "Help"));
         help.onClick = [this] { if (onHelp) onHelp(); };
 
+        checkChip = std::make_unique<CheckBadge>();
+        checkChip->onClick = [this] { selectTab (Tab::vocalCheck); };
+        addChildComponent (*checkChip);
+
         undoButton = std::make_unique<HistoryButton> (false);
         redoButton = std::make_unique<HistoryButton> (true);
         undoButton->setTooltip (i18n::tr ("Rückgängig (Strg+Z)", "Undo (Ctrl+Z)"));
@@ -368,6 +393,23 @@ namespace velvox::ui
     {
         undoButton->setEnabled (proc.getUndo().canUndo());
         redoButton->setEnabled (proc.getUndo().canRedo());
+
+        auto& vc = proc.getVocalCheck();
+        const int score = vc.score(), tips = score >= 0 ? (int) vc.visibleFindings().size() : 0;
+        if (score != shownScore || tips != shownTips)
+        {
+            shownScore = score;
+            shownTips = tips;
+            checkChip->setVisible (score >= 0);
+            const auto middot = juce::String::fromUTF8 (" \xc2\xb7 ");
+            checkChip->setButtonText (juce::String (score) + middot + juce::String (tips));
+            checkChip->setTooltip ("Vocal Check " + juce::String (score) + middot
+                                   + (tips == 1 ? i18n::tr ("1 Tipp", "1 tip")
+                                                : i18n::format (i18n::tr ("{0} Tipps", "{0} tips"), { juce::String (tips) }))
+                                   + i18n::tr (" - Klick öffnet den Vocal Check", " - click to open the Vocal Check"));
+            checkChip->getProperties().set ("score", score);
+            resized();
+        }
 
         auto& pm = proc.getPresetManager();
         const auto name = pm.getCurrentPresetName();
@@ -497,6 +539,10 @@ namespace velvox::ui
         settingsButton->setBounds (centred (r.removeFromRight (28), 28));
         r.removeFromRight (8);
         bypass.setBounds (centred (r.removeFromRight (84), h));
+        // The badge on the VOCAL CHECK tab's top right corner
+        const auto tab = tabs[1]->getBounds();
+        const int badgeW = juce::GlyphArrangement::getStringWidthInt (semiBold (10.0f), checkChip->getButtonText()) + 14;
+        checkChip->setBounds (tab.getRight() - badgeW + 6, 2, badgeW, 15);
     }
 
     juce::Rectangle<int> TopBar::getPresetArea() const

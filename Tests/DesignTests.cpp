@@ -76,11 +76,7 @@ public:
                 seen.insert (ui::moduleColour (id).getARGB());
             }
             expectEquals ((int) seen.size(), dsp::numModules, "every module has its own colour");
-            expect (ui::moduleColour (ModuleId::ride) == juce::Colour (0xff00d1ff), "LEVEL RIDE #00D1FF");
-            expect (ui::moduleColour (ModuleId::smooth) == juce::Colour (0xff22b8ff), "SMOOTH #22B8FF");
-            expect (ui::moduleColour (ModuleId::smash) == juce::Colour (0xff3b82f6), "VOCAL SMASH #3B82F6");
-            expect (ui::moduleColour (ModuleId::delay) == juce::Colour (0xffd946ef), "DELAY #D946EF");
-            expect (ui::moduleColour (ModuleId::reverb) == juce::Colour (0xfff472b6), "REVERB #F472B6");
+            expect (ui::moduleColour (ModuleId::reverb) == juce::Colour (0xfff472b6), "REVERB #F472B6");   // colours by group since the review of 2026-10-28
             expect (ui::colours::windowBg == juce::Colour (0xff05060a), "window #05060A");
             expect (ui::monoFont (11.5f).getTypefaceName().containsIgnoreCase ("Roboto Mono"), "values in Roboto Mono");
         }
@@ -383,17 +379,46 @@ public:
             expect (h.get (pid::compOn) > 0.5f, "reset keeps it on");
         }
 
-        beginTest ("Design: 14 tiles scroll instead of shrinking below 84 px");
+        // Review 2026-10-28 (item 5): too many for normal tiles -> compact tiles that share the width (every
+        // module stays visible, no scrolling); only far beyond that the row scrolls
+        beginTest ("Design: many tiles become compact instead of scrolling; normal size while they fit");
         {
             Harness h;
             ui::ChainView view (h.proc);
             view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
-            for (auto id : { ModuleId::ride, ModuleId::smash, ModuleId::smooth, ModuleId::sat, ModuleId::doubler, ModuleId::delay,
-                             ModuleId::reverb, ModuleId::check, ModuleId::eq, ModuleId::comp, ModuleId::sat, ModuleId::smooth })
-                view.insertModule (id);
             for (const auto& s : h.proc.getRouting())
-                expect (view.getTileBounds (s.id, s.instance).getWidth() >= 84.0f - 0.01f, "tile width >= 84");
-            expect (view.getMaxScroll() > 0.0f, "the chain scrolls");
+                expect (! view.isCompact() && view.getTileBounds (s.id, s.instance).getWidth() >= 84.0f - 0.01f, "few modules: normal tiles");
+            for (auto id : { ModuleId::ride, ModuleId::smash, ModuleId::smooth, ModuleId::sat, ModuleId::doubler, ModuleId::delay,
+                             ModuleId::reverb, ModuleId::denoise, ModuleId::eq, ModuleId::comp, ModuleId::sat, ModuleId::smooth })
+                view.insertModule (id);
+            expectGreaterThan ((int) h.proc.getRouting().size(), 14);
+            expect (view.isCompact(), "compact tiles");
+            expectEquals (view.getMaxScroll(), 0.0f, "no scrolling: every module visible");
+            for (const auto& s : h.proc.getRouting())
+            {
+                const auto b = view.getTileBounds (s.id, s.instance);
+                expect (b.getWidth() < ui::ChainView::compactLookW && b.getWidth() >= ui::ChainView::compactTileW - 0.01f, "compact width " + juce::String (b.getWidth()));
+                expect (view.getLocalBounds().toFloat().contains (b.getCentre()), "inside the row");
+                expect (! view.getPowerBounds (s.id, s.instance).isEmpty(), "power reachable (a dot)");
+            }
+        }
+
+        beginTest ("Design: module colours by group - Aufräumen teal, Dynamik blue, Klang violet, Raum pink");
+        {
+            using G = ui::ModuleGroup;
+            const std::pair<G, std::vector<ModuleId>> groups[] {
+                { G::cleanUp, { ModuleId::denoise, ModuleId::breath, ModuleId::eq } },
+                { G::dynamics, { ModuleId::ride, ModuleId::comp, ModuleId::smash, ModuleId::deess } },
+                { G::tone, { ModuleId::smooth, ModuleId::sat, ModuleId::doubler } },
+                { G::space, { ModuleId::delay, ModuleId::reverb } } };
+            for (auto& [group, ids] : groups)
+                for (auto id : ids)
+                {
+                    expect (ui::moduleGroup (id) == group, dsp::moduleKey (id));
+                    const float dh = std::abs (ui::moduleColour (id).getHue() - ui::groupColour (group).getHue());
+                    expect (std::min (dh, 1.0f - dh) < 0.06f, juce::String (dsp::moduleKey (id)) + " in its group's hue");
+                }
+            expectEquals (ui::groupName (G::cleanUp), juce::String::fromUTF8 ("Aufräumen"));
         }
 
         beginTest ("Design: every panel binds only existing parameters, in its module colour");
@@ -458,7 +483,7 @@ public:
         }
 
         // 0.6 (spec 2.2 / 2.3): the Vocal Control bar is gone; its six macros are the Simple-mode faders
-        beginTest ("Design: Simple mode faders PRESENCE SPACE WIDTH PUNCH WARMTH VOCAL LEVEL, in the macro colours");
+        beginTest ("Design: Simple mode faders grouped Klang (Presence, Warmth) / Raum (Space, Width) / Dynamik & Pegel (Punch, Vocal Level)");
         {
             Harness h;
             ui::SimpleView view (h.proc, nullptr);
@@ -466,13 +491,26 @@ public:
             juce::StringArray ids;
             for (auto& s : view.getMacroSliders())
                 ids.add (s->getParamId());
-            expect (ids == juce::StringArray { "macroPresence", "macroSpace", "macroWidth", "macroAggression", "macroWarmth", "outputGain" },
+            expect (ids == juce::StringArray { "macroPresence", "macroWarmth", "macroSpace", "macroWidth", "macroAggression", "outputGain" },
                     "order: " + ids.joinIntoString (","));
-            const juce::uint32 expected[] { 0xff00d1ff, 0xff3b82f6, 0xff6366ff, 0xff8b5cf6, 0xffd946ef, 0xfff472b6 };
+            const juce::uint32 expected[] { 0xff00d1ff, 0xffd946ef, 0xff3b82f6, 0xff6366ff, 0xff8b5cf6, 0xfff472b6 };
             for (size_t i = 0; i < view.getMacroSliders().size() && i < 6; ++i)
                 expect (view.getMacroSliders()[i]->getAccent() == juce::Colour (expected[i]), "macro colour " + juce::String ((int) i));
-            expectEquals (view.getMacroSliders()[3]->getLabel(), juce::String ("Punch"));
+            expectEquals (view.getMacroSliders()[4]->getLabel(), juce::String ("Punch"));
             expectEquals (view.getMacroSliders()[5]->getLabel(), juce::String ("Vocal Level"));
+
+            // Review 2026-10-28 (item 1): three groups with a heading, the middle of each fader = unchanged,
+            // a grey line under each fader with what the auto mix did there (empty without a mix)
+            expect (view.getMacroGroupTitles() == juce::StringArray { "Klang", "Raum", "Dynamik & Pegel" }, view.getMacroGroupTitles().joinIntoString (","));
+            for (int i = 0; i < 5; ++i)
+            {
+                auto& s = *view.getMacroSliders()[(size_t) i];
+                expectEquals (s.slider.getMinimum(), -100.0, s.getLabel() + " bipolar");
+                expect (s.isBipolar(), s.getLabel());
+                expect (view.getMacroNote (i).isEmpty(), "no note without a mix");
+            }
+            for (int i = 1; i < 6; ++i)
+                expect (view.getMacroSliders()[(size_t) i]->getY() > view.getMacroSliders()[(size_t) i - 1]->getY(), "top to bottom");
 
             // Spectrum left with the analyse button under it, faders right, meters at the bottom
             expect (view.getSpectrumArea().getRight() < view.getMacroArea().getX(), "spectrum left of the faders");

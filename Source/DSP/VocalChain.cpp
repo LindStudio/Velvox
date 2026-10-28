@@ -446,9 +446,10 @@ namespace velvox::dsp
                 routeGain.setTargetValue (0.0f);
         }
 
-        // 3) Serial module instances in routing order
+        // 3) Serial module instances in routing order; VOCAL CHECK listens after them (read only)
         for (const auto& slot : activeRouting)
             processSerialModule (slot, io, numChannels, n);
+        check.process (io, numChannels, n);
 
         // 4) Parallel sends, fed from the end of the serial chain. They return
         //    wet only, so the dry signal is present exactly once.
@@ -577,7 +578,7 @@ namespace velvox::dsp
             // 0.3 modules: each has its own click-free on/off and does nothing at all while off
             case ModuleId::smash:   smash[k].process (io, numChannels, n); break;
             case ModuleId::smooth:  smooth[k].process (io, numChannels, n); break;
-            case ModuleId::check:   check.process (io, numChannels, n); break; // read only
+            case ModuleId::check:   break;   // never in the routing: processChunk feeds it after the chain
             // 0.7: constant latency while in the chain, own click-free on/off
             case ModuleId::denoise: denoise.process (io, numChannels, n); break;
             case ModuleId::breath:  breath.process (io, numChannels, n); break;

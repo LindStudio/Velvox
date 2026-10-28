@@ -4,6 +4,40 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 
 ## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/modules-0.7`
 
+### Review-Umsetzung (Jakob, 2026-10-28) – Version 0.7.0
+Keine Rückwärtskompatibilität (Entwicklungsphase): Defaults und Wertebereiche wurden direkt geändert.
+- **Makros bipolar:** Presence, Warmth, Space, Width und Punch laufen von −100 bis +100 %, die Mitte heißt
+  unverändert. Links nimmt weg (Presence und Warmth senken über ihre EQ-Rollen-Bänder ab). Absenkungen des Auto Mix
+  sind jetzt sichtbar (z. B. Presence −80 %). Die Fader stehen in drei Gruppen (Klang, Raum, Dynamik & Pegel), und
+  unter jedem steht, was der Auto Mix dort gemacht hat.
+- **Lautheit:** Init (Kompressor-Makeup jetzt 5 dB) und alle Werks-Presets bringen eine Vocal mit −18 LUFS auf
+  ±0,3 LU zur Eingangslautheit (gemessen an echten VocalSet-Aufnahmen). Die IN/OUT-Meter in SIMPEL haben einen
+  Spitzenhalter, und OUT zeigt den Unterschied zum Eingang („−3 LU“).
+- **Vocal Check ist kein Ketten-Modul mehr:** Er misst immer nach der ganzen Kette und ist standardmäßig an.
+  Memphy sagt die Tipps in SIMPEL einzeln an („Ja, mach“ / „Zeig mir“). Am Tab VOCAL CHECK sitzt ein Abzeichen
+  mit Score und Anzahl der Tipps. Der Tab hat einen Knopf „Neu messen“ statt Laufend/Capture/Start/Reset, ein Wort
+  zum Score, „Alles anwenden“ direkt daneben und unten das Spektrum der Stimme gegen das Ziel des Genres.
+- **Tour:** Die Karte steht neben dem Ziel, nie darauf. Memphy hört auf zu reden, sobald die Tour weitergeht, und
+  blinzelt nicht mehr im Moment eines Stimmungswechsels.
+- **Kette:** Die Farben richten sich nach der Gruppe (Aufräumen Teal, Dynamik Blau, Klang Violett, Raum Pink).
+  Wird es eng, schrumpfen die Kacheln und werden kompakt (Kurzname, Power als Punkt). Gescrollt wird erst ganz
+  zuletzt.
+- **Auto-Mix-Bericht:** Jede Zahl sagt, woher sie kommt („Gesang im gemessenen Abschnitt“ / „Gerade jetzt
+  (live)“). „Gleich laut“ steht in SIMPEL neben Vorher/Nachher und ist standardmäßig an. „Vorherigen Zustand
+  wiederherstellen“ ist ein Link unter der Liste.
+- **Saturation macht voller, nicht kaputt:** Presets, Makros und Defaults (3 dB, 50 %) bleiben unter 3 % THD. Das
+  Panel zeigt im Einzelband-Modus eine Skala „Wärme → Farbe → Zerre“ mit Marker, und der THD-Chip ist in der
+  Farbe seiner Zone.
+- **Lesbarkeit:** Ausgeschriebene Read-outs im Output („Eingang / Nach den Modulen / Lautheits-Ausgleich“).
+  Legenden in SIMPEL, EQ, De-Esser, Smooth und Output bleiben stehen. Beschriftungen unter Reglern haben 11 px
+  und mehr Kontrast. Die Sprechblase passt sich dem Text an, und „Klick mich = Vocal Check“ steht als Chip unter
+  Memphy.
+- **Ein Wort pro Sache:** überall „Vocal analysieren“ und „Solo“ (De-Esser: „S-Laute solo“). Das Analyse-Popup
+  zeigt drei nummerierte Schritte.
+- **Kleinigkeiten:** Undo/Redo als Pfeile neben dem Preset-Namen. Die Preset-Liste schließt nach einem Klick.
+  Die Version kommt aus einer einzigen Stelle (CMake, 0.7.0). EQ-Punkte überlappen nicht mehr, und Rollen-Schilder
+  erscheinen nur am gewählten Punkt.
+
 ### Behoben
 - **EQ-Sweep:** Wer beim Sweep (Kopfhörer am Punkt ziehen) mit dem Mausrad das Q änderte, bekam beim
   nächsten Schieben nach links oder rechts das alte Q zurück. Der Sweep geht jetzt immer vom aktuellen Q aus.

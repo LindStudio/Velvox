@@ -45,6 +45,7 @@ public:
             for (auto& p : getFactoryPresets())
                 if (p.name == "Hypertechno Lead")
                     p.applyTo (h.proc.getState());
+            h.set (pid::levelMatchMode, 0.0f);   // the pure input (the fair compare is on by default since the review of 2026-10-28)
             h.set (pid::bypass, 1.0f);
             const auto in = h.noise (0.3f, 1.0, 7);
             const auto out = h.run (in);

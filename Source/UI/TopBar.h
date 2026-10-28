@@ -75,6 +75,9 @@ namespace velvox::ui
         juce::TextButton& getPrevButton() noexcept { return prev; }
         juce::TextButton& getNextButton() noexcept { return next; }
         juce::Button& getUndoButton() noexcept { return *undoButton; }
+        // A badge "68 · 3" (score · tips) on the VOCAL CHECK tab once there is a score; a click opens the tab,
+        // the tooltip says it in words (review 2026-10-28)
+        juce::TextButton& getCheckChip() noexcept { return *checkChip; }
         juce::Button& getRedoButton() noexcept { return *redoButton; }
         juce::Button& getModeButton (Mode m) noexcept { return m == Mode::simple ? *modeButtons[0] : *modeButtons[1]; }
         juce::Button& getTabButton (Tab t) noexcept { return t == Tab::autoMix ? *tabs[0] : *tabs[1]; }
@@ -99,6 +102,8 @@ namespace velvox::ui
         Tab tab = Tab::autoMix;
         Toggle bypass;
         juce::TextButton help { "?" };
+        std::unique_ptr<juce::TextButton> checkChip;
+        int shownScore = -2, shownTips = -1;
         std::unique_ptr<juce::Button> settingsButton, undoButton, redoButton;
         juce::Rectangle<int> logoArea;
         bool shownModified = false;

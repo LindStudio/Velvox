@@ -171,7 +171,7 @@ namespace velvox::dsp
 
     ChainSettings applyMacroMove (const ChainSettings& base, MacroId id, float fromRaw, float toRaw) noexcept
     {
-        const float from = clamp (fromRaw, 0.0f, 1.0f), to = clamp (toRaw, 0.0f, 1.0f);
+        const float from = clamp (fromRaw, -1.0f, 1.0f), to = clamp (toRaw, -1.0f, 1.0f);   // bipolar since the review of 2026-10-28
         const float d = to - from;
         if (d == 0.0f)
             return base;
@@ -189,6 +189,12 @@ namespace velvox::dsp
                     s.eqOn = true;
                     air = roleBand (s.eq, EqRole::air);
                     s.deessOn = true;
+                }
+                else if (toRaw < 0.0f)
+                {
+                    // Below the middle: a cut needs the band (review 2026-10-28, bipolar faders)
+                    s.eqOn = true;
+                    air = roleBand (s.eq, EqRole::air);
                 }
                 else if (s.eqOn)
                 {
@@ -210,7 +216,14 @@ namespace velvox::dsp
                 }
                 else
                 {
-                    if (s.eqOn)
+                    if (toRaw < 0.0f)
+                    {
+                        // Below the middle: thinner - the warmth band cuts (created for it)
+                        s.eqOn = true;
+                        warmth = roleBand (s.eq, EqRole::warmth);
+                        air = existingRoleBand (s.eq, EqRole::air);
+                    }
+                    else if (s.eqOn)
                     {
                         warmth = existingRoleBand (s.eq, EqRole::warmth);
                         air = existingRoleBand (s.eq, EqRole::air);

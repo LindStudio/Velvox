@@ -169,14 +169,14 @@ public:
 
             // 0.2 / 0.3 strings: every module, 0.3 modules at their default places
             const auto full = Routing::legacyFull();
-            expectEquals (full.size(), dsp::numModules - 2, "every module up to 0.6 (the 0.7 clean-up modules never join an old chain)");
+            expectEquals (full.size(), dsp::numModules - 3, "every module up to 0.6 (the 0.7 clean-up modules never join an old chain, VOCAL CHECK is no chain module)");
             expect (Routing::fromString (legacyV03Default) == full);
             expect (Routing::fromString ("eq,comp,deess,sat,doubler,pitch,delay:send,reverb:send,chop") == full, "v0.2 default -> 0.3 default");
             const auto custom = Routing::fromString ("sat,eq,comp,deess,doubler,pitch,delay:insert,reverb:send,chop");
             expect (custom.isValid() && custom.isInsert (ModuleId::delay) && custom.isSend (ModuleId::reverb));
             expect (custom.positionOf (ModuleId::sat) == 0 && custom.positionOf (ModuleId::ride) == custom.positionOf (ModuleId::eq) + 1,
                     "custom order kept, ride placed after EQ");
-            expect (custom.positionOf (ModuleId::check) == custom.size() - 1, "check stays last");
+            expect (! custom.contains (ModuleId::check), "VOCAL CHECK never joins the chain (review 2026-10-28)");
 
             // v2 strings are exact, with instances
             const auto multi = Routing::fromString ("v2,eq,comp,eq#2,deess,reverb#2:insert,delay:send");
@@ -207,8 +207,8 @@ public:
             Routing all;
             for (int m = 0; m < dsp::numModules; ++m)
                 for (int k = 0; k < dsp::maxInstances ((ModuleId) m); ++k)
-                    expect (all.insertAt (all.size(), (ModuleId) m, k));
-            expectEquals (all.size(), Routing::capacity);
+                    expect (all.insertAt (all.size(), (ModuleId) m, k) == dsp::isChainModule ((ModuleId) m));
+            expectEquals (all.size(), Routing::capacity - 1, "all but the VOCAL CHECK slot");
             expect (all.isValid());
             expectEquals (all.nextFreeInstance (ModuleId::eq), -1);
 
@@ -548,6 +548,7 @@ public:
                 expectLessOrEqual (std::abs ((peakAt - pos) - reported), 2, "reported latency == measured delay" + at);
 
                 // Global bypass: the input delayed by exactly the reported latency
+                h.set (pid::levelMatchMode, 0.0f);   // the pure input (the fair compare is on by default since the review of 2026-10-28)
                 h.set (pid::bypass, 1.0f);
                 h.run (h.silence (0.2));   // the bypass crossfade
                 const auto in = h.noise (0.3f, 0.5 + (double) reported / rate, 5);

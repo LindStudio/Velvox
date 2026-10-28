@@ -277,6 +277,10 @@ namespace velvox::ui
         shape.addRoundedRectangle (r.getX(), r.getY(), r.getWidth(), r.getHeight(), corner, corner,
                                    ! flatL, ! flatR, ! flatL, ! flatR);
 
+        // A link (review 2026-10-28: "Vorherigen Zustand wiederherstellen"): no background at all
+        if ((bool) b.getProperties().getWithDefault ("link", false))
+            return;
+
         // Design segment (on a #0D0F15 group): active = accent at 16 %, hover = white 3 / 6 %
         if ((bool) b.getProperties().getWithDefault (segmentProperty, false))
         {
@@ -357,6 +361,18 @@ namespace velvox::ui
             g.setColour (c);
             g.setFont (semiBold (11.0f));
             g.drawFittedText (b.getButtonText(), b.getLocalBounds().reduced (2, 0), juce::Justification::centred, 1, 0.8f);
+            return;
+        }
+        if ((bool) b.getProperties().getWithDefault ("link", false))
+        {
+            // Left aligned, underlined, in the interaction colour
+            const auto f = font (12.5f);
+            const auto text = b.getButtonText();
+            const float w = std::min ((float) b.getWidth(), (float) juce::GlyphArrangement::getStringWidthInt (f, text));
+            g.setColour (! b.isEnabled() ? colours::textFaint : highlighted ? colours::textStrong : colours::cyan.withAlpha (0.9f));
+            g.setFont (f);
+            g.drawText (text, b.getLocalBounds(), juce::Justification::centredLeft, true);
+            g.fillRect (juce::Rectangle<float> (0.0f, (float) b.getHeight() * 0.5f + f.getHeight() * 0.5f, w, 1.0f));
             return;
         }
         auto c = b.findColour (on ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId);

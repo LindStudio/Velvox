@@ -80,8 +80,9 @@ namespace velvox::check
 
             bool measured (ModuleId m, int k) const
             {
-                const int at = c.routing.indexOf (m, k), checkAt = c.routing.indexOf (ModuleId::check, 0);
-                return at >= 0 && checkAt >= 0 && at < checkAt && c.audible && c.audible (m, k);
+                // VOCAL CHECK measures after the whole chain: every module in it is part of the measurement
+                const int at = c.routing.indexOf (m, k);
+                return at >= 0 && c.audible && c.audible (m, k);
             }
 
             bool isEnsured (ModuleId m) const { return std::find (ensured.begin(), ensured.end(), m) != ensured.end(); }

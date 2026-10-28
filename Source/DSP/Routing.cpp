@@ -123,6 +123,9 @@ namespace velvox::dsp
 
     bool Routing::insertAt (int index, ModuleId id, int instance, bool insertMode) noexcept
     {
+        // Review 2026-10-28: VOCAL CHECK is no module of the chain - it always measures after it (VocalChain)
+        if (! isChainModule (id))
+            return false;
         if (count >= capacity || idx (id) >= numModules || instance < 0 || instance >= maxInstances (id) || contains (id, instance))
             return false;
         index = juce::jlimit (0, count, index);

@@ -104,7 +104,7 @@ namespace velvox::automix
     std::map<juce::String, float> sliderPositions (const std::map<juce::String, float>& values)
     {
         const auto get = [&values] (const char* id) { const auto it = values.find (id); return it != values.end() ? it->second : 0.0f; };
-        const auto pct = [] (float fraction) { return juce::jlimit (0.0f, 100.0f, fraction * 100.0f); };
+        const auto pct = [] (float fraction) { return juce::jlimit (-100.0f, 100.0f, fraction * 100.0f); };   // bipolar faders
         const bool comp = get (pid::compOn) > 0.5f;
         return {
             { pid::macroPresence,   pct (roleGain ({}, values, dsp::EqRole::air) / 5.0f) },

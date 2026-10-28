@@ -11,7 +11,7 @@ namespace velvox::ui
         using i18n::show;
         juce::String num (float v, int decimals = 1) { return i18n::number (v, decimals); }
 
-        constexpr int headerH = 44, gapV = 10, statusW = 300, tuneH = 92;
+        constexpr int headerH = 44, gapV = 10, statusW = 300, tuneH = 92;   // tuneH: Density beside its explanation
 
         // Design panel: #07080D, border #161925, radius 12
         void drawPanel (juce::Graphics& g, juce::Rectangle<int> area)
@@ -210,6 +210,7 @@ namespace velvox::ui
         analyse.onClick = [this] { if (onAnalyse) onAnalyse(); };
 
         restore.setButtonText (tr ("Vorherigen Zustand wiederherstellen", "Restore previous state"));
+        restore.getProperties().set ("link", true);   // a link under the list, not a button over it
         restore.setTooltip (tr ("Verwirft den Auto-Mix und stellt die Einstellungen von davor wieder her", "Discards the auto mix and brings back the settings from before"));
         restore.onClick = [this] { autoMix.restorePrevious(); };
 
@@ -263,6 +264,38 @@ namespace velvox::ui
         updateButtons();
         resized();
         repaint();
+    }
+
+    std::vector<AutoMixView::StatusRow> AutoMixView::statusRows() const
+    {
+        const auto& r = autoMix.getReport();
+        std::vector<StatusRow> rows;
+        if (r.valid)
+        {
+            rows.push_back ({ tr ("Analyse", "Analysis"), i18n::format (tr ("{0} s Gesang (Abschnitt)", "{0} s of singing (section)"), { num (r.voicedSeconds) }), colours::text });
+            rows.push_back ({ "Material", r.conservative ? tr ("Wenig - vorsichtige Werte", "Little - cautious values") : tr ("Ausreichend", "Enough"),
+                              r.conservative ? colours::bypass : colours::ok });
+            rows.push_back ({ tr ("Bearbeitet", "Processed"), i18n::format (tr ("{0} Module", "{0} modules"), { juce::String (r.changedModules.size()) }), colours::text });
+            // The mix's result on the measured section - not what plays right now (that is the live line)
+            rows.push_back ({ tr ("Gesang im gemessenen Abschnitt", "Vocal in the measured section"),
+                              i18n::format (tr ("{0} LUFS · Spitze {1} dB", "{0} LUFS · peak {1} dB"), { num (r.outputLufs), num (r.outputPeakDb) }), colours::text });
+        }
+        else
+        {
+            rows.push_back ({ tr ("Analyse", "Analysis"), tr ("Noch keine", "None yet"), colours::textFaint });
+        }
+        rows.push_back ({ tr ("Gerade jetzt (live)", "Right now (live)"), inputStatus, inputColour });
+        rows.push_back ({ tr ("Beat-Sidechain", "Beat sidechain"), sidechainStatus + (r.valid && r.beatAnalysed ? tr (" · analysiert", " · analyzed") : juce::String()),
+                          colours::textDim });
+        return rows;
+    }
+
+    juce::StringArray AutoMixView::getStatusLines() const
+    {
+        juce::StringArray lines;
+        for (const auto& row : statusRows())
+            lines.add (row.label + ": " + row.value);
+        return lines;
     }
 
     void AutoMixView::updateButtons()
@@ -339,33 +372,26 @@ namespace velvox::ui
             g.drawText (tr ("VOCAL-STATUS", "VOCAL STATUS"), a.removeFromTop (26), juce::Justification::centredLeft, false);
             a.removeFromTop (6);
 
-            const auto line = [&g, &a] (const juce::String& label, const juce::String& value, juce::Colour c)
+            // Short labels beside their value; a long one ("Gesang im gemessenen Abschnitt") above it
+            for (const auto& row : statusRows())
             {
-                auto row = a.removeFromTop (27);
-                g.setColour (colours::textDim);
                 g.setFont (font (13.5f));
-                g.drawText (label, row.removeFromLeft (128), juce::Justification::centredLeft, false);
-                g.setColour (c);
+                const bool stacked = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), row.label) > 124;
+                auto line = a.removeFromTop (stacked ? 40 : 27);
+                g.setColour (colours::textDim);
+                if (stacked)
+                {
+                    g.setFont (font (12.0f));
+                    g.drawText (row.label, line.removeFromTop (16), juce::Justification::centredLeft, false);
+                }
+                else
+                {
+                    g.drawText (row.label, line.removeFromLeft (128), juce::Justification::centredLeft, false);
+                }
+                g.setColour (row.colour);
                 g.setFont (medium (13.5f));
-                g.drawFittedText (value, row, juce::Justification::centredLeft, 1, 0.85f);
-            };
-
-            if (r.valid)
-            {
-                line (tr ("Analyse", "Analysis"), i18n::format (tr ("{0} s Gesang (Abschnitt)", "{0} s of singing (section)"), { num (r.voicedSeconds) }), colours::text);
-                line ("Material", r.conservative ? tr ("Wenig - vorsichtige Werte", "Little - cautious values") : tr ("Ausreichend", "Enough"),
-                      r.conservative ? colours::bypass : colours::ok);
-                line (tr ("Bearbeitet", "Processed"), i18n::format (tr ("{0} Module", "{0} modules"), { juce::String (r.changedModules.size()) }), colours::text);
-                line (tr ("Ausgang", "Output"), i18n::format (tr ("{0} LUFS · Spitze {1} dB", "{0} LUFS · peak {1} dB"), { num (r.outputLufs), num (r.outputPeakDb) }),
-                      colours::text);
+                g.drawFittedText (row.value, line, juce::Justification::centredLeft, 1, 0.85f);
             }
-            else
-            {
-                line (tr ("Analyse", "Analysis"), tr ("Noch keine", "None yet"), colours::textFaint);
-            }
-            line (tr ("Eingang (live)", "Input (live)"), inputStatus, inputColour);
-            line (tr ("Beat-Sidechain", "Beat sidechain"), sidechainStatus + (r.valid && r.beatAnalysed ? tr (" · analysiert", " · analyzed") : juce::String()),
-                  colours::textDim);
 
             a.removeFromTop (10);
             g.setColour (colours::text);
@@ -428,6 +454,12 @@ namespace velvox::ui
             g.setColour (colours::textStrong);
             g.setFont (semiBold (13.0f, 0.18f));
             g.drawText (tr ("FEINSCHLIFF", "FINE-TUNING"), a.removeFromTop (18), juce::Justification::centredLeft, false);
+            // What Density does, beside it (it no longer stands alone in the box)
+            g.setColour (colours::textDim);
+            g.setFont (font (12.5f));
+            g.drawFittedText (tr ("Density: dichter und gleichmäßiger Gesang (mehr Kompression). Der faire Vergleich hält Vorher, Nachher und Bypass gleich laut.",
+                                  "Density: a denser, steadier vocal (more compression). The fair comparison keeps before, after and bypass at the same loudness."),
+                              a.withRight (levelMatch->getX() - 16).withTrimmedTop (4).toNearestInt(), juce::Justification::topLeft, 3, 1.0f);
             g.setColour (colours::textFaint);
             g.setFont (semiBold (10.0f, 0.15f));
             g.drawText (tr ("FAIRER VERGLEICH", "FAIR COMPARISON"), levelMatch->getBounds().translated (0, -20).withHeight (16), juce::Justification::centredLeft, false);
@@ -453,8 +485,10 @@ namespace velvox::ui
         auto list = stepsArea.reduced (16, 14).withTrimmedTop (34);
         if (restore.isVisible())
         {
-            restore.setBounds (list.removeFromBottom (32).removeFromRight (290));
-            list.removeFromBottom (8);
+            auto link = list.removeFromBottom (24);
+            list.removeFromBottom (6);
+            restore.setBounds (link.removeFromLeft (std::min (link.getWidth(),
+                juce::GlyphArrangement::getStringWidthInt (font (12.5f), restore.getButtonText()) + 8)));
         }
         stepView.setBounds (list);
         steps->setSize (list.getWidth() - 8, steps->heightFor());

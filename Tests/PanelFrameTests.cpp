@@ -77,6 +77,8 @@ public:
             allModulesInChain (h);
             for (int id = -1; id < dsp::numModules; ++id)
             {
+                if (id >= 0 && ! dsp::isChainModule ((ModuleId) id))
+                    continue;   // VOCAL CHECK has no module panel since the review of 2026-10-28 (its tab)
                 auto panel = ui::createDetailPanel (h.proc, id);
                 panel->setBounds (panelSize());
                 const auto name = juce::String (id < 0 ? "output" : dsp::moduleKey ((ModuleId) id));

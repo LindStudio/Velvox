@@ -145,12 +145,20 @@ namespace velvox::ui
     juce::Rectangle<float> ChainView::laneArea() const
     {
         const auto add = addCardArea();
-        return { add.getRight() + tileGap, add.getY(), sendGap + (float) std::max (1, numSends) * (serialW + tileGap), add.getHeight() };
+        return { add.getRight() + tileGap, add.getY(), sendGap + sendColumnsW(), add.getHeight() };
+    }
+
+    // The send lane: one column per send; empty it keeps a tile's room - compact only a narrow drop strip
+    float ChainView::sendColumnsW() const noexcept
+    {
+        if (numSends > 0)
+            return (float) numSends * (serialW + tileGap);
+        return isCompact() ? emptyLaneCompactW : serialW + tileGap;
     }
 
     float ChainView::contentWidth() const
     {
-        return (float) numSerial * (serialW + tileGap) + addTileW + tileGap + sendGap + (float) std::max (1, numSends) * (serialW + tileGap);
+        return (float) numSerial * (serialW + tileGap) + addTileW + tileGap + sendGap + sendColumnsW();
     }
 
     float ChainView::getMaxScroll()
@@ -176,10 +184,12 @@ namespace velvox::ui
 
         numSerial = (int) serial.size();
         numSends = (int) sends.size();
-        // Tiles shrink a little before the row starts to scroll
+        // Tiles shrink a little, then turn compact (every module stays visible), and only then the row scrolls
         const int columns = numSerial + std::max (1, numSends);
-        const float fit = (row.getWidth() - addTileW - sendGap - tileGap * (float) (columns + 1)) / (float) std::max (1, columns);
-        serialW = juce::jlimit (minTileW, tileW, fit);
+        float fit = (row.getWidth() - addTileW - sendGap - tileGap * (float) (columns + 1)) / (float) std::max (1, columns);
+        if (fit < compactLookW && numSends == 0)   // compact: the empty send lane narrows to a drop strip
+            fit = (row.getWidth() - addTileW - sendGap - emptyLaneCompactW - tileGap * (float) (numSerial + 1)) / (float) std::max (1, numSerial);
+        serialW = juce::jlimit (compactTileW, tileW, fit);
 
         const float maxScroll = std::max (0.0f, contentWidth() - row.getWidth());
         if (scroll.target > maxScroll || scroll.current > maxScroll)
@@ -234,8 +244,8 @@ namespace velvox::ui
     // Solo "S": bottom right, on the line of the power switch
     juce::Rectangle<float> ChainView::soloBounds (const Tile& t) const
     {
-        if (! dsp::canSolo (t.id))
-            return {};
+        if (! dsp::canSolo (t.id) || t.bounds.getWidth() < compactLookW - 0.01f)
+            return {};   // compact tiles: Solo through Alt+click and the tile menu
         return juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ t.bounds.getRight() - 15.0f, powerBounds (t).getCentreY() });
     }
 
@@ -421,10 +431,11 @@ namespace velvox::ui
             scrollTo (scroll.target - delta * 512.0f, false);
             return;
         }
+        // One notch = about one tile, also with compact tiles (review 2026-10-28)
        #if JUCE_MAC
-        constexpr float pixelsPerUnit = 2400.0f;   // a mouse notch on macOS is ~0.04
+        const float pixelsPerUnit = 2400.0f * scrollStep() / (tileW + tileGap);   // a mouse notch on macOS is ~0.04
        #else
-        constexpr float pixelsPerUnit = 200.0f;    // a notch on Windows is 120 / 256: about one tile
+        const float pixelsPerUnit = 200.0f * scrollStep() / (tileW + tileGap);    // a notch on Windows is 120 / 256
        #endif
         // Small steps (precision touchpads send many) follow directly, wheel notches glide
         scrollTo (scroll.target - delta * pixelsPerUnit, std::abs (delta) >= 0.2f);
@@ -660,11 +671,14 @@ namespace velvox::ui
         Tile shifted = t;
         shifted.bounds = r;
 
-        // 1) Name
+        // 1) Name (compact tiles: the short name)
+        const bool compact = r.getWidth() < compactLookW - 0.01f;
         const auto nameArea = nameBounds (shifted);
         g.setColour ((on ? colours::textStrong : colours::textMuted));
-        g.setFont (semiBold (9.5f, 0.12f));
-        g.drawFittedText (i18n::upper (cardName (routing, t.id, t.instance)), nameArea.toNearestInt(), juce::Justification::centred, 1, 0.7f);
+        g.setFont (semiBold (compact ? 8.5f : 9.5f, compact ? 0.04f : 0.12f));
+        const juce::String name = compact ? juce::String (dsp::moduleShortName (t.id)) + (t.instance > 0 ? juce::String (t.instance + 1) : juce::String())
+                                          : cardName (routing, t.id, t.instance);
+        g.drawFittedText (i18n::upper (name), nameArea.toNearestInt(), juce::Justification::centred, 1, 0.7f);
 
         // 2) Icon (with a SEND badge on sends)
         const auto iconArea = iconBounds (shifted);
@@ -679,8 +693,20 @@ namespace velvox::ui
             g.drawText ("SEND", badge, juce::Justification::centred, false);
         }
 
-        // 3) On / off
-        drawPowerGlyph (g, powerBounds (shifted), switchedOn, hov, hue);
+        // 3) On / off (compact: a dot)
+        if (compact)
+        {
+            const auto dot = juce::Rectangle<float> (9.0f, 9.0f).withCentre (powerBounds (shifted).getCentre());
+            g.setColour (switchedOn ? hue : colours::textFaint);
+            if (switchedOn)
+                g.fillEllipse (dot);
+            else
+                g.drawEllipse (dot.reduced (0.5f), 1.2f);
+        }
+        else
+        {
+            drawPowerGlyph (g, powerBounds (shifted), switchedOn, hov, hue);
+        }
 
         // Activity line along the bottom edge (gain reduction, ducking, movement)
         const float act = activityOf (t);

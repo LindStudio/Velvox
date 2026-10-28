@@ -31,6 +31,7 @@ namespace velvox::ui::mascot
         bool autoMixBusy = false;    // listening / capturing / analysing
         bool mixFinished = false;    // a mix has just been applied (true for one update)
         bool talking = false;        // a speech line is being said
+        int tip = 0;                 // a Vocal Check tip is up: 1 = a small one (he thinks), 2 = a serious one (sad)
     };
 
     class Brain
@@ -117,6 +118,8 @@ namespace velvox::ui::mascot
                 return silent > silenceToIdle ? Mood::annoyed : Mood::thinking;
             if (proudLeft > 0.0)
                 return Mood::proud;
+            if (in.tip > 0)
+                return in.tip > 1 ? Mood::sad : Mood::thinking;
             if (silent > 0.0)   // a pause between phrases keeps the reaction, a long one ends it
                 return silent > silenceToIdle || ! reacting (now) ? Mood::listening : now;
             return quality (in.score);

@@ -4,6 +4,8 @@
 #include "TestHelpers.h"
 #include "MacroTestHelpers.h"
 #include "StateKeys.h"
+#include "AutoMix/AutoMixPlanner.h"
+#include "Parameters/EqBands.h"
 #include <thread>
 
 using namespace velvox;
@@ -131,7 +133,7 @@ public:
             expectWithinAbsoluteError (after.values.at (pid::compThreshold), -18.0f - 8.0f, 1.0e-3f);
             expectWithinAbsoluteError (after.values.at (pid::compRatio), 3.0f + 3.2f, 1.0e-3f);
             expectWithinAbsoluteError (after.values.at (pid::compAttack), 10.0f * (1.0f - 0.48f), 1.0e-3f);
-            expectWithinAbsoluteError (after.values.at (pid::compMakeup), 4.0f, 1.0e-3f);
+            expectWithinAbsoluteError (after.values.at (pid::compMakeup), 5.0f + 4.0f, 1.0e-3f, "default makeup 5 dB (review 2026-10-28) + 4");
             expect (after.values.at (pid::satOn) > 0.5f);
             expectWithinAbsoluteError (after.values.at (pid::satMix), 32.0f, 1.0e-3f);
             const juce::StringArray moved { pid::macroAggression, pid::compOn, pid::compThreshold, pid::compRatio, pid::compAttack, pid::compMakeup,
@@ -390,12 +392,12 @@ void MacroTests::simpleSetsModulesTests()
         Harness h;
         h.neutral();
         auto* p = h.proc.getState().getParameter (pid::macroSpace);
-        std::thread automation ([p] { p->setValueNotifyingHost (0.5f); });
+        std::thread automation ([p] { p->setValueNotifyingHost (p->convertTo0to1 (50.0f)); });   // 50 % (bipolar range)
         automation.join();
         juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
         expect (h.get (pid::reverbOn) > 0.5f, "mapped on the message thread");
         expectWithinAbsoluteError (h.get (pid::reverbMix), 15.0f, 1.0e-3f);
-        std::thread back ([p] { p->setValueNotifyingHost (0.0f); });
+        std::thread back ([p] { p->setValueNotifyingHost (p->convertTo0to1 (0.0f)); });
         back.join();
         juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
         expect (h.get (pid::reverbOn) < 0.5f, "an automation curve back at 0 switches it off again");
@@ -499,6 +501,47 @@ void MacroTests::moveTests()
         expectEquals (softer.comp.thresholdDb, 0.0f, "clamped at 0 dB");
         expectEquals (softer.comp.ratio, 1.0f, "clamped at 1:1");
         expectWithinAbsoluteError (softer.comp.attackMs, 25.0f, 1.0e-3f, "attack / (1 - 0.6)");
+    }
+
+    // Review 2026-10-28 (item 1): the faders are bipolar - the middle is "unchanged", left is less
+    beginTest ("Bipolar: the five macros run -100 .. +100 % around 0; below the middle Presence and Warmth cut with their role bands");
+    {
+        test::Harness h;
+        for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroSpace, pid::macroWidth, pid::macroAggression })
+        {
+            auto* p = dynamic_cast<juce::RangedAudioParameter*> (h.proc.getState().getParameter (id));
+            expect (p != nullptr && p->getNormalisableRange().start == -100.0f && p->getNormalisableRange().end == 100.0f, id);
+            expectEquals (h.get (id), 0.0f, juce::String (id) + " starts in the middle");
+        }
+
+        const auto neutral = bases.back().second;
+        auto noRoles = neutral;
+        noRoles.eqOn = false;
+        for (auto& b : noRoles.eq.bands)
+            b = {};
+        const auto darker = dsp::applyMacroMove (noRoles, MacroId::presence, 0.0f, -0.5f);
+        expect (darker.eqOn, "the EQ comes on for the cut");
+        float air = 0.0f;
+        for (const auto& b : darker.eq.bands)
+            if (b.role == (int) dsp::EqRole::air)
+                air = b.gain;
+        expectWithinAbsoluteError (air, -2.5f, 1.0e-4f, "half left = -2.5 dB air");
+        const auto thinner = dsp::applyMacroMove (noRoles, MacroId::warmth, 0.0f, -1.0f);
+        float warm = 0.0f;
+        for (const auto& b : thinner.eq.bands)
+            if (b.role == (int) dsp::EqRole::warmth)
+                warm = b.gain;
+        expectWithinAbsoluteError (warm, -3.0f, 1.0e-4f, "full left = -3 dB warmth");
+        const auto back = dsp::applyMacroMove (darker, MacroId::presence, -0.5f, 0.0f);
+        for (const auto& b : back.eq.bands)
+            if (b.role == (int) dsp::EqRole::air)
+                expectWithinAbsoluteError (b.gain, 0.0f, 1.0e-4f, "back in the middle: no cut");
+
+        // The auto mix's cut shows as a negative position
+        std::map<juce::String, float> values;
+        auto access = eqbands::accessFor (values);
+        eqbands::findOrCreateBand (access, 0, dsp::EqRole::air, dsp::EqBandType::highShelf, 10000.0f, -4.0f, 0.7071f);
+        expectWithinAbsoluteError (automix::sliderPositions (values).at (pid::macroPresence), -80.0f, 0.01f, "-4 dB air = -80 %");
     }
 
     beginTest ("Simple move never touches user EQ bands");

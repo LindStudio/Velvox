@@ -188,114 +188,6 @@ namespace velvox::ui
             Legend legend;
         };
 
-        //======================================================================
-        // VOCAL CHECK: what the analysis measured - long-term spectrum and balance
-        class CheckView final : public ModuleView
-        {
-        public:
-            explicit CheckView (VelvoxAudioProcessor& p) : proc (p) {}
-
-            void update (const LiveData& d) override
-            {
-                on = d.settings.checkOn;
-                pulse = (float) (0.5 + 0.5 * std::sin (d.time * 3.0));
-                repaint();
-            }
-
-            void paint (juce::Graphics& g) override
-            {
-                const auto& r = proc.getLatestAnalysis();
-                const float alpha = on ? 1.0f : 0.4f;
-                auto area = getLocalBounds().toFloat().reduced (16.0f, 12.0f);
-                auto stats = area.removeFromRight (230.0f);
-                area.removeFromRight (18.0f);
-
-                // Long-term spectrum of the voice
-                label (g, i18n::tr ("Mittleres Spektrum der Stimme", "Average spectrum of the voice"), area.withHeight (12.0f));
-                auto plot = area.withTrimmedTop (18.0f).withTrimmedBottom (14.0f);
-                SpectrumView::drawFrequencyGrid (g, plot.withTrimmedBottom (-14.0f), true);
-                if (! r.spectrumDb.empty())
-                {
-                    float top = -200.0f;
-                    for (auto v : r.spectrumDb)
-                        top = std::max (top, v);
-                    juce::Path p;
-                    bool started = false;
-                    float firstX = 0.0f, lastX = 0.0f;
-                    for (int b = 0; b < (int) r.spectrumDb.size(); ++b)
-                    {
-                        if (r.spectrumDb[(size_t) b] < -150.0f)
-                            continue;
-                        const float f = dsp::VocalAnalyzer::bandCentre (b);
-                        const float x = SpectrumView::xForFrequency (std::max (20.0f, f), plot);
-                        const float y = yFor (r.spectrumDb[(size_t) b] - top, -60.0f, 3.0f, plot);
-                        if (! started) { p.startNewSubPath (x, y); started = true; firstX = x; }
-                        else p.lineTo (x, y);
-                        lastX = x;
-                    }
-                    if (started)
-                    {
-                        g.setGradientFill (auroraGradient (plot.getTopLeft(), plot.getTopRight(), 0.12f * alpha));
-                        juce::Path fill (p);
-                        fill.lineTo (lastX, plot.getBottom());
-                        fill.lineTo (firstX, plot.getBottom());
-                        fill.closeSubPath();
-                        g.fillPath (fill);
-                        glowStroke (g, p, plot, 1.5f, alpha);
-                    }
-                }
-                else
-                {
-                    label (g, on ? i18n::tr ("Hört zu …", "Listening …") : i18n::tr ("VOCAL CHECK einschalten, um zu analysieren", "Switch VOCAL CHECK on to analyze"), plot, juce::Justification::centred, colours::textDim);
-                }
-
-                // Balance bars (relative to the 300 Hz - 2 kHz core) and key numbers
-                label (g, i18n::tr ("Balance zum Kern", "Balance to the core"), stats.withHeight (12.0f));
-                auto bars = stats.withTrimmedTop (18.0f).removeFromTop (stats.getHeight() * 0.55f);
-                const char* names[] { "Low", "Body", "Core", "Pres", "S", "Air" };
-                const float bw = bars.getWidth() / 6.0f;
-                const float zeroY = yFor (0.0f, -30.0f, 6.0f, bars.withTrimmedBottom (14.0f));
-                g.setColour (colours::accent.withAlpha (0.08f));
-                g.fillRect (juce::Rectangle<float> (bars.getX(), zeroY, bars.getWidth(), 1.0f));
-                for (int i = 0; i < 6; ++i)
-                {
-                    const auto cell = juce::Rectangle<float> (bars.getX() + bw * (float) i, bars.getY(), bw, bars.getHeight());
-                    if (r.enoughMaterial || ! r.spectrumDb.empty())
-                    {
-                        const float v = i == 2 ? 0.0f : juce::jlimit (-30.0f, 6.0f, r.bandDb[(size_t) i]);
-                        const float y = yFor (v, -30.0f, 6.0f, bars.withTrimmedBottom (14.0f));
-                        const auto bar = juce::Rectangle<float> (cell.getCentreX() - 5.0f, std::min (y, zeroY), 10.0f, std::max (2.0f, std::abs (y - zeroY)));
-                        const auto c = aurora ((float) i / 5.0f);
-                        g.setColour (c.withAlpha (0.85f * alpha));
-                        g.fillRoundedRectangle (bar, 3.0f);
-                    }
-                    label (g, names[i], cell.withY (cell.getBottom() - 12.0f).withHeight (12.0f), juce::Justification::centred);
-                }
-
-                auto lines = stats.withTrimmedTop (18.0f + stats.getHeight() * 0.55f + 6.0f);
-                const auto line = [&] (const juce::String& k, const juce::String& v)
-                {
-                    auto row = lines.removeFromTop (15.0f);
-                    label (g, k, row, juce::Justification::centredLeft);
-                    g.setColour (colours::text.withAlpha (alpha));
-                    g.setFont (medium (11.0f));
-                    g.drawText (v, row, juce::Justification::centredRight, false);
-                };
-                line (i18n::tr ("Stimme analysiert", "Voice analyzed"), juce::String (r.voicedSeconds, 1) + " s");
-                line (i18n::tr ("Spitze", "Peak"), r.peakDb <= -99.0f ? juce::String ("-") : juce::String (r.peakDb, 1) + " dBFS");
-                line (i18n::tr ("Pegelumfang", "Loudness range"), r.loudnessRangeDb > 0.0f ? juce::String (r.loudnessRangeDb, 1) + " dB" : juce::String ("-"));
-                line (i18n::tr ("S zu Vokalen", "S to vowels"), r.sibilanceVsVowelDb > -99.0f ? juce::String (r.sibilanceVsVowelDb, 1) + " dB" : juce::String ("-"));
-
-                if (on)
-                    drawGlow (g, { stats.getRight() - 4.0f, stats.getY() + 5.0f }, 8.0f, 0.3f + 0.4f * pulse, colours::teal);
-            }
-
-        private:
-            VelvoxAudioProcessor& proc;
-            bool on = false;
-            float pulse = 0.0f;
-        };
-
     }
 
     std::unique_ptr<ModuleView> createModuleView (VelvoxAudioProcessor& p, int code, const SpectrumSource* spectrum)
@@ -314,7 +206,7 @@ namespace velvox::ui
             case ModuleId::reverb:  return createReverbRoom (p, instance);
             case ModuleId::smash:   return createDynView (p, ModuleId::smash, instance);
             case ModuleId::smooth:  return createSmoothGraph (p, instance);
-            case ModuleId::check:   return std::make_unique<CheckView> (p);
+            case ModuleId::check:   break;   // no chain module (review 2026-10-28)
             case ModuleId::ride:    return createDynView (p, ModuleId::ride, instance);
             case ModuleId::denoise:
             case ModuleId::breath:  return createCleanupView (p, dsp::selectionModule (code));

@@ -577,7 +577,7 @@ public:
             const auto f = planFix (mud, "Mulm", s.context (bands));
             expect (f.routing.has_value() && f.routing->contains (ModuleId::eq), "EQ inserted");
             s.apply (f);
-            expect (s.routing.indexOf (ModuleId::eq) < s.routing.indexOf (ModuleId::check), "where an EQ usually sits (before the check)");
+            expect (! s.routing.contains (ModuleId::check), "VOCAL CHECK is no chain module (review 2026-10-28)");
             expectEquals (s.get (pid::eqOn), 1.0f);
             const auto b = roleBand (s.values, dsp::EqRole::mud);
             expect (b.has_value(), "mud band created");
@@ -608,20 +608,7 @@ public:
             expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::mud)->gain, -3.0f, 0.01f);
         }
 
-        beginTest ("Fix model: EQ after VOCAL CHECK - applying twice does not double the cut, a deeper cut stays");
-        {
-            State s ("v2,check,eq");
-            s.values[pid::eqOn] = 1.0f;
-            s.apply (planFix (mud, "Mulm", s.context (bands)));
-            expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::mud)->gain, -3.0f, 0.01f);
-            s.apply (planFix (mud, "Mulm", s.context (bands)));
-            expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::mud)->gain, -3.0f, 0.01f, "idempotent");
-
-            const auto a = eqbands::accessFor (s.values);
-            eqbands::findOrCreateBand (a, 0, dsp::EqRole::mud, dsp::EqBandType::bell, 300.0f, -5.0f, 1.2f);
-            s.apply (planFix (mud, "Mulm", s.context (bands)));
-            expectWithinAbsoluteError (roleBand (s.values, dsp::EqRole::mud)->gain, -5.0f, 0.01f, "never weakens an existing cut");
-        }
+        // (0.6 "EQ after VOCAL CHECK" is gone: since the review of 2026-10-28 VOCAL CHECK measures after the whole chain)
 
         beginTest ("Fix model: EQ before VOCAL CHECK - the measurement contains its cut, the fix adds to it");
         {

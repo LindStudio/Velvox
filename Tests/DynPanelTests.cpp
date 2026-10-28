@@ -273,6 +273,7 @@ public:
             Harness h;
             h.neutral();
             h.set (pid::compOn, 1.0f);
+            h.set (pid::compMakeup, 0.0f);   // the default is 5 dB since the review of 2026-10-28
             h.set (pid::compThreshold, -30.0f);
             h.set (pid::compRatio, 4.0f);
             CompGraph g (h.proc, 0);

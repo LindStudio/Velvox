@@ -161,8 +161,9 @@ public:
     }
 
     // Every module, several duplicates, two sends: 21 instances
-    static constexpr const char* fullChain = "v2,check,eq,eq#2,comp,comp#2,deess,sat,sat#2,smooth,ride,smash,doubler,"
-                                             "delay:insert,eq#3,reverb:send,reverb#2:send,eq#4,comp#3,deess#2,doubler#2";
+    // Every instance there is (review 2026-10-28: tiles turn compact first, the row scrolls only beyond that)
+    static constexpr const char* fullChain = "v2,breath,denoise,eq,eq#2,comp,comp#2,deess,sat,sat#2,sat#3,smooth,smooth#2,ride,ride#2,smash,smash#2,doubler,"
+                                             "delay:insert,delay#2:insert,eq#3,reverb:send,reverb#2:send,eq#4,comp#3,deess#2,deess#3,doubler#2";
 
     static juce::MouseWheelDetails wheelOf (float dy, float dx = 0.0f, bool smooth = false)
     {
@@ -186,9 +187,9 @@ public:
             ui::ChainView view (h.proc);
             view.setBounds (0, 0, 886, ui::ChainView::preferredHeight);
             view.refresh();
-            expect (view.getMaxScroll() > 1000.0f, "21 instances: the row scrolls a lot");
+            expect (view.getMaxScroll() > 250.0f, "every instance: the row scrolls (compact tiles): " + juce::String (view.getMaxScroll()));
             const float step = view.scrollStep();
-            expect (step >= ui::ChainView::minTileW, "a step is one tile");
+            expect (step >= ui::ChainView::compactTileW, "a step is one tile");
             const auto at = view.getRowViewport().getCentre();
 
             view.mouseWheelMove (mouse (view, at, at, false), wheelOf (-notch));
@@ -267,7 +268,7 @@ public:
             const auto right = view.getScrollArrowBounds (true);
             expect (! right.isEmpty(), "right arrow while more tiles are on the right");
             click (view, right.getCentre());
-            expect (view.getScroll() > view.getRowViewport().getWidth() * 0.5f, "a page to the right");
+            expect (view.getScroll() >= std::min (view.getMaxScroll(), view.getRowViewport().getWidth() * 0.5f) - 1.0f, "a page to the right (or the end)");
             expect (! view.getScrollArrowBounds (false).isEmpty(), "left arrow now");
             click (view, view.getScrollArrowBounds (false).getCentre());
             expectWithinAbsoluteError (view.getScroll(), 0.0f, 0.5f, "and back");
@@ -380,9 +381,7 @@ public:
             view.mouseMove (mouse (view, view.getSoloBounds (ModuleId::comp).getCentre(), {}, false));
             expect (view.getTooltip().startsWith ("Solo"), "hover card on the S: " + view.getTooltip());
 
-            expect (view.getSoloBounds (ModuleId::check).isEmpty(), "Check: no S");
-            click (view, view.getIconBounds (ModuleId::check).getCentre(), juce::ModifierKeys::altModifier);
-            expect (! h.proc.isSoloActive(), "Check cannot be soloed");
+            expect (view.getSoloBounds (ModuleId::check).isEmpty(), "Check: no tile, no S (review 2026-10-28)");
         }
 
         beginTest ("Chain: solo shows clearly - soloed tile in solo yellow, the others dimmed, OUTPUT says SOLO");

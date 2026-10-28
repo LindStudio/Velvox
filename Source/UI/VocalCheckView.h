@@ -4,6 +4,7 @@
 #include "Segments.h"
 #include "../Check/CheckTypes.h"
 #include "../Check/CheckTargets.h"
+#include "../DSP/VocalAnalyzer.h"
 #include "../Text/I18n.h"
 
 class VelvoxAudioProcessor;
@@ -11,8 +12,10 @@ class VelvoxAudioProcessor;
 // VOCAL CHECK tab of Headliner 0.6 (spec 2.11 / 5.15, the user's pick "Check 1 · score + tiles"):
 //
 //   [score ring]  ⏻ VOCAL CHECK                                   GENRE  Party | Pop | Akustik
-//                 Laufend · 12,4 s Stimme                         [ Alles anwenden (3) ]
-//                 Laufend | Capture   Start   Reset
+//                 gut · 3 Dinge kannst du noch verbessern
+//                 misst gerade · 12,4 s Stimme  [Neu messen]  [ Alles anwenden (3) ]
+//   (review 2026-10-28: one "Neu messen" instead of Laufend | Capture / Start / Reset, the score as a word,
+//    "Alles anwenden" beside the score, the voice's spectrum against the genre's target below the tiles)
 //   ─────────────────────────────────────────────────────────────────────────────────────────
 //   ▌ Mulm um 300 Hz (+4 dB)                                         [Ignorieren] [Anwenden]
 //   ▌ → EQ −3 dB bei 300 Hz
@@ -48,9 +51,30 @@ namespace velvox::ui
         int chevron = 0;       // link style: 0 none, 1 right (collapsed), 2 down (expanded)
     };
 
+    // The voice's long-term spectrum (relative to its 300 Hz - 2 kHz core) against the target ranges of the
+    // genre: where the tips come from (review 2026-10-28). A legend names both.
+    class VoiceTargetView final : public juce::Component
+    {
+    public:
+        VoiceTargetView();
+        void setData (const dsp::AnalysisResult& r, check::Genre genre);
+        bool hasVoice() const noexcept { return ! voiceDb.empty(); }
+        void paint (juce::Graphics&) override;
+        void resized() override;
+
+    private:
+        std::vector<float> voiceDb;   // relative to the core, 1/12 octave from lowHz
+        float lowHz = 40.0f;
+        check::CheckTargets targets;
+        Legend legend;
+        juce::Rectangle<float> plot() const;
+    };
+
     class VocalCheckView final : public juce::Component
     {
     public:
+        // "schwach" / "okay" / "gut" / "sehr gut" (English: weak / okay / good / very good); "" without a score
+        static juce::String scoreWord (int score);
         // One finding: a tile in the list, or a compact row in the expanded "x ignoriert" section
         class Tile final : public juce::Component, public juce::SettableTooltipClient
         {
@@ -108,6 +132,10 @@ namespace velvox::ui
         void setIgnoredExpanded (bool expanded);
         juce::String getScoreText() const;
         const juce::String& getStatusText() const noexcept { return status; }
+        juce::String getScoreWordText() const { return scoreWord (score); }
+        juce::String getSummaryText() const;   // "3 Dinge kannst du noch verbessern"
+        CheckButton& getRemeasureButton() noexcept { return remeasure; }
+        VoiceTargetView& getTargetView() noexcept { return targetView; }
         CheckButton& getApplyAllButton() noexcept { return applyAll; }
         CheckButton& getIgnoredToggle() noexcept { return ignoredToggle; }
         CheckButton& getRestoreAllButton() noexcept { return restoreAll; }
@@ -125,8 +153,8 @@ namespace velvox::ui
 
         VelvoxAudioProcessor& proc;
         PowerButton power;
-        Segments mode;
-        CheckButton startStop { "Start", CheckButton::Style::ghost }, reset { "Reset", CheckButton::Style::ghost };
+        CheckButton remeasure { i18n::tr ("Neu messen", "Measure again"), CheckButton::Style::ghost };
+        VoiceTargetView targetView;
         std::array<std::unique_ptr<CheckButton>, 3> genres;
         CheckButton applyAll { i18n::tr ("Alles anwenden", "Apply all"), CheckButton::Style::filled };
         CheckButton ignoredToggle { i18n::tr ("0 ignoriert", "0 ignored"), CheckButton::Style::link };

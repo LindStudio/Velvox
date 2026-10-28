@@ -45,7 +45,7 @@ namespace velvox::ui::help
 - Vergleiche mit Vorher / Nachher neben dem Knopf und stell mit den sechs Fadern fein nach.
 
 ## SIMPEL und ADVANCED
-- SIMPEL: das Live-Spektrum deiner Vocal (unbearbeitet = gestrichelte Linie, bearbeitet = gefüllte Kurve), „Vocal analysieren“ und sechs Makro-Fader: Presence, Space, Width, Punch, Warmth, Vocal Level. Unten kleine IN- und OUT-Meter.
+- SIMPEL: das Live-Spektrum deiner Vocal (unbearbeitet = gestrichelte Linie, bearbeitet = gefüllte Kurve), „Vocal analysieren“ und sechs Makro-Fader in drei Gruppen: Klang (Presence, Warmth), Raum (Space, Width), Dynamik & Pegel (Punch, Vocal Level). Die Mitte heißt unverändert, links weniger, rechts mehr; darunter steht, was der Auto Mix dort gemacht hat. Unten IN- und OUT-Meter, OUT mit dem Unterschied zum Eingang.
 - ADVANCED: oben die Modul-Kette, darunter das Panel des gewählten Moduls – ein großes Live-Bild, die Hauptregler und alles Weitere unter „Mehr“.
 
 ## Die Tabs
@@ -67,7 +67,7 @@ R"~(Headliner is an automatic vocal mixer for EDM, hypertechno, hard dance, part
 - Compare with Before / After next to the button, and fine-tune with the six faders.
 
 ## SIMPLE and ADVANCED
-- SIMPLE: the live spectrum of your vocal (unprocessed = dashed line, processed = filled curve), "Analyze vocal", and six macro faders: Presence, Space, Width, Punch, Warmth, Vocal Level. Small IN and OUT meters at the bottom.
+- SIMPLE: the live spectrum of your vocal (unprocessed = dashed line, processed = filled curve), "Analyze vocal", and six macro faders in three groups: Tone (Presence, Warmth), Space (Space, Width), Dynamics & level (Punch, Vocal Level). The middle means unchanged, left less, right more; under each one it says what the auto mix did there. IN and OUT meters at the bottom, OUT with the difference to the input.
 - ADVANCED: the module chain on top and the panel of the selected module below - a large live picture, the main controls, and everything else behind "More".
 
 ## The tabs
@@ -195,7 +195,7 @@ Every knob, switch and menu is a real plugin parameter: your DAW can automate it
 Die Modul-Kette mit dem Panel des gewählten Moduls. Was die SIMPEL-Fader getan haben, erscheint hier als ganz normale Einstellungen.
 
 ## VOCAL CHECK
-Eine Diagnose der Aufnahme an der Position des Vocal-Check-Moduls: eine Punktzahl (0 – 100) und eine Kachel pro Befund mit dem vorgeschlagenen Fix. „Anwenden“ setzt ihn um, „Alles anwenden“ setzt alle Vorschläge auf einmal um – jeder ist ein Rückgängig-Schritt (Strg+Z). „Ignorieren“ blendet einen Befund aus (zurückholen unter „x ignoriert“). Das Genre (Party, Pop, Akustik) bestimmt die Zielbereiche.
+Eine Diagnose deiner Vocal nach der ganzen Modul-Kette (kein Modul in der Kette, sie läuft immer mit): eine Punktzahl (0 – 100) mit einem Wort dazu (schwach, okay, gut, sehr gut) und eine Kachel pro Befund mit dem vorgeschlagenen Fix. Unten siehst du das Spektrum deiner Stimme gegen das Ziel des Genres – daher kommen die Tipps. In SIMPEL sagt dir Memphy die Tipps einzeln („Ja, mach“ / „Zeig mir“). „Anwenden“ setzt ihn um, „Alles anwenden“ setzt alle Vorschläge auf einmal um – jeder ist ein Rückgängig-Schritt (Strg+Z). „Ignorieren“ blendet einen Befund aus (zurückholen unter „x ignoriert“). Das Genre (Party, Pop, Akustik) bestimmt die Zielbereiche.
 
 ## Wechseln
 Alle Ansichten zeigen dieselben Einstellungen. Ein Wechsel ändert nie den Klang und setzt nichts zurück.)~",
@@ -208,7 +208,7 @@ R"~(## SIMPLE
 The module chain with the panel of the selected module. What the SIMPLE faders did shows up here as ordinary settings.
 
 ## VOCAL CHECK
-A diagnosis of the recording at the position of the Vocal Check module: a score (0 - 100) and one tile per finding with the suggested fix. "Apply" applies it, "Apply all" applies every suggestion at once - each is one undo step (Ctrl+Z). "Ignore" hides a finding (restorable under "x ignored"). The genre (Party, Pop, Acoustic) sets the target ranges.
+A diagnosis of your vocal after the whole module chain (not a module in the chain, it always runs): a score (0 - 100) with a word (weak, okay, good, very good) and one tile per finding with the suggested fix. Below, your voice's spectrum against the genre's target - that is where the tips come from. In SIMPLE, Memphy tells you the tips one by one ("Yes, do it" / "Show me"). "Apply" applies it, "Apply all" applies every suggestion at once - each is one undo step (Ctrl+Z). "Ignore" hides a finding (restorable under "x ignored"). The genre (Party, Pop, Acoustic) sets the target ranges.
 
 ## Switching
 All views show the same settings. Switching never changes the sound or resets anything.)~") });
@@ -554,16 +554,16 @@ R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosi
                    "Place it after compression and saturation, which bring resonances out. Static problems are often better fixed with an EQ cut first.") }));
 
             p.push_back (modulePage (l, gModules, "check", "Vocal Check", {
-                t ("Analysiert die Vocal an seiner Position in der Kette und erklärt, was sich verbessern lässt: Balance zwischen Tiefen, Körper, Kern, Präsenz, S und Luft, Pegelumfang, S-Laute und Clipping. Er hört nur zu – das Audio läuft unverändert durch.",
-                   "Analyzes the vocal at its position in the chain and explains what could be improved: balance between low end, body, core, presence, S and air, loudness range, sibilance and clipping. It only listens - the audio passes through unchanged."),
+                t ("Analysiert die Vocal nach der ganzen Modul-Kette und erklärt, was sich verbessern lässt: Balance zwischen Tiefen, Körper, Kern, Präsenz, S und Luft, Pegelumfang, S-Laute und Clipping. Er hört nur zu – das Audio läuft unverändert durch.",
+                   "Analyzes the vocal after the whole module chain and explains what could be improved: balance between low end, body, core, presence, S and air, loudness range, sibilance and clipping. It only listens - the audio passes through unchanged."),
                 t ("Wenn du unsicher bist, was die Vocal braucht, und als letzter Check deiner Einstellungen.",
                    "When you are unsure what the vocal needs, and as a final check of your settings."),
-                t ("- Schalt ihn ein und spiel die Vocal ab; Pausen werden ignoriert. Er braucht etwa 4 Sekunden Stimme, bevor er Ergebnisse zeigt.\n- Mode: Continuous analysiert ungefähr die letzten 30 Sekunden; Capture analysiert alles zwischen Start und Stop.\n- Reset löscht die Analyse.\n- Klick auf einen Befund öffnet das Modul, das er empfiehlt.",
-                   "- Switch it on and play the vocal; pauses are ignored. It needs about 4 seconds of voice before it shows results.\n- Mode: Continuous analyzes the last 30 seconds or so; Capture analyzes everything between Start and Stop.\n- Reset clears the analysis.\n- Click a finding to open the module it recommends."),
-                t ("Es gibt keine Klangregler – nur den Analyse-Modus. Mehr Material ergibt verlässlichere Befunde.",
-                   "There are no sound controls - only the analysis mode. More material gives more reliable findings."),
-                t ("- Setz Vocal Check ans Ende und spiel einen typischen Abschnitt des Songs.\n- Um die Aufnahme selbst zu beurteilen, zieh ihn an den Anfang der Kette.",
-                   "- Put Vocal Check last and play a typical section of the song.\n- To judge the recording itself, drag it to the front of the chain."),
+                t ("- Spiel die Vocal ab; Pausen werden ignoriert. Er braucht etwa 4 Sekunden Stimme, bevor er Ergebnisse zeigt, und misst laufend ungefähr die letzten 30 Sekunden.\n- „Neu messen“ vergisst die bisherige Messung und fängt von vorn an.\n- Klick auf einen Befund öffnet das Modul, das er empfiehlt.",
+                   "- Play the vocal; pauses are ignored. It needs about 4 seconds of voice before it shows results and keeps measuring the last 30 seconds or so.\n- \"Measure again\" forgets the measurement so far and starts over.\n- Click a finding to open the module it recommends."),
+                t ("Es gibt keine Klangregler – nur das Genre, das die Zielbereiche bestimmt. Mehr Material ergibt verlässlichere Befunde.",
+                   "There are no sound controls - only the genre, which sets the target ranges. More material gives more reliable findings."),
+                t ("- Spiel einen typischen Abschnitt des Songs.\n- Um die Aufnahme selbst zu beurteilen, schalte die Module in ADVANCED kurz ab.",
+                   "- Play a typical section of the song.\n- To judge the recording itself, switch the modules off for a moment in ADVANCED."),
                 t ("- Jedem Befund blind folgen. Er beschreibt die Messung; deine Ohren und der Track entscheiden.\n- Einen Abschnitt mit viel Stille oder anderen Instrumenten analysieren.",
                    "- Following every finding blindly. It describes the measurement; your ears and the track decide.\n- Analyzing a section with a lot of silence or other instruments."),
                 t ("Er sieht genau, was die Module davor getan haben. Weil er das Audio nie verändert, ändert seine Position nie den Klang.",

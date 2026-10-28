@@ -170,6 +170,7 @@ namespace velvox::ui
         const juce::String& getParamId() const noexcept { return paramId; }
         juce::String getLabel() const { return label; }
         juce::Colour getAccent() const noexcept { return accent; }
+        bool isBipolar() const { return slider.getMinimum() < 0.0 && slider.getMaximum() > 0.0; }   // 0 in the middle
 
         // Processed value marker (macros), like Knob::effectiveValue
         std::function<float()> effectiveValue;

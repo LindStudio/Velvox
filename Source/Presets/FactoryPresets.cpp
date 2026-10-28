@@ -145,7 +145,6 @@ namespace velvox
                       { delayLowCut, 500 }, { delayHighCut, 7000 }, { delayPingPong, 1 }, { delayDuckAmount, 8 },
                       { reverbOn, 1 }, { reverbType, plate }, { reverbMix, 18 }, { reverbDecay, 1.8f }, { reverbPreDelay, 30 },
                       { reverbSize, 65 }, { reverbLowCut, 400 }, { reverbDuckAmount, 8 },
-                      { checkOn, 1 },
                       { stereoWidth, 115 }, { monoBelow, 150 }, { outputGain, 3.0f },
                   }),
 

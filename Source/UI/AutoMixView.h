@@ -35,11 +35,16 @@ namespace velvox::ui
         Knob& getDensityKnob() noexcept { return *density; }
         Segments& getLevelMatch() noexcept { return *levelMatch; }
         int getNumStepRows() const noexcept;
+        // "label: value" of the vocal status (review 2026-10-28: each number says where it comes from)
+        juce::StringArray getStatusLines() const;
+        juce::Rectangle<int> getStepListBounds() const { return stepView.getBounds(); }
 
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
         void rebuild();
         void updateButtons();
+        struct StatusRow { juce::String label, value; juce::Colour colour; };
+        std::vector<StatusRow> statusRows() const;
 
         class StepList;
 

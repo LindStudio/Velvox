@@ -1128,6 +1128,39 @@ public:
             ed.getAutoMixView().onOpenModule ((int) ModuleId::comp);
             expect (ed.isAdvanced() && ed.getDetail() != nullptr && ! ed.isMixDetailsOpen(), "a step opens the module");
         }
+
+        // Review 2026-10-28 (item 7): numbers say where they come from, the fair compare sits next to
+        // Vorher / Nachher (on by default), "restore" is a link under the list
+        beginTest ("Editor: fair compare beside Vorher / Nachher, on by default; report numbers explained; restore under the list");
+        {
+            Harness h;
+            expectEquals ((int) h.get (pid::levelMatchMode), 1, "Gleich laut vergleichen is on in a fresh instance");
+            h.proc.getAutoMix().dismissPrompt();
+            VocalSpec s; s.seconds = 14.0;
+            const auto result = h.proc.getAutoMix().runSynchronously (makeVocal (s));
+            h.proc.getAutoMix().applyResult (result);
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            auto& ed = asVelvox (*e);
+            auto& simple = ed.getSimpleView();
+            auto& fair = simple.getFairCompareButton();
+            expect (fair.isVisible() && fair.getToggleState(), "visible and on");
+            expect (fair.getButtonText().contains ("Gleich laut"), fair.getButtonText());
+            expect (std::abs (fair.getY() - simple.getBeforeButton().getY()) <= 4 && fair.getRight() <= simple.getBeforeButton().getX(),
+                    "on the same row, just left of Vorher / Nachher");
+            click (fair);
+            expectEquals ((int) h.get (pid::levelMatchMode), 0, "off");
+            click (fair);
+            expectEquals ((int) h.get (pid::levelMatchMode), 1, "on again (like bypass)");
+
+            ed.showMixDetails();
+            auto& view = ed.getAutoMixView();
+            const auto lines = view.getStatusLines();
+            expect (lines.joinIntoString ("|").contains ("gemessenen Abschnitt"), lines.joinIntoString ("|"));
+            expect (lines.joinIntoString ("|").contains ("Gerade jetzt (live)"), lines.joinIntoString ("|"));
+            auto& restore = view.getRestoreButton();
+            expect (restore.isVisible() && restore.getY() >= view.getStepListBounds().getBottom(), "restore under the list");
+            expect ((bool) restore.getProperties()["link"], "as a link");
+        }
     }
     //==========================================================================
     // 1.0: every text of the report is stored in both languages (it is built on the analysis

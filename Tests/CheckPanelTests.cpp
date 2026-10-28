@@ -6,6 +6,9 @@
 #include "SyntheticVocal.h"
 #include "PluginEditor.h"
 #include "UI/VocalCheckView.h"
+#include "UI/ModuleBrowser.h"
+#include "UI/TopBar.h"
+#include "UI/SimpleView.h"
 #include "UI/UserSettings.h"
 #include "StateKeys.h"
 #include "Text/I18n.h"
@@ -239,7 +242,6 @@ public:
             expectEquals (view->getApplyAllButton().getButtonText(), "Apply all (" + juce::String (applicable) + ")");
             expectEquals (view->getGenreButton (check::Genre::party).getButtonText(), juce::String ("Party"));
             expectEquals (view->getGenreButton (check::Genre::acoustic).getButtonText(), juce::String ("Acoustic"));
-            expect (view->getStatusText().startsWith ("Capture"), view->getStatusText());
             expect (view->getStatusText().contains ("s of voice"), view->getStatusText());
             expect (! view->getStatusText().contains (","), "decimal point: " + view->getStatusText());
             expectGreaterThan (view->getNumTiles(), 0);
@@ -337,6 +339,51 @@ public:
             }
         }
 
+        // Review 2026-10-28 (item 6): one "Neu messen", the score with a word, "Alles anwenden" beside it,
+        // the voice's spectrum against the genre's target in the free space below
+        beginTest ("View: Neu messen instead of mode / Start / Reset; score word; Apply all beside the score; voice vs target");
+        {
+            expectEquals (ui::VocalCheckView::scoreWord (30), juce::String ("schwach"));
+            expectEquals (ui::VocalCheckView::scoreWord (60), juce::String ("okay"));
+            expectEquals (ui::VocalCheckView::scoreWord (80), juce::String ("gut"));
+            expectEquals (ui::VocalCheckView::scoreWord (95), juce::String ("sehr gut"));
+            expect (ui::VocalCheckView::scoreWord (-1).isEmpty());
+
+            Harness h;
+            analysedTake (h);
+            auto view = make (h);
+            view->setSize (984, 540);
+            view->refreshNow();
+            const int n = (int) h.proc.getVocalCheck().visibleFindings().size();
+            expect (view->getSummaryText().contains (juce::String (n)) && view->getSummaryText().contains ("verbessern"), view->getSummaryText());
+            expect (view->getScoreWordText() == ui::VocalCheckView::scoreWord (h.proc.getVocalCheck().score()));
+
+            juce::StringArray texts;
+            for (auto* c : view->getChildren())
+                if (auto* b = dynamic_cast<juce::Button*> (c); b != nullptr && b->isVisible())
+                    texts.add (b->getButtonText());
+            for (auto* gone : { "Start", "Stop", "Reset", "Capture" })
+                expect (! texts.contains (gone), juce::String ("no ") + gone);
+            auto& remeasure = view->getRemeasureButton();
+            expect (remeasure.isVisible() && remeasure.getButtonText() == "Neu messen");
+            expect (view->getApplyAllButton().getX() < view->getWidth() / 2, "Alles anwenden next to the score (left half)");
+
+            auto& spec = view->getTargetView();
+            expect (spec.isVisible() && spec.hasVoice(), "the voice's spectrum");
+            expect (spec.getY() > view->getHeight() / 2 && spec.getHeight() >= 100, "in the space below");
+            const ui::Legend* legend = nullptr;
+            for (auto* c : spec.getChildren())
+                if (auto* l = dynamic_cast<ui::Legend*> (c))
+                    legend = l;
+            expect (legend != nullptr && legend->isVisible() && legend->getItems().size() == 2, "legend: voice / target");
+
+            click (remeasure);
+            expect (h.proc.getAnalyzer().getMode() == dsp::VocalAnalyzer::Mode::continuous, "measures continuously again");
+            expect (h.proc.getState().getRawParameterValue (pid::checkMode)->load() < 0.5f);
+            view->refreshNow();
+            expectEquals (view->getStatusText(), juce::String ("Singe/spiele ab, um zu analysieren"), "measures again from nothing");
+        }
+
         beginTest ("Preview text: the parameters a fix writes and the modules it inserts");
         {
             Harness h;
@@ -358,19 +405,28 @@ public:
             expect (ui::checkSeverityColour (check::Severity::low) == ui::moduleColour (ModuleId::check));
         }
 
-        beginTest ("Summary (Check module panel): score, count and the link to the VOCAL CHECK tab");
+        // Review 2026-10-28 (item 3): VOCAL CHECK is no module of the chain any more; it measures after the chain
+        beginTest ("No chain module: not in the routing, the browser or a preset; the diagnosis still measures after the chain");
         {
+            expect (! Routing::defaults().contains (ModuleId::check));
+            const auto parsed = Routing::fromString ("v2,eq,check,comp");
+            expectEquals (parsed.toString(), juce::String ("v2,eq,comp"), "a stored check slot is dropped");
+            Routing r;
+            expect (! r.insertDefault (ModuleId::check, 0) && ! r.insertAt (0, ModuleId::check, 0, true));
+            {
+                Harness h;
+                ui::ModuleBrowser browser (h.proc);
+                browser.setBounds (0, 0, 900, 600);
+                const auto shown = browser.visibleModules();
+                expect (std::find (shown.begin(), shown.end(), ModuleId::check) == shown.end(), "not in the module browser");
+                expectEquals (h.get (pid::checkOn), 1.0f, "the diagnosis runs by default");
+            }
             Harness h;
             analysedTake (h);
-            ui::CheckSummary summary (h.proc);
-            summary.setBounds (0, 0, 280, 120);
-            summary.refresh();
-            int opened = 0;
-            summary.onOpenTab = [&opened] { ++opened; };
-            expectEquals (summary.getScoreText(), juce::String (h.proc.getVocalCheck().score()));
-            expect (summary.getCountText().contains (juce::String ((int) h.proc.getVocalCheck().visibleFindings().size())), summary.getCountText());
-            click (summary.getOpenButton());
-            expectEquals (opened, 1);
+            expect (! h.proc.getRouting().contains (ModuleId::check));
+            expect (! h.proc.getVocalCheck().visibleFindings().empty(), "findings without a check slot");
+            expect (h.proc.getVocalCheck().visibleFindings().front()->handling != Finding::Handling::handledLater,
+                    "the chain is part of the measurement (VOCAL CHECK measures after it)");
         }
     }
 
@@ -398,28 +454,55 @@ public:
             }
         }
 
-        beginTest ("Shell: the Check module panel links to the VOCAL CHECK tab");
+        // Review 2026-10-28 (item 3): Memphy says the tips in SIMPEL, one at a time; the header chip opens the tab
+        beginTest ("Shell: Memphy says one tip at a time with Ja, mach / Zeig mir; the header chip shows score and tips");
         {
             Harness h;
             analysedTake (h);
-            h.proc.getState().state.setProperty (statekeys::uiMode, "pro", nullptr);
+            h.proc.getAutoMix().dismissPrompt();
+            h.proc.getState().state.setProperty (statekeys::uiMode, "beginner", nullptr);
             h.proc.getState().state.setProperty (statekeys::uiTab, "automix", nullptr);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
             auto& ed = asVelvox (*e);
-            ed.selectModule ((int) ModuleId::check);
-            auto* panel = ed.getDetail();
-            expect (panel != nullptr && panel->getModuleId() == (int) ModuleId::check);
-            ui::CheckSummary* summary = nullptr;
-            if (panel != nullptr)
-                for (auto* c : panel->getChildren())
-                    if (auto* s = dynamic_cast<ui::CheckSummary*> (c))
-                        summary = s;
-            expect (summary != nullptr, "summary in the panel");
-            if (summary != nullptr)
-                click (summary->getOpenButton());
-            runLoop (50);
-            expect (ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "link opens the tab");
-            expect (ed.getCheckView().isVisible());
+            auto& simple = ed.getSimpleView();
+            auto& vc = h.proc.getVocalCheck();
+
+            auto& chip = ed.getTopBar().getCheckChip();
+            ed.getTopBar().refresh();
+            expect (chip.isVisible(), "the chip once there is a score");
+            const auto n = (int) vc.visibleFindings().size();
+            expect (chip.getButtonText().contains (juce::String (vc.score())) && chip.getButtonText().contains (juce::String (n)),
+                    chip.getButtonText());
+
+            for (int i = 0; i < 60 * 3; ++i)
+                simple.tick (1.0 / 60.0);
+            const auto first = simple.getTipId();
+            expect (first.isNotEmpty(), "a tip");
+            const auto* f = vc.finding (first);
+            expect (f != nullptr && vc.canApply (first), "an applicable finding");
+            if (f != nullptr)
+                expect (simple.getBubbleText().contains (f->problem), "he says the problem: " + simple.getBubbleText());
+            auto& yes = simple.getTipYesButton();
+            auto& show = simple.getTipShowButton();
+            expect (yes.isVisible() && show.isVisible() && ! simple.getAnalyseButton().isVisible(), "his two answers instead");
+            expect (yes.getButtonText() == "Ja, mach" && show.getButtonText() == "Zeig mir");
+            click (yes);
+            expect (vc.wasApplied (first), "Ja, mach applies the fix");
+            expect (simple.getTipId().isEmpty() && simple.getAnalyseButton().isVisible(), "then the usual bubble");
+            for (int i = 0; i < 60 * 4; ++i)
+                simple.tick (1.0 / 60.0);
+            const auto second = simple.getTipId();
+            expect (second != first, "the next tip, never the same again");
+            if (second.isNotEmpty())
+            {
+                click (simple.getTipShowButton());
+                runLoop (30);
+                expect (ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "Zeig mir opens the tab");
+            }
+            ed.setTab (VelvoxAudioProcessorEditor::Tab::autoMix);
+            click (chip);
+            runLoop (30);
+            expect (ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "the chip opens the tab");
         }
 
         beginTest ("Shell: Ctrl+Z after a tile's Anwenden undoes the whole fix");
