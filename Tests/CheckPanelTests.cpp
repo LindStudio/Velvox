@@ -32,6 +32,21 @@ namespace
         return makeVocal (s);
     }
 
+    // Blocks through the processor, pumping the analyzer like its timer (no refresh forced)
+    void feedBlocks (Harness& h, const automix::CapturedAudio& v)
+    {
+        juce::AudioBuffer<float> block (2, 512);
+        juce::MidiBuffer midi;
+        for (int start = 0; start + 512 <= v.numSamples(); start += 512)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                block.copyFrom (ch, 0, v.vocal[(size_t) std::min (ch, (int) v.vocal.size() - 1)].data() + start, 512);
+            h.proc.processBlock (block, midi);
+            if ((start / 512) % 8 == 0)
+                h.proc.pumpAnalyzer();
+        }
+    }
+
     void feed (Harness& h, const automix::CapturedAudio& v)
     {
         juce::AudioBuffer<float> block (2, 512);
@@ -406,6 +421,25 @@ public:
         }
 
         // Review 2026-10-28 (item 3): VOCAL CHECK is no module of the chain any more; it measures after the chain
+        // Final review 2026-10-28: on by default, so a closed instance must not analyse every 0.5 s - it only collects
+        beginTest ("On by default, but without an open editor it only collects; the analysis runs once an editor is open");
+        {
+            Harness h;
+            h.neutral();
+            h.set (pid::checkOn, 1.0f);
+            VocalSpec s;
+            s.seconds = 8.0;
+            s.channels = 2;
+            feedBlocks (h, makeVocal (s));
+            juce::Thread::sleep (600);   // longer than the refresh interval
+            h.proc.pumpAnalyzer();
+            expect (! h.proc.getLatestAnalysis().enoughMaterial && h.proc.getLatestAnalysis().voicedSeconds <= 0.0f,
+                    "no analysis while closed");
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditorIfNeeded());   // as a host opens it
+            h.proc.pumpAnalyzer();
+            expect (h.proc.getLatestAnalysis().voicedSeconds > 4.0f, "open: analysed from what was collected");
+        }
+
         beginTest ("No chain module: not in the routing, the browser or a preset; the diagnosis still measures after the chain");
         {
             expect (! Routing::defaults().contains (ModuleId::check));

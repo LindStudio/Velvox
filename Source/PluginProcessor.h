@@ -198,6 +198,7 @@ private:
           [this] (velvox::dsp::ModuleId id, int k) { return isInstanceAudible (id, k); },
           &undoHistory } };
     double lastAnalysisMs = 0.0;
+    bool analysedOpen = false;   // the last pump had an editor open
     struct AnalyzerTimer final : juce::Timer
     {
         explicit AnalyzerTimer (VelvoxAudioProcessor& p) : owner (p) {}

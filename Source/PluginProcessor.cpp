@@ -139,9 +139,13 @@ void VelvoxAudioProcessor::pumpAnalyzer()
     analyzer.setMode (reader.checkMode() == 1 ? dsp::VocalAnalyzer::Mode::capture : dsp::VocalAnalyzer::Mode::continuous);
     if (reader.checkOn())
     {
+        // On by default (review 2026-10-28): a closed instance only collects; the analysis runs while an editor
+        // shows it (Memphy, the tab badge, the VOCAL CHECK tab) - at once when one opens, then twice a second
         analyzer.pump();
-        if (juce::Time::getMillisecondCounterHiRes() - lastAnalysisMs > 500.0)
+        const bool open = getActiveEditor() != nullptr;
+        if (open && (! analysedOpen || juce::Time::getMillisecondCounterHiRes() - lastAnalysisMs > 500.0))
             refreshAnalysis();
+        analysedOpen = open;
     }
 }
 
