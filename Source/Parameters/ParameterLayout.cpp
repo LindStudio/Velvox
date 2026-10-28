@@ -242,7 +242,7 @@ namespace velvox
             { pid::compAttack,    "Comp Attack",    "Compressor", T::Float, 0.1f, 100.0f, 10.0f, 10.0f, "ms", {}, "How fast gain reduction engages." },
             { pid::compRelease,   "Comp Release",   "Compressor", T::Float, 10.0f, 1000.0f, 120.0f, 150.0f, "ms", {}, "How fast gain reduction recovers." },
             { pid::compKnee,      "Comp Knee",      "Compressor", T::Float, 0.0f, 18.0f, 6.0f, 0.0f, "dB", {}, "Width of the soft knee around the threshold." },
-            { pid::compMakeup,    "Comp Makeup",    "Compressor", T::Float, -12.0f, 24.0f, 0.0f, 0.0f, "dB", {}, "Gain added after compression." },
+            { pid::compMakeup,    "Comp Makeup",    "Compressor", T::Float, -12.0f, 24.0f, 5.0f, 0.0f, "dB", {}, "Gain added after compression." },
             { pid::compMix,       "Comp Mix",       "Compressor", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "Dry/wet for parallel compression." },
 
             // ---------------- De-esser ----------------
@@ -254,9 +254,9 @@ namespace velvox
 
             // ---------------- Saturation ----------------
             { pid::satOn,     "Sat On",     "Saturation", T::Bool, 0, 1, 0, 0, "", {}, "Enables the saturation stage." },
-            { pid::satDrive,  "Sat Drive",  "Saturation", T::Float, 0.0f, 24.0f, 6.0f, 0.0f, "dB", {}, "Amount of harmonic saturation (level compensated)." },
+            { pid::satDrive,  "Sat Drive",  "Saturation", T::Float, 0.0f, 24.0f, 3.0f, 0.0f, "dB", {}, "Amount of harmonic saturation (level compensated)." },
             { pid::satOutput, "Sat Output", "Saturation", T::Float, -24.0f, 6.0f, 0.0f, 0.0f, "dB", {}, "Output trim of the saturation stage." },
-            { pid::satMix,    "Sat Mix",    "Saturation", T::Float, 0.0f, 100.0f, 100.0f, 0.0f, "%", {}, "Dry/wet of the saturation stage." },
+            { pid::satMix,    "Sat Mix",    "Saturation", T::Float, 0.0f, 100.0f, 50.0f, 0.0f, "%", {}, "Dry/wet of the saturation stage." },
 
             // ---------------- Delay ----------------
             { pid::delayOn,       "Delay On",       "Delay", T::Bool, 0, 1, 0, 0, "", {}, "Enables the delay (parallel send)." },

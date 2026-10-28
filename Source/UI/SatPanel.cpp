@@ -653,15 +653,53 @@ namespace velvox::ui
         }
     }
 
+    SatView::Zone SatView::zoneFor (float thd) noexcept
+    {
+        return thd < dsp::SaturationModule::warmZoneThd ? Zone::warmth : thd < 10.0f ? Zone::colour : Zone::distortion;
+    }
+
+    juce::Colour SatView::zoneColour (Zone z) noexcept
+    {
+        switch (z)
+        {
+            case Zone::warmth:     return colours::ok;
+            case Zone::colour:     return juce::Colour (0xfffbbf24);
+            case Zone::distortion: return colours::warning;
+        }
+        return colours::ok;
+    }
+
+    namespace
+    {
+        // The scale runs log from 0.3 % to 30 % THD: Wärme up to 3 % (the left half), Farbe to 10 %, then Zerre
+        float scalePosition (float thd) noexcept
+        {
+            return juce::jlimit (0.0f, 1.0f, std::log (std::max (thd, 0.3f) / 0.3f) / std::log (100.0f));
+        }
+    }
+
+    juce::Rectangle<float> SatView::scaleBar() const noexcept
+    {
+        return strip.reduced (16.0f, 0.0f).withTrimmedTop (strip.getHeight() * 0.52f).withHeight (12.0f);
+    }
+
+    juce::Point<float> SatView::getScaleMarker() const noexcept
+    {
+        const auto bar = scaleBar();
+        return { bar.getX() + bar.getWidth() * scalePosition (thdPercent), bar.getCentreY() };
+    }
+
     void SatView::rebuildCurve()
     {
         const int band = multiband ? selected : 0;
         const int c = shownCharacter (band);
         const float d = shownDrive (band);
-        if (c == curveCharacter && std::abs (d - curveDrive) < 0.01f)
+        const float mix = haveLive ? shown.mix : 1.0f;
+        if (c == curveCharacter && std::abs (d - curveDrive) < 0.01f && std::abs (mix - curveMix) < 0.001f)
             return;
         curveCharacter = c;
         curveDrive = d;
+        curveMix = mix;
 
         // Transfer curve over -1 .. 1 (y clipped to +-1.2)
         constexpr int n = 97;
@@ -683,10 +721,11 @@ namespace velvox::ui
 
         // Harmonics of a -12 dBFS sine (H1..H8, dB relative to H1)
         harmonics = dsp::SaturationModule::harmonicProfile (c, d, -12.0f);
-        double sum = 0.0;
-        for (size_t k = 1; k < harmonics.size(); ++k)
-            sum += std::pow (10.0, harmonics[k] / 10.0);
-        thdPercent = (float) (100.0 * std::sqrt (sum));
+        dsp::SatSettings one;
+        one.character = c;
+        one.driveDb = d;
+        one.mix = juce::jlimit (0.0f, 1.0f, mix);
+        thdPercent = dsp::SaturationModule::thdPercent (one, -12.0f);   // as it sounds: with the Mix
     }
 
     void SatView::update (const LiveData& d)
@@ -748,8 +787,11 @@ namespace velvox::ui
         // Strip: frequency grid, then the bands
         g.setColour (juce::Colours::black.withAlpha (0.28f));
         g.fillRoundedRectangle (strip.expanded (0.0f, 0.0f), 8.0f);
+        // The frequency grid only where there are bands (a single band shows the warmth scale)
         for (float f : { 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f })
         {
+            if (! multiband)
+                break;
             const float x = xForFrequency (f);
             const bool major = f == 100.0f || f == 1000.0f || f == 10000.0f;
             g.setColour (colours::accent.withAlpha (major ? 0.06f : 0.03f));
@@ -760,10 +802,10 @@ namespace velvox::ui
                              colours::textFaint, 8.0f);
         }
         // The ends of the axis (20 Hz / 20 kHz) where they do not crowd the 100 / 10k labels
-        if (xForFrequency (100.0f) - strip.getX() >= 40.0f)
+        if (multiband && xForFrequency (100.0f) - strip.getX() >= 40.0f)
             drawCaption (g, "20", juce::Rectangle<float> (strip.getX() + 2.0f, strip.getBottom() + 3.0f, 30.0f, 12.0f), juce::Justification::centredLeft,
                          colours::textFaint, 8.0f);
-        if (strip.getRight() - xForFrequency (10000.0f) >= 48.0f)
+        if (multiband && strip.getRight() - xForFrequency (10000.0f) >= 48.0f)
             drawCaption (g, "20k", juce::Rectangle<float> (strip.getRight() - 32.0f, strip.getBottom() + 3.0f, 30.0f, 12.0f), juce::Justification::centredRight,
                          colours::textFaint, 8.0f);
 
@@ -789,9 +831,10 @@ namespace velvox::ui
             g.fillRoundedRectangle (br, 8.0f);
 
             // Live drive meter: rises from the bottom with input level + drive (-42 .. +6 dB), below the labels
+            // (multiband; a single band shows the warmth scale instead)
             const float top = br.getY() + (multiband ? 36.0f : 12.0f);
             const float level = juce::jlimit (0.0f, 1.0f, juce::jmap (meterDb[(size_t) b], -42.0f, 6.0f, 0.0f, 1.0f));
-            if (on && level > 0.001f)
+            if (multiband && on && level > 0.001f)
             {
                 const float room = std::max (8.0f, br.getBottom() - (top + 46.0f));
                 const auto heat = br.withTop (br.getBottom() - room * level);
@@ -829,6 +872,37 @@ namespace velvox::ui
             }
         }
 
+        // Single band: the scale Wärme -> Farbe -> Zerre (THD of a -12 dBFS sine with the Mix), a marker at the setting
+        if (! multiband)
+        {
+            const auto bar = scaleBar();
+            const float split[] { 0.0f, 0.5f, scalePosition (10.0f), 1.0f };
+            const Zone zones[] { Zone::warmth, Zone::colour, Zone::distortion };
+            const juce::String names[] { i18n::tr ("Wärme", "Warmth"), i18n::tr ("Farbe", "Colour"), i18n::tr ("Zerre", "Distortion") };
+            for (int z = 0; z < 3; ++z)
+            {
+                const auto seg = juce::Rectangle<float> (bar.getX() + bar.getWidth() * split[z], bar.getY(),
+                                                         bar.getWidth() * (split[z + 1] - split[z]), bar.getHeight()).reduced (1.0f, 0.0f);
+                const auto zc = zoneColour (zones[z]);
+                const bool here = getZone() == zones[z];
+                g.setColour (zc.withAlpha ((here ? 0.55f : 0.18f) * alpha));
+                g.fillRoundedRectangle (seg, 4.0f);
+                drawCaption (g, names[z], seg.withY (bar.getBottom() + 6.0f).withHeight (14.0f), juce::Justification::centred,
+                             here ? zc.interpolatedWith (juce::Colours::white, 0.3f) : colours::textDim, 11.0f);
+            }
+            const auto m = getScaleMarker();
+            const auto mc = zoneColour (getZone());
+            drawGlow (g, m, 14.0f, 0.35f * alpha, mc);
+            g.setColour (colours::panelInset);
+            g.fillEllipse (juce::Rectangle<float> (16.0f, 16.0f).withCentre (m));
+            g.setColour (mc.withAlpha (alpha));
+            g.fillEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre (m));
+            g.setColour (colours::text.withAlpha (alpha));
+            g.setFont (monoFont (12.0f));
+            const auto thdText = "THD " + (thdPercent < 10.0f ? juce::String (thdPercent, 1) : juce::String (juce::roundToInt (thdPercent))) + " %";
+            g.drawText (thdText, juce::Rectangle<float> (90.0f, 16.0f).withCentre (m.translated (0.0f, -18.0f)), juce::Justification::centred, false);
+        }
+
         // Mini: transfer curve and harmonics of the selected band
         const int band = multiband ? selected : 0;
         const bool bandOn = ! multiband || raw (onIds[band]) > 0.5f;
@@ -850,7 +924,18 @@ namespace velvox::ui
         auto hb = harmonicsBox;
         auto head = hb.removeFromTop (14.0f);
         drawCaption (g, i18n::tr ("Obertöne", "Harmonics"), head, juce::Justification::centredLeft, colours::textFaint, 8.0f);
-        drawCaption (g, "THD " + (thdPercent < 10.0f ? juce::String (thdPercent, 1) : juce::String (juce::roundToInt (thdPercent))) + " %", head, juce::Justification::centredRight, colours::textDim, 8.0f);
+        {
+            // The THD chip in the colour of its zone (green warmth, amber colour, red distortion)
+            const auto text = "THD " + (thdPercent < 10.0f ? juce::String (thdPercent, 1) : juce::String (juce::roundToInt (thdPercent))) + " %";
+            const auto zc = zoneColour (getZone());
+            const float w = (float) juce::GlyphArrangement::getStringWidthInt (semiBold (9.0f, 0.12f), text) + 14.0f;
+            const auto chip = head.withLeft (head.getRight() - w).withSizeKeepingCentre (w, 14.0f);
+            g.setColour (zc.withAlpha (0.16f * alpha));
+            g.fillRoundedRectangle (chip, 7.0f);
+            g.setColour (zc.withAlpha (0.7f * alpha));
+            g.drawRoundedRectangle (chip.reduced (0.5f), 7.0f, 1.0f);
+            drawCaption (g, text, chip, juce::Justification::centred, zc.interpolatedWith (juce::Colours::white, 0.25f), 8.0f);
+        }
         hb.removeFromTop (4.0f);
         auto labels = hb.removeFromBottom (13.0f);
         const int nBars = 7;   // H2 .. H8

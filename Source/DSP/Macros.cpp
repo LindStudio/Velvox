@@ -103,6 +103,53 @@ namespace velvox::dsp
                 on = false;
         }
 
+        // Review 2026-10-28 (Jakob: Saturation "voller, nicht verzerrt"): the macros keep the saturation in the
+        // warmth zone - more drive and more Mix only up to the THD limit; the drive gives way when the Mix
+        // they add would pass it. A user setting already beyond the limit is not made any harsher by them.
+        constexpr float macroThdLimit = SaturationModule::warmZoneThd * 0.85f;
+        void limitSatToWarmZone (const SatSettings& base, SatSettings& s) noexcept
+        {
+            const auto thd = [] (int character, float driveDb, float mix)
+            {
+                SatSettings one;
+                one.character = character;
+                one.driveDb = driveDb;
+                one.mix = mix;
+                return SaturationModule::thdPercent (one, -12.0f);
+            };
+            const auto limit = [&] (float baseDb, float& db, int character)
+            {
+                const float allowed = std::max (macroThdLimit, base.enabled ? thd (character, baseDb, base.mix) : 0.0f);
+                if (thd (character, db, s.mix) > allowed)
+                    db = std::min (db, SaturationModule::maxDriveForThd (character, s.mix, allowed));
+            };
+            limit (base.driveDb, s.driveDb, s.character);
+            // Multiband: the bands keep moving together - the smallest room of any band decides
+            float added = 1.0e9f;
+            for (size_t i = 0; i < s.bands.size(); ++i)
+            {
+                float db = s.bands[i].driveDb;
+                limit (base.bands[i].driveDb, db, s.bands[i].character);
+                added = std::min (added, db - base.bands[i].driveDb);
+            }
+            for (size_t i = 0; i < s.bands.size(); ++i)
+                s.bands[i].driveDb = std::min (s.bands[i].driveDb, base.bands[i].driveDb + std::max (0.0f, added));
+
+            // Tube colours even at 0 dB drive: then the Mix the macros added gives way, too
+            const float allowed = std::max (macroThdLimit, base.enabled ? thd (s.character, base.driveDb, base.mix) : 0.0f);
+            const float floorMix = base.enabled ? std::min (base.mix, s.mix) : 0.0f;
+            if (! s.multiband && thd (s.character, s.driveDb, s.mix) > allowed)
+            {
+                float lo = floorMix, hi = s.mix;
+                for (int i = 0; i < 16; ++i)
+                {
+                    const float m = 0.5f * (lo + hi);
+                    (thd (s.character, s.driveDb, m) <= allowed ? lo : hi) = m;
+                }
+                s.mix = lo;
+            }
+        }
+
         // The clamps of applyMacros (parameter ranges)
         void clampMacroFields (ChainSettings& s, RoleBand& air, RoleBand& warmth) noexcept
         {
@@ -235,6 +282,7 @@ namespace velvox::dsp
         }
 
         clampMacroFields (s, air, warmth);
+        limitSatToWarmZone (base.sat, s.sat);
         return s;
     }
 
@@ -329,6 +377,7 @@ namespace velvox::dsp
         s.stereo.width       = clamp (s.stereo.width, 0.0f, StereoStage::maxWidth);
         s.reverbDuck.amountDb = clamp (s.reverbDuck.amountDb, 0.0f, 24.0f);
         s.delayDuck.amountDb  = clamp (s.delayDuck.amountDb, 0.0f, 24.0f);
+        limitSatToWarmZone (base.sat, s.sat);
         return s;
     }
 }

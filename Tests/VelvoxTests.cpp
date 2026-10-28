@@ -412,13 +412,13 @@ public:
                     idx = i;
             expect (idx >= 0);
             expect (pm.loadPreset (idx));
-            expectWithinAbsoluteError (h.get (pid::satDrive), 12.0f, 0.01f);
+            expectWithinAbsoluteError (h.get (pid::satDrive), 3.0f, 0.01f, "the warmth zone (review 2026-10-28)");
             expectWithinAbsoluteError (h.get (pid::hpfFreq), 160.0f, 0.01f);
             expectEquals ((int) h.get (pid::delayPingPong), 1);
             expectEquals (pm.getCurrentPresetName(), juce::String ("Hypertechno Lead"));
 
             expect (pm.loadPreset (0)); // Init resets to defaults
-            expectWithinAbsoluteError (h.get (pid::satDrive), 6.0f, 0.01f);
+            expectWithinAbsoluteError (h.get (pid::satDrive), 3.0f, 0.01f);
             expectEquals ((int) h.get (pid::satOn), 0);
         }
 

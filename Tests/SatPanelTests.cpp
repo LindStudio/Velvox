@@ -282,6 +282,38 @@ private:
             expect (! view.getBandArea (1).isVisible(), "only one band");
         }
 
+        // Review 2026-10-28 (item 9): single band shows a scale Wärme -> Farbe -> Zerre with a marker; the THD
+        // chip counts the Mix and is coloured by that zone
+        beginTest ("SatView: single band = the warmth / colour / distortion scale; THD with Mix, zone colours");
+        {
+            Harness h;
+            setPlain (h, pid::satOn, 1.0f);
+            setPlain (h, pid::satMultiband, 0.0f);
+            setPlain (h, pid::satCharacter, 2.0f);
+            setPlain (h, pid::satDrive, 3.0f);
+            setPlain (h, pid::satMix, 30.0f);
+            ui::SatView view (h.proc, 0);
+            view.setBounds (0, 0, 720, 270);
+            view.update (*liveFor (h));
+            expect (view.isScaleShown(), "single band: the scale");
+            const auto s = h.proc.readEffectiveSettings().sat;
+            expectWithinAbsoluteError (view.getThdPercent(), dsp::SaturationModule::thdPercent (s, -12.0f), 0.05f, "THD as it sounds (with Mix)");
+            expect (view.getZone() == ui::SatView::Zone::warmth, "3 dB tube at 30 %: warmth");
+            expect (ui::SatView::zoneColour (ui::SatView::Zone::warmth) != ui::SatView::zoneColour (ui::SatView::Zone::distortion));
+
+            setPlain (h, pid::satCharacter, 3.0f);
+            setPlain (h, pid::satDrive, 24.0f);
+            setPlain (h, pid::satMix, 100.0f);
+            view.update (*liveFor (h));
+            expect (view.getZone() == ui::SatView::Zone::distortion, "24 dB hard at 100 %: distortion, " + juce::String (view.getThdPercent()));
+            const auto marker = view.getScaleMarker();
+            expect (view.getStripArea().contains (marker) && marker.x > view.getStripArea().getCentreX(), "the marker sits in the right part");
+
+            setPlain (h, pid::satMultiband, 1.0f);
+            view.update (*liveFor (h));
+            expect (! view.isScaleShown(), "multiband: the band areas");
+        }
+
         beginTest ("SatView crossover handles: drag (one undo step), fine, order guard, reset, wheel");
         {
             Harness h;

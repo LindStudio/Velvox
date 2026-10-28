@@ -574,8 +574,12 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    void CompactMeters::setLevels (float inDb, float outDb, float inLufs, float outLufs, bool clipped)
+    void CompactMeters::setLevels (float inDb, float outDb, float inLufs, float outLufs, bool clipped, double now)
     {
+        if (now < 0.0)
+            now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        const double dt = lastTime < 0.0 ? 0.0 : juce::jlimit (0.0, 0.25, now - lastTime);
+        lastTime = now;
         // Peaks fall back smoothly (about 20 dB per second at 60 frames)
         const float in[2] { inDb, outDb };
         bool changed = clipped && ! clipLatched;
@@ -584,12 +588,36 @@ namespace velvox::ui
             const float next = std::max (in[i], level[(size_t) i] - 0.35f);
             changed = changed || std::abs (next - level[(size_t) i]) > 0.1f;
             level[(size_t) i] = next;
+
+            // Peak hold: stays 1.5 s, then falls at 20 dB per second
+            auto& h = hold[(size_t) i];
+            if (in[i] >= h)
+            {
+                h = in[i];
+                holdSince[(size_t) i] = now;
+            }
+            else if (now - holdSince[(size_t) i] > 1.5)
+            {
+                const float fallen = std::max (level[(size_t) i], h - 20.0f * (float) dt);
+                changed = changed || std::abs (fallen - h) > 0.1f;
+                h = fallen;
+            }
         }
         changed = changed || std::abs (inLufs - lufs[0]) > 0.05f || std::abs (outLufs - lufs[1]) > 0.05f;
         lufs = { inLufs, outLufs };
         clipLatched = clipLatched || clipped;
         if (changed)
             repaint();
+    }
+
+    juce::String CompactMeters::getDifferenceText() const
+    {
+        if (lufs[0] <= -70.0f || lufs[1] <= -70.0f)
+            return {};
+        const int d = juce::roundToInt (lufs[1] - lufs[0]);
+        if (d == 0)
+            return juce::String::fromUTF8 ("\xc2\xb1" "0");
+        return (d > 0 ? juce::String ("+") : juce::String::fromUTF8 ("\xe2\x88\x92")) + juce::String (std::abs (d)) + " LU";
     }
 
     void CompactMeters::paint (juce::Graphics& g)
@@ -604,6 +632,14 @@ namespace velvox::ui
             {
                 g.setGradientFill (auroraGradient (track.getTopLeft(), track.getTopRight(), 0.9f));
                 g.fillRoundedRectangle (track.withWidth (std::max (track.getHeight(), track.getWidth() * fraction)), track.getHeight() * 0.5f);
+            }
+            // Peak hold: a thin bright tick (red near 0 dBFS)
+            const float h = hold[isOut ? 1 : 0];
+            if (h > -60.0f)
+            {
+                const float x = track.getX() + track.getWidth() * juce::jlimit (0.0f, 1.0f, juce::jmap (h, -60.0f, 0.0f, 0.0f, 1.0f));
+                g.setColour (h > -0.5f ? colours::warning : colours::textStrong.withAlpha (0.85f));
+                g.fillRect (juce::Rectangle<float> (2.0f, track.getHeight() + 4.0f).withCentre ({ std::max (track.getX() + 1.0f, x - 1.0f), track.getCentreY() }));
             }
             if (isOut && clipLatched)
             {
@@ -632,19 +668,31 @@ namespace velvox::ui
             return;
         }
 
-        // Side by side: IN [bar] -23.4 LUFS     OUT [bar] -14.2 LUFS
+        // Side by side: IN [bar] -23.4 LUFS     OUT [bar] -14.2 LUFS  −5 LU (the number right at its bar)
         const float half = r.getWidth() / 2.0f;
         for (int i = 0; i < 2; ++i)
         {
             auto area = r.removeFromLeft (half).reduced (i == 0 ? 0.0f : 12.0f, 0.0f).withTrimmedRight (i == 0 ? 12.0f : 0.0f);
             g.setColour (colours::textFaint);
-            g.setFont (semiBold (9.5f, 0.15f));
+            g.setFont (semiBold (11.0f, 0.12f));
             g.drawText (i == 0 ? "IN" : "OUT", area.removeFromLeft (34.0f), juce::Justification::centredLeft, false);
-            auto text = area.removeFromRight (84.0f);
+            if (const auto diff = i == 1 ? getDifferenceText() : juce::String(); diff.isNotEmpty())
+            {
+                // OUT against IN: green while it is about as loud (within 1 LU)
+                const auto chip = area.removeFromRight (52.0f).withSizeKeepingCentre (50.0f, 18.0f);
+                const auto c = std::abs (juce::roundToInt (lufs[1] - lufs[0])) <= 1 ? colours::ok : colours::textSoft;
+                g.setColour (c.withAlpha (0.14f));
+                g.fillRoundedRectangle (chip, 9.0f);
+                g.setColour (c);
+                g.setFont (monoFont (11.0f));
+                g.drawText (diff, chip, juce::Justification::centred, false);
+                area.removeFromRight (6.0f);
+            }
+            auto text = area.removeFromRight (80.0f);
             g.setColour (colours::textSoft);
             g.setFont (monoFont (11.0f));
-            g.drawText (lufsText (lufs[(size_t) i]) + (lufs[(size_t) i] > -70.0f ? " LUFS" : ""), text, juce::Justification::centredRight, false);
-            drawBar (area.reduced (4.0f, 0.0f).withSizeKeepingCentre (area.getWidth() - 18.0f, 6.0f), level[(size_t) i], i == 1);
+            g.drawText (lufsText (lufs[(size_t) i]) + (lufs[(size_t) i] > -70.0f ? " LUFS" : ""), text.withTrimmedLeft (4.0f), juce::Justification::centredLeft, false);
+            drawBar (area.reduced (4.0f, 0.0f).withSizeKeepingCentre (area.getWidth() - 12.0f, 6.0f), level[(size_t) i], i == 1);
         }
     }
 

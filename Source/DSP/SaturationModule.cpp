@@ -113,6 +113,37 @@ namespace velvox::dsp
             y[i] = shape (x[i], d, character) * c;
     }
 
+    float SaturationModule::thdPercent (const SatSettings& s, float levelDb) noexcept
+    {
+        const bool mb = s.multiband;
+        if (mb && ! s.bands[1].on)
+            return 0.0f;
+        const auto h = harmonicProfile (mb ? s.bands[1].character : s.character, mb ? s.bands[1].driveDb : s.driveDb, levelDb);
+        double sum = 0.0;
+        for (size_t k = 1; k < h.size(); ++k)
+            sum += std::pow (10.0, h[k] / 10.0);
+        const double m = juce::jlimit (0.0f, 1.0f, s.mix), g1 = std::pow (10.0, h[0] / 20.0);
+        const double fundamental = (1.0 - m) + m * g1;
+        return fundamental > 1.0e-9 ? (float) (100.0 * m * g1 * std::sqrt (sum) / fundamental) : 0.0f;
+    }
+
+    float SaturationModule::maxDriveForThd (int character, float mix, float targetPercent) noexcept
+    {
+        SatSettings s;
+        s.character = character;
+        s.mix = mix;
+        const auto thdAt = [&s] (float drive) { s.driveDb = drive; return thdPercent (s, -12.0f); };
+        if (thdAt (24.0f) <= targetPercent)
+            return 24.0f;
+        float lo = 0.0f, hi = 24.0f;   // THD grows with drive
+        for (int i = 0; i < 20; ++i)
+        {
+            const float midDb = 0.5f * (lo + hi);
+            (thdAt (midDb) <= targetPercent ? lo : hi) = midDb;
+        }
+        return lo;
+    }
+
     std::array<float, 8> SaturationModule::harmonicProfile (int character, float driveDb, float levelDb) noexcept
     {
         character = juce::jlimit (0, numCharacters - 1, character);

@@ -182,7 +182,7 @@ public:
             {
                 return dsp::LoudnessMeter::integratedLufs (b.getArrayOfReadPointers(), b.getNumChannels(), b.getNumSamples(), 48000.0, skip);
             };
-            constexpr float inputLufs = -18.0f;
+            const float inputLufs = (float) juce::SystemStats::getEnvironmentVariable ("VELVOX_LOUDNESS_INPUT", "-18").getDoubleValue();
             const int skip = 48000 / 2;
             std::vector<std::pair<juce::String, juce::AudioBuffer<float>>> takes;
             const auto add = [&] (const juce::String& name, juce::AudioBuffer<float> b)
@@ -237,8 +237,7 @@ public:
                     << ", synthetic " << juce::String (synthSum / synth, 2) << " LU, peak "
                     << juce::String (juce::Decibels::gainToDecibels (peak), 1) << " dBFS";
                 table << row << juce::newLine;
-                if (preset.name == "Init")
-                    continue;   // the parameter defaults, a starting point (logged only)
+                // Review 2026-10-28: Init (the parameter defaults, a fresh instance) keeps the loudness as well
                 // Calibrated on real voices; the synthetic take compresses about 3 LU harder (higher crest factor)
                 if (real > 0)
                     expectWithinAbsoluteError ((float) (realSum / real), 0.0f, 1.0f, preset.name + ": real takes");

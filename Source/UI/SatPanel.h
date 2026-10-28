@@ -63,6 +63,16 @@ namespace velvox::ui
         void resized() override;
 
         bool isMultiband() const noexcept { return multiband; }
+
+        // Review 2026-10-28: how hard the selected band works, as it sounds (drive, character, Mix) - THD of a
+        // -12 dBFS sine, in three zones. Single band shows them as a scale Wärme -> Farbe -> Zerre with a marker.
+        enum class Zone { warmth, colour, distortion };
+        static Zone zoneFor (float thdPercent) noexcept;
+        static juce::Colour zoneColour (Zone z) noexcept;
+        float getThdPercent() const noexcept { return thdPercent; }
+        Zone getZone() const noexcept { return zoneFor (thdPercent); }
+        bool isScaleShown() const noexcept { return ! multiband; }
+        juce::Point<float> getScaleMarker() const noexcept;
         // Selected band 0 / 1 / 2 (Low / Mid / High); -1 while multiband is off
         int getSelectedBand() const noexcept { return multiband ? selected : -1; }
         int getChosenBand() const noexcept { return selected; }   // kept while multiband is off
@@ -117,7 +127,8 @@ namespace velvox::ui
         juce::Rectangle<float> strip, curveBox, harmonicsBox;
         // Selected band's picture, rebuilt only when its character / drive change
         int curveCharacter = -1;
-        float curveDrive = -1000.0f;
+        float curveDrive = -1000.0f, curveMix = -1.0f;
+        juce::Rectangle<float> scaleBar() const noexcept;
         juce::Path curvePath;
         std::array<float, 8> harmonics {};
         float thdPercent = 0.0f;

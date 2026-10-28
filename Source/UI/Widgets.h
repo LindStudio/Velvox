@@ -235,16 +235,22 @@ namespace velvox::ui
     {
     public:
         void setStacked (bool shouldStack) { stacked = shouldStack; repaint(); }
-        // Peak levels in dBFS, loudness in LUFS; `clipped` latches the lamp
-        void setLevels (float inDb, float outDb, float inLufs, float outLufs, bool clipped);
+        // Peak levels in dBFS, loudness in LUFS; `clipped` latches the lamp. nowSeconds: the clock of the
+        // peak hold (tests); < 0 = the system clock
+        void setLevels (float inDb, float outDb, float inLufs, float outLufs, bool clipped, double nowSeconds = -1.0);
         float getInputDb() const noexcept { return level[0]; }
         float getOutputDb() const noexcept { return level[1]; }
+        // Review 2026-10-28: a peak hold per bar (1.5 s, then it falls) and OUT's loudness against IN
+        float getPeakHold (int which) const noexcept { return hold[(size_t) juce::jlimit (0, 1, which)]; }
+        juce::String getDifferenceText() const;   // "−5 LU", "+2 LU", "±0"; empty without signal
         bool isClipLatched() const noexcept { return clipLatched; }
         void paint (juce::Graphics&) override;
         void mouseDown (const juce::MouseEvent&) override { clipLatched = false; repaint(); }
 
     private:
-        std::array<float, 2> level { -100.0f, -100.0f }, lufs { -100.0f, -100.0f };
+        std::array<float, 2> level { -100.0f, -100.0f }, lufs { -100.0f, -100.0f }, hold { -100.0f, -100.0f };
+        std::array<double, 2> holdSince { 0.0, 0.0 };
+        double lastTime = -1.0;
         bool clipLatched = false, stacked = false;
     };
 

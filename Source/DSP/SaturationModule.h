@@ -102,6 +102,13 @@ namespace velvox::dsp
         //  (H1 itself = the level change of the fundamental incl. compensation, normally ~0 dB)
         static void transferCurve (int character, float driveDb, const float* x, float* y, int n) noexcept;
         static std::array<float, 8> harmonicProfile (int character, float driveDb, float levelDb) noexcept;
+        //  thdPercent: THD (H2..H8) of a 1 kHz sine at levelDb through the settings as they sound - drive,
+        //  character and Mix (multiband: the Mid band, where 1 kHz lies). The panel's THD chip and the
+        //  warmth zone (review 2026-10-28: presets and macros stay under warmZoneThd) use it.
+        static float thdPercent (const SatSettings& s, float levelDb) noexcept;
+        static constexpr float warmZoneThd = 3.0f;   // % at -12 dBFS: "fuller", not distorted
+        // The highest drive (0..24 dB) that keeps a character at this Mix under targetPercent THD at -12 dBFS
+        static float maxDriveForThd (int character, float mix, float targetPercent) noexcept;
 
         static constexpr int numBands = 3;
         const SatMeters& getMeters() const noexcept { return meters; }

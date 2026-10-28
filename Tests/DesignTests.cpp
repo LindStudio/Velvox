@@ -206,6 +206,27 @@ public:
             }
         }
 
+        // Review 2026-10-28 (items 2 / 15): IN / OUT meters with a peak hold, OUT tells the difference to the input
+        beginTest ("Review: SIMPEL meters hold their peak about 1.5 s; OUT shows the loudness difference to IN");
+        {
+            ui::CompactMeters m;
+            m.setSize (800, 30);
+            m.setLevels (-6.0f, -10.0f, -20.0f, -25.0f, false, 0.0);
+            for (int i = 1; i <= 60; ++i)   // one second of quiet frames
+                m.setLevels (-40.0f, -40.0f, -20.0f, -25.0f, false, i / 60.0);
+            expectWithinAbsoluteError (m.getPeakHold (0), -6.0f, 0.01f, "IN holds its peak");
+            expectWithinAbsoluteError (m.getPeakHold (1), -10.0f, 0.01f, "OUT too");
+            expect (m.getInputDb() < -15.0f, "while the bar itself falls");
+            for (int i = 61; i <= 240; ++i)
+                m.setLevels (-40.0f, -40.0f, -20.0f, -25.0f, false, i / 60.0);
+            expect (m.getPeakHold (0) < -30.0f, "then the hold falls back");
+            expectEquals (m.getDifferenceText(), juce::String::fromUTF8 ("\xe2\x88\x92" "5 LU"), "OUT 5 LU under IN");
+            m.setLevels (-40.0f, -40.0f, -20.0f, -20.3f, false, 5.0);
+            expectEquals (m.getDifferenceText(), juce::String::fromUTF8 ("\xc2\xb1" "0"), "the same loudness");
+            m.setLevels (-40.0f, -40.0f, -100.0f, -100.0f, false, 6.0);
+            expect (m.getDifferenceText().isEmpty(), "nothing without signal");
+        }
+
         // Review 2026-10-28 (item 11): the Output read-outs say what they are; "Wie Bypass" is not squeezed
         beginTest ("Review: Output panel names its read-outs in words, every Level Match segment fits its text");
         {

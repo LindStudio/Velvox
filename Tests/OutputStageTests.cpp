@@ -71,9 +71,10 @@ public:
             for (auto& p : getFactoryPresets())
                 if (p.name == "Aggressive Vocal")
                     p.applyTo (h.proc.getState());
-            h.set (pid::outputGain, 0.0f);
             // make the processed signal clearly louder (0.6: 9 dB - the peak-hold compressor of the
-            // preset holds steady noise ~1 dB lower than the 0.5 detector did, so 6 dB was no longer enough)
+            // preset holds steady noise ~1 dB lower than the 0.5 detector did, so 6 dB was no longer enough;
+            // review 2026-10-28: the preset's saturation no longer adds level, the Vocal Level does)
+            h.set (pid::outputGain, 6.0f);
             h.set (pid::inputGain, 9.0f);
             h.set (pid::levelMatchMode, 2.0f);
             h.set (pid::levelMatchWindow, 0.0f); // fast

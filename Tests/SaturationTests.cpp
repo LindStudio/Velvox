@@ -189,6 +189,67 @@ public:
 
     void runTest() override
     {
+        // Review 2026-10-28 (item 9, Jakob: "voller machen, nicht distorten"): presets, the fresh module, the
+        // macros at full and the auto mix stay in the warmth zone - under 3 % THD at -12 dBFS (the THD chip's level)
+        beginTest ("Warmth zone: every factory preset, Init, full macros and the auto mix under 3 % THD");
+        {
+            const auto thdPercent = [] (const SatSettings& s)
+            {
+                const auto out = renderWith (s, sineVec (fs48, 1000.0, -12.0, 1.0));
+                return 100.0 * std::pow (10.0, thdDb (out, fs48, 1000.0) / 20.0);
+            };
+            const auto check = [&] (test::Harness& h, const juce::String& what)
+            {
+                const auto s = h.proc.readEffectiveSettings().sat;
+                if (! s.enabled)
+                    return;
+                const double thd = thdPercent (s);
+                logMessage (what + ": THD " + juce::String (thd, 2) + " %, model " + juce::String (SaturationModule::thdPercent (s, -12.0f), 2) + " %");
+                expect (thd < 3.0, what + ": " + juce::String (thd, 2) + " %");
+                expectWithinAbsoluteError ((float) thd, SaturationModule::thdPercent (s, -12.0f), (float) std::max (0.3, 0.2 * thd),
+                                           what + ": the chip's number matches the sound");
+            };
+            {
+                test::Harness h;
+                h.set (pid::satOn, 1.0f);
+                check (h, "Init with Saturation on");
+                for (auto* macro : { pid::macroWarmth, pid::macroAggression })
+                {
+                    h.set (macro, 100.0f);
+                    check (h, juce::String ("Init + ") + macro + " 100 %");
+                    h.set (macro, 0.0f);
+                }
+            }
+            test::Harness h;
+            auto& pm = h.proc.getPresetManager();
+            for (int i = 0; i < pm.getEntries().size(); ++i)
+            {
+                if (! pm.getEntries()[i].isFactory)
+                    continue;
+                pm.loadPreset (i);
+                const auto name = pm.getEntries()[i].name;
+                check (h, name);
+                for (auto* macro : { pid::macroWarmth, pid::macroAggression })
+                {
+                    const float before = h.get (macro);
+                    h.set (macro, 100.0f);
+                    check (h, name + " + " + macro + " 100 %");
+                    h.set (macro, before);
+                }
+            }
+            // The auto mix sets Tube 5 dB / 30 % at most
+            SatSettings mixed;
+            mixed.enabled = true;
+            for (int c = 0; c < 3; ++c)
+            {
+                mixed.character = c;
+                mixed.driveDb = 5.0f;
+                mixed.mix = 0.3f;
+                const double thd = thdPercent (mixed);
+                expect (thd < 3.0, "auto mix, character " + juce::String (c) + ": " + juce::String (thd, 2));
+            }
+        }
+
         beginTest ("Aliasing at equal THD (4987 Hz, -6 dBFS) - Saturn 2 HQ class");
         {
             const auto tone = sineVec (fs48, 4987.0, -6.0, 2.0);
@@ -566,16 +627,18 @@ public:
             OfflineParameters p;
             p.set (pid::satOn, 1.0f);
             p.set (pid::satMultiband, 1.0f);
-            p.set (pid::satLowDrive, 3.0f);
-            p.set (pid::satMidDrive, 6.0f);
-            p.set (pid::satHighDrive, 9.0f);
+            p.set (pid::satMix, 0.0f);   // room in the warmth zone (review 2026-10-28) for the macro's drive
+            p.set (pid::satLowDrive, 0.0f);
+            p.set (pid::satMidDrive, 1.0f);
+            p.set (pid::satHighDrive, 2.0f);
             // 0.6.1: WARMTH writes the modules (a Simple move from 0 to 100 %)
             const auto cs = dsp::applyMacroMove (p.read (dsp::Routing::defaults()), dsp::MacroId::warmth, 0.0f, 1.0f);
             const auto& b = cs.sat.bands;
             expect (cs.sat.multiband);
-            expectWithinAbsoluteError (b[1].driveDb - b[0].driveDb, 3.0f, 0.01f);
-            expectWithinAbsoluteError (b[2].driveDb - b[1].driveDb, 3.0f, 0.01f);
-            expectGreaterThan (b[0].driveDb, 3.5f, "the macro adds drive to every band");
+            expectWithinAbsoluteError (b[1].driveDb - b[0].driveDb, 1.0f, 0.01f, "the differences stay");
+            expectWithinAbsoluteError (b[2].driveDb - b[1].driveDb, 1.0f, 0.01f);
+            expectGreaterThan (b[0].driveDb, 0.5f, "the macro adds drive to every band");
+            expectLessThan (SaturationModule::thdPercent (cs.sat, -12.0f), SaturationModule::warmZoneThd, "inside the warmth zone");
 
             using dsp::linkedBandDrives;
             auto r = linkedBandDrives ({ 3.0f, 6.0f, 9.0f }, 1, 10.0f);
