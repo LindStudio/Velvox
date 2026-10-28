@@ -269,6 +269,47 @@ public:
             expectEquals (top.getTabButton (T::Tab::autoMix).getButtonText(), juce::String ("MODULE"));
         }
 
+        // Jakob 2026-10-28: on pause the picture stays, so unprocessed and processed can be compared
+        beginTest ("Simple spectrum: when the playback stops (silence or no audio) the last spectrum stays");
+        {
+            dsp::SampleTap inTap, outTap;
+            ui::SpectrumSource source (inTap, outTap);
+            juce::Random random (5);
+            std::vector<float> block (512), quiet (512, 0.0f);
+            const auto push = [&] (const std::vector<float>& in, const std::vector<float>& out)
+            {
+                const float* pi[] { in.data() };
+                const float* po[] { out.data() };
+                inTap.push (pi, 1, (int) in.size());
+                outTap.push (po, 1, (int) out.size());
+            };
+            for (int k = 0; k < 200; ++k)
+            {
+                for (auto& s : block)
+                    s = random.nextFloat() * 0.6f - 0.3f;
+                push (block, block);
+                source.update (48000.0);
+            }
+            const auto in = source.getInput(), out = source.getOutput();
+            for (int k = 0; k < 120; ++k)   // two seconds of a paused host that still processes silence
+            {
+                push (quiet, block);         // (a reverb tail may still ring in the output)
+                source.update (48000.0);
+            }
+            expect (source.getInput() == in && source.getOutput() == out, "silence: the picture holds");
+            for (int k = 0; k < 120; ++k)   // a host that stops calling process
+                source.update (48000.0);
+            expect (source.getInput() == in && source.getOutput() == out, "no audio: the picture holds");
+            for (int k = 0; k < 30; ++k)
+            {
+                for (auto& s : block)
+                    s = random.nextFloat() * 0.02f - 0.01f;   // playback again, much quieter
+                push (block, block);
+                source.update (48000.0);
+            }
+            expect (source.getInput() != in, "playing again: it moves");
+        }
+
         beginTest ("Simple spectrum: the frequency labels are drawn above the fill, on a backing");
         {
             dsp::SampleTap inTap, outTap;

@@ -10,9 +10,17 @@ namespace velvox::ui
     void SpectrumSource::update (double sampleRate)
     {
         const double fs = sampleRate > 0.0 ? sampleRate : 48000.0;
+        // Jakob 2026-10-28: when the playback stops (the input goes silent, or the host stops calling
+        // process) the picture freezes, so unprocessed and processed can be compared at rest
+        bool inputLive = false;
         for (auto* c : { &in, &out })
         {
             const int n = c->tap.pull (scratch.data(), (int) scratch.size());
+            float peak = 0.0f;
+            for (int i = 0; i < n; ++i)
+                peak = std::max (peak, std::abs (scratch[(size_t) i]));
+            if (c == &in)
+                inputLive = n > 0 && peak > 1.0e-4f;   // above -80 dBFS
             // Only the newest fftSize samples matter
             const int skip = std::max (0, n - fftSize);
             for (int i = skip; i < n; ++i)
@@ -20,7 +28,8 @@ namespace velvox::ui
                 c->ring[(size_t) c->writePos] = scratch[(size_t) i];
                 c->writePos = (c->writePos + 1) % fftSize;
             }
-            analyse (*c, fs, n > 0);
+            if (inputLive)
+                analyse (*c, fs, true);
         }
     }
 
