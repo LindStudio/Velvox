@@ -55,6 +55,54 @@ namespace velvox::ui
         return { stand.getCentreX() - size * 0.5f, stand.getBottom() - size, size, size };
     }
 
+    juce::Rectangle<float> MascotView::frameArea() const
+    {
+        // The lower 64 % of his square, a little narrower: his body sits in it, his head is above it; raised
+        // by its offset shadow so that shows below it too
+        const auto a = stickerArea();
+        const float w = a.getWidth() * 0.86f, shadow = 5.0f * w / 128.0f;
+        return { a.getX() + a.getWidth() * 0.07f - shadow * 0.5f, a.getBottom() - shadow - a.getHeight() * 0.64f, w, a.getHeight() * 0.64f };
+    }
+
+    void MascotView::paintFrame (juce::Graphics& g, juce::Rectangle<float> f) const
+    {
+        // "Plugin-Violett" (Jakob 2026-10-28): violet panel, pink speed lines from behind him, ink rim,
+        // hard cyan offset shadow - the plugin's accent colours in comic form
+        const float u = f.getWidth() / 128.0f;   // the design was made at 128 px frame width
+        const float rim = std::max (2.0f, 3.5f * u);
+        g.setColour (juce::Colour (0xff00d1ff));
+        g.fillRect (f.translated (5.0f * u, 5.0f * u));
+
+        const auto centre = juce::Point<float> (f.getCentreX(), f.getY() + f.getHeight() * 0.55f);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffa78bfa), centre, juce::Colour (0xff5b2fd6),
+                                                 { f.getRight(), f.getBottom() }, true));
+        g.fillRect (f);
+
+        // Speed lines: thin wedges every 9 degrees, clipped to the panel
+        {
+            juce::Graphics::ScopedSaveState s (g);
+            g.reduceClipRegion (f.toNearestInt());
+            juce::Path lines;
+            const float reach = f.getWidth() + f.getHeight();
+            for (int i = 0; i < 40; ++i)
+            {
+                const float a0 = juce::degreesToRadians (9.0f * (float) i), a1 = a0 + juce::degreesToRadians (1.4f);
+                lines.startNewSubPath (centre);
+                lines.lineTo (centre + juce::Point<float> (std::sin (a0), -std::cos (a0)) * reach);
+                lines.lineTo (centre + juce::Point<float> (std::sin (a1), -std::cos (a1)) * reach);
+                lines.closeSubPath();
+            }
+            g.setColour (juce::Colour (0xd9f472b6));
+            g.fillPath (lines);
+            // A calm middle, so the speed lines start around him
+            g.setGradientFill (juce::ColourGradient (juce::Colour (0xffa78bfa), centre, juce::Colour (0x00a78bfa),
+                                                     centre.translated (f.getWidth() * 0.28f, 0.0f), true));
+            g.fillRect (f);
+        }
+        g.setColour (juce::Colour (0xff121018));
+        g.drawRect (f, rim);
+    }
+
     juce::AffineTransform MascotView::motion() const
     {
         const auto area = stickerArea();
@@ -69,6 +117,8 @@ namespace velvox::ui
         const auto img = sticker (brain.mood());
         if (area.isEmpty() || ! img.isValid())
             return false;
+        if (frameArea().contains ((float) x, (float) y))
+            return true;
         auto p = juce::Point<float> ((float) x, (float) y).transformedBy (motion().inverted());
         if (! area.contains (p))
             return false;
@@ -83,6 +133,17 @@ namespace velvox::ui
         if (area.isEmpty())
             return;
         g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+        const auto frame = frameArea();
+        paintFrame (g, frame);
+
+        // The figure: cut by the frame at its sides and bottom (inside the rim), free above its top edge
+        const float rim = std::max (2.0f, 3.5f * frame.getWidth() / 128.0f);
+        juce::Graphics::ScopedSaveState clip (g);
+        juce::RectangleList<int> visible;
+        visible.add (juce::Rectangle<float>::leftTopRightBottom (frame.getX() + rim, frame.getY(), frame.getRight() - rim, frame.getBottom() - rim)
+                         .getSmallestIntegerContainer());
+        visible.add (getLocalBounds().withBottom (juce::roundToInt (frame.getY() + rim)));
+        g.reduceClipRegion (visible);
         const auto t = motion();
         const auto draw = [&] (mascot::Mood m, float alpha)
         {

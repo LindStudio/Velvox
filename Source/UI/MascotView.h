@@ -5,11 +5,12 @@
 
 namespace velvox::ui
 {
-    // Memphy as a comic sticker (SIMPEL, bottom left). The editor feeds it once per frame; it shows the
-    // sticker of the mood the Brain picks, with its pop, breathing, talking bounce and hop, and cross-fades
-    // between two stickers. The sticker fills the stand area (his place in the layout) and scales with the
-    // window (stickers are 384 px, sharp up to about 3x); parts of the figure pop out over the disc, so
-    // the component is larger than the stand area and only takes clicks on the sticker itself.
+    // Memphy as a comic figure (SIMPEL, bottom left). The editor feeds it once per frame; it shows the
+    // picture of the mood the Brain picks, with its pop, breathing, talking bounce and hop, and cross-fades
+    // between two pictures. His body sits in a comic frame with violet speed lines (Jakob 2026-10-28,
+    // "Plugin-Violett"); his head and raised hands pop out over its top edge. The figure fills the stand
+    // area (his place in the layout) and scales with the window (pictures are 384 px, sharp up to about 3x);
+    // the component is larger than the stand area and only takes clicks on the figure and the frame.
     // A click on him opens the Vocal Check (approved assistant concept: no extra button for it).
     class MascotView final : public juce::Component, public juce::SettableTooltipClient
     {
@@ -38,6 +39,8 @@ namespace velvox::ui
 
     private:
         juce::Rectangle<float> stickerArea() const;   // the sticker image at rest, in local coordinates
+        juce::Rectangle<float> frameArea() const;     // the comic frame his body sits in (his head pops out)
+        void paintFrame (juce::Graphics&, juce::Rectangle<float> frame) const;
         juce::AffineTransform motion() const;          // pop, breathing, bounce, hop around his feet
 
         mascot::Brain brain;
