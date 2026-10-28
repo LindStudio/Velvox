@@ -1,6 +1,15 @@
 # HEADLINER – Übergabe für die nächste Session
 
-## STAND 2026-10-27 ABEND – HIER WEITERMACHEN
+## STAND 2026-10-28 – HIER WEITERMACHEN
+Branch **`feature/modules-0.7`**, am PC „Shadow“ weitergemacht (Commits `37210de`, `37a1056`, noch nicht gepusht).
+- Punkte 1, 2 und der Changelog-Teil von 4 unten sind **erledigt**: voller Lauf 37.527 Checks grün, pluginval 10 SUCCESS.
+  Das Review (neu gemacht, die `.superpowers`-Ledger liegen nur am anderen PC) fand einen echten Fehler, der jetzt behoben ist:
+  Room Noise / Breath Control klickten beim Einfügen während der Wiedergabe → jetzt `reset (fadeIn)` wie Smooth, Test in
+  `Tests/RoutingTests.cpp`. Bekannt, nicht behoben: unter 44,1 kHz (22,05/24 kHz) senkt Breath Control die ersten ~15 ms
+  eines Atmers nicht ab, weil die Look-ahead-Zeit dort kürzer ist als Erkennung + halbes Fenster.
+- Offen: Punkt 3 (Jakobs Antwort zu den Modulnamen), Installieren (FL schließen), Push nur nach Rückfrage, dann Punkt 5.
+
+## STAND 2026-10-27 ABEND
 Branch **`feature/modules-0.7`** (baut auf `feature/i18n` auf). Jakob hat unterbrochen („ich mach morgen weiter“).
 - **Fertig + committet:**
   - Plan A `docs/superpowers/plans/2026-10-27-remove-creative-modules.md`: Pitch, Stutter, Pulse, Choir komplett raus,
