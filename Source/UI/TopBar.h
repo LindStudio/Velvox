@@ -34,7 +34,7 @@ namespace velvox::ui
     };
 
     // Header of Headliner 0.6 (height 44), left to right:
-    //   logo · preset selector ‹ name ▾ › · SIMPEL | ADVANCED · tabs AUTO MIX | VOCAL CHECK · … · Bypass · ?
+    //   logo · preset selector ‹ name ▾ › · ↶ ↷ · SIMPEL | ADVANCED · tabs AUTO MIX | VOCAL CHECK · … · Bypass · ?
     // The mode decides how the AUTO MIX tab looks (Simple: spectrum + six macros; Advanced: chain +
     // module panel); VOCAL CHECK shows the check panel in both modes.
     class TopBar final : public juce::Component
@@ -66,12 +66,16 @@ namespace velvox::ui
         std::function<void()> onPresetList;
         std::function<void()> onHelp;
         std::function<void()> onSettings;   // gear: the settings sheet (1.0)
+        // Undo / redo arrows right of the preset name (review 2026-10-28); without handlers they use the history directly
+        std::function<void()> onUndo, onRedo;
 
         juce::TextButton& getHelpButton() noexcept { return help; }
         juce::Button& getSettingsButton() noexcept { return *settingsButton; }
         juce::TextButton& getPresetButton() noexcept { return presetButton; }
         juce::TextButton& getPrevButton() noexcept { return prev; }
         juce::TextButton& getNextButton() noexcept { return next; }
+        juce::Button& getUndoButton() noexcept { return *undoButton; }
+        juce::Button& getRedoButton() noexcept { return *redoButton; }
         juce::Button& getModeButton (Mode m) noexcept { return m == Mode::simple ? *modeButtons[0] : *modeButtons[1]; }
         juce::Button& getTabButton (Tab t) noexcept { return t == Tab::autoMix ? *tabs[0] : *tabs[1]; }
         juce::Rectangle<int> getPresetArea() const;
@@ -95,7 +99,7 @@ namespace velvox::ui
         Tab tab = Tab::autoMix;
         Toggle bypass;
         juce::TextButton help { "?" };
-        std::unique_ptr<juce::Button> settingsButton;
+        std::unique_ptr<juce::Button> settingsButton, undoButton, redoButton;
         juce::Rectangle<int> logoArea;
         bool shownModified = false;
         int modifiedCheck = 0;

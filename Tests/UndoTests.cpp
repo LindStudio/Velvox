@@ -3,6 +3,7 @@
 
 #include "TestHelpers.h"
 #include "UI/ChainView.h"
+#include "UI/TopBar.h"
 
 using namespace velvox;
 using namespace velvox::test;
@@ -41,6 +42,36 @@ public:
             expectEquals (undo.getNumSteps(), 0, "undo does not record a new step");
             expect (undo.redo());
             expectWithinAbsoluteError (h.get (pid::compRatio), 6.0f, 1.0e-3f, "redo re-applies");
+        }
+
+        // Review 2026-10-28 (item 15): undo / redo next to the preset name, greyed out while there is nothing
+        beginTest ("Header: undo and redo arrows next to the preset name follow the history");
+        {
+            Harness h;
+            ui::DialogOverlay dialog;
+            ui::TopBar top (h.proc, dialog);
+            top.setBounds (0, 0, 1440, ui::TopBar::height);
+            auto& undoButton = top.getUndoButton();
+            auto& redoButton = top.getRedoButton();
+            expect (undoButton.isVisible() && redoButton.isVisible());
+            expect (undoButton.getX() >= top.getPresetArea().getRight() && undoButton.getX() - top.getPresetArea().getRight() <= 12,
+                    "right of the preset name");
+            expect (redoButton.getX() > undoButton.getX());
+            expect (undoButton.getTooltip().isNotEmpty() && redoButton.getTooltip().isNotEmpty());
+            top.refresh();
+            expect (! undoButton.isEnabled() && ! redoButton.isEnabled(), "fresh instance: both greyed out");
+            const float before = h.get (pid::compRatio);
+            gesture (h, pid::compRatio, 6.0f);
+            top.refresh();
+            expect (undoButton.isEnabled() && ! redoButton.isEnabled(), "after an edit: undo");
+            undoButton.triggerClick();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+            expectWithinAbsoluteError (h.get (pid::compRatio), before, 1.0e-3f, "the arrow undoes");
+            top.refresh();
+            expect (! undoButton.isEnabled() && redoButton.isEnabled(), "now redo");
+            redoButton.triggerClick();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+            expectWithinAbsoluteError (h.get (pid::compRatio), 6.0f, 1.0e-3f, "the arrow redoes");
         }
 
         beginTest ("Three gestures are three steps; a drag with many values is still one");

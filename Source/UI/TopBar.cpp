@@ -184,6 +184,34 @@ namespace velvox::ui
         };
 
         // Gear for the settings sheet: drawn like the "?" button (ghost square, icon in the text colour)
+        // ↶ / ↷: a curved arrow, greyed out while there is nothing to undo / redo
+        class HistoryButton final : public juce::Button
+        {
+        public:
+            explicit HistoryButton (bool isRedo) : juce::Button (isRedo ? "redo" : "undo"), redo (isRedo) {}
+
+            void paintButton (juce::Graphics& g, bool highlighted, bool down) override
+            {
+                const bool on = isEnabled();
+                if (on && (highlighted || down))
+                    getLookAndFeel().drawButtonBackground (g, *this, colours::control, highlighted, down);
+                const auto c = getLocalBounds().toFloat().getCentre();
+                const float r = 5.5f, dir = redo ? -1.0f : 1.0f;
+                // An arc over the top, open at the bottom, the head on the left (undo) or right (redo)
+                juce::Path arc;
+                arc.addCentredArc (c.x, c.y + 1.5f, r, r, 0.0f, dir * 1.35f, -dir * 1.6f, true);
+                const juce::Point<float> tip (c.x - dir * r * std::sin (1.35f), c.y + 1.5f - r * std::cos (1.35f));
+                juce::Path head;
+                head.addTriangle (tip.translated (-dir * 3.4f, -2.6f), tip.translated (dir * 2.2f, -3.2f), tip.translated (-dir * 0.6f, 2.6f));
+                g.setColour (! on ? colours::textFaint.withAlpha (0.45f) : highlighted ? colours::textStrong : colours::textSoft);
+                g.strokePath (arc, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                g.fillPath (head);
+            }
+
+        private:
+            bool redo;
+        };
+
         class GearButton final : public juce::Button
         {
         public:
@@ -268,6 +296,15 @@ namespace velvox::ui
         help.setTooltip (i18n::tr ("Hilfe", "Help"));
         help.onClick = [this] { if (onHelp) onHelp(); };
 
+        undoButton = std::make_unique<HistoryButton> (false);
+        redoButton = std::make_unique<HistoryButton> (true);
+        undoButton->setTooltip (i18n::tr ("Rückgängig (Strg+Z)", "Undo (Ctrl+Z)"));
+        redoButton->setTooltip (i18n::tr ("Wiederherstellen (Strg+Y)", "Redo (Ctrl+Y)"));
+        undoButton->onClick = [this] { if (onUndo) onUndo(); else proc.getUndo().undo(); refresh(); };
+        redoButton->onClick = [this] { if (onRedo) onRedo(); else proc.getUndo().redo(); refresh(); };
+        addAndMakeVisible (*undoButton);
+        addAndMakeVisible (*redoButton);
+
         settingsButton = std::make_unique<GearButton>();
         settingsButton->setTooltip (i18n::tr ("Einstellungen: Sprache, Ansicht, Fenstergröße", "Settings: language, view, window size"));
         settingsButton->onClick = [this] { if (onSettings) onSettings(); };
@@ -329,6 +366,9 @@ namespace velvox::ui
 
     void TopBar::refresh()
     {
+        undoButton->setEnabled (proc.getUndo().canUndo());
+        redoButton->setEnabled (proc.getUndo().canRedo());
+
         auto& pm = proc.getPresetManager();
         const auto name = pm.getCurrentPresetName();
         if (name != shownPreset || presetButton.getButtonText().isEmpty())
@@ -433,7 +473,12 @@ namespace velvox::ui
         prev.setBounds (preset.removeFromLeft (26));
         next.setBounds (preset.removeFromRight (26));
         presetButton.setBounds (preset);
-        r.removeFromLeft (14);
+        r.removeFromLeft (6);
+
+        // ↶ ↷
+        undoButton->setBounds (centred (r.removeFromLeft (26), 26));
+        redoButton->setBounds (centred (r.removeFromLeft (26), 26));
+        r.removeFromLeft (10);
 
         // SIMPEL | ADVANCED
         auto modes = centred (r.removeFromLeft (164), 26);

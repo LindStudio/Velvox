@@ -196,6 +196,8 @@ HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
 
     topBar.onModeChange = [this] (Mode m) { setMode (m); };
     topBar.onTabChange = [this] (Tab t) { setTab (t); };
+    topBar.onUndo = [this] { chainView.undo(); };
+    topBar.onRedo = [this] { chainView.redo(); };
     topBar.onPresetList = [this]
     {
         help.close();
