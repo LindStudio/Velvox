@@ -1,6 +1,21 @@
 # HEADLINER – Übergabe für die nächste Session
 
-## STAND 2026-10-28 – HIER WEITERMACHEN
+## STAND 2026-10-28 ABEND (dieser PC) – HIER WEITERMACHEN
+Branch **`feature/modules-0.7`**, Version **0.7.0**. Die Review-Punkte aus
+`docs/superpowers/plans/2026-10-28-review-umsetzung.md` sind **alle umgesetzt** (Punkt 10 hatte Jakob abgelehnt).
+Was sich geändert hat, steht im CHANGELOG unter „Review-Umsetzung“. Entscheidungen, die ich dabei selbst getroffen
+habe („Ruling“), stehen im Ledger `.superpowers/sdd/2026-10-28-review-umsetzung/progress.md` (nur auf diesem PC).
+- Voller Lauf 37.889 Checks grün. Eigenes Abschluss-Review gemacht, ein Fund behoben: Der Analyzer wertet nur noch
+  bei offenem Editor aus.
+- **Nicht gepusht, nicht installiert.** Vorher Jakob fragen. Zum Installieren FL Studio schließen.
+- Offen für Jakob: Plugin in FL testen. Die wichtigsten Rulings, die er absegnen sollte: Vocal-Check-Abzeichen am
+  Tab statt eines langen Chips in der Kopfzeile, keine Gruppen-Zusammenfassung (Stufe 3) in der Kette, keine
+  Gruppenbeschriftung unter der Kette, Saturation-Kennlinien unverändert (nur Drive/Mix begrenzt), Legende
+  „unbearbeitet / bearbeitet“ statt „vorher / nachher“.
+- Tests nie zweimal gleichzeitig starten: Sie teilen sich `%TEMP%\velvox-tests.settings`, dann schlagen
+  Sprach-Tests fehl.
+
+## STAND 2026-10-28 (Shadow-PC)
 Branch **`feature/modules-0.7`**, am PC „Shadow“ weitergemacht (alle Commits des Tages noch nicht gepusht).
 - Punkte 1, 2 und der Changelog-Teil von 4 unten sind **erledigt**: voller Lauf 37.527 Checks grün, pluginval 10 SUCCESS.
   Das Review (neu gemacht, die `.superpowers`-Ledger liegen nur am anderen PC) fand einen echten Fehler, der jetzt behoben ist:
