@@ -589,7 +589,8 @@ namespace velvox::ui
         {
             int w = 96;
             if (auto* s = dynamic_cast<Segments*> (c))
-                w = juce::jlimit (150, 440, 58 * (s->getNumSegments() + (s->getOverflowSegment() >= 0 ? 1 : 0)));
+                w = juce::jlimit (150, 440, std::max (58 * (s->getNumSegments() + (s->getOverflowSegment() >= 0 ? 1 : 0)),
+                                                      s->hasTilePainter() ? 0 : s->getIdealWidth (28)));
             else if (auto* t = dynamic_cast<Toggle*> (c))
                 w = std::min (124, 38 + juce::GlyphArrangement::getStringWidthInt (medium (12.0f), t->getButtonText()));
             else if (dynamic_cast<Choice*> (c) != nullptr)
@@ -748,10 +749,21 @@ namespace velvox::ui
                     l->setColour (juce::Label::textColourId, colours::text);
                     l->setJustificationType (juce::Justification::centredRight);
                 }
+                // Review 2026-10-28: the read-outs named in words instead of IN / FX / MATCH
+                inCaption.setText (i18n::tr ("Eingang", "Input"), juce::dontSendNotification);
+                procCaption.setText (i18n::tr ("Nach den Modulen", "After the modules"), juce::dontSendNotification);
+                matchCaption.setText (i18n::tr ("Lautheits-Ausgleich", "Loudness match"), juce::dontSendNotification);
+                for (auto* l : { &inCaption, &procCaption, &matchCaption })
+                {
+                    l->setFont (font (11.5f));
+                    l->setColour (juce::Label::textColourId, colours::textDim);
+                    l->setJustificationType (juce::Justification::centredRight);
+                    l->setInterceptsMouseClicks (false, false);
+                }
                 inValue.setTooltip (i18n::tr ("Eingang (LUFS)", "Input (LUFS)"));
                 procValue.setTooltip (i18n::tr ("Bearbeitet (LUFS)", "Processed (LUFS)"));
                 matchValue.setTooltip (i18n::tr ("Level Match (dB)", "Level match (dB)"));
-                placeInVisual ({ &correlation, &correlationCaption, &inValue, &procValue, &matchValue });
+                placeInVisual ({ &correlation, &correlationCaption, &inCaption, &inValue, &procCaption, &procValue, &matchCaption, &matchValue });
             }
 
             void refresh() override
@@ -761,10 +773,10 @@ namespace velvox::ui
                 correlation.push (m.correlation.load());
                 const auto fmt = [] (float lufs) { return lufs <= -99.0f ? juce::String ("- LUFS") : juce::String (lufs, 1) + " LUFS"; };
                 const auto set = [] (juce::Label& l, const juce::String& t) { if (l.getText() != t) l.setText (t, juce::dontSendNotification); };
-                set (inValue, "IN " + fmt (m.inputLufs.load()));
-                set (procValue, "FX " + fmt (m.processedLufs.load()));
+                set (inValue, fmt (m.inputLufs.load()));
+                set (procValue, fmt (m.processedLufs.load()));
                 const float match = m.levelMatchDb.load();
-                set (matchValue, "MATCH " + juce::String (match > 0.05f ? "+" : "") + juce::String (match, 1) + " dB");
+                set (matchValue, juce::String (match > 0.05f ? "+" : "") + juce::String (match, 1) + " dB");
                 if (monoButton != nullptr && monoButton->getToggleState() != proc.isMonoMonitor())
                     monoButton->setToggleState (proc.isMonoMonitor(), juce::dontSendNotification);
             }
@@ -776,17 +788,21 @@ namespace velvox::ui
                 auto r = area.reduced (10).removeFromRight (140);
                 if (auto* v = getVisual())
                     v->setBounds (area.withTrimmedRight (156).reduced (1));
-                r.removeFromTop (14);
-                inValue.setBounds (r.removeFromTop (20));
-                procValue.setBounds (r.removeFromTop (20));
-                matchValue.setBounds (r.removeFromTop (20));
+                r.removeFromTop (10);
+                for (auto [caption, value] : { std::pair { &inCaption, &inValue }, std::pair { &procCaption, &procValue },
+                                               std::pair { &matchCaption, &matchValue } })
+                {
+                    caption->setBounds (r.removeFromTop (16));
+                    value->setBounds (r.removeFromTop (20));
+                    r.removeFromTop (8);
+                }
                 correlation.setBounds (r.removeFromBottom (18));
                 correlationCaption.setBounds (r.removeFromBottom (16));
             }
 
             CorrelationView correlation;
             juce::Label correlationCaption;
-            juce::Label inValue, procValue, matchValue;
+            juce::Label inValue, procValue, matchValue, inCaption, procCaption, matchCaption;
             juce::TextButton* monoButton = nullptr;
         };
 

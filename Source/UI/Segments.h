@@ -25,6 +25,7 @@ namespace velvox::ui
         int getSelectedSegment() const noexcept { return selectedSegment; }   // -1: value has no segment
         int getChoiceForSegment (int segment) const;                         // parameter index of a segment
         int getNumSegments() const noexcept { return (int) choiceIndex.size(); }
+        int getIdealWidth (int height) const;   // every text segment fits its name (review 2026-10-28)
         void clickSegment (int segment);
         void setAccent (juce::Colour accent);
         const juce::String& getParamId() const noexcept { return paramId; }

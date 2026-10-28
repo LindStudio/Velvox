@@ -137,6 +137,42 @@ public:
             expectWithinAbsoluteError ((float) k.slider.getDoubleClickReturnValue(), 3.0f, 1.0e-4f, "double-click value = default 3:1");
         }
 
+        // Review 2026-10-28 (item 11): the Output read-outs say what they are; "Wie Bypass" is not squeezed
+        beginTest ("Review: Output panel names its read-outs in words, every Level Match segment fits its text");
+        {
+            Harness h;
+            for (auto lang : { i18n::Language::german, i18n::Language::english })
+            {
+                i18n::ScopedLanguage scoped (lang);
+                auto panel = ui::createDetailPanel (h.proc, -1);
+                panel->setBounds (0, 0, 1400, 640);
+                panel->refresh();
+                juce::StringArray texts;
+                std::function<void (juce::Component&)> walk = [&] (juce::Component& c)
+                {
+                    if (auto* l = dynamic_cast<juce::Label*> (&c); l != nullptr && l->isVisible())
+                        texts.add (l->getText());
+                    if (auto* s = dynamic_cast<ui::Segments*> (&c); s != nullptr && s->getParamId() == pid::levelMatchMode)
+                        for (auto* child : s->getChildren())
+                            if (auto* b = dynamic_cast<juce::TextButton*> (child); b != nullptr && b->isVisible())
+                            {
+                                const int need = juce::GlyphArrangement::getStringWidthInt (
+                                                     b->getLookAndFeel().getTextButtonFont (*b, b->getHeight()), b->getButtonText()) + 16;
+                                expect (b->getWidth() >= need, b->getButtonText() + ": " + juce::String (b->getWidth()) + " < " + juce::String (need));
+                            }
+                    for (auto* child : c.getChildren())
+                        walk (*child);
+                };
+                walk (*panel);
+                const bool de = lang == i18n::Language::german;
+                for (auto* want : de ? std::initializer_list<const char*> { "Eingang", "Nach den Modulen", "Lautheits-Ausgleich" }
+                                     : std::initializer_list<const char*> { "Input", "After the modules", "Loudness match" })
+                    expect (texts.contains (juce::String::fromUTF8 (want)), juce::String ("read-out caption: ") + want);
+                for (auto& t : texts)
+                    expect (! t.startsWith ("IN ") && ! t.startsWith ("FX ") && ! t.startsWith ("MATCH "), "no abbreviation: " + t);
+            }
+        }
+
         // Review 2026-10-28 (item 15): names under controls at least 11 px and readable on the panel
         beginTest ("Review: names under knobs are 11 px or more, faint texts reach 4.5:1 contrast on the panel");
         {

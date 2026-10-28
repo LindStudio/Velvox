@@ -240,6 +240,19 @@ namespace velvox::ui
         g.fillRoundedRectangle (getLocalBounds().toFloat(), 7.0f);
     }
 
+    int Segments::getIdealWidth (int height) const
+    {
+        // Segments share the width equally (resized): the longest name decides, drawn as the
+        // look-and-feel does (its font at the height, 8 px each side) plus a little air
+        int widest = 52;
+        for (auto* b : buttons)
+        {
+            const auto f = b->getLookAndFeel().getTextButtonFont (*b, height - 6);
+            widest = std::max (widest, juce::GlyphArrangement::getStringWidthInt (f, b->getButtonText()) + 22);
+        }
+        return 6 + widest * buttons.size();
+    }
+
     void Segments::resized()
     {
         if (buttons.isEmpty())
