@@ -463,6 +463,43 @@ public:
             expectWithinAbsoluteError (band (h, 0, air).gain, 3.0f, 1.0e-3f, "undo: back to what PRESENCE set");
         }
 
+        // Review 2026-10-28 (item 15): close points move a little apart; role tags only at the selected / hovered point
+        beginTest ("Graph: close points do not overlap; a role tag shows only at the selected or hovered point");
+        {
+            Harness h;
+            withEq (h, 0);
+            ui::eqedit::addBand (h.proc, 0, 1000.0f, 0.0f);
+            ui::eqedit::addBand (h.proc, 0, 1010.0f, 0.0f);
+            ui::eqedit::addBand (h.proc, 0, 8000.0f, 0.0f);
+            h.proc.getState().getParameter (pid::macroPresence)->setValueNotifyingHost (0.6f);   // a role band
+            ui::EqGraph g (h.proc, nullptr, 0);
+            g.setBounds (0, 0, 900, 320);
+            auto live = std::make_unique<ui::LiveData>();
+            g.update (*live);
+            expect (g.pointFor (0).getDistanceFrom (g.pointFor (1)) >= 14.0f,
+                    "two bands at the same spot: " + juce::String (g.pointFor (0).getDistanceFrom (g.pointFor (1))));
+            expect (g.pointFor (0).x < g.pointFor (1).x, "the order of the frequencies stays");
+            expect (std::abs (g.pointFor (0).y - g.yForGain (0.0f)) < 0.01f, "only sideways: the height still reads the gain");
+            expect (std::abs (g.pointFor (2).x - g.xForFreq (8000.0f)) < 0.01f, "a lone point stays exactly at its frequency");
+            expectEquals (g.bandAt (g.pointFor (1)), 1, "each point reachable where it is drawn");
+
+            int role = -1;
+            for (int b = 0; b < dsp::maxEqBands; ++b)
+                if (g.getShown()[(size_t) b].used && g.getShown()[(size_t) b].band.role != (int) dsp::EqRole::none)
+                    role = b;
+            expect (role >= 0);
+            if (role < 0)
+                return;
+            g.setSelected (0);
+            expect (! g.isRoleTagShown (role), "not selected, not hovered: no tag");
+            g.setSelected (role);
+            expect (g.isRoleTagShown (role), "selected: tag");
+            g.setSelected (0);
+            g.mouseMove (mouse (g, g.pointFor (role), g.pointFor (role), false));
+            expect (g.isRoleTagShown (role), "hovered: tag");
+            expect (! g.isRoleTagShown (0), "user bands never carry one");
+        }
+
         beginTest ("Graph: EQ 2 edits its own bands only");
         {
             Harness h;

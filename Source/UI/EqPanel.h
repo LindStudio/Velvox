@@ -86,7 +86,8 @@ namespace velvox::ui
         float freqForX (float x) const noexcept;
         float yForGain (float db) const noexcept;
         float gainForY (float y) const noexcept;
-        juce::Point<float> pointFor (int band) const;   // where the band's point is drawn
+        juce::Point<float> pointFor (int band) const;   // where the band's point is drawn (close points nudged apart)
+        bool isRoleTagShown (int band) const;           // LC / WARM / ...: only at the selected or hovered point
         int bandAt (juce::Point<float> p) const;        // -1: no point there
 
         // ---- Selection

@@ -323,11 +323,46 @@ namespace velvox::ui
     {
         if (band < 0 || band >= dsp::maxEqBands)
             return {};
-        const auto& b = shown[(size_t) band].band;
         const auto r = plotArea();
-        const float x = juce::jlimit (r.getX(), r.getRight(), xForFreq (b.freq));
-        const float gain = eqedit::hasGain (b.type) ? juce::jlimit (-rangeDb, rangeDb, b.gain) : 0.0f;
-        return { x, yForGain (gain) };
+        const auto exact = [&] (int i) -> juce::Point<float>
+        {
+            const auto& b = shown[(size_t) i].band;
+            const float x = juce::jlimit (r.getX(), r.getRight(), xForFreq (b.freq));
+            const float gain = eqedit::hasGain (b.type) ? juce::jlimit (-rangeDb, rangeDb, b.gain) : 0.0f;
+            return { x, yForGain (gain) };
+        };
+        const auto p = exact (band);
+        if (band == dragged || ! shown[(size_t) band].used)
+            return p;
+
+        // Review 2026-10-28: points closer than one point apart move sideways (the height still reads
+        // the gain), each half the overlap - the dragged point stays under the mouse, the other takes all
+        constexpr float minGap = 15.0f;
+        float shift = 0.0f;
+        for (int i = 0; i < dsp::maxEqBands; ++i)
+        {
+            if (i == band || ! shown[(size_t) i].used)
+                continue;
+            const auto o = exact (i);
+            const float d = p.getDistanceFrom (o);
+            if (d >= minGap)
+                continue;
+            const float dx = std::abs (p.x - o.x), dy = std::abs (p.y - o.y);
+            if (dy >= minGap)
+                continue;
+            const float needX = std::sqrt (minGap * minGap - dy * dy) - dx;   // sideways distance still missing
+            const bool right = p.x > o.x || (p.x == o.x && band > i);
+            shift += (right ? 1.0f : -1.0f) * needX * (i == dragged ? 1.0f : 0.5f);
+        }
+        return { juce::jlimit (r.getX(), r.getRight(), p.x + juce::jlimit (-minGap, minGap, shift)), p.y };
+    }
+
+    bool EqGraph::isRoleTagShown (int band) const
+    {
+        if (band < 0 || band >= dsp::maxEqBands || ! shown[(size_t) band].used
+            || shown[(size_t) band].band.role == (int) dsp::EqRole::none)
+            return false;
+        return band == selected || band == hovered || band == dragged;
     }
 
     int EqGraph::bandAt (juce::Point<float> p) const
@@ -572,7 +607,7 @@ namespace velvox::ui
             g.setFont (semiBold (9.0f));
             g.drawText (juce::String (b + 1), juce::Rectangle<float> (size, size).withCentre (p), juce::Justification::centred, false);
 
-            if (s.band.role != (int) dsp::EqRole::none)
+            if (isRoleTagShown (b))
             {
                 g.setColour (c.withAlpha (0.9f * on));
                 g.setFont (semiBold (8.5f, 0.12f));
