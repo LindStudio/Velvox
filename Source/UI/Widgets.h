@@ -119,6 +119,7 @@ namespace velvox::ui
         juce::Rectangle<int> getDialArea() const noexcept { return dialArea; }
         juce::Rectangle<int> getValueArea() const noexcept { return valueArea; }
         juce::Rectangle<int> getNameArea() const noexcept { return name.getBounds(); }
+        const juce::Label& getNameLabel() const noexcept { return name; }
         void setDescription (const juce::String& text) { description = text; }
         const juce::String& getDescription() const noexcept { return description; }
         const juce::String& getParamId() const noexcept { return paramId; }

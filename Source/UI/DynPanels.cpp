@@ -1183,7 +1183,7 @@ namespace velvox::ui
             g.setFont (monoFont (11.0f));
             g.setColour (on ? colours::text : colours::textFaint);
             g.drawText (grText, col.withHeight (16.0f).expanded (14.0f, 0.0f), juce::Justification::centred, false);
-            g.setFont (semiBold (9.0f, 0.12f));
+            g.setFont (semiBold (11.0f, 0.06f));
             g.setColour (colours::knobName);
             g.drawText (grLabel, col.withTop (col.getBottom() - 13.0f).expanded (10.0f, 0.0f), juce::Justification::centred, false);
         }

@@ -137,6 +137,32 @@ public:
             expectWithinAbsoluteError ((float) k.slider.getDoubleClickReturnValue(), 3.0f, 1.0e-4f, "double-click value = default 3:1");
         }
 
+        // Review 2026-10-28 (item 15): names under controls at least 11 px and readable on the panel
+        beginTest ("Review: names under knobs are 11 px or more, faint texts reach 4.5:1 contrast on the panel");
+        {
+            Harness h;
+            ui::Knob k (h.proc.getState(), pid::compRatio, "Ratio", ui::moduleColour (ModuleId::comp));
+            expect (k.getNameLabel().getFont().getHeight() >= 11.0f, "knob name " + juce::String (k.getNameLabel().getFont().getHeight()));
+            const auto lum = [] (juce::Colour c)
+            {
+                const auto ch = [] (juce::uint8 v)
+                {
+                    const double x = v / 255.0;
+                    return x <= 0.03928 ? x / 12.92 : std::pow ((x + 0.055) / 1.055, 2.4);
+                };
+                return 0.2126 * ch (c.getRed()) + 0.7152 * ch (c.getGreen()) + 0.0722 * ch (c.getBlue());
+            };
+            const auto contrast = [&] (juce::Colour a, juce::Colour b)
+            {
+                const double la = lum (a), lb = lum (b);
+                return (std::max (la, lb) + 0.05) / (std::min (la, lb) + 0.05);
+            };
+            for (auto c : { ui::colours::knobName, ui::colours::textFaint })
+                for (auto bg : { ui::colours::panel, ui::colours::raisedHi, ui::colours::control })
+                    expect (contrast (c, bg) >= 4.5, c.toDisplayString (false) + " on " + bg.toDisplayString (false) + ": "
+                                                     + juce::String (contrast (c, bg), 2));
+        }
+
         // 0.6 shell (spec 2.1): the 1384 x 1040 canvas, the CHAIN tab and the A/B header of 0.5 are gone
         beginTest ("Design: 1000 x 600 canvas, header with SIMPEL | ADVANCED and the tabs AUTO MIX | VOCAL CHECK");
         {

@@ -334,8 +334,9 @@ namespace velvox::ui
 
     void Knob::applyLabelStyle()
     {
-        // Design: knob name Montserrat SemiBold 9 px, #6B7489, capitals, under the value
-        name.setFont (semiBold (9.0f, 0.06f));
+        // Design: knob name Montserrat SemiBold, capitals, under the value; 11 px since the review of 2026-10-28
+        name.setFont (semiBold (11.0f, 0.03f));
+        name.setMinimumHorizontalScale (0.8f);
         name.setJustificationType (juce::Justification::centred);
         name.setColour (juce::Label::textColourId, colours::knobName);
         name.setInterceptsMouseClicks (false, false);
@@ -668,7 +669,7 @@ namespace velvox::ui
         g.drawText (loudness <= -99.0f ? juce::String ("-") : juce::String (loudness, 1),
                     readout.removeFromTop (22.0f), juce::Justification::centred, false);
         g.setColour (colours::knobName);
-        g.setFont (semiBold (9.0f, 0.1f));
+        g.setFont (semiBold (11.0f, 0.06f));
         g.drawText ("LUFS", readout.removeFromTop (14.0f), juce::Justification::centred, false);
         r.removeFromBottom (8.0f);
 

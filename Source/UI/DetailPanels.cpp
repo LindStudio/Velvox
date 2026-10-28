@@ -571,7 +571,7 @@ namespace velvox::ui
             if (dynamic_cast<Knob*> (c) == nullptr && captions.count (c) > 0)
             {
                 g.setColour (colours::knobName);
-                g.setFont (semiBold (9.0f, 0.06f));
+                g.setFont (semiBold (11.0f, 0.03f));
                 g.drawText (i18n::upper (captions[c]), c->getBounds().translated (0, c->getHeight() + 4).withHeight (14),
                             juce::Justification::centred, false);
             }

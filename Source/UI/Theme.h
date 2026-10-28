@@ -28,7 +28,7 @@ namespace velvox::ui
         inline const juce::Colour textStrong { 0xfff1f5f9 };
         inline const juce::Colour textSoft   { 0xffc9ced9 };
         inline const juce::Colour textMuted  { 0xff8a93a6 };
-        inline const juce::Colour knobName   { 0xff6b7489 };   // name under a knob
+        inline const juce::Colour knobName   { 0xff7f889d };   // name under a knob (>= 4.5:1 on panels, review 2026-10-28)
 
         // Existing roles mapped onto the design system
         inline const juce::Colour background = windowBg;
@@ -39,7 +39,7 @@ namespace velvox::ui
         inline const juce::Colour lineSoft   = borderSoft;
         inline const juce::Colour text       { 0xffe8ebf2 };
         inline const juce::Colour textDim    = textMuted;      // secondary labels
-        inline const juce::Colour textFaint  { 0xff5b6478 };   // section labels, scales, units
+        inline const juce::Colour textFaint  { 0xff767f94 };   // section labels, scales, units (>= 4.5:1 on panels)
         inline const juce::Colour accent     { 0xffffffff };
         inline const juce::Colour warning    { 0xffff5c6c };
         inline const juce::Colour ok         { 0xff4be3a6 };
