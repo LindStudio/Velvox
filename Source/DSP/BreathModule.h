@@ -29,7 +29,8 @@ namespace velvox::dsp
         static int latencyFor (double sampleRate) noexcept { return juce::roundToInt (sampleRate * 0.09); }
 
         void prepare (double sampleRate, int maxBlockSize);
-        void reset();
+        // fadeIn: mid-stream (joining the chain) - silent until the delay line is filled, then a 10 ms fade-in
+        void reset (bool fadeIn = true);
         void setSettings (const BreathSettings& s) noexcept { settings = s; }
         void process (float* const* io, int numChannels, int numSamples) noexcept;
 
@@ -54,6 +55,8 @@ namespace velvox::dsp
         int historyPos = 0, hopFill = 0, run = 0, misses = 0;
         float phraseDb = -120.0f, holdSeconds = 0.0f;
         float gain = 1.0f, attackCoeff = 0.0f, releaseCoeff = 0.0f;
+        int primeRemaining = 0;
+        float primeGain = 1.0f, primeStep = 0.002f;
         std::atomic<float> reductionDb { 0.0f };
     };
 }

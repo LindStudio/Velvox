@@ -33,7 +33,8 @@ namespace velvox::dsp
         static constexpr int latency = fftSize;          // 1024 samples
 
         void prepare (double sampleRate, int maxBlockSize);
-        void reset();
+        // fadeIn: mid-stream (joining the chain) - silent until the STFT buffer is filled, then a 10 ms fade-in
+        void reset (bool fadeIn = true);
         void setSettings (const DenoiseSettings& s) noexcept { settings = s; }
         void process (float* const* io, int numChannels, int numSamples) noexcept;
 
@@ -63,6 +64,8 @@ namespace velvox::dsp
         int pos = 0, hopCounter = 0;
         int subWindowFrames = 47, framesInSub = 0, subIndex = 0;
         float onAmount = 0.0f;                             // smoothed 0..1 per frame
+        int primeRemaining = 0;                            // after joining mid-stream: silent samples left
+        float primeGain = 1.0f, primeStep = 0.002f;        // then the fade-in
         std::atomic<float> reductionDb { 0.0f };
     };
 }

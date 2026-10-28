@@ -113,6 +113,40 @@ public:
             expectEquals (h.proc.getLatencySamples(), with, "switching off keeps the latency (still in the chain)");
         }
 
+        beginTest ("0.7: Raumrauschen and Atem-Absenker join the chain while playing without a click");
+        {
+            for (auto* onId : { pid::denoiseOn, pid::breathOn })
+            {
+                Harness h;
+                h.neutral();
+                const auto in = h.sine (200.0, 0.5f, 1.0);
+                juce::MidiBuffer midi;
+                const int bs = 256;
+                float maxStep = 0.0f, last = 0.0f;
+                for (int start = 0; start + bs <= in.getNumSamples(); start += bs)
+                {
+                    if (start == 12800)
+                        h.set (onId, 1.0f);   // inserts the module mid-stream (empty delay line)
+                    juce::AudioBuffer<float> block (2, bs);
+                    for (int ch = 0; ch < 2; ++ch)
+                        block.copyFrom (ch, 0, in, ch, start, bs);
+                    h.proc.processBlock (block, midi);
+                    for (int i = 0; i < bs; ++i)
+                    {
+                        const float y = block.getSample (0, i);
+                        if (start + i > 4800)
+                            maxStep = std::max (maxStep, std::abs (y - last));
+                        last = y;
+                    }
+                }
+                expect (h.proc.getRouting().contains (onId == pid::denoiseOn ? ModuleId::denoise : ModuleId::breath), onId);
+                // The sine itself steps by at most 2 pi f A / fs = 0.013; the empty delay line ending
+                // at full gain would jump to wherever the sine is at that moment
+                logMessage (juce::String (onId) + ": largest sample step " + juce::String (maxStep, 4));
+                expectLessThan (maxStep, 0.04f, onId);
+            }
+        }
+
         beginTest ("0.7: Pitch, Stutter, Pulse and Choir are gone");
         {
             expectEquals (dsp::numModules, 13);   // 11 after the removal + Raumrauschen and Atem-Absenker

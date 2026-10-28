@@ -33,11 +33,14 @@ namespace velvox::dsp
         // becomes "the floor"
         const double frameSeconds = hop / fs;
         subWindowFrames = std::max (1, (int) std::round (5.0 / frameSeconds / numSubWindows));
-        reset();
+        primeStep = (float) (1.0 / (0.010 * fs));
+        reset (false);   // a fresh start: the zeros in the buffer are real silence
     }
 
-    void DenoiseModule::reset()
+    void DenoiseModule::reset (bool fadeIn)
     {
+        primeRemaining = fadeIn ? latency : 0;
+        primeGain = fadeIn ? 0.0f : 1.0f;
         for (auto& c : channels)
         {
             std::fill (c.in.begin(), c.in.end(), 0.0f);
@@ -138,11 +141,21 @@ namespace velvox::dsp
         const int chans = std::min (numChannels, 2);
         for (int i = 0; i < numSamples; ++i)
         {
+            // After joining mid-stream: silence until the buffer holds audio, then a fade-in
+            float prime = 1.0f;
+            if (primeRemaining > 0)
+            {
+                --primeRemaining;
+                prime = 0.0f;
+            }
+            else if (primeGain < 1.0f)
+                prime = primeGain = std::min (1.0f, primeGain + primeStep);
+
             for (int ch = 0; ch < chans; ++ch)
             {
                 auto& c = channels[(size_t) ch];
                 const float x = io[ch][i];
-                io[ch][i] = c.out[(size_t) pos];
+                io[ch][i] = c.out[(size_t) pos] * prime;
                 c.out[(size_t) pos] = 0.0f;
                 c.in[(size_t) pos] = x;
             }

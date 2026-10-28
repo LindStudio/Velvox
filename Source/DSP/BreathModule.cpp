@@ -53,11 +53,14 @@ namespace velvox::dsp
         marks.assign ((size_t) std::max (1, latency), 0.0f);
         attackCoeff = (float) std::exp (-1.0 / (0.005 * fs));
         releaseCoeff = (float) std::exp (-1.0 / (0.030 * fs));
-        reset();
+        primeStep = (float) (1.0 / (0.010 * fs));
+        reset (false);   // a fresh start: the zeros in the delay line are real silence
     }
 
-    void BreathModule::reset()
+    void BreathModule::reset (bool fadeIn)
     {
+        primeRemaining = fadeIn ? latency : 0;
+        primeGain = fadeIn ? 0.0f : 1.0f;
         for (auto& d : delayLine)
             std::fill (d.begin(), d.end(), 0.0f);
         std::fill (marks.begin(), marks.end(), 0.0f);
@@ -158,12 +161,22 @@ namespace velvox::dsp
             gain = target + (gain - target) * (target < gain ? attackCoeff : releaseCoeff);
             minGain = std::min (minGain, gain);
 
+            // After joining mid-stream: silence until the delay line holds audio, then a fade-in
+            float prime = 1.0f;
+            if (primeRemaining > 0)
+            {
+                --primeRemaining;
+                prime = 0.0f;
+            }
+            else if (primeGain < 1.0f)
+                prime = primeGain = std::min (1.0f, primeGain + primeStep);
+
             float mono = 0.0f;
             for (int ch = 0; ch < chans; ++ch)
             {
                 auto& d = delayLine[(size_t) ch];
                 const float x = io[ch][i];
-                io[ch][i] = d[(size_t) delayPos] * gain;
+                io[ch][i] = d[(size_t) delayPos] * gain * prime;
                 d[(size_t) delayPos] = x;
                 mono += x;
             }

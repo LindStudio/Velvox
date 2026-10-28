@@ -190,6 +190,8 @@ namespace velvox::dsp
         for (auto& m : smooth)
             m.reset (false);   // a fresh start: nothing to fade in
         resetAll (ride);
+        denoise.reset (false);
+        breath.reset (false);
         resetAll (delayDucker);
         resetAll (reverbDucker);
         bypassDelay.reset();
@@ -215,8 +217,8 @@ namespace velvox::dsp
             // joining mid-stream: silent until its delay line is filled, then a fade-in (no restart click)
             case ModuleId::smooth:  smooth[(size_t) k].reset (! adoptRoutingImmediately); break;
             case ModuleId::ride:    ride[(size_t) k].reset(); break;
-            case ModuleId::denoise: denoise.reset(); break;
-            case ModuleId::breath:  breath.reset(); break;
+            case ModuleId::denoise: denoise.reset (! adoptRoutingImmediately); break;
+            case ModuleId::breath:  breath.reset (! adoptRoutingImmediately); break;
             case ModuleId::check:   break;
         }
     }
