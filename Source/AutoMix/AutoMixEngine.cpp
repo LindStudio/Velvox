@@ -707,11 +707,16 @@ namespace velvox::automix
             }
         }
 
-        // ---- Output level: match the target loudness, then keep peaks below -1 dBFS
+        // ---- Output level: match the target loudness, then keep peaks below -1 dBFS. With a beat on the
+        //      sidechain (Jakob 2026-10-28) the voice sits leadOverBeatLu above the beat instead: the
+        //      original raised by what it lacks against the beat (measured where the beat plays)
+        constexpr float leadOverBeatLu = 1.0f;
+        const bool toBeat = r.profile.beatPresent;
+        const float outputTarget = toBeat ? r.original.lufs + (leadOverBeatLu - r.profile.vocalOverBeatLu) : target;
         report (0.85f, "Pegel wird angepasst", "Adjusting the level");
         m = renderChecked (audio, current, plan, r.profile);
         ++r.iterations;
-        float out = plan.get (pid::outputGain) + (target - m.lufs);
+        float out = plan.get (pid::outputGain) + (outputTarget - m.lufs);
         plan.set (pid::outputGain, juce::jlimit (-24.0f, 24.0f, out));
 
         m = renderChecked (audio, current, plan, r.profile);
@@ -730,10 +735,25 @@ namespace velvox::automix
         outDecision.outputStage = true;
         outDecision.measured = true;
         outDecision.title = both ("Ausgang {0} LUFS, Spitze {1}", "Output {0} LUFS, peak {1}", { num (m.lufs, 1), db (m.peakDb) });
-        outDecision.reason = both ("Lautheit an das Original angeglichen ({0} LUFS), damit der Vergleich fair bleibt.",
-                                   "Loudness matched to the original ({0} LUFS) so the comparison stays fair.", { num (r.original.lufs, 1) })
-                           + (peakLimited ? both (" Etwas leiser, um 1 dB Reserve zu halten.", " A little quieter to keep 1 dB of headroom.") : juce::String())
-                           + both (" Clip Guard bleibt als Schutz aktiv.", " Clip Guard stays on as a safeguard.");
+        if (toBeat)
+        {
+            const float missing = outputTarget - m.lufs;   // what the peaks / the gain range left out
+            outDecision.reason = both ("Stimme 1 LU über dem Beat eingepegelt (Beat am Sidechain {0} LUFS).",
+                                       "Voice set 1 LU above the beat (beat on the sidechain {0} LUFS).", { num (r.profile.beatLufs, 1) })
+                               + (missing > 0.5f ? both (" Wegen der Spitzen (1 dB Reserve) bleibt sie {0} LU darunter - den Kanal-Fader hochziehen.",
+                                                         " The peaks (1 dB of headroom) keep it {0} LU short of that - raise the channel fader.",
+                                                         { num (missing, 1) })
+                                                 : juce::String())
+                               + both (" Annahme: Der Sidechain bekommt den Beat so laut, wie er spielt (Send nach dem Fader, 0 dB).",
+                                       " Assumes the sidechain gets the beat as loud as it plays (post-fader send at 0 dB).");
+        }
+        else
+        {
+            outDecision.reason = both ("Lautheit an das Original angeglichen ({0} LUFS), damit der Vergleich fair bleibt.",
+                                       "Loudness matched to the original ({0} LUFS) so the comparison stays fair.", { num (r.original.lufs, 1) })
+                               + (peakLimited ? both (" Etwas leiser, um 1 dB Reserve zu halten.", " A little quieter to keep 1 dB of headroom.") : juce::String());
+        }
+        outDecision.reason += both (" Clip Guard bleibt als Schutz aktiv.", " Clip Guard stays on as a safeguard.");
         plan.decisions.push_back (outDecision);
 
         report (1.0f, "Fertig", "Done");
