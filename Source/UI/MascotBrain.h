@@ -17,8 +17,9 @@
 //
 // A new state waits until the current one has played minHold seconds (one-shots play to their end),
 // scores near a border keep the current state (hysteresis), and every switch cross-fades from the
-// last frame of the old clip (also at the wrap of a loop, where the packer may have cut it) - except the
-// fall, which starts from nothing. The mouth moves only while he talks (the view's speech lines).
+// last frame of the old clip - except the fall, which starts from nothing. Loops wrap straight: where the
+// packer cut one, it blended the end into the start (a fade over a frozen frame showed as a hitch).
+// The mouth moves only while he talks (the view's speech lines).
 namespace velvox::ui::mascot
 {
     enum class Clip { fall, wave, bow, idle, relax, bad, hipHop, breakdance };
@@ -85,15 +86,11 @@ namespace velvox::ui::mascot
         {
             updateMouth (in.talking, dt);
             silent = in.inputDb > signalDb ? 0.0 : silent + dt;
-            const int before = frame();
             time += dt;
             if (fading)
                 fadeElapsed += dt;
             if (fading && fadeElapsed >= fadeTime)
                 fading = false;
-            // The packer cuts long loops to their most seamless window: hide what's left of the seam
-            if (current().loops && frame() < before)
-                startFade ({ now, before });
 
             if (! current().loops && ! finished())
                 return;   // one-shots play to their end

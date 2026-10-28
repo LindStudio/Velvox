@@ -1,6 +1,6 @@
 """Pack the rendered mascot frames into the plugin's clip files (Resources/Mascot/<clip>.vms).
 
-    python tools/mascot/pack_mascot.py <render dir> Resources/Mascot [--height 240] [--quality 85]
+    python tools/mascot/pack_mascot.py <render dir> Resources/Mascot [--height 320] [--quality 86]
 
 <render dir> is the output of
     render_mascot.py --mode all --rate 30
@@ -33,9 +33,11 @@ CLIPS = [
     ("breakdance", "Breakdance_1990", True),
 ]
 FPS = 30
-CALM = {"idle", "bad"}   # little motion: 15 fps is enough
-# Longest loop in frames at 30 fps; the full turn has to stay whole
-MAX_LOOP = {"bad": 10_000}
+CALM = set()   # clips stored at 15 fps; none (Jakob 2026-10-28: 15 fps idle looked choppy)
+# Longest loop in frames at 30 fps
+MAX_LOOP = {}
+# Frames at the end of a cut loop that are blended into the frames before its start, so the wrap is seamless
+LOOP_BLEND = 12
 # One-shots that stand still at the end: only their first n frames (30 fps)
 CUT = {"wave": 235, "bow": 380}
 STANDING = "Listening_Gesture"   # the clip that defines where the standing figure is
@@ -105,6 +107,15 @@ def loop_window(paths, max_len):
     return best[1], best[2]
 
 
+def mix(a, b, w):
+    """a -> b by w (0..1), premultiplied so the edges don't darken."""
+    x = np.asarray(a, dtype=np.float32) / 255.0
+    y = np.asarray(b, dtype=np.float32) / 255.0
+    alpha = x[..., 3:4] * (1 - w) + y[..., 3:4] * w
+    rgb = (x[..., :3] * x[..., 3:4] * (1 - w) + y[..., :3] * y[..., 3:4] * w) / np.maximum(alpha, 1e-6)
+    return Image.fromarray((np.clip(np.concatenate([rgb, alpha], axis=2), 0, 1) * 255).astype(np.uint8), "RGBA")
+
+
 def patch(base, variant):
     a = np.asarray(base, dtype=np.int16)
     b = np.asarray(variant, dtype=np.int16)
@@ -121,9 +132,11 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("src")
     p.add_argument("out")
-    p.add_argument("--height", type=int, default=240)
-    p.add_argument("--quality", type=int, default=80, help="JPEG quality of the colour")
-    p.add_argument("--max-loop", type=int, default=150, help="longest loop in frames (5 s), unless MAX_LOOP says otherwise")
+    # 320 px for a figure about 112 units tall: sharp up to ~2.8x (window size x Windows scaling);
+    # 240 looked pixelated on Jakob's screen (2026-10-28)
+    p.add_argument("--height", type=int, default=320)
+    p.add_argument("--quality", type=int, default=86, help="JPEG quality of the colour")
+    p.add_argument("--max-loop", type=int, default=240, help="longest loop in frames (8 s), unless MAX_LOOP says otherwise")
     args = p.parse_args()
 
     box = union_box(args.src)
@@ -154,18 +167,32 @@ def main():
         fps = FPS // 2 if name in CALM else FPS
         if fps != FPS:
             zu, halb, offen = zu[::2], halb[::2], offen[::2]
-        limit = MAX_LOOP.get(name, args.max_loop)
-        start, length = loop_window(zu, limit * fps // FPS) if loops else (0, len(zu))
-        zu, halb, offen = (f[start:start + length] for f in (zu, halb, offen))
+        limit = MAX_LOOP.get(name, args.max_loop) * fps // FPS
+        src = list(zip(zu, halb, offen))
+        # A cut loop: its last LOOP_BLEND frames dissolve into the frames just before its start, so the
+        # last frame leads straight into the first (the plugin no longer fades over a frozen frame)
+        blend_from = {}
+        if loops and len(src) > limit:
+            start, length = loop_window(zu[LOOP_BLEND:], limit)
+            start += LOOP_BLEND
+            for i in range(LOOP_BLEND):
+                blend_from[length - LOOP_BLEND + i] = (start - LOOP_BLEND + i, (i + 1) / (LOOP_BLEND + 1))
+        else:
+            start, length = 0, len(src)
+        window = src[start:start + length]
         data = bytearray(b"VMS3")
-        data += struct.pack("<hhhib", fps, size[0], size[1], len(zu), 1 if loops else 0)
+        data += struct.pack("<hhhib", fps, size[0], size[1], len(window), 1 if loops else 0)
         data += struct.pack("<hhhh", *ref)
-        for z, h, o in zip(zu, halb, offen):
-            base = load(z)
+        for idx, paths in enumerate(window):
+            base, h, o = (load(p) if p else None for p in paths)
+            if idx in blend_from:
+                j, w = blend_from[idx]
+                other = [load(p) if p else None for p in src[j]]
+                base, h, o = (mix(a, b, w) if a is not None else None for a, b in zip((base, h, o), other))
             colour, alpha = jpeg(base, args.quality), png(base.getchannel("A"))
             data += struct.pack("<i", len(colour)) + colour + struct.pack("<i", len(alpha)) + alpha
             for v in (h, o):
-                pt = patch(base, load(v)) if v else None
+                pt = patch(base, v) if v is not None else None
                 if pt is None:
                     data += struct.pack("<hhi", 0, 0, 0)
                 else:
@@ -176,7 +203,7 @@ def main():
         with open(path, "wb") as f:
             f.write(data)
         total += len(data)
-        print(f"{name:8s} {anim:32s} {len(zu):4d} frames (from {start}) {len(data) / 1e6:6.2f} MB")
+        print(f"{name:8s} {anim:32s} {len(window):4d} frames (from {start}) {len(data) / 1e6:6.2f} MB")
     print(f"frame {size[0]}x{size[1]}, standing figure {ref}, total {total / 1e6:.1f} MB")
 
 

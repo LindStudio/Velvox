@@ -26,11 +26,11 @@ FEATHER = 14
 # The decal image: this part of the crop (both regions with their feather)
 BOX = (0, 270, 540, 740)
 
-# The decals: name -> (eyes from, mouth from)
+# The decals: name -> (eyes from, mouth from); no eyes = the model's own (clearer than the sheet's)
 DECALS = {
-    "neutral": ("neutral", "neutral"),
-    "neutral_smile": ("neutral", "wink"),          # talking: half-open mouth
-    "neutral_open": ("neutral", "surprised"),      # talking: open mouth
+    "neutral": (None, "neutral"),
+    "neutral_smile": (None, "wink"),               # talking: half-open mouth
+    "neutral_open": (None, "surprised"),           # talking: open mouth
     "wink": ("wink", "wink"),
     "surprised": ("surprised", "surprised"),
     "sad": ("sad", "sad"),
@@ -42,6 +42,34 @@ def mask(size, region):
     cx, cy, rx, ry = region
     ImageDraw.Draw(m).ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=255)
     return m.filter(ImageFilter.GaussianBlur(FEATHER))
+
+
+def neutral_whites(img):
+    """Eye whites, highlights and teeth to grey-white: the sheet's are pinkish, and the render's colour
+    grading (saturation x1.35, made for the body texture) turned them red (Jakob, 2026-10-28)."""
+    a = np.asarray(img, dtype=np.float32) / 255.0
+    hi, lo = a.max(axis=2), a.min(axis=2)
+    sat = (hi - lo) / np.maximum(hi, 1e-6)
+    w = np.clip((0.55 - sat) / 0.2, 0, 1) * np.clip((hi - 0.45) / 0.15, 0, 1)
+    lum = a.mean(axis=2, keepdims=True)
+    out = lum + (a - lum) * (1.0 - 0.95 * w[..., None])
+    return Image.fromarray((np.clip(out, 0, 1) * 255).astype(np.uint8))
+
+
+def brown_irises(img, region):
+    """The sheet's irises are a dark magenta that read as red eyes on the plugin; the model's own are
+    brown with an orange rim: move their hue there (dark, saturated pixels inside `region` only)."""
+    hsv = np.asarray(img.convert("HSV"), dtype=np.float32)
+    rgbmask = np.asarray(region, dtype=np.float32) / 255.0
+    h, s, v = hsv[..., 0], hsv[..., 1] / 255, hsv[..., 2] / 255
+    # Red stays (skin, brows): only the magenta / purple of the irises moves, the short way round the hue circle
+    to_red = np.minimum(np.abs(h - 0.0), np.abs(h - 255.0))
+    not_red = np.clip((to_red - 10.0) / 8.0, 0, 1)
+    iris = np.clip((0.75 - v) / 0.15, 0, 1) * np.clip((s - 0.25) / 0.15, 0, 1) * rgbmask * not_red
+    delta = (14.0 - h + 128.0) % 256.0 - 128.0               # ~20 degrees: orange-brown
+    hsv[..., 0] = (h + delta * iris) % 256.0
+    hsv[..., 2] = v * (1.0 - 0.25 * iris) * 255
+    return Image.fromarray(np.clip(hsv, 0, 255).astype(np.uint8), "HSV").convert("RGB")
 
 
 def main():
@@ -57,8 +85,9 @@ def main():
 
     eyes_m, mouth_m = mask((CROP_W, CROP_H), EYES), mask((CROP_W, CROP_H), MOUTH)
     for name, (eyes_from, mouth_from) in DECALS.items():
-        rgb = Image.composite(heads[mouth_from], heads[eyes_from], mouth_m)
-        alpha = np.maximum(np.asarray(eyes_m), np.asarray(mouth_m))
+        eyes = brown_irises(heads[eyes_from or mouth_from], eyes_m)
+        rgb = neutral_whites(Image.composite(heads[mouth_from], eyes, mouth_m))
+        alpha = np.maximum(np.asarray(eyes_m) if eyes_from else 0, np.asarray(mouth_m))
         rgba = rgb.convert("RGBA")
         rgba.putalpha(Image.fromarray(alpha))
         rgba = rgba.crop(BOX)

@@ -9,7 +9,7 @@ namespace velvox::ui
     // Memphy, the animated imp (SIMPEL, bottom left). The editor feeds it once per frame; it plays the clip
     // the Brain picks, swaps in the mouth patch while he talks and cross-fades between clips.
     // The standing figure fills the stand area (his place in the layout) and scales with the window
-    // (frames are rendered for twice the design size); wider poses reach beyond it, so the component
+    // (frames are packed for about 2.8x the design size); wider poses reach beyond it, so the component
     // is larger than the stand area and only takes clicks on the figure itself.
     // A click on him opens the Vocal Check (approved assistant concept: no extra button for it).
     class MascotView final : public juce::Component, public juce::SettableTooltipClient

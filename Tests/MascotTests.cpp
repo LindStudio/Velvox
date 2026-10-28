@@ -200,7 +200,7 @@ public:
             }
         }
 
-        beginTest ("Frames advance with the clip's frame rate and loops wrap with a cross-fade");
+        beginTest ("Frames advance with the clip's frame rate; loops wrap straight, no fade over a frozen frame");
         {
             Brain b (syntheticClips());
             run (b, singing (20), 3.0);
@@ -208,17 +208,20 @@ public:
             const int a = b.frame();
             b.update (singing (20), 0.1);
             expectEquals ((b.frame() - a + 60) % 60, 3);
-            bool faded = false;
+            bool wrapped = false, faded = false;
             int last = b.frame();
             for (int i = 0; i < 200; ++i)
             {
                 b.update (singing (20), 1.0 / 60.0);
                 expect (b.frame() >= 0 && b.frame() < 60);
                 if (b.frame() < last)
-                    faded = faded || (b.fadeFrom().has_value() && b.fadeFrom()->clip == Clip::bad && b.fadeFrom()->frame == 59);
+                {
+                    wrapped = true;
+                    faded = faded || b.fadeFrom().has_value();
+                }
                 last = b.frame();
             }
-            expect (faded, "the last frame fades out over the first");
+            expect (wrapped && ! faded, "the packer made the seam; the plugin just plays on");
         }
 
         beginTest ("A state change cross-fades from the old clip");
@@ -278,7 +281,7 @@ public:
                     }
                 }
             }
-            expect (h >= 224, "sharp at twice the design size (he is about 112 units tall in SIMPEL)");
+            expect (h >= 320, "sharp up to about 2.8 x the design size (he is about 112 units tall in SIMPEL)");
             const auto& idle = lib.clip (Clip::idle);
             expect (idle.patch (idle.frameCount() / 2, Mouth::open).image.isValid(), "an open mouth to talk with");
         }
