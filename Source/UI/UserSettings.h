@@ -20,6 +20,7 @@ namespace velvox::ui::settings
     inline constexpr const char* defaultScale = "defaultScale"; // window scale of a new instance (1 = 1000 x 600)
     inline constexpr const char* offerAnalysis = "offerAnalysis"; // bool (default true): analysis popup on new instances
     inline constexpr const char* infoCards = "infoCards";       // bool (default true): hover info cards on controls
+    inline constexpr const char* mascotClicked = "mascotClicked"; // bool: Memphy was clicked once (the "click me" chip goes)
 
     juce::String getString (const juce::String& key, const juce::String& fallback = {});
     bool getBool (const juce::String& key, bool fallback = false);

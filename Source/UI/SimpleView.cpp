@@ -1,6 +1,7 @@
 #include "SimpleView.h"
 #include "../PluginProcessor.h"
 #include "../Text/I18n.h"
+#include "UserSettings.h"
 
 namespace velvox::ui
 {
@@ -67,7 +68,9 @@ namespace velvox::ui
         if (text != say)
         {
             say = text;
-            repaint (bubble);
+            const auto old = bubble;
+            layoutBubble();
+            repaint (old.getUnion (bubble).expanded (10));
         }
     }
 
@@ -174,8 +177,18 @@ namespace velvox::ui
         meters.setTooltip (tr ("Pegel und Lautheit (LUFS) am Eingang und Ausgang", "Level and loudness (LUFS) at the input and output"));
         addAndMakeVisible (meters);
 
-        mascot.onClick = [this] { if (onVocalCheck) onVocalCheck(); };
+        mascot.onClick = [this]
+        {
+            if (! settings::getBool (settings::mascotClicked))
+            {
+                settings::set (settings::mascotClicked, true);
+                clickHint.setVisible (false);
+            }
+            if (onVocalCheck) onVocalCheck();
+        };
         addAndMakeVisible (mascot);
+        clickHint.onClick = mascot.onClick;
+        addChildComponent (clickHint);
 
         for (const auto& m : macroDefs())
         {
@@ -329,15 +342,63 @@ namespace velvox::ui
         g.setColour (colours::panelInset);
         g.fillRect (b.getX() - 0.5f, tipY - 6.0f, 2.0f, 12.0f);
 
-        auto text = bubble.reduced (14, 10);
-        const auto actions = text.removeFromBottom (30);
         g.setColour (colours::text);
         g.setFont (font (12.5f));
-        g.drawFittedText (say, text, juce::Justification::topLeft, 3, 1.0f);
-        g.setColour (colours::textDim);
-        g.setFont (font (10.0f));
-        g.drawText (tr ("Klick auf mich = Vocal Check", "Click me = Vocal Check"),
-                    actions.withLeft (details.getRight() + 8), juce::Justification::centredRight, true);
+        g.drawFittedText (say, bubbleText, juce::Justification::topLeft, 3, 1.0f);
+    }
+
+    //==========================================================================
+    namespace
+    {
+        constexpr int bubblePadX = 14, bubblePadY = 10, bubbleLineH = 16, bubbleActionsH = 30, bubbleGap = 6;
+        juce::String clickHintText() { return tr ("Klick mich = Vocal Check", "Click me = Vocal Check"); }
+    }
+
+    SimpleView::ClickHint::ClickHint()
+    {
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        setTooltip (tr ("Öffnet den Vocal Check", "Opens the Vocal Check"));
+    }
+
+    int SimpleView::ClickHint::getIdealWidth() const
+    {
+        return juce::GlyphArrangement::getStringWidthInt (font (11.0f), clickHintText()) + 20;
+    }
+
+    void SimpleView::ClickHint::paint (juce::Graphics& g)
+    {
+        const auto r = getLocalBounds().toFloat().reduced (0.5f);
+        g.setColour (colours::raisedHi);
+        g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
+        g.setColour (colours::violet.withAlpha (isMouseOver() ? 0.9f : 0.55f));
+        g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
+        g.setColour (colours::textSoft);
+        g.setFont (font (11.0f));
+        g.drawText (clickHintText(), getLocalBounds(), juce::Justification::centred, false);
+    }
+
+    void SimpleView::layoutBubble()
+    {
+        if (bubbleRow.isEmpty())
+            return;
+        // Width: the text's longest line (at most the row), never narrower than the two buttons
+        const int buttonsW = 168 + 8 + 86;
+        const int maxTextW = bubbleRow.getWidth() - 2 * bubblePadX;
+        juce::GlyphArrangement ga;
+        ga.addJustifiedText (font (12.5f), say, 0.0f, 0.0f, (float) maxTextW, juce::Justification::topLeft);
+        const auto box = ga.getBoundingBox (0, -1, true);
+        const int lines = juce::jlimit (1, 3, juce::roundToInt (box.getHeight() / font (12.5f).getHeight()));
+        const int textW = juce::jlimit (buttonsW, maxTextW, (int) std::ceil (box.getWidth()) + 2);
+        const int h = 2 * bubblePadY + lines * bubbleLineH + bubbleGap + bubbleActionsH;
+        bubble = bubbleRow.withTop (bubbleRow.getBottom() - h).withWidth (textW + 2 * bubblePadX);
+
+        auto inner = bubble.reduced (bubblePadX, bubblePadY);
+        bubbleText = inner.removeFromTop (lines * bubbleLineH);
+        inner.removeFromTop (bubbleGap);
+        auto actions = inner.removeFromTop (bubbleActionsH);
+        analyse.setBounds (actions.removeFromLeft (168));
+        actions.removeFromLeft (8);
+        details.setBounds (actions.removeFromLeft (86));
     }
 
     void SimpleView::resized()
@@ -373,12 +434,16 @@ namespace velvox::ui
         mascot.setBounds (reach);
         mascot.setStandArea (place - reach.getPosition().toFloat());
         row.removeFromLeft (8);
-        bubble = row;
+        bubbleRow = row.withTrimmedBottom (8);   // the click chip below
+        layoutBubble();
 
-        auto actions = bubble.reduced (14, 10).removeFromBottom (30);
-        analyse.setBounds (actions.removeFromLeft (168));
-        actions.removeFromLeft (8);
-        details.setBounds (actions.removeFromLeft (86));
+        // "Klick mich = Vocal Check" under his feet, until the first click
+        const auto standInView = place;
+        const int chipW = clickHint.getIdealWidth();
+        clickHint.setBounds (juce::Rectangle<int> (chipW, 16).withCentre ({ juce::roundToInt (standInView.getCentreX()), 0 })
+                                 .withBottomY (spectrumPanel.getBottom() - 4)
+                                 .constrainedWithin (spectrumPanel.reduced (4)));
+        clickHint.setVisible (! settings::getBool (settings::mascotClicked));
 
         // Six faders, evenly spaced
         auto col = macroPanel.reduced (18, 22);

@@ -53,6 +53,9 @@ namespace velvox::ui
         MascotView& getMascot() noexcept { return mascot; }
         juce::Rectangle<int> getMascotArea() const noexcept;   // Memphy and his bubble (the tour's first step)
         const juce::String& getBubbleText() const noexcept { return say; }
+        juce::Rectangle<int> getBubbleArea() const noexcept { return bubble; }
+        juce::Rectangle<int> getBubbleTextArea() const noexcept { return bubbleText; }
+        juce::Component& getClickHint() noexcept { return clickHint; }   // "Klick mich = Vocal Check" under Memphy
 
         struct MacroDef { const char* paramId; const char* label; juce::uint32 colour; };
         static const std::vector<MacroDef>& macroDefs();
@@ -64,6 +67,18 @@ namespace velvox::ui
         void advance (mascot::Inputs in, double dt);
         bool advanceLines (double dt);   // true while one of his lines is up
         void setSay (const juce::String& text);
+        void layoutBubble();   // the bubble fits the text (review 2026-10-28), the buttons right under it
+
+        // The "click me" chip under Memphy, until he was clicked once (user settings)
+        class ClickHint final : public juce::Component, public juce::SettableTooltipClient
+        {
+        public:
+            ClickHint();
+            void paint (juce::Graphics&) override;
+            void mouseUp (const juce::MouseEvent&) override { if (onClick) onClick(); }
+            int getIdealWidth() const;
+            std::function<void()> onClick;
+        };
 
         VelvoxAudioProcessor& proc;
         SpectrumView spectrumView;
@@ -79,6 +94,7 @@ namespace velvox::ui
         double lastTick = 0.0, scoreAge = 1.0e9, silentFor = 0.0;
         int score = -1;
         bool wasBusy = false;
-        juce::Rectangle<int> spectrumPanel, macroPanel, meterStrip, bubble, statusRow;
+        ClickHint clickHint;
+        juce::Rectangle<int> spectrumPanel, macroPanel, meterStrip, bubble, bubbleRow, bubbleText, statusRow;
     };
 }

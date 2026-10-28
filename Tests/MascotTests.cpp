@@ -7,6 +7,7 @@
 #include "UI/MascotView.h"
 #include "UI/SimpleView.h"
 #include "UI/TutorialOverlay.h"
+#include "UI/UserSettings.h"
 
 using namespace velvox;
 using namespace velvox::ui::mascot;
@@ -272,11 +273,38 @@ public:
             expect (simple->isVisible(), "back in SIMPEL to see it");
         }
 
+        // Review 2026-10-28 (item 13): the bubble fits its text, the buttons right under it; "click me" as a chip
+        beginTest ("The bubble fits its text with the buttons right below; the click hint is a chip under Memphy until the first click");
+        {
+            if (simple == nullptr || mascot == nullptr)
+                return;
+            const auto text = simple->getBubbleTextArea();
+            const auto bubble = simple->getBubbleArea();
+            auto& analyse = simple->getAnalyseButton();
+            expect (bubble.contains (text) && bubble.contains (analyse.getBounds()) && bubble.contains (simple->getDetailsButton().getBounds()));
+            expect (analyse.getY() >= text.getBottom() && analyse.getY() - text.getBottom() <= 8, "buttons right under the text");
+            expect (bubble.getBottom() - analyse.getBottom() <= 12, "no empty space under the buttons");
+            const auto lines = juce::roundToInt ((float) text.getHeight() / 16.0f);
+            expect (lines >= 1 && lines <= 3, "one to three lines: " + juce::String (text.getHeight()));
+
+            ui::settings::set (ui::settings::mascotClicked, false);
+            simple->resized();
+            auto& chip = simple->getClickHint();
+            expect (chip.isVisible(), "a chip until he was clicked once");
+            const auto stand = simple->getLocalArea (mascot, mascot->getStandArea()).toNearestInt();
+            expect (std::abs (chip.getBounds().getCentreX() - stand.getCentreX()) <= 2 && chip.getY() >= stand.getCentreY(), "under Memphy");
+            expect (chip.getX() >= simple->getSpectrumArea().getX() && chip.getBottom() <= simple->getSpectrumArea().getBottom(), "inside the panel");
+            expect (! bubble.intersects (chip.getBounds()), "not in the bubble");
+        }
+
         beginTest ("A click on Memphy opens the Vocal Check");
         {
             mascot->simulateClick();
             juce::MessageManager::getInstance()->runDispatchLoopUntil (30);
             expectEquals (h.proc.getState().state.getProperty ("uiTab").toString(), juce::String ("check"));
+            expect (ui::settings::getBool (ui::settings::mascotClicked), "remembered");
+            if (simple != nullptr)
+                expect (! simple->getClickHint().isVisible(), "the chip is gone after the first click");
         }
     }
 };
