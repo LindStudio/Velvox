@@ -7,7 +7,8 @@
 **Quelle:** Review-Website https://claude.ai/artifact/NwwJ1YbUGzf2B3VyNftHae (15 Befunde, links Ist, rechts Vorschlag),
 Jakobs Antworten vom 2026-10-28 (Chat). Punkt 10 hat Jakob abgelehnt („wir bauen später jedes Modul final“).
 
-**Regeln wie immer:** Parameter-IDs nie ändern, alte Projekte klingen gleich (Migrationen), Layout nur so wie hier
+**Regeln:** **Keine Rückwärtskompatibilität** (Jakob 2026-10-28: Entwicklungsphase, es gibt keine alten Projekte) –
+Defaults, Wertebereiche, Routing und State direkt ändern, keine Migrationen schreiben. Layout nur so wie hier
 beschrieben, Texte in beiden Sprachen (`docs/I18N.md`), vor Push fragen.
 
 ---
@@ -21,23 +22,20 @@ beschrieben, Texte in beiden Sprachen (`docs/I18N.md`), vor Push fragen.
   Vocal Level). Füllt den heutigen Leerraum.
 - Technik: `Parameters/MacroMapper.h` und `AutoMixPlanner::sliderPositions` arbeiten heute nur 0..100 % nach oben.
   Bipolar heißt: Bereich −100..+100 % mit 0 in der Mitte, für Presence/Warmth auch Absenkung über die Rollen-Bänder.
-  **Achtung Parameter-IDs:** Makro-Parameter nicht umbenennen; falls der Wertebereich sich ändert, Migration in
-  `setStateInformation` (alte 0..100 % → neue Mitte + Wert), alte Projekte müssen gleich klingen.
-- Tests: Fader zeigt nach Mix mit Presence-Cut einen negativen Wert; Ziehen auf die Mitte nimmt die Mix-Änderung zurück;
-  altes Projekt lädt mit gleichem Klang.
+  Wertebereich der Makro-Parameter direkt umstellen (keine Migration nötig).
+- Tests: Fader zeigt nach Mix mit Presence-Cut einen negativen Wert; Ziehen auf die Mitte nimmt die Mix-Änderung zurück.
 
 ## 2. Leiser nach dem Laden (Jakob: „auch“)
 - Init und **alle Werks-Presets** bringen eine −18-LUFS-Vocal auf Eingangslautheit (±1 LU). Heute Init −5 LU,
   „Hard Dance Lead“ −8 LU.
 - Weg: Kompressor-Makeup / Output-Kalibrierung je Preset (wie 0.6.1 „Werks-Presets gleich laut“, Test in
   `Tests/PresetTests.cpp`, der offenbar nicht mehr alles abdeckt – prüfen, warum Hard Dance Lead durchrutscht).
-  Default-Änderung beim Init-Kompressor (`compMakeup`) braucht Migration für alte Projekte ohne gespeicherten Wert.
+  Default beim Init-Kompressor (`compMakeup`) einfach ändern.
 - OUT-Meter zeigt zusätzlich den **Unterschied zum Eingang** („±0“, „−5 LU“) – siehe auch Punkt 15 (Meter).
 
 ## 3. Vocal Check raus aus der Kette, Memphy sagt, was nicht passt (Jakob: „so umsetzen, gibt's ja Memphy dafür“)
 - Vocal-Check-Kachel aus der Modul-Kette entfernen (kein Power-Knopf zwischen Effekten). Die Diagnose läuft weiter,
-  wenn der Tab sie braucht; `checkOn`-Parameter bleibt (ID nie ändern), wird nur nicht mehr als Kette angezeigt.
-  Routing-Migration: `check` aus alten Routings beim Laden ignorieren, ohne den Klang zu ändern (Check ist klangneutral).
+  wenn der Tab sie braucht. `check` als Ketten-Modul ganz entfernen (Routing, Browser, Presets), keine Migration.
 - **Memphy sagt die Tipps:** In SIMPEL meldet er sich in der Sprechblase, wenn der Vocal Check etwas findet
   („Unter 90 Hz rumpelt's – soll ich einen Low Cut setzen?“ mit Knopf „Ja, mach“ / „Zeig mir“), Stimmung passend
   (genervt/traurig/nachdenkend). Ein Tipp nach dem anderen, nicht während er schon redet.
@@ -77,7 +75,7 @@ beschrieben, Texte in beiden Sprachen (`docs/I18N.md`), vor Push fragen.
 ## 7. Bericht: Zahlen erklären, fairer Vergleich nach vorn (Jakob: „ja umsetzen“)
 - Zahlen mit Herkunft im Klartext: „Gesang im gemessenen Abschnitt −14,4 LUFS“ vs. „Gerade jetzt (live) −25,3 LUFS“.
 - **„Gleich laut vergleichen“ (fairer Vergleich) direkt neben Vorher/Nachher in SIMPEL**, Standard an
-  (`levelMatchMode`, Default-Änderung → nur für neue Instanzen, alte Projekte behalten ihren Wert).
+  (`levelMatchMode` Default direkt ändern).
 - „Vorherigen Zustand wiederherstellen“ als Link unter der Liste, nicht mehr über der Liste schwebend.
 - Feinschliff-Bereich: Density bleibt, aber nicht mehr allein in einer großen Box.
 
@@ -92,7 +90,7 @@ beschrieben, Texte in beiden Sprachen (`docs/I18N.md`), vor Push fragen.
   `Tests/` (THD + Spektrum), kein Hörtest nötig laut Jakob – trotzdem Renders in `velvox-bench` ablegen.
 - Panel: oben eine **Skala Wärme → Farbe → Zerre** mit Marker (statt der leeren Bandfläche ohne Multiband),
   THD-Chip in Farbe (grün/gelb/rot). Bandfläche nur bei Multiband.
-- Alte Projekte: Klang bleibt (nur Presets/Auto-Mix-Vorschläge ändern sich, keine Parameter-Umdeutung).
+- Kennlinien und Drive-Bereiche dürfen sich direkt ändern (keine alten Projekte zu schützen).
 
 ## 10. Panels einheitlich – NICHT umsetzen (Jakob: „passt derzeit so, wir bauen später jedes Modul final“)
 
@@ -139,7 +137,7 @@ beschrieben, Texte in beiden Sprachen (`docs/I18N.md`), vor Push fragen.
 1. Schnelle, sichere Sachen: 15 (Preset-Liste, Version, Schriftgröße), 11, 12, 13, 14, 4
 2. Klang: 9 (Saturation), 2/8 (Lautheit) – mit Messungen
 3. Struktur: 3 (Vocal Check raus + Memphy-Tipps), 6, 7
-4. Größer: 1 (bipolare Makros, Migration!), 5 (Kette zusammenfassen)
+4. Größer: 1 (bipolare Makros), 5 (Kette zusammenfassen)
 
 ## Prüfen am Ende
 - `scripts\build.ps1` (alle Tests) + pluginval 10.

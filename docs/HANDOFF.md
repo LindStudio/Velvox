@@ -78,7 +78,9 @@ Anderer PC („Shadow"): zuerst `git fetch origin` bzw. `git fetch drive-backup 
 - **Design/UI:** Jakob gibt die Richtung per Mockups vor (SVG-Varianten zeigen, nicht 1:1 umsetzen). Layout nicht eigenmächtig
   umbauen. Entscheidungen: `docs/superpowers/specs/2026-10-25-headliner-pro-overhaul-design.md`, `docs/design/`.
 - TDD: erst Test rot, dann Fix. Vor „fertig": `scripts\build.ps1` (alle Tests) + pluginval Strenge 10.
-- Parameter-IDs und Plugin-Codes nie ändern. Alte Projekte müssen gleich klingen (Migrationen in `setStateInformation`).
+- **Keine Rückwärtskompatibilität** (Jakob 2026-10-28): Entwicklungsphase, es gibt keine alten Projekte. Defaults, Wertebereiche,
+  Routing und State direkt ändern, keine Migrationen und keine „alte Projekte klingen gleich“-Tests mehr. (Ersetzt die frühere
+  Regel „Parameter-IDs nie ändern, alte Projekte müssen gleich klingen“.)
 - Pro Schritt committen; **vor jedem Push fragen**, außer Jakob hat es ausdrücklich gesagt.
 - Dateien nie mit PowerShell `Get-Content`/`Set-Content` bearbeiten (zerstört Umlaute) – Edit-Tool oder Python mit UTF-8.
   PowerShell 5.1 verschluckt leere `""`-Argumente an Programme.
