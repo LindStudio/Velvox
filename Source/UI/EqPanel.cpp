@@ -807,7 +807,6 @@ namespace velvox::ui
         sweeping = true;
         const auto& s = shown[(size_t) band];
         dragFreq = s.band.freq;
-        sweepQ = s.band.q;
         // Frequency outermost (like a point drag): its end records the step
         if (auto* f = paramFor (proc, instance, band, pid::eqband::freq))
             f->beginChangeGesture();
@@ -851,10 +850,12 @@ namespace velvox::ui
             setReal (paramFor (proc, instance, band, pid::eqband::freq), dragFreq);
             if (auto* q = paramFor (proc, instance, band, pid::eqband::q); q != nullptr && eqedit::hasQ (shown[(size_t) band].band.type))
             {
-                // Up = narrower: x 2 per 60 px (fine: per 600 px)
+                // Up = narrower: x 2 per 60 px (fine: per 600 px). From the Q as it is now, not as it was at
+                // the press: the wheel changes it during a sweep too (a remembered one snapped it back)
                 const auto range = q->getNormalisableRange();
-                sweepQ = juce::jlimit (range.start, range.end, sweepQ * std::pow (2.0f, -delta.y * scale / 60.0f));
-                setReal (q, sweepQ);
+                const float current = range.convertFrom0to1 (q->getValue());
+                if (delta.y != 0.0f)
+                    setReal (q, juce::jlimit (range.start, range.end, current * std::pow (2.0f, -delta.y * scale / 60.0f)));
             }
             refreshCurves();
             return;

@@ -638,6 +638,74 @@ public:
             expectEquals (eq.getAuditionBand(), -1, "deleted band: solo ends");
         }
 
+        beginTest ("EQ graph: a purely sideways sweep keeps the band's Q (Jakob 2026-10-28: Q reset as soon as he swept)");
+        {
+          for (int type = 0; type < dsp::numEqBandTypes; ++type)
+          {
+            Harness h;
+            auto panel = openEq (h, 0);
+            const int a = ui::eqedit::addBand (h.proc, 0, 800.0f, 4.0f);
+            if (auto* t = h.proc.getState().getParameter (eqbands::bandParamId (0, a, pid::eqband::type)))
+                t->setValueNotifyingHost (t->convertTo0to1 ((float) type));
+            if (! ui::eqedit::hasQ (ui::eqedit::parameterBand (h.proc, 0, a).type))
+                continue;
+            if (auto* q = h.proc.getState().getParameter (eqbands::bandParamId (0, a, pid::eqband::q)))
+                q->setValueNotifyingHost (q->convertTo0to1 (3.0f));
+            logMessage ("band type " + juce::String (type));
+            panel->refresh();
+            auto* g = panel->getGraph();
+            expect (g != nullptr);
+            if (g == nullptr)
+                return;
+            g->update (*std::make_unique<ui::LiveData>());
+            juce::uint32 now = 5000;
+            g->clock = [&] { return now; };
+            const auto qNow = [&] { return ui::eqedit::parameterBand (h.proc, 0, a).q; };
+            expectWithinAbsoluteError (qNow(), 3.0f, 0.01f);
+
+            g->mouseMove (mouseOn (*g, g->pointFor (a)));
+            const auto icon = g->auditionIconArea (a).getCentre();
+            g->mouseMove (mouseOn (*g, icon));
+            press (*g, icon);
+            for (float dx : { 10.0f, 25.0f, 40.0f, 10.0f, -20.0f })
+            {
+                g->mouseDrag (mouseOn (*g, icon.translated (dx, 0.0f)));
+                expectWithinAbsoluteError (qNow(), 3.0f, 0.01f, "sideways to " + juce::String (dx) + " px");
+            }
+            now += 100;
+            release (*g, icon.translated (-20.0f, 0.0f));
+            expectWithinAbsoluteError (qNow(), 3.0f, 0.01f, "after the release");
+          }
+
+            // The likely way it happened: Q changed with the wheel in the middle of a sweep, then sideways
+            Harness h;
+            auto panel = openEq (h, 0);
+            const int a = ui::eqedit::addBand (h.proc, 0, 800.0f, 4.0f);
+            panel->refresh();
+            auto* g = panel->getGraph();
+            if (g == nullptr)
+                return;
+            g->update (*std::make_unique<ui::LiveData>());
+            juce::uint32 now = 5000;
+            g->clock = [&] { return now; };
+            const auto qNow = [&] { return ui::eqedit::parameterBand (h.proc, 0, a).q; };
+            g->mouseMove (mouseOn (*g, g->pointFor (a)));
+            const auto icon = g->auditionIconArea (a).getCentre();
+            g->mouseMove (mouseOn (*g, icon));
+            press (*g, icon);
+            g->mouseDrag (mouseOn (*g, icon.translated (20.0f, 0.0f)));
+            const float before = qNow();
+            juce::MouseWheelDetails wheel {};
+            wheel.deltaY = 0.5f;
+            g->mouseWheelMove (mouseOn (*g, icon.translated (20.0f, 0.0f)), wheel);
+            const float wheeled = qNow();
+            expect (wheeled > before * 1.1f, "the wheel changed Q (" + juce::String (before) + " -> " + juce::String (wheeled) + ")");
+            g->mouseDrag (mouseOn (*g, icon.translated (40.0f, 0.0f)));
+            expectWithinAbsoluteError (qNow(), wheeled, 0.01f, "sideways after the wheel: Q stays where the wheel put it");
+            now += 100;
+            release (*g, icon.translated (40.0f, 0.0f));
+        }
+
         beginTest ("EQ graph: sweep while soloed (Pro-Q) - drag the headphone: sideways = frequency, up / down = Q, wheel = Q");
         {
             Harness h;

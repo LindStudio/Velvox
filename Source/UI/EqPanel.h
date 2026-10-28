@@ -155,7 +155,6 @@ namespace velvox::ui
         // up / down Q - in one undo step; a sweep from a fresh press ends the solo at the release
         juce::Point<float> sweepStart;
         bool sweeping = false;
-        float sweepQ = 1.0f;
         void beginSweep (int band);
         void endSweep();
         int shownAudition = -1;       // last state read from the DSP (repaints when it changes)

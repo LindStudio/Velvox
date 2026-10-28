@@ -4,6 +4,10 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 
 ## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/modules-0.7`
 
+### Behoben
+- **EQ-Sweep:** Wer beim Sweep (Kopfhörer am Punkt ziehen) mit dem Mausrad das Q änderte, bekam beim
+  nächsten Schieben nach links oder rechts das alte Q zurück. Der Sweep geht jetzt immer vom aktuellen Q aus.
+
 ### Entfernt – 0.7 (Jakob, 2026-10-27)
 - **Pitch, Stutter, Pulse und Choir sind ganz raus:** keine Module, Parameter, Panels, Hilfeseiten und Presets
   mehr dafür. Der Host sieht entsprechend weniger Parameter. **Alte Projekte** mit diesen Modulen laden ohne
