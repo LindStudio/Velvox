@@ -772,13 +772,58 @@ namespace velvox::automix
         p.distortionLikely = p.clipRuns >= 3 || (p.peakDb > -0.3f && p.crestDb < 6.0f);
 
         // ---- Beat (sidechain): level and overlap in the bands the vocal needs
-        if (audio.hasBeat())
+        if (audio.hasBeat() && (int) audio.beat[0].size() >= n)
         {
             std::vector<const float*> beat;
             for (auto& c : audio.beat)
                 beat.push_back (c.data());
-            p.beatLufs = integratedLufs (beat, n, fs);
-            if (p.beatLufs > -50.0f)
+            const float* bL = beat[0];
+            const float* bR = beat.size() > 1 ? beat[1] : bL;
+
+            // 50 ms blocks of the beat: where it plays, and how dense it is there
+            std::vector<float> beatBlockDb;
+            for (int start = 0; start + block <= n; start += block)
+            {
+                double s = 0.0;
+                for (int i = start; i < start + block; ++i)
+                {
+                    const double m = 0.5 * ((double) bL[i] + bR[i]);
+                    s += m * m;
+                }
+                beatBlockDb.push_back (toDb (s / block));
+            }
+            int firstBlock = -1, lastBlock = -1, playing = 0;
+            for (int b = 0; b < (int) beatBlockDb.size(); ++b)
+                if (beatBlockDb[(size_t) b] > -50.0f)
+                {
+                    if (firstBlock < 0)
+                        firstBlock = b;
+                    lastBlock = b;
+                    ++playing;
+                }
+            p.beatPlayingSeconds = (float) (playing * block / fs);
+            if (p.beatPlayingSeconds >= 3.0f)
+            {
+                // Loudness of both over the span where the beat plays
+                const int spanStart = firstBlock * block, spanLength = (lastBlock + 1 - firstBlock) * block;
+                std::vector<const float*> beatSpan, vocalSpan;
+                for (auto* c : beat)
+                    beatSpan.push_back (c + spanStart);
+                for (auto* c : chans)
+                    vocalSpan.push_back (c + spanStart);
+                p.beatLufs = integratedLufs (beatSpan, spanLength, fs);
+                const float vocalSpanLufs = integratedLufs (vocalSpan, spanLength, fs);
+                if (vocalSpanLufs > -70.0f)
+                    p.vocalOverBeatLu = vocalSpanLufs - p.beatLufs;
+
+                std::vector<float> span (beatBlockDb.begin() + firstBlock, beatBlockDb.begin() + lastBlock + 1);
+                const float loud = percentile (span, 0.9f);
+                int gaps = 0;
+                for (float b : span)
+                    gaps += b < loud - 20.0f ? 1 : 0;
+                p.beatGapShare = (float) gaps / (float) span.size();
+            }
+            if (p.beatPlayingSeconds >= 3.0f && p.beatLufs > -50.0f)
             {
                 p.beatPresent = true;
                 std::array<double, nb> bAvg {}, vAvg {};
@@ -788,8 +833,14 @@ namespace velvox::automix
                     if (! voiced[fi])
                         continue;
                     const int start = (int) fi * hop;
+                    double s = 0.0;
                     for (int i = 0; i < fftSize; ++i)
-                        work[(size_t) i] = 0.5f * (beat[0][start + i] + beat[beat.size() > 1 ? 1 : 0][start + i]);
+                    {
+                        work[(size_t) i] = 0.5f * (bL[start + i] + bR[start + i]);
+                        s += (double) work[(size_t) i] * work[(size_t) i];
+                    }
+                    if (toDb (s / fftSize) <= -50.0f)
+                        continue;   // the beat does not play here
                     std::fill (work.begin() + fftSize, work.end(), 0.0f);
                     window.multiplyWithWindowingTable (work.data(), (size_t) fftSize);
                     fft.performFrequencyOnlyForwardTransform (work.data(), true);
@@ -810,6 +861,9 @@ namespace velvox::automix
                                 e += a[(size_t) b];
                         return toDb (e / count);
                     };
+                    p.beatOverVocalDb.resize (nb);
+                    for (int b = 0; b < nb; ++b)
+                        p.beatOverVocalDb[(size_t) b] = toDb (bAvg[(size_t) b] / count) - toDb (vAvg[(size_t) b] / count);
                     p.beatPresenceVsVocalDb = range (bAvg, 2000, 5000) - range (vAvg, 2000, 5000);
                     p.beatLowMidVsVocalDb = range (bAvg, 250, 500) - range (vAvg, 250, 500);
                     p.maskingHint = p.beatPresenceVsVocalDb > 3.0f;

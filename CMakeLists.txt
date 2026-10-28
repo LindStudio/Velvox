@@ -284,3 +284,8 @@ endif()
 if(VELVOX_BUILD_TESTS)
     target_sources(VelvoxTests PRIVATE Tests/MascotTests.cpp Tests/DenoiseTests.cpp Tests/BreathTests.cpp)
 endif()
+
+# The auto mix hears the beat (plan 2026-10-28)
+if(VELVOX_BUILD_TESTS)
+    target_sources(VelvoxTests PRIVATE Tests/BeatTests.cpp)
+endif()

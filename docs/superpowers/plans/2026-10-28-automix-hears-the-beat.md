@@ -47,7 +47,7 @@
 
 **Produces (new fields in `VocalProfile`, all only valid when `beatPresent`):**
 - `std::vector<float> beatOverVocalDb` – per profiler band (`VocalProfiler::numBands`), beat power minus vocal power over the frames where the voice is voiced **and** the beat plays (beat frame level above −50 dBFS).
-- `float beatGapShare` – share of 50 ms blocks of the beat that are more than 12 dB below the beat's 90th-percentile block level (0 = wall of sound, ~0.5 = sparse).
+- `float beatGapShare` – share of 50 ms blocks of the beat that are more than 20 dB below the beat's 90th-percentile block level (0 = wall of sound, ~0.5 = sparse). (12 dB was too close to the level between kicks of a dense beat.)
 - `float vocalOverBeatLu` – vocal integrated LUFS minus beat integrated LUFS, both over the span where the beat plays.
 - `float beatPlayingSeconds`.
 - Keep `beatPresenceVsVocalDb`, `beatLowMidVsVocalDb`, `maskingHint` (now derived from `beatOverVocalDb`, same meaning) so the assistant and Vocal Check keep working.
@@ -78,7 +78,7 @@ Rule: in 1.5–6 kHz find the band region (3 adjacent bands, smoothed) where `be
 
 **Files:** Modify `Source/AutoMix/AutoMixPlanner.cpp` (space section, line ~540), `Source/AutoMix/AutoMixObjective.cpp` (dynamics window), `docs/AUTOMIX_OBJECTIVE.md`. Test: `Tests/AutoMixTests.cpp`.
 
-Rules (only with `beatPresent`): dense beat (`beatGapShare < 0.15`) → reverb mix × 0.7 (rounded), delay mix − 2 %, decision reason adds „dichter Beat: weniger Hall, damit die Stimme vorne bleibt“ / "dense beat: less reverb so the voice stays in front"; sparse beat (`> 0.4`) → reverb mix + 2 % (max 16), reason „Beat mit Lücken: etwas mehr Raum“ / "beat with gaps: a little more room". Objective: over a dense beat the dynamics window is 3–6 dB instead of 4–8 dB (steadier voice against a wall of sound); otherwise unchanged.
+Rules (only with `beatPresent`): dense beat (`beatGapShare < 0.15`) → reverb mix × 0.7 (rounded), delay mix − 2 %, decision reason adds „dichter Beat: weniger Hall, damit die Stimme vorne bleibt“ / "dense beat: less reverb so the voice stays in front"; sparse beat (`> 0.3`) → reverb mix + 2 % (max 16), reason „Beat mit Lücken: etwas mehr Raum“ / "beat with gaps: a little more room". Objective: over a dense beat the dynamics window is 3–6 dB instead of 4–8 dB (steadier voice against a wall of sound); otherwise unchanged.
 
 - [ ] Failing tests: (a) same sung vocal: dense beat → reverb mix lower than without beat, sparse → higher, no beat → unchanged; (b) objective: dynamicsDb 7 is penalised with dense beat, not without; (c) roomy take stays without reverb whatever the beat.
 - [ ] Implement, run – PASS. Commit `Auto mix: reverb, delay and dynamics follow how dense the beat is`.

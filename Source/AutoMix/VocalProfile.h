@@ -113,8 +113,14 @@ namespace velvox::automix
         bool distortionLikely = false;
 
         // ---- Beat on the sidechain (analysis only, never audible)
+        // Measured only where the beat plays (50 ms blocks above -50 dBFS); a beat that plays
+        // less than 3 s counts as none
         bool beatPresent = false;
-        float beatLufs = -100.0f;
+        float beatPlayingSeconds = 0.0f;
+        float beatLufs = -100.0f;             // over the span where the beat plays
+        float vocalOverBeatLu = 0.0f;         // vocal minus beat loudness over that span
+        float beatGapShare = 0.0f;            // share of 50 ms beat blocks 20 dB below its loud blocks (0 = wall of sound)
+        std::vector<float> beatOverVocalDb;   // per band (numBands): beat minus vocal, frames where both play
         float beatPresenceVsVocalDb = 0.0f;   // beat 2-5 kHz level minus vocal 2-5 kHz level (voiced frames)
         float beatLowMidVsVocalDb = 0.0f;     // same for 250-500 Hz
         bool maskingHint = false;
