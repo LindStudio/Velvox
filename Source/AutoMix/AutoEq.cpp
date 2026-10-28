@@ -351,15 +351,75 @@ namespace velvox::automix::autoeq
                     moves.push_back (m);
             }
 
-        // ---- The beat masks the presence range (sidechain, only a hint): a small lift
-        if (ctx.masking && ! ctx.harsh && find (EqRole::autoTone) == moves.end() && (int) moves.size() < ctx.budget)
+        // ---- The beat covers the voice (sidechain measurement at the output level): lift where it covers
+        //      most, unless the voice is already sharp there or the presence band is taken
+        const auto mask = maskingOf (p);
+        if (const float g = unmaskGainDb (mask.presenceDb, ctx.conservative);
+            g > 0.0f && ! ctx.harsh && find (EqRole::autoTone) == moves.end() && (int) moves.size() < ctx.budget)
         {
-            const auto b = bandOf (EqBandType::bell, 3000.0f, 1.0f, 0.9f);
+            const auto b = bandOf (EqBandType::bell, mask.hz, g, 1.0f);
             moves.push_back ({ EqRole::autoTone, b, titleOf (EqRole::autoTone, b),
-                               both ("Der Beat ist im Präsenzbereich lauter als die Stimme (Sidechain-Messung, nur ein Hinweis) - daher nur eine kleine Anhebung.",
-                                     "The beat is louder than the voice in the presence range (sidechain measurement, only a hint) - so only a small boost."), false });
+                               both ("Der Beat ist bei {0} um {1} lauter als die Stimme (gemessen am Sidechain, bei Stimme 1 LU über dem Beat) - eine breite Anhebung bringt sie dort durch.",
+                                     "At {0} the beat is {1} louder than the voice (measured on the sidechain, with the voice 1 LU above the beat) - a broad boost gets it through there.",
+                                     { hz (mask.hz), db (mask.presenceDb) }), false });
         }
+
+        // The beat crowds the low mids: an existing mud cut goes 1 dB deeper (never a cut from the beat alone)
+        if (mask.valid && mask.lowMidDb > 6.0f)
+            if (auto it = find (EqRole::autoMix); it != moves.end() && it->band.gain < 0.0f && it->band.gain > -maxBroadCutDb)
+            {
+                it->band.gain = std::max (-maxBroadCutDb, it->band.gain - 1.0f);
+                it->title = titleOf (EqRole::autoMix, it->band);
+                it->reason += both (" Der Beat ist dort {0} lauter als die Stimme - 1 dB mehr.", " The beat is {0} louder than the voice there - 1 dB more.",
+                                    { db (mask.lowMidDb) });
+            }
         return moves;
+    }
+
+    Masking maskingOf (const VocalProfile& p)
+    {
+        Masking m;
+        const auto& d = p.beatOverVocalDb;
+        if (! p.beatPresent || d.size() != (size_t) VocalProfiler::numBands)
+            return m;
+        m.valid = true;
+        // At the output the voice moves by (lead - measured): the beat's lead over it shrinks by that
+        const float shift = leadOverBeatLu - p.vocalOverBeatLu;
+        const auto mean = [&d] (int from, int to)
+        {
+            double s = 0.0;
+            for (int b = from; b <= to; ++b)
+                s += d[(size_t) b];
+            return (float) (s / (to - from + 1));
+        };
+        for (int b = 1; b + 1 < (int) d.size(); ++b)
+        {
+            const float c = VocalProfiler::bandCentre (b);
+            if (c >= 1500.0f && c <= 6000.0f)
+                if (const float v = mean (b - 1, b + 1) - shift; v > m.presenceDb)
+                {
+                    m.presenceDb = v;
+                    m.hz = c;
+                }
+        }
+        double s = 0.0;
+        int n = 0;
+        for (int b = 0; b < (int) d.size(); ++b)
+            if (const float c = VocalProfiler::bandCentre (b); c >= 250.0f && c < 500.0f)
+            {
+                s += d[(size_t) b];
+                ++n;
+            }
+        m.lowMidDb = n > 0 ? (float) (s / n) - shift : -100.0f;
+        return m;
+    }
+
+    float unmaskGainDb (float excessDb, bool conservative) noexcept
+    {
+        if (excessDb <= unmaskFromDb)
+            return 0.0f;
+        const float g = juce::jlimit (0.5f, 2.5f, 0.3f * (excessDb - unmaskFromDb) * (conservative ? 0.6f : 1.0f));
+        return std::max (0.5f, roundHalf (g));
     }
 
     std::vector<Move> correct (const Levels& rendered, const Context& ctx, const std::vector<Move>& owned)

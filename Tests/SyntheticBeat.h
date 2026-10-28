@@ -17,7 +17,8 @@ namespace velvox::test
         dense,           // pad and hats all the time
         sparse,          // every other bar only a kick on 1 and 3 (no pad, no hats)
         presenceHeavy,   // dense, 2-5 kHz lifted by 9 dB
-        lowMidHeavy      // dense, 250-500 Hz lifted by 9 dB
+        lowMidHeavy,     // dense, 250-500 Hz lifted by 9 dB
+        dark             // kick and a pad below 1.5 kHz only: leaves the presence range free
     };
 
     // Stereo beat (identical channels) of `seconds`, normalised to `lufs` (BS.1770 gated).
@@ -37,7 +38,7 @@ namespace velvox::test
         // Pad: band noise 300 Hz - 6 kHz
         dsp::Biquad padHp, padLp, hatHp, hatHp2, tone;
         padHp.setCoeffs (dsp::design::highPass (fs, 300.0, 0.7071));
-        padLp.setCoeffs (dsp::design::lowPass (fs, 6000.0, 0.7071));
+        padLp.setCoeffs (dsp::design::lowPass (fs, kind == BeatKind::dark ? 1500.0 : 6000.0, 0.7071));
         hatHp.setCoeffs (dsp::design::highPass (fs, 7000.0, 0.7071));
         hatHp2.setCoeffs (dsp::design::highPass (fs, 7000.0, 0.7071));
         if (kind == BeatKind::presenceHeavy)
@@ -68,7 +69,7 @@ namespace velvox::test
 
             // Hats: 30 ms noise bursts on the 8ths
             const float noise1 = rnd.nextFloat() * 2.0f - 1.0f, noise2 = rnd.nextFloat() * 2.0f - 1.0f;
-            const bool hatsOn = ! sparse || barIndex % 2 == 0;
+            const bool hatsOn = kind != BeatKind::dark && (! sparse || barIndex % 2 == 0);
             const int inEighth = t % eighth;
             const float hatEnv = hatsOn && inEighth < (int) (0.03 * fs) ? (float) std::exp (-(inEighth / fs) * 120.0) : 0.0f;
             y += 0.35f * hatEnv * hatHp2.process (hatHp.process (noise1, 0), 0);

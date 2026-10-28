@@ -144,7 +144,6 @@ namespace velvox::automix
         ctx.noisy = p.snrValid && p.snrDb < 28.0f;
         ctx.sibilant = p.hasIssue ("sibilance");
         ctx.harsh = p.hasIssue ("harsh");
-        ctx.masking = p.maskingHint;
         int inUse = 0, available = 0;
         for (int i = 0; i < dsp::maxEqBands; ++i)
         {
@@ -351,6 +350,10 @@ namespace velvox::automix
         if (const auto* air = moveFor (dsp::EqRole::air); (air == nullptr || air->band.gain <= 0.0f) && (harsh || p.presenceDb > -4.0f))
             plan.notes.push_back (both ("Keine Höhenanhebung: Die Aufnahme ist bereits hell genug.",
                                         "No high boost: the recording is already bright enough."));
+        if (const auto mask = autoeq::maskingOf (p); harsh && autoeq::unmaskGainDb (mask.presenceDb, false) > 0.0f)
+            plan.notes.push_back (both ("Der Beat verdeckt die Stimme bei {0} ({1}), aber sie ist dort schon scharf - keine Anhebung.",
+                                        "The beat covers the voice at {0} ({1}), but it is already sharp there - no boost.",
+                                        { hz (mask.hz), db (mask.presenceDb) }));
 
         // ================= Level Ride: phrase levels =================
         // Also on wet hooks with a small loudness range: in the blind listening test of

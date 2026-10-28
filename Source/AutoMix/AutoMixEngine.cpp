@@ -710,9 +710,8 @@ namespace velvox::automix
         // ---- Output level: match the target loudness, then keep peaks below -1 dBFS. With a beat on the
         //      sidechain (Jakob 2026-10-28) the voice sits leadOverBeatLu above the beat instead: the
         //      original raised by what it lacks against the beat (measured where the beat plays)
-        constexpr float leadOverBeatLu = 1.0f;
         const bool toBeat = r.profile.beatPresent;
-        const float outputTarget = toBeat ? r.original.lufs + (leadOverBeatLu - r.profile.vocalOverBeatLu) : target;
+        const float outputTarget = toBeat ? r.original.lufs + (autoeq::leadOverBeatLu - r.profile.vocalOverBeatLu) : target;
         report (0.85f, "Pegel wird angepasst", "Adjusting the level");
         m = renderChecked (audio, current, plan, r.profile);
         ++r.iterations;

@@ -146,6 +146,97 @@ public:
         }
 
         levelTests();
+        eqTests();
+    }
+
+    void eqTests()
+    {
+        const auto vocal = makeVocal (vocalSpec());
+        const float vocalLufs = lufsOf (vocal);
+        const auto profileWith = [&] (BeatKind kind)
+        {
+            return VocalProfiler::analyse (withBeat (vocal, makeBeat (kind, 48000.0, 12.0, vocalLufs + 3.0f)));
+        };
+        const auto toneBell = [] (const MixPlan& plan) { return roleBand (plan, {}, dsp::EqRole::autoTone); };
+        const auto hasNote = [] (const MixPlan& plan, const char* text)
+        {
+            for (auto& n : plan.notes)
+                if (i18n::show (n, i18n::Language::english).contains (text))
+                    return true;
+            return false;
+        };
+
+        beginTest ("Beat EQ: a lift only where the beat covers the voice");
+        {
+            const auto none = AutoMixPlanner::plan (VocalProfiler::analyse (vocal), defaults());
+            for (auto kind : { BeatKind::presenceHeavy, BeatKind::dense, BeatKind::dark })
+            {
+                const auto p = profileWith (kind);
+                const auto m = autoeq::maskingOf (p);
+                const auto plan = AutoMixPlanner::plan (p, defaults());
+                const auto b = toneBell (plan);
+                logMessage (juce::String ((int) kind) + ": beat over voice " + juce::String (m.presenceDb, 1) + " dB at "
+                            + juce::String (m.hz, 0) + " Hz -> tone bell " + (b && b->on ? juce::String (b->gain, 1) + " dB at " + juce::String (b->freq, 0) : juce::String ("off")));
+                if (kind == BeatKind::presenceHeavy)
+                {
+                    expect (b.has_value() && b->on, "presence-heavy beat: a lift");
+                    if (b && b->on)
+                    {
+                        expect (b->freq >= 1500.0f && b->freq <= 6000.0f, juce::String (b->freq));
+                        expect (b->gain >= 0.5f && b->gain <= 2.5f, juce::String (b->gain));
+                    }
+                }
+                if (kind == BeatKind::dark)
+                    expect (! (b && b->on && b->gain > 0.0f), "a beat that leaves the presence free: no lift");
+            }
+            const auto b0 = toneBell (none);
+            expect (! (b0 && b0->on && b0->gain > 0.0f), "no beat: no lift from it");
+            expect (autoeq::unmaskGainDb (3.0f, false) == 0.0f && autoeq::unmaskGainDb (30.0f, false) == 2.5f
+                    && autoeq::unmaskGainDb (4.0f, false) == 0.5f);
+        }
+
+        beginTest ("Beat EQ: a sharp voice is not lifted, the report says why");
+        {
+            auto p = profileWith (BeatKind::presenceHeavy);
+            p.issues.push_back ({ "harsh", "Betonte obere Mitten", "", Confidence::likely, 10.0f });
+            const auto plan = AutoMixPlanner::plan (p, defaults());
+            const auto b = toneBell (plan);
+            expect (! (b && b->on && b->gain > 0.0f), "no lift on a sharp voice");
+            expect (hasNote (plan, "already sharp there"));
+        }
+
+        beginTest ("Beat EQ: a crowded low mid deepens a mud cut, never makes one");
+        {
+            // The rule on set measurements: synthetic beats normalised to a loudness hardly crowd the low
+            // mids of a voice set 1 LU above them, but bass-heavy productions can
+            const auto crowd = [] (VocalProfile p)
+            {
+                const float shift = autoeq::leadOverBeatLu - p.vocalOverBeatLu;
+                for (int b = 0; b < VocalProfiler::numBands; ++b)
+                    if (const float c = VocalProfiler::bandCentre (b); c >= 250.0f && c < 500.0f)
+                        p.beatOverVocalDb[(size_t) b] = 9.0f + shift;
+                return p;
+            };
+            const auto cutOf = [] (const MixPlan& plan) { return roleGain (plan, {}, dsp::EqRole::autoMix); };
+            const auto withBeatProfile = profileWith (BeatKind::dense);
+            expectLessThan (autoeq::maskingOf (withBeatProfile).lowMidDb, 6.0f, "the dense test beat does not crowd them");
+            expectWithinAbsoluteError (autoeq::maskingOf (crowd (withBeatProfile)).lowMidDb, 9.0f, 0.01f);
+
+            for (float mud : { 0.0f, 3.0f, 4.5f, 6.0f })
+            {
+                auto p = withBeatProfile;
+                for (int b = 0; b < VocalProfiler::numBands; ++b)
+                    if (const float c = VocalProfiler::bandCentre (b); c >= 250.0f && c < 500.0f)
+                        p.spectrumDb[(size_t) b] += mud;
+                const float without = cutOf (AutoMixPlanner::plan (p, defaults()));
+                const float with = cutOf (AutoMixPlanner::plan (crowd (p), defaults()));
+                logMessage ("mud +" + juce::String (mud, 1) + " dB: cut " + juce::String (without, 1) + " -> " + juce::String (with, 1) + " with a crowded low mid");
+                if (without < 0.0f)
+                    expectWithinAbsoluteError (with, std::max (-autoeq::maxBroadCutDb, without - 1.0f), 0.01f);
+                else
+                    expectEquals (with, without, "no mud cut from the beat alone");
+            }
+        }
     }
 
     void levelTests()

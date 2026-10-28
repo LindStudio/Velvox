@@ -60,7 +60,7 @@ namespace velvox::automix::autoeq
     {
         const VocalProfile* profile = nullptr;
         std::vector<dsp::EqBand> fixed;   // bands that stay (user / Vocal Check bands, the planned low cut)
-        bool conservative = false, noisy = false, sibilant = false, harsh = false, masking = false;
+        bool conservative = false, noisy = false, sibilant = false, harsh = false;
         int budget = maxBands - 1;        // bands available besides the low cut
     };
 
@@ -79,4 +79,19 @@ namespace velvox::automix::autoeq
 
     // True when `band` respects the limits (narrow: cut only, Q 10..16, >= -9 dB; broad: -4..+4 dB)
     bool withinLimits (const dsp::EqBand& band) noexcept;
+
+    // ---- The beat on the sidechain (plan 2026-10-28). The output puts the voice leadOverBeatLu above
+    //      the beat; the masking is measured as it will be there.
+    inline constexpr float leadOverBeatLu = 1.0f;
+    inline constexpr float unmaskFromDb = 3.0f;        // the beat this much louder than the voice: lift
+    struct Masking
+    {
+        bool valid = false;           // a beat was measured
+        float hz = 0.0f;              // centre of the 1/4 octave of 1.5 - 6 kHz where the beat covers most
+        float presenceDb = -100.0f;   // there: beat minus voice (dB)
+        float lowMidDb = -100.0f;     // 250 - 500 Hz: beat minus voice (dB)
+    };
+    Masking maskingOf (const VocalProfile& profile);
+    // The lift for a masking of `excessDb` (0 below unmaskFromDb), 0.5 .. 2.5 dB in 0.5 dB steps
+    float unmaskGainDb (float excessDb, bool conservative) noexcept;
 }
