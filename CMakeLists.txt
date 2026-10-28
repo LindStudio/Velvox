@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Velvox VERSION 0.6.1 LANGUAGES C CXX)
+project(Velvox VERSION 0.7.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -118,6 +118,7 @@ set(VELVOX_COMMON_DEFINITIONS
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
+    VELVOX_VERSION_STRING="${PROJECT_VERSION}"   # the one place of the version: project() above
 )
 
 # Third-party, header-only (MIT): Signalsmith Stretch 1.4.0 + Signalsmith Linear 0.6.4

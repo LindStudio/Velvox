@@ -9,5 +9,9 @@ namespace velvox::product
     inline constexpr const char* name = "Headliner";
     inline constexpr const char* legacyName = "Velvox";   // user preset folder of 0.1 - 0.3
     inline constexpr const char* companyName = "Lind Audio";
-    inline constexpr const char* versionString = "0.6.1";
+   #ifdef VELVOX_VERSION_STRING
+    inline constexpr const char* versionString = VELVOX_VERSION_STRING;   // from CMake project(... VERSION)
+   #else
+    #error "VELVOX_VERSION_STRING comes from CMakeLists.txt"
+   #endif
 }
