@@ -15,6 +15,18 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 - Vocal Check: der Mono-Hinweis verweist auf den Doubler. Das Delay-Echobild liest das Song-Tempo jetzt
   direkt aus der Kette (vorher über Pulse).
 
+### Neu – Room Noise und Breath Control – 0.7
+- **Room Noise** (Raumrauschen): senkt gleichmäßiges Rauschen (Lüfter, Raum, Vorverstärker oder Interface).
+  Das Rauschen wird laufend aus den leisesten Stellen der letzten 5 s gelernt. Amount 0–100 %, bei 100 %
+  höchstens −18 dB pro Frequenz. Latenz 1024 Samples.
+- **Breath Control** (Atem-Absenker): erkennt Atmer (leise, rauschig, ohne Tonhöhe, mindestens 60 ms) und
+  senkt sie ab Beginn ab. Amount 50 % = −12 dB, 100 % = −30 dB. S-Laute bleiben. Latenz 90 ms.
+- Die Latenz gilt nur, solange das Modul in der Kette ist (auch ausgeschaltet). Einschalten fügt es vorne
+  in die Kette ein. Kommt es während der Wiedergabe dazu, blendet es ohne Klick ein.
+- **Auto Mix:** setzt Room Noise ein, wenn der Abstand Stimme zu Rauschen unter 40 dB liegt, und Breath
+  Control, wenn Atmer hörbar sind.
+- **Alte Projekte:** beide Module sind nicht in der Kette, der Klang und die Latenz bleiben gleich.
+
 ### Neu – Maskottchen und SIMPEL
 - Das Teufelchen in SIMPEL (unten links, Klick = Vocal Check), Statuszeile, Vorher/Nachher oben rechts,
   Sprechblase mit „Vocal analysieren“ / „Details“. Nach dem Auto Mix zeigen die SIMPEL-Regler, was er
