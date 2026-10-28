@@ -108,7 +108,7 @@ public:
             expect (f.browser->visibleEntries().empty(), "un-starred");
         }
 
-        beginTest ("Hover shows the description; one click loads and keeps the list open (one undo step), Enter loads and closes");
+        beginTest ("Hover shows the description; one click loads and closes the list (one undo step), Enter loads and closes");
         {
             Fixture f;
             const int hd = indexOf (*f.pm, "Hard Dance Lead", true);
@@ -122,12 +122,13 @@ public:
             }
             f.browser->mouseDown (mouseAt (*f.browser, row.getCentre()));
             expectEquals (f.pm->getCurrentPresetName(), juce::String ("Hard Dance Lead"), "one click loads");
-            expect (f.browser->isOpen(), "and the list stays open");
+            expect (! f.browser->isOpen(), "and the list closes (Jakob 2026-10-28)");
             expectEquals (f.h.proc.getUndo().getNumSteps(), 1, "one undo step");
-            f.browser->mouseDown (mouseAt (*f.browser, row.getCentre()));
-            f.browser->mouseDoubleClick (mouseAt (*f.browser, row.getCentre(), 2));
-            expect (f.browser->isOpen(), "a double-click keeps it open too");
+            f.browser->open();
+            f.browser->mouseDown (mouseAt (*f.browser, f.browser->rowBounds (hd).getCentre()));
+            expect (! f.browser->isOpen(), "a click on the loaded preset closes too");
             expectEquals (f.h.proc.getUndo().getNumSteps(), 1, "the loaded preset is not loaded again");
+            f.browser->open();
             f.browser->mouseDown (mouseAt (*f.browser, { 2, 2 }));
             expect (! f.browser->isOpen(), "a click outside closes");
 

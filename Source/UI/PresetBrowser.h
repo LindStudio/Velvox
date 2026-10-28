@@ -12,7 +12,7 @@ namespace velvox::ui
     //   top     search field
     //   list    one row per preset: star (favourite, kept in the user settings), name, category;
     //           hover / selection shows the preset's description at the bottom
-    //   click   loads the preset (one undo step), the list stays open
+    //   click   loads the preset (one undo step) and closes the list
     //   keys    Up / Down select, Enter loads the selection and closes, Esc or a click outside closes
     //   bottom  Speichern, Speichern als …, Umbenennen …, Löschen (user presets)
     class PresetBrowser final : public juce::Component, private juce::TextEditor::Listener
@@ -47,7 +47,7 @@ namespace velvox::ui
         void selectEntry (int entryIndex);
         int getSelectedEntry() const noexcept { return selected; }
         void moveSelection (int steps);
-        bool loadEntry (int entryIndex);   // loads it (unless it is the loaded preset), the list stays open
+        bool loadEntry (int entryIndex);   // loads it (unless it is the loaded preset), the list stays open (tests)
         bool loadSelected();               // loads the selection and closes the list
         juce::String getInfoText() const;
 

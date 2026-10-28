@@ -482,15 +482,14 @@ namespace velvox::ui
             toggleFavourite (r);
             return;
         }
-        // One click loads the preset; the list stays open to try the next one (Esc, Enter or a click outside close it)
+        // One click loads the preset and closes the list (Jakob 2026-10-28)
         selectEntry (r);
-        loadEntry (r);
-        repaint();
+        loadSelected();
     }
 
     void PresetBrowser::mouseDoubleClick (const juce::MouseEvent&)
     {
-        // The first click has loaded the preset already; the list stays open
+        // The first click has loaded the preset and closed the list already
     }
 
     void PresetBrowser::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w)
