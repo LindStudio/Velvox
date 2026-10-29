@@ -189,8 +189,10 @@ namespace velvox::automix::autoeq
                 // 2026-10-29: 2-5 kHz is only cut on a take that is brighter there than finished professional vocals
                 // (or harsh); a dark voice gets a lift instead - also when it is noisy or sibilant, just a smaller one
                 case EqRole::autoTone: return { ctx.harsh || p.presenceDb > presenceWindow.hi ? cut : 0.0f,
-                                                ctx.harsh ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : 3.0f) * scale };
-                default:               return { cut, ctx.harsh ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : maxBroadBoostDb) * scale };
+                                                ctx.harsh || p.presenceDb > presenceWindow.hi ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : 3.0f) * scale };
+                // A take that is already brighter above 2 kHz than finished vocals never gets its highs lifted,
+                // even when 10-16 kHz is low (the shelf would lift the harsh range with it)
+                default:               return { cut, ctx.harsh || p.topDb > topWindow.hi ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : maxBroadBoostDb) * scale };
             }
         }
     }

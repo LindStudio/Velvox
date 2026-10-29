@@ -118,7 +118,7 @@ public:
         };
         VocalSpec res; res.seconds = 14.0; res.resonanceHz = 1800.0f; res.resonanceDb = 16.0f;
 
-        beginTest ("Planner: a resonance gets a notch in an auto-mix role band, explained, without SMOOTH");
+        beginTest ("Planner: a resonance gets a notch in an auto-mix role band, explained; SMOOTH stays gentle");
         {
             const auto cur = defaults();
             const auto plan = planOf (res, cur);
@@ -134,7 +134,9 @@ public:
             expect (std::any_of (plan.decisions.begin(), plan.decisions.end(), [] (const Decision& d)
                                  { return d.module == dsp::ModuleId::eq && i18n::show (d.title, i18n::Language::english).startsWith ("Resonance")
                                           && i18n::show (d.title, i18n::Language::english).contains ("narrow"); }), "and in English");
-            expect (! plan.on (pid::smoothOn), "SMOOTH is not switched on for a resonance the EQ already notches (not harsh)");
+            // 2026-10-29: SMOOTH runs on every vocal as basic care; a resonance the EQ already notches does not raise it
+            expect (plan.on (pid::smoothOn) && std::abs (plan.get (pid::smoothAmount) - 20.0f) < 0.01f,
+                    "SMOOTH only gently (20 %) for a resonance the EQ already notches (not harsh)");
             for (auto& b : autoBands (plan, cur))
                 expect (autoeq::withinLimits (b), "limits: " + autoeq::titleOf (b.bandRole(), b));
             expect ((int) autoBands (plan, cur).size() <= autoeq::maxBands, "at most 6 auto-mix bands");
@@ -378,7 +380,9 @@ public:
             {
                 VocalSpec b; b.seconds = 14.0; b.tiltDb = 4.0f; b.f0 = 300.0f;
                 auto p = profileOf (b);
+                logMessage ("    bright take: presence " + juce::String (p.presenceDb, 1) + ", top " + juce::String (p.topDb, 1) + ", air " + juce::String (p.airDb, 1));
                 const auto moves = autoeq::planMoves (ctxFor (p));
+                for (auto& m : moves) logMessage ("      " + m.title);
                 checkLimits (moves, autoeq::maxBands - 1, "bright");
                 for (auto& m : moves)
                     if (m.role == dsp::EqRole::air || m.role == dsp::EqRole::autoTone)
@@ -390,7 +394,7 @@ public:
                 VocalSpec s; s.seconds = 14.0;
                 const auto p = profileOf (s);
                 auto ctx = ctxFor (p);
-                autoeq::Levels inside; inside.body = -5.0f; inside.lowMid = -3.0f; inside.presence = -10.0f; inside.top = -11.0f; inside.air = -24.0f;
+                autoeq::Levels inside; inside.body = -5.0f; inside.lowMid = -3.0f; inside.presence = -9.0f; inside.top = -7.0f; inside.air = -17.0f;
                 expect (autoeq::correct (inside, ctx, {}).empty(), "inside the windows: nothing to correct");
 
                 auto dull = inside; dull.top = -20.0f;
@@ -414,7 +418,7 @@ public:
                 expect (autoeq::correct (dull, none, {}).empty(), "no budget: no new band");
 
                 // A planned lift that overshot is taken back
-                auto bright = inside; bright.top = -5.0f;
+                auto bright = inside; bright.top = -1.0f;
                 autoeq::Move lift { dsp::EqRole::air, band (dsp::EqBandType::highShelf, 9000.0f, 3.0f, 0.7071f), "x", "y", false };
                 const auto c3 = autoeq::correct (bright, ctx, { lift });
                 const auto* a3 = find (c3, dsp::EqRole::air);

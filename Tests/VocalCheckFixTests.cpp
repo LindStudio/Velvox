@@ -6,6 +6,7 @@
 #include "DSP/VocalAnalyzer.h"
 #include "Check/CheckTypes.h"
 #include "Check/CheckTargets.h"
+#include "AutoMix/AutoEq.h"
 #include "Check/CheckFixPlanner.h"
 #include "Check/CheckRules.h"
 #include "Parameters/ParameterLayout.h"
@@ -310,11 +311,13 @@ public:
             expectEquals (t.body.hi, -1.0f);
             expectEquals (t.lowMid.lo, -7.0f);
             expectEquals (t.lowMid.hi, 0.0f);
-            expectEquals (t.top.lo, -16.0f);
-            expectEquals (t.top.hi, -7.0f);
-            expectEquals (t.air.lo, -32.0f);
-            expectEquals (t.air.hi, -16.0f);
-            expectEquals (t.presenceMax, -4.0f);
+            // 2026-10-29: the windows calibrated on finished professional vocals (AutoEq.h)
+            using namespace velvox::automix;
+            expectEquals (t.top.lo, autoeq::topWindow.lo);
+            expectEquals (t.top.hi, autoeq::topWindow.hi);
+            expectEquals (t.air.lo, autoeq::airWindow.lo);
+            expectEquals (t.air.hi, autoeq::airWindow.hi);
+            expectEquals (t.presenceMax, autoeq::presenceWindow.hi);
             expectEquals (t.phrase.lo, 3.0f);
             expectEquals (t.phrase.hi, 6.0f);
             expectEquals (t.crestMin, 5.5f);

@@ -204,26 +204,30 @@ public:
         // broad 2.6 kHz cut in the base plan (the softer-highs variant is not needed any more) and the body / low-mid
         // lifts the render asked for; "stereo with rumble" is inside the body window; "dark 44.1 kHz" cuts the low
         // mids. Chosen candidates and output trims moved with the EQ.
+        // 2026-10-29 (windows calibrated on finished professional vocals, SMOOTH as basic care): every chain has
+        // SMOOTH; "dark low" lifts the highs with a 4.5 kHz shelf (+4) on top of the presence lift and cuts the
+        // low mids deeper (-4), now without saturation; "bright sibilant" needs no warmth shelf any more and its top
+        // shelf is -3.5; "dark 44.1 kHz" gets presence (+3) and a 4.5 kHz shelf (+2.5) and a deeper body cut.
         { VocalSpec s; s.seconds = 12.0;
-          goldens.push_back ({ "clean dry", s, "Basisplan", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
-                               100.0f, 0, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.3844f }); }
+          goldens.push_back ({ "clean dry", s, "Basisplan", "v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send",
+                               100.0f, 0, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.4286f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = -5.0f; s.f0 = 120.0f;
-          goldens.push_back ({ "dark low", s, "Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
-                               70.0f, 1, 200.0f, -4.0f, 285.0876f, -1.5f, 1.2f, 10000.0f, 0.0f, 4.6905f, 3000.0f, 3.0f, 0.8f }); }
+          goldens.push_back ({ "dark low", s, "Ohne S\xc3\xa4ttigung + Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send",
+                               70.0f, 1, 200.0f, -4.0f, 285.0876f, -4.0f, 1.2f, 4500.0f, 4.0f, 4.3439f, 3000.0f, 3.0f, 0.8f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = 4.0f; s.sibilance = 1.6f; s.f0 = 300.0f;
-          goldens.push_back ({ "bright sibilant", s, "De-Esser st\xc3\xa4rker + Dynamik leichter", "v2,eq,ride,comp,deess,doubler,delay:send,reverb:send",
-                               136.4929f, 0, 170.0f, 4.0f, 350.0f, 3.0f, 1.0f, 5000.0f, -4.0f, 3.7932f, 2560.0f, -4.0f, 1.0f }); }
+          goldens.push_back ({ "bright sibilant", s, "De-Esser st\xc3\xa4rker + Dynamik leichter", "v2,eq,ride,comp,deess,smooth,doubler,delay:send,reverb:send",
+                               136.4929f, 0, 170.0f, 0.0f, 350.0f, 3.0f, 1.0f, 5000.0f, -3.5f, 3.7194f, 2560.0f, -4.0f, 1.0f }); }
         { VocalSpec s; s.seconds = 12.0; s.channels = 2; s.stereoDifference = 0.5f; s.rumbleDb = -26.0f;
           // 0.6 dynamics: was "Dynamik leichter + De-Esser staerker" (the lighter compression is no longer needed)
-          goldens.push_back ({ "stereo with rumble", s, "De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,smash,deess,sat,delay:send,reverb:send",
-                               126.5934f, 1, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.5825f }); }
+          goldens.push_back ({ "stereo with rumble", s, "De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,smash,deess,smooth,sat,delay:send,reverb:send",
+                               126.5934f, 1, 180.0f, 0.0f, 1500.0f, 0.0f, 1.0f, 10000.0f, 0.0f, 4.6269f }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = -3.0f; s.f0 = 150.0f; s.sampleRate = 44100.0;
           // 0.6 reverb track: the reverb now reaches its set decay (T30 +-10 %), so the base plan's send already
           // gives enough space here (score 0.454 vs 0.471 for "Mehr Raum (Large Hall)", was the other way round);
           // the EQ / output decisions below are unchanged
           // 0.6 dynamics: "Mehr Raum (Large Hall)" scores best again (it was the 0.5 choice before the reverb change)
-          goldens.push_back ({ "dark 44.1 kHz", s, "Basisplan", "v2,eq,ride,comp,smash,deess,sat,doubler,delay:send,reverb:send",
-                               70.0f, 0, 200.0f, -3.0f, 200.0f, -4.0f, 1.2f, 10000.0f, 0.0f, 4.9537f }); }
+          goldens.push_back ({ "dark 44.1 kHz", s, "Basisplan", "v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send",
+                               70.0f, 0, 200.0f, -4.0f, 200.0f, -4.0f, 1.2f, 4500.0f, 2.5f, 4.8093f, 3000.0f, 3.0f, 0.8f }); }
 
         const auto current = defaultValues();
         for (const auto& g : goldens)

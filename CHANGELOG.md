@@ -4,6 +4,19 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 
 ## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/modules-0.7`
 
+### Auto Mix an Profi-Vocals ausgerichtet (Jakob, 2026-10-29)
+Jakob: „Auto Mix nimmt immer Höhen raus, Profis boosten eher; nimmt nie Breath Control/Smooth.“ Gemessen an
+8 fertigen Profi-Vocals und 23 trockenen Stimmen.
+- **Hellere Zielkurve:** Die Klangfenster lagen ~5 dB zu dunkel. Neu (gegenüber dem Kern): über 2 kHz −11…−3 dB,
+  Luft −22…−13 dB, Präsenz 2–5 kHz −12…−5 dB (vorher ohne Untergrenze). Vocal Check nutzt dieselben Ziele.
+- **Keine dummen Höhen-Entscheidungen mehr:** 2–5 kHz wird nur noch abgesenkt, wenn die Stimme dort heller ist als
+  fertige Profi-Vocals (oder scharf). Dunkle Stimmen bekommen Präsenz und Höhen dazu. Umgekehrt bekommt eine
+  Stimme, die schon zu hell ist, nie eine Höhen- oder Präsenz-Anhebung.
+- **Smooth läuft immer** als sanfte Grundpflege (20 %), bei Schärfe oder Resonanzen 30/45 %. **Breath Control**
+  ab 1 % Atem-Anteil, **Room Noise** nur unter 35 dB Rauschabstand und nicht auf halligen oder fertigen Takes.
+- Ergebnis auf den 23 trockenen Stimmen: Präsenz im Median −12,3 → −10,4 dB, Höhen −11,8 → −9,1 dB (Profi-Bereich).
+  Luft bleibt dunkler als bei Profis, weil die Anhebung bewusst auf 4 dB (2 dB bei Rauschen) begrenzt ist.
+
 ### Review-Umsetzung (Jakob, 2026-10-28) – Version 0.7.0
 Keine Rückwärtskompatibilität (Entwicklungsphase): Defaults und Wertebereiche wurden direkt geändert.
 - **Makros bipolar:** Presence, Warmth, Space, Width und Punch laufen von −100 bis +100 %, die Mitte heißt
