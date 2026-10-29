@@ -719,13 +719,13 @@ namespace velvox::ui
                 curvePath.lineTo (pt);
         }
 
-        // Harmonics of a -12 dBFS sine (H1..H8, dB relative to H1)
-        harmonics = dsp::SaturationModule::harmonicProfile (c, d, -12.0f);
+        // Harmonics of a sine at a realistic vocal peak (thdLevelDb, level-trimmed; H1..H8, dB relative to H1)
+        harmonics = dsp::SaturationModule::harmonicProfile (c, d, dsp::SaturationModule::thdLevelDb);
         dsp::SatSettings one;
         one.character = c;
         one.driveDb = d;
         one.mix = juce::jlimit (0.0f, 1.0f, mix);
-        thdPercent = dsp::SaturationModule::thdPercent (one, -12.0f);   // as it sounds: with the Mix
+        thdPercent = dsp::SaturationModule::thdPercent (one, dsp::SaturationModule::thdLevelDb);   // as it sounds: with the Mix
     }
 
     void SatView::update (const LiveData& d)
@@ -872,7 +872,7 @@ namespace velvox::ui
             }
         }
 
-        // Single band: the scale Wärme -> Farbe -> Zerre (THD of a -12 dBFS sine with the Mix), a marker at the setting
+        // Single band: the scale Wärme -> Farbe -> Zerre (THD at a realistic vocal peak, thdLevelDb, with the Mix), a marker at the setting
         if (! multiband)
         {
             const auto bar = scaleBar();

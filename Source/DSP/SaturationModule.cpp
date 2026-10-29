@@ -5,7 +5,7 @@ namespace velvox::dsp
     namespace
     {
         constexpr float bias = 0.2f;     // adds even harmonics
-        constexpr float tubeBias = 0.5f;
+        constexpr float tubeBias = 0.4f;   // audit 2026-10-29: 0.5 was too asymmetric (harsh H2 from the first dB)
         constexpr int updateInterval = 16;
         constexpr double adaaEpsilon = 1.0e-6;
         constexpr double hfFix = 0.133;
@@ -80,26 +80,30 @@ namespace velvox::dsp
         }
     }
 
-    // Keeps perceived level roughly constant: matches the RMS of a -12 dBFS sine
-    // before and after the curve.
+    // Keeps perceived level roughly constant: matches the RMS before and after the curve of sines at
+    // the reference peak and 6 / 12 dB below it - the level trim puts a take's peaks at the reference,
+    // most of a vocal lies below them
     float SaturationModule::compensationFor (float drive, int character) noexcept
     {
         constexpr int points = 48;
-        constexpr float amp = 0.25f;
-        double inSum = 0.0, outSum = 0.0, outMean = 0.0;
+        double inSum = 0.0, outSum = 0.0;
         float out[points];
 
-        for (int i = 0; i < points; ++i)
+        for (float amp : { 0.25f, 0.125f, 0.0625f })
         {
-            const float x = amp * std::sin (6.2831853f * (float) i / (float) points);
-            out[i] = shape (x, drive, character);
-            outMean += out[i];
-            inSum += (double) x * x;
-        }
+            double outMean = 0.0;
+            for (int i = 0; i < points; ++i)
+            {
+                const float x = amp * std::sin (6.2831853f * (float) i / (float) points);
+                out[i] = shape (x, drive, character);
+                outMean += out[i];
+                inSum += (double) x * x;
+            }
 
-        outMean /= points;
-        for (int i = 0; i < points; ++i)
-            outSum += (out[i] - outMean) * (out[i] - outMean);
+            outMean /= points;
+            for (int i = 0; i < points; ++i)
+                outSum += (out[i] - outMean) * (out[i] - outMean);
+        }
 
         return outSum > 1.0e-12 ? (float) std::sqrt (inSum / outSum) : 1.0f;
     }
@@ -132,7 +136,7 @@ namespace velvox::dsp
         SatSettings s;
         s.character = character;
         s.mix = mix;
-        const auto thdAt = [&s] (float drive) { s.driveDb = drive; return thdPercent (s, -12.0f); };
+        const auto thdAt = [&s] (float drive) { s.driveDb = drive; return thdPercent (s, thdLevelDb); };
         if (thdAt (24.0f) <= targetPercent)
             return 24.0f;
         float lo = 0.0f, hi = 24.0f;   // THD grows with drive
@@ -150,7 +154,7 @@ namespace velvox::dsp
         constexpr int points = 64;
         const float d = dbToGain (driveDb);
         const float c = compensationFor (d, character);
-        const float a = dbToGain (levelDb);
+        const float a = dbToGain (levelDb + levelTrimDb (levelDb));   // the curve sees the trimmed sine
         float y[points];
         for (int i = 0; i < points; ++i)
             y[i] = shape (a * std::sin (juce::MathConstants<float>::twoPi * (float) i / (float) points), d, character) * c;
@@ -221,6 +225,12 @@ namespace velvox::dsp
         xoverLow.setCurrentAndTargetValue (xoverLow.getTargetValue());
         xoverHigh.setCurrentAndTargetValue (xoverHigh.getTargetValue());
 
+        trimTarget.assign ((size_t) std::max (1, maxBlockSize), 1.0f);
+        envRelease = std::exp (-1.0 / (0.3 * sampleRate));
+        pauseRelease = std::exp (-1.0 / (0.05 * sampleRate));
+        trimDownCoef = 1.0 - std::exp (-1.0 / (0.00025 * highRate));
+        trimUpCoef = 1.0 - std::exp (-1.0 / (0.002 * highRate));
+
         dcR = 1.0 - 2.0 * juce::MathConstants<double>::pi * 10.0 / highRate;
         warmupLength = (int) std::lround (0.005 * sampleRate);
         for (int b = 0; b < numBands; ++b)
@@ -250,7 +260,36 @@ namespace velvox::dsp
             b.fill (0.0);
         for (auto& f : firHist)
             f = { 0.0, 0.0 };
+        trimNow.fill (trimForEnv());   // the follower keeps running while the module is off
         needsReset = false;
+    }
+
+    double SaturationModule::trimForEnv() const noexcept
+    {
+        return (double) dbToGain (referenceDb) / std::max (levelEnv, (double) dbToGain (trimFloorDb));
+    }
+
+    // Programme peak (linked channels): instant attack, 300 ms release. The release is held in a
+    // pause - while the 50 ms peak is 20 dB under the programme peak or under the trim floor - so the
+    // trim never creeps up between phrases
+    void SaturationModule::followLevel (const float* const* channels, int numChannels, int numSamples) noexcept
+    {
+        const double floorLin = dbToGain (trimFloorDb);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            double a = 0.0;
+            for (int ch = 0; ch < numChannels; ++ch)
+                a = std::max (a, (double) std::abs (channels[ch][i]));
+            if (! std::isfinite (a))
+                a = 0.0;
+            pauseEnv = std::max (a, pauseEnv * pauseRelease);
+            if (a > levelEnv)
+                levelEnv = a;
+            else if (pauseEnv > std::max (floorLin, 0.1 * levelEnv))
+                levelEnv *= envRelease;
+            if (i < (int) trimTarget.size())
+                trimTarget[(size_t) i] = (float) trimForEnv();
+        }
     }
 
     void SaturationModule::stopSolo() noexcept
@@ -262,7 +301,10 @@ namespace velvox::dsp
     void SaturationModule::reset()
     {
         dryDelay.reset();
+        levelEnv = dbToGain (trimFloorDb);   // set by the first sound
+        pauseEnv = 0.0;
         resetState();
+        trimNow.fill (1.0);   // from unity: the first note is never lifted for a moment
     }
 
     void SaturationModule::setSettings (const SatSettings& s) noexcept
@@ -339,6 +381,7 @@ namespace velvox::dsp
         for (int ch = 0; ch < numChannels; ++ch)
             dry.copyFrom (ch, 0, channels[ch], numSamples);
         dryDelay.process (dry.getArrayOfWritePointers(), numChannels, numSamples);
+        followLevel (channels, numChannels, numSamples);
 
         // A pending switch between single and multiband happens while the output is the dry
         if (requestedMultiband != activeMultiband && weight.getCurrentValue() <= 0.0f && ! weight.isSmoothing())
@@ -439,10 +482,19 @@ namespace velvox::dsp
                     double wet = 0.0, sum = u;
                     double soloLin[numBands] {}, soloWet[numBands] {};   // each band's dry share and output
 
+                    // Level trim: the curve sees u * g; its output is scaled back by the mean of this and
+                    // the last sample's g (what the ADAA averages over), so the linear part stays exact
+                    // while g moves
+                    auto& g = trimNow[(size_t) ch];
+                    const double gLast = g;
+                    const double target = trimTarget[(size_t) std::min (start + i, (int) trimTarget.size() - 1)];
+                    g += (target < g ? trimDownCoef : trimUpCoef) * (target - g);
+                    const double gBack = 2.0 / (g + gLast);
+
                     if (! mb)
                     {
                         auto& p = bandParams[0];
-                        wet = shapeAdaa (shapers[0][(size_t) ch], p, u);
+                        wet = shapeAdaa (shapers[0][(size_t) ch], p, u * g) * gBack;
                         inSum[0] += u * u;
                         outSum[0] += wet * wet;
                     }
@@ -483,11 +535,11 @@ namespace velvox::dsp
                                     sh.fp = antiderivative (sh.xp, p.driveLin, p.character);
                                     sh.stale = false;
                                 }
-                                y = lin + (double) on * (shapeAdaa (sh, p, xb) - lin);
+                                y = lin + (double) on * (shapeAdaa (sh, p, xb * g) * gBack - lin);
                             }
                             else
                             {
-                                sh.xp = xb;
+                                sh.xp = xb * g;
                                 sh.stale = true;
                             }
                             wet += y;

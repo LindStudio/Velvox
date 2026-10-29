@@ -115,7 +115,7 @@ namespace velvox::dsp
                 one.character = character;
                 one.driveDb = driveDb;
                 one.mix = mix;
-                return SaturationModule::thdPercent (one, -12.0f);
+                return SaturationModule::thdPercent (one, SaturationModule::thdLevelDb);
             };
             const auto limit = [&] (float baseDb, float& db, int character)
             {

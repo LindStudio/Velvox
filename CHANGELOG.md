@@ -4,6 +4,15 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 
 ## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/modules-0.7`
 
+### Saturation pegelunabhängig (Jakob, 2026-10-29)
+Jakob: „Saturation verzerrt die Vocal stark.“ Die Kurven arbeiteten auf absoluten dBFS und waren auf einen Sinus
+mit −12 dBFS geeicht – echte Vocal-Spitzen liegen nach dem Kompressor 6–11 dB höher.
+- **Drive bezieht sich auf den Programmpegel:** Ein langsamer Spitzenfolger (300 ms, in Pausen gehalten) bringt
+  die Stimme vor der Kurve auf −12 dBFS und danach zurück. Derselbe Drive klingt auf einer −24- und einer
+  −3-dBFS-Aufnahme gleich; leise Stellen werden höchstens um 18 dB angehoben (kein Rauschen in die Kurve).
+- **Wärmezone und THD-Anzeige gelten bei −3 dBFS Spitze**, nicht mehr nur bei −12 dBFS.
+- **Tube sanfter:** weniger Asymmetrie (Bias 0,5 → 0,4), die geraden Obertöne bleiben sein Charakter.
+
 ### Auto Mix an Profi-Vocals ausgerichtet (Jakob, 2026-10-29)
 Jakob: „Auto Mix nimmt immer Höhen raus, Profis boosten eher; nimmt nie Breath Control/Smooth.“ Gemessen an
 8 fertigen Profi-Vocals und 23 trockenen Stimmen.

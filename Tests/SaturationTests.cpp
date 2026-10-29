@@ -190,24 +190,34 @@ public:
     void runTest() override
     {
         // Review 2026-10-28 (item 9, Jakob: "voller machen, nicht distorten"): presets, the fresh module, the
-        // macros at full and the auto mix stay in the warmth zone - under 3 % THD at -12 dBFS (the THD chip's level)
+        // macros at full and the auto mix stay in the warmth zone - under 3 % THD at -12 dBFS and at a -3 dBFS peak (the THD chip's level)
         beginTest ("Warmth zone: every factory preset, Init, full macros and the auto mix under 3 % THD");
         {
-            const auto thdPercent = [] (const SatSettings& s)
+            // Audit 2026-10-29 (Jakob: "verzerrt die Vocal stark"): also at a realistic vocal peak level
+            // (-3 dBFS, compressor with makeup before the Saturation), not only at -12 dBFS
+            const auto thdPercentAt = [] (const SatSettings& s, float level)
             {
-                const auto out = renderWith (s, sineVec (fs48, 1000.0, -12.0, 1.0));
+                const auto out = renderWith (s, sineVec (fs48, 1000.0, level, 1.0));
                 return 100.0 * std::pow (10.0, thdDb (out, fs48, 1000.0) / 20.0);
+            };
+            const auto thdPercent = [&] (const SatSettings& s)
+            {
+                return std::max (thdPercentAt (s, -12.0f), thdPercentAt (s, SaturationModule::thdLevelDb));
             };
             const auto check = [&] (test::Harness& h, const juce::String& what)
             {
                 const auto s = h.proc.readEffectiveSettings().sat;
                 if (! s.enabled)
                     return;
-                const double thd = thdPercent (s);
-                logMessage (what + ": THD " + juce::String (thd, 2) + " %, model " + juce::String (SaturationModule::thdPercent (s, -12.0f), 2) + " %");
-                expect (thd < 3.0, what + ": " + juce::String (thd, 2) + " %");
-                expectWithinAbsoluteError ((float) thd, SaturationModule::thdPercent (s, -12.0f), (float) std::max (0.3, 0.2 * thd),
-                                           what + ": the chip's number matches the sound");
+                for (float level : { -12.0f, SaturationModule::thdLevelDb })
+                {
+                    const double thd = thdPercentAt (s, level);
+                    const auto at = what + " at " + juce::String (juce::roundToInt (level)) + " dBFS";
+                    logMessage (at + ": THD " + juce::String (thd, 2) + " %, model " + juce::String (SaturationModule::thdPercent (s, level), 2) + " %");
+                    expect (thd < 3.0, at + ": " + juce::String (thd, 2) + " %");
+                    expectWithinAbsoluteError ((float) thd, SaturationModule::thdPercent (s, level), (float) std::max (0.3, 0.2 * thd),
+                                               at + ": the chip's number matches the sound");
+                }
             };
             {
                 test::Harness h;
@@ -263,17 +273,117 @@ public:
                 }
         }
 
-        beginTest ("THD calibration unchanged (1 kHz, -12 / -24 dBFS = the static curve)");
+        // Audit 2026-10-29: the curves sit on the programme level, not on absolute dBFS - a slow peak
+        // follower trims the input to the reference level before the curve and back after it
+        beginTest ("THD calibration (1 kHz): every level from -24 to -1 dBFS = the static curve at the reference level");
         {
             for (int c = 0; c < SaturationModule::numCharacters; ++c)
-                for (double level : { -12.0, -24.0 })
+                for (double level : { -24.0, -12.0, -6.0, -1.0 })
                 {
                     const double measured = thdDb (renderWith (single (c, 12.0f), sineVec (fs48, 1000.0, level, 2.0)), fs48, 1000.0);
-                    const double expected = staticThdDb (c, 12.0f, level);
-                    logMessage ("character " + juce::String (c) + " at " + juce::String (level, 0) + " dBFS: THD "
+                    const double expected = staticThdDb (c, 12.0f, SaturationModule::referenceDb);
+                    logMessage ("character " + juce::String (c) + " at " + juce::String (juce::roundToInt (level)) + " dBFS: THD "
                                 + juce::String (measured, 2) + " dB, curve " + juce::String (expected, 2) + " dB");
                     expectWithinAbsoluteError (measured, expected, 0.3);
+                    expectWithinAbsoluteError (20.0 * std::log10 (SaturationModule::thdPercent (single (c, 12.0f), (float) level) / 100.0),
+                                               measured, 0.3, "the model knows the level trim");
                 }
+        }
+
+        beginTest ("Level-independent drive: the same Drive distorts a -24 and a -6 dBFS vocal take alike");
+        {
+            VocalSpec vs;
+            vs.seconds = 3.0;
+            const auto voice = makeVocal (vs).vocal[0];
+            float peak = 0.0f;
+            for (float v : voice)
+                peak = std::max (peak, std::abs (v));
+            // Added distortion of the take at a peak level: the output (scaled back) minus the linear
+            // chain (the same take at -70 dBFS, far below the trim floor, scaled back)
+            const auto scaled = [&] (double peakDb)
+            {
+                std::vector<float> v (voice);
+                const float g = (float) std::pow (10.0, peakDb / 20.0) / peak;
+                for (auto& x : v)
+                    x *= g;
+                return std::make_pair (v, (double) g);
+            };
+            const auto distortionDb = [&] (const SatSettings& s, double peakDb)
+            {
+                const auto [in, g] = scaled (peakDb);
+                const auto [lin, gl] = scaled (-70.0);
+                const auto out = renderWith (s, in), ref = renderWith (s, lin);
+                double e = 0.0, p = 0.0;
+                for (size_t i = 4800; i < out.size(); ++i)
+                {
+                    const double y = out[i] / g, r = ref[i] / gl;
+                    e += (y - r) * (y - r);
+                    p += r * r;
+                }
+                return dbOf (e / p);
+            };
+            const char* names[] { "Warm", "Tape", "Tube", "Hard" };
+            for (int c = 0; c < SaturationModule::numCharacters; ++c)
+                for (float drive : { 3.0f, 6.0f, 12.0f })
+                {
+                    const double quiet = distortionDb (single (c, drive), -24.0), loud = distortionDb (single (c, drive), -6.0);
+                    logMessage (juce::String (names[c]) + " " + juce::String (juce::roundToInt (drive)) + " dB: distortion at -24 dBFS peak "
+                                + juce::String (quiet, 1) + " dB, at -6 dBFS peak " + juce::String (loud, 1) + " dB");
+                    expectWithinAbsoluteError (loud, quiet, 2.0, juce::String (names[c]) + " " + juce::String (drive));
+                }
+        }
+
+        beginTest ("Quiet noise is not pushed into distortion (trim floor)");
+        {
+            for (int c = 0; c < SaturationModule::numCharacters; ++c)
+            {
+                const double quiet = thdDb (renderWith (single (c, 12.0f), sineVec (fs48, 1000.0, -60.0, 2.0)), fs48, 1000.0);
+                const double maxBoost = SaturationModule::referenceDb - SaturationModule::trimFloorDb;
+                const double expected = staticThdDb (c, 12.0f, -60.0 + maxBoost);
+                logMessage ("character " + juce::String (c) + " at -60 dBFS: THD " + juce::String (quiet, 1) + " dB, curve +"
+                            + juce::String (juce::roundToInt (maxBoost)) + " dB: " + juce::String (expected, 1) + " dB");
+                expectLessThan (maxBoost, 20.0, "the trim lifts quiet takes by a bounded amount");
+                expectLessThan (quiet, expected + 1.0);
+                expectLessThan (quiet, staticThdDb (c, 12.0f, SaturationModule::referenceDb) - 15.0, "far cleaner than the programme level");
+            }
+        }
+
+        beginTest ("Phrase after a quiet passage: the onset is not harsher than the steady phrase, no click");
+        {
+            // -28 dBFS (the trim lifts it), then a 2 ms ramp to -3 dBFS
+            const int n = (int) (1.5 * fs48), onset = (int) fs48;
+            std::vector<float> in ((size_t) n);
+            for (int i = 0; i < n; ++i)
+            {
+                const double ramp = juce::jlimit (0.0, 1.0, (i - onset) / (0.002 * fs48));
+                const double db = -28.0 + 25.0 * ramp;
+                in[(size_t) i] = (float) (std::pow (10.0, db / 20.0) * std::sin (2.0 * pi * 300.0 * i / fs48));
+            }
+            for (int c = 0; c < SaturationModule::numCharacters; ++c)
+            {
+                const auto s = single (c, 6.0f);
+                const auto out = renderWith (s, in);
+                // The linear part: the same signal at -70 dB
+                std::vector<float> lin (in);
+                for (auto& x : lin)
+                    x *= 1.0e-3f;
+                const auto ref = renderWith (s, lin);
+                const auto window = [&] (int from, int len)
+                {
+                    double e = 0.0, p = 0.0;
+                    for (int i = from; i < from + len; ++i)
+                    {
+                        const double r = ref[(size_t) i] * 1.0e3;
+                        e += std::pow (out[(size_t) i] - r, 2.0);
+                        p += r * r;
+                    }
+                    return dbOf (e / p);
+                };
+                const int len = (int) (0.02 * fs48);
+                const double first = window (onset, len), steady = window (onset + (int) (0.3 * fs48), len);
+                logMessage ("character " + juce::String (c) + ": distortion first 20 ms " + juce::String (first, 1) + " dB, steady " + juce::String (steady, 1) + " dB");
+                expectLessThan (first, steady + 6.0);
+            }
         }
 
         beginTest ("Linear chain flat at Mix 100 % and 50 % (no comb between dry and wet)");
@@ -396,6 +506,18 @@ public:
                         d = std::max (d, std::abs (std::max (sig[(size_t) a][(size_t) k], -100.0f) - std::max (sig[(size_t) b][(size_t) k], -100.0f)));
                     expectGreaterThan (d, 6.0f, "characters " + juce::String (a) + " / " + juce::String (b));
                 }
+
+            // Audit 2026-10-29: Tube less asymmetric (less harsh), still the even-harmonic character -
+            // more H2 than Warm and H2 above its own H3
+            const auto tube = SaturationModule::harmonicProfile (2, 5.0f, SaturationModule::referenceDb);
+            SatSettings t5;
+            t5.character = 2;
+            t5.driveDb = 5.0f;
+            const float thd = SaturationModule::thdPercent (t5, SaturationModule::thdLevelDb);
+            logMessage ("Tube 5 dB: H2 " + juce::String (tube[1], 1) + " dB, H3 " + juce::String (tube[2], 1) + " dB, THD " + juce::String (thd, 1) + " %");
+            expectLessThan (thd, 8.5f, "Tube 5 dB was 9.6 % THD (bias 0.5)");
+            expectGreaterThan (tube[1], tube[2] + 6.0f, "Tube: H2 dominates");
+            expectGreaterThan (sig[2][1], sig[0][1] + 3.0f, "Tube: more H2 than Warm");
         }
 
         beginTest ("harmonicProfile and transferCurve match the processed audio");
@@ -422,10 +544,6 @@ public:
 
         beginTest ("Loudness stays matched across the Drive range (vocal-like signal)");
         {
-            VocalSpec vs;
-            vs.seconds = 4.0;
-            vs.levelDb = -18.0f;
-            const auto voice = makeVocal (vs).vocal[0];
             const auto rms = [] (const std::vector<float>& v, size_t from)
             {
                 double e = 0.0;
@@ -433,16 +551,25 @@ public:
                     e += (double) v[i] * v[i];
                 return 10.0 * std::log10 (e / (double) (v.size() - from) + 1.0e-30);
             };
-            const double inDb = rms (voice, 4800);
-            for (int c = 0; c < 4; ++c)
-                for (float drive : { 0.0f, 6.0f, 12.0f, 18.0f, 24.0f })
-                {
-                    const double change = rms (renderWith (single (c, drive), voice), 4800) - inDb;
-                    logMessage ("character " + juce::String (c) + ", drive " + juce::String (drive, 0) + " dB: level " + juce::String (change, 2) + " dB");
-                    // Ruling (ledger): the 0.2 compensation is kept (old projects keep their level);
-                    // it holds the vocal within -1.1 .. +1.7 dB over the whole Drive range
-                    expectWithinAbsoluteError (change, 0.0, 2.0);
-                }
+            // A quiet, a normal and a hot take (RMS): the level trim keeps the match at every level
+            for (float levelDb : { -30.0f, -18.0f, -10.0f })
+            {
+                VocalSpec vs;
+                vs.seconds = 4.0;
+                vs.levelDb = levelDb;
+                const auto voice = makeVocal (vs).vocal[0];
+                const double inDb = rms (voice, 4800);
+                for (int c = 0; c < 4; ++c)
+                    for (float drive : { 0.0f, 6.0f, 12.0f, 18.0f, 24.0f })
+                    {
+                        const double change = rms (renderWith (single (c, drive), voice), 4800) - inDb;
+                        logMessage ("take " + juce::String (juce::roundToInt (levelDb)) + " dBFS RMS, character " + juce::String (c)
+                                    + ", drive " + juce::String (juce::roundToInt (drive)) + " dB: level " + juce::String (change, 2) + " dB");
+                        // Ruling (ledger): the 0.2 compensation is kept; it holds the vocal within
+                        // -1.1 .. +1.7 dB over the whole Drive range
+                        expectWithinAbsoluteError (change, 0.0, 2.0);
+                    }
+            }
         }
 
         beginTest ("Meters report band input and output levels");
@@ -638,7 +765,7 @@ public:
             expectWithinAbsoluteError (b[1].driveDb - b[0].driveDb, 1.0f, 0.01f, "the differences stay");
             expectWithinAbsoluteError (b[2].driveDb - b[1].driveDb, 1.0f, 0.01f);
             expectGreaterThan (b[0].driveDb, 0.5f, "the macro adds drive to every band");
-            expectLessThan (SaturationModule::thdPercent (cs.sat, -12.0f), SaturationModule::warmZoneThd, "inside the warmth zone");
+            expectLessThan (SaturationModule::thdPercent (cs.sat, SaturationModule::thdLevelDb), SaturationModule::warmZoneThd, "inside the warmth zone");
 
             using dsp::linkedBandDrives;
             auto r = linkedBandDrives ({ 3.0f, 6.0f, 9.0f }, 1, 10.0f);

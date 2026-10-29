@@ -5,6 +5,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include <array>
 #include <atomic>
+#include <vector>
 
 namespace velvox::dsp
 {
@@ -98,7 +99,7 @@ namespace velvox::dsp
 
         // UI feed (message thread, no state):
         //  transferCurve: y = shape (x) * compensation for the given character and drive
-        //  harmonicProfile: H1..H8 of a sine at levelDb through the curve, dB relative to H1
+        //  harmonicProfile: H1..H8 of a sine at levelDb (peak) through the level trim and the curve, dB relative to H1
         //  (H1 itself = the level change of the fundamental incl. compensation, normally ~0 dB)
         static void transferCurve (int character, float driveDb, const float* x, float* y, int n) noexcept;
         static std::array<float, 8> harmonicProfile (int character, float driveDb, float levelDb) noexcept;
@@ -106,9 +107,19 @@ namespace velvox::dsp
         //  character and Mix (multiband: the Mid band, where 1 kHz lies). The panel's THD chip and the
         //  warmth zone (review 2026-10-28: presets and macros stay under warmZoneThd) use it.
         static float thdPercent (const SatSettings& s, float levelDb) noexcept;
-        static constexpr float warmZoneThd = 3.0f;   // % at -12 dBFS: "fuller", not distorted
-        // The highest drive (0..24 dB) that keeps a character at this Mix under targetPercent THD at -12 dBFS
+        static constexpr float warmZoneThd = 3.0f;   // % at thdLevelDb: "fuller", not distorted
+        // The highest drive (0..24 dB) that keeps a character at this Mix under targetPercent THD at thdLevelDb
         static float maxDriveForThd (int character, float mix, float targetPercent) noexcept;
+
+        // Level trim (audit 2026-10-29: Drive meant something else on every take): a slow peak follower
+        // (instant attack, 300 ms release, held in pauses) trims the programme peak to referenceDb
+        // before the curves and back after them, so a Drive distorts a -24 and a -3 dBFS take alike.
+        // Below trimFloorDb the lift stops (noise and pauses are not pushed into the curve).
+        static constexpr float referenceDb = -12.0f;   // the curves' calibration level (compensationFor)
+        static constexpr float trimFloorDb = -30.0f;   // at most +18 dB
+        static constexpr float thdLevelDb = -3.0f;     // readouts and the warmth zone: a realistic vocal peak
+        // Trim (dB) the follower settles on for a steady programme peak
+        static float levelTrimDb (float peakDb) noexcept { return referenceDb - std::max (peakDb, trimFloorDb); }
 
         static constexpr int numBands = 3;
         const SatMeters& getMeters() const noexcept { return meters; }
@@ -151,6 +162,7 @@ namespace velvox::dsp
         void updateBandParams (int band, int skip, bool force) noexcept;
         void updateCrossovers (int skip, bool force) noexcept;
         void resetState() noexcept;
+        void followLevel (const float* const* channels, int numChannels, int numSamples) noexcept;
 
         SatOversampler oversampler;
         IntegerDelay dryDelay;
@@ -173,6 +185,14 @@ namespace velvox::dsp
         int latency = 0;
         int warmup = 0, warmupLength = 240;
         SatMeters meters;
+
+        // Level trim (see levelTrimDb): peak follower at the base rate (plus a 50 ms one that tells a
+        // phrase from a pause), the trim smoothed per channel at the high rate (fast down, slower up)
+        double levelEnv = 0.03, pauseEnv = 0.0, envRelease = 0.9999, pauseRelease = 0.999;
+        double trimDownCoef = 0.02, trimUpCoef = 0.003;
+        std::vector<float> trimTarget;
+        std::array<double, maxChannels> trimNow {};
+        double trimForEnv() const noexcept;
 
         std::atomic<int> soloRequest { -1 };
         std::array<juce::SmoothedValue<float>, 3> soloWeight;   // share of each band's solo in the output (audio thread)

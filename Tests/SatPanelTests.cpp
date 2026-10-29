@@ -297,7 +297,7 @@ private:
             view.update (*liveFor (h));
             expect (view.isScaleShown(), "single band: the scale");
             const auto s = h.proc.readEffectiveSettings().sat;
-            expectWithinAbsoluteError (view.getThdPercent(), dsp::SaturationModule::thdPercent (s, -12.0f), 0.05f, "THD as it sounds (with Mix)");
+            expectWithinAbsoluteError (view.getThdPercent(), dsp::SaturationModule::thdPercent (s, dsp::SaturationModule::thdLevelDb), 0.05f, "THD as it sounds (with Mix)");
             expect (view.getZone() == ui::SatView::Zone::warmth, "3 dB tube at 30 %: warmth");
             expect (ui::SatView::zoneColour (ui::SatView::Zone::warmth) != ui::SatView::zoneColour (ui::SatView::Zone::distortion));
 
