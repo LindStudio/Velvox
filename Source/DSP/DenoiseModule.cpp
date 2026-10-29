@@ -24,18 +24,19 @@ namespace velvox::dsp
             window[(size_t) i] = 0.5f - 0.5f * std::cos (2.0f * juce::MathConstants<float>::pi * (float) i / (float) fftSize);
             windowEnergy += (double) window[(size_t) i] * window[(size_t) i];
         }
-        spectrum.assign ((size_t) fftSize * 2, 0.0f);
         noise.assign ((size_t) numBins, 0.0f);
+        framePower.assign ((size_t) numBins, 0.0f);
+        power.assign ((size_t) numBins, 0.0f);
+        gain.assign ((size_t) numBins, 1.0f);
+        prevClean.assign ((size_t) numBins, 0.0f);
+        for (auto& m : subMin)
+            m.assign ((size_t) numBins, 1.0e30f);
         for (auto& c : channels)
         {
             c.in.assign ((size_t) fftSize, 0.0f);
             c.out.assign ((size_t) fftSize, 0.0f);
             c.silent.assign ((size_t) fftSize, 0);
-            c.power.assign ((size_t) numBins, 0.0f);
-            c.gain.assign ((size_t) numBins, 1.0f);
-            c.prevClean.assign ((size_t) numBins, 0.0f);
-            for (auto& m : c.subMin)
-                m.assign ((size_t) numBins, 1.0e30f);
+            c.spectrum.assign ((size_t) fftSize * 2, 0.0f);
         }
         // 5 s of frames in 6 sub-windows: room noise is steady, and a note held for up to ~4 s never
         // becomes "the floor"
@@ -53,18 +54,18 @@ namespace velvox::dsp
         {
             std::fill (c.in.begin(), c.in.end(), 0.0f);
             std::fill (c.out.begin(), c.out.end(), 0.0f);
-            std::fill (c.power.begin(), c.power.end(), 0.0f);
             std::fill (c.silent.begin(), c.silent.end(), (uint8_t) 1);   // the empty buffer is silence, never an edge
             c.silentRun = minSilentRun;
-            c.primed = false;
-            c.framesSeen = 0;
-            std::fill (c.gain.begin(), c.gain.end(), 1.0f);
-            std::fill (c.prevClean.begin(), c.prevClean.end(), 0.0f);
-            for (auto& m : c.subMin)
-                std::fill (m.begin(), m.end(), 1.0e30f);
-            c.edgeMin.fill (1.0e30f);
-            c.edgeFlatness.fill (1.0f);
         }
+        std::fill (power.begin(), power.end(), 0.0f);
+        std::fill (gain.begin(), gain.end(), 1.0f);
+        std::fill (prevClean.begin(), prevClean.end(), 0.0f);
+        for (auto& m : subMin)
+            std::fill (m.begin(), m.end(), 1.0e30f);
+        edgeMin.fill (1.0e30f);
+        edgeFlatness.fill (1.0f);
+        primed = false;
+        framesSeen = 0;
         pos = 0;
         hopCounter = 0;
         framesInSub = 0;
@@ -73,21 +74,35 @@ namespace velvox::dsp
         reductionDb.store (0.0f);
     }
 
-    void DenoiseModule::processFrame (Channel& c) noexcept
+    void DenoiseModule::processFrame (int chans) noexcept
     {
-        // Oldest sample first (pos points at the oldest one of the circular input); the window energy of the
-        // samples that are not digital silence
+        // Oldest sample first (pos points at the oldest one of the circular input). Stereo is linked: one
+        // power per bin (summed over the channels) and one gain for both, so the image never wanders. The
+        // window energy of the samples where some channel is not digital silence
         double audible = 0.0;
         for (int i = 0; i < fftSize; ++i)
         {
             const auto idx = (size_t) ((pos + i) % fftSize);
             const float w = window[(size_t) i];
-            spectrum[(size_t) i] = c.in[idx] * w;
-            if (c.silent[idx] == 0)
+            bool anyAudible = false;
+            for (int ch = 0; ch < chans; ++ch)
+            {
+                auto& c = channels[(size_t) ch];
+                c.spectrum[(size_t) i] = c.in[idx] * w;
+                anyAudible = anyAudible || c.silent[idx] == 0;
+            }
+            if (anyAudible)
                 audible += (double) w * w;
         }
-        std::fill (spectrum.begin() + fftSize, spectrum.end(), 0.0f);
-        fft->performRealOnlyForwardTransform (spectrum.data(), true);
+        std::fill (framePower.begin(), framePower.end(), 0.0f);
+        for (int ch = 0; ch < chans; ++ch)
+        {
+            auto& s = channels[(size_t) ch].spectrum;
+            std::fill (s.begin() + fftSize, s.end(), 0.0f);
+            fft->performRealOnlyForwardTransform (s.data(), true);
+            for (int k = 0; k < numBins; ++k)
+                framePower[(size_t) k] += s[(size_t) (2 * k)] * s[(size_t) (2 * k)] + s[(size_t) (2 * k + 1)] * s[(size_t) (2 * k + 1)];
+        }
 
         // Smoothed power and the minimum of the current sub-window. The minimum is tracked only once the input
         // buffer is full and the smoothing has settled (~20 frames): the empty buffer after a reset or a single
@@ -96,7 +111,7 @@ namespace velvox::dsp
         // audible part is the "edge" of the cut: steady noise right next to it on an edited noisy take, the
         // soft start or end of a word on a clean one. The quietest edge caps the floor below.
         const int settle = fftSize / hop + 20;
-        c.framesSeen = std::min (c.framesSeen + 1, settle);
+        framesSeen = std::min (framesSeen + 1, settle);
         const double audibleShare = audible / windowEnergy;
         if (audibleShare < 0.999)
         {
@@ -108,8 +123,7 @@ namespace velvox::dsp
                 double sum = 0.0, flatSum = 0.0, flatLog = 0.0;
                 for (int k = 0; k < numBins; ++k)
                 {
-                    const float re = spectrum[(size_t) (2 * k)], im = spectrum[(size_t) (2 * k + 1)];
-                    const double p = (double) re * re + (double) im * im;
+                    const double p = framePower[(size_t) k];
                     sum += p;
                     if (k >= kLo && k <= kHi)
                     {
@@ -119,27 +133,27 @@ namespace velvox::dsp
                 }
                 const double n = kHi - kLo + 1;
                 const auto flatness = (float) (flatSum > 0.0 ? std::exp (flatLog / n) / (flatSum / n) : 0.0);
-                const auto level = (float) (sum / audibleShare);                if (level < c.edgeMin[(size_t) subIndex])
+                const auto level = (float) (sum / audibleShare);
+                if (level < edgeMin[(size_t) subIndex])
                 {
-                    c.edgeMin[(size_t) subIndex] = level;
-                    c.edgeFlatness[(size_t) subIndex] = flatness;
+                    edgeMin[(size_t) subIndex] = level;
+                    edgeFlatness[(size_t) subIndex] = flatness;
                 }
             }
-            c.framesSeen = fftSize / hop;
-            c.primed = false;
+            framesSeen = fftSize / hop;
+            primed = false;
         }
-        else if (c.framesSeen > fftSize / hop)
+        else if (framesSeen > fftSize / hop)
         {
-            auto& sub = c.subMin[(size_t) subIndex];
+            auto& sub = subMin[(size_t) subIndex];
             for (int k = 0; k < numBins; ++k)
             {
-                const float re = spectrum[(size_t) (2 * k)], im = spectrum[(size_t) (2 * k + 1)];
-                const float p = re * re + im * im;
-                c.power[(size_t) k] = c.primed ? powerSmoothing * c.power[(size_t) k] + (1.0f - powerSmoothing) * p : p;
-                if (c.framesSeen >= settle)
-                    sub[(size_t) k] = std::min (sub[(size_t) k], c.power[(size_t) k]);
+                const float p = framePower[(size_t) k];
+                power[(size_t) k] = primed ? powerSmoothing * power[(size_t) k] + (1.0f - powerSmoothing) * p : p;
+                if (framesSeen >= settle)
+                    sub[(size_t) k] = std::min (sub[(size_t) k], power[(size_t) k]);
             }
-            c.primed = true;
+            primed = true;
         }
 
         // Noise floor: the minimum over the 5 s (nothing learned yet = no noise)
@@ -147,7 +161,7 @@ namespace velvox::dsp
         for (int k = 0; k < numBins; ++k)
         {
             float m = 1.0e30f;
-            for (const auto& sw : c.subMin)
+            for (const auto& sw : subMin)
                 m = std::min (m, sw[(size_t) k]);
             noise[(size_t) k] = m < 1.0e29f ? bias * m : 0.0f;
             floorSum += noise[(size_t) k];
@@ -158,13 +172,13 @@ namespace velvox::dsp
         // down to that edge (3 dB margin; the bias is left out of the comparison)
         int quietest = -1;
         for (int s = 0; s < numSubWindows; ++s)
-            if (c.edgeMin[(size_t) s] < 1.0e29f && (quietest < 0 || c.edgeMin[(size_t) s] < c.edgeMin[(size_t) quietest]))
+            if (edgeMin[(size_t) s] < 1.0e29f && (quietest < 0 || edgeMin[(size_t) s] < edgeMin[(size_t) quietest]))
                 quietest = s;
         if (quietest >= 0 && floorSum > 0.0)
         {
-            const auto scale = c.edgeFlatness[(size_t) quietest] < minNoiseFlatness
+            const auto scale = edgeFlatness[(size_t) quietest] < minNoiseFlatness
                                    ? 0.0f
-                                   : (float) std::min (1.0, 2.0 * bias * c.edgeMin[(size_t) quietest] / floorSum);
+                                   : (float) std::min (1.0, 2.0 * bias * edgeMin[(size_t) quietest] / floorSum);
             for (auto& n : noise)
                 n *= scale;
         }
@@ -175,36 +189,43 @@ namespace velvox::dsp
         const float floorGain = juce::Decibels::decibelsToGain (-18.0f * a);
         for (int k = 0; k < numBins; ++k)
         {
-            const float re = spectrum[(size_t) (2 * k)], im = spectrum[(size_t) (2 * k + 1)];
-            const float p = re * re + im * im;
+            const float p = framePower[(size_t) k];
             const float n = std::max (tiny, over * noise[(size_t) k]);
             const float post = p / n;
             // The decision-directed estimate lags behind onsets and vibrato (a harmonic sliding into a bin):
             // a bin 9 dB above the noise (noise alone practically never gets there) takes its instantaneous SNR
-            const float dd = ddWeight * c.prevClean[(size_t) k] / n + (1.0f - ddWeight) * std::max (0.0f, post - 1.0f);
+            const float dd = ddWeight * prevClean[(size_t) k] / n + (1.0f - ddWeight) * std::max (0.0f, post - 1.0f);
             const float prior = post > 8.0f ? std::max (dd, post - 1.0f) : dd;
             const float g = std::max (floorGain, prior / (1.0f + prior));
-            c.gain[(size_t) k] = g;
-            c.prevClean[(size_t) k] = g * g * p;
+            gain[(size_t) k] = g;
+            prevClean[(size_t) k] = g * g * p;
         }
         double sumGain = 0.0;
         for (int k = 0; k < numBins; ++k)
         {
-            const float lo = c.gain[(size_t) std::max (0, k - 1)], mid = c.gain[(size_t) k], hi = c.gain[(size_t) std::min (numBins - 1, k + 1)];
+            const float lo = gain[(size_t) std::max (0, k - 1)], mid = gain[(size_t) k], hi = gain[(size_t) std::min (numBins - 1, k + 1)];
             const float g = (lo + mid + hi) / 3.0f;
             const float applied = 1.0f - onAmount * (1.0f - g);
-            spectrum[(size_t) (2 * k)] *= applied;
-            spectrum[(size_t) (2 * k + 1)] *= applied;
+            for (int ch = 0; ch < chans; ++ch)
+            {
+                auto& s = channels[(size_t) ch].spectrum;
+                s[(size_t) (2 * k)] *= applied;
+                s[(size_t) (2 * k + 1)] *= applied;
+            }
             sumGain += applied;
         }
         reductionDb.store (juce::Decibels::gainToDecibels ((float) (sumGain / numBins), -60.0f), std::memory_order_relaxed);
 
-        fft->performRealOnlyInverseTransform (spectrum.data());
         // Synthesis window; Hann^2 at 75 % overlap sums to 1.5. The frame's first sample belongs to the
         // output slot `pos` (read again after fftSize samples = the latency)
         constexpr float norm = 1.0f / 1.5f;
-        for (int i = 0; i < fftSize; ++i)
-            c.out[(size_t) ((pos + i) % fftSize)] += spectrum[(size_t) i] * window[(size_t) i] * norm;
+        for (int ch = 0; ch < chans; ++ch)
+        {
+            auto& c = channels[(size_t) ch];
+            fft->performRealOnlyInverseTransform (c.spectrum.data());
+            for (int i = 0; i < fftSize; ++i)
+                c.out[(size_t) ((pos + i) % fftSize)] += c.spectrum[(size_t) i] * window[(size_t) i] * norm;
+        }
     }
 
     void DenoiseModule::process (float* const* io, int numChannels, int numSamples) noexcept
@@ -248,18 +269,14 @@ namespace velvox::dsp
                 if (std::abs (target - onAmount) < 1.0e-3f)
                     onAmount = target;
 
-                for (int ch = 0; ch < chans; ++ch)
-                    processFrame (channels[(size_t) ch]);
+                processFrame (chans);
 
                 if (++framesInSub >= subWindowFrames)
                 {
                     framesInSub = 0;
                     subIndex = (subIndex + 1) % numSubWindows;
-                    for (auto& c : channels)
-                    {
-                        std::fill (c.subMin[(size_t) subIndex].begin(), c.subMin[(size_t) subIndex].end(), 1.0e30f);
-                        c.edgeMin[(size_t) subIndex] = 1.0e30f;
-                    }
+                    std::fill (subMin[(size_t) subIndex].begin(), subMin[(size_t) subIndex].end(), 1.0e30f);
+                    edgeMin[(size_t) subIndex] = 1.0e30f;
                 }
             }
         }

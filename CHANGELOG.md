@@ -11,6 +11,8 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 - Damit eine saubere Stimme zwischen digitaler Stille unberührt bleibt, schaut Room Noise auf die Ränder der
   Stille: Ist dort Rauschen (spektral flach), wird es gelernt; ist dort nur das weiche Ende eines Wortes, gibt es
   kein Raumrauschen und es wird nichts weggenommen.
+- **Stereo gekoppelt:** Room Noise rechnet für links und rechts mit einer gemeinsamen Absenkung. Vorher wanderte eine
+  links gemischte Stimme um 1,1 dB weiter nach links, jetzt bleibt sie stehen (0,1 dB).
 
 ### Auto Mix an Profi-Vocals ausgerichtet (Jakob, 2026-10-29)
 Jakob: „Auto Mix nimmt immer Höhen raus, Profis boosten eher; nimmt nie Breath Control/Smooth.“ Gemessen an

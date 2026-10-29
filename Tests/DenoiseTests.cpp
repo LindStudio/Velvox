@@ -223,6 +223,43 @@ public:
             expectLessThan (worst, 1.0e-4f);
         }
 
+        beginTest ("Stereo is linked: a voice panned left keeps its place, the noise still drops on both sides");
+        {
+            // L = voice + noise, R = voice at -12 dB + its own noise: separate gains would treat the right side's
+            // voice as noisier and pull it down more, so the voice would wander to the left
+            const double fs = 48000.0;
+            VocalSpec spec; spec.seconds = 10.0;
+            const auto clean = makeVocal (spec).vocal[0];
+            const auto nl = pinkNoise ((int) clean.size(), -45.0f, 21), nr = pinkNoise ((int) clean.size(), -45.0f, 22);
+            std::vector<float> l (clean.size()), r (clean.size());
+            for (size_t i = 0; i < l.size(); ++i)
+            {
+                l[i] = clean[i] + nl[i];
+                r[i] = 0.25f * clean[i] + nr[i];
+            }
+            auto ol = l, orr = r;
+            DenoiseModule m;
+            m.prepare (fs, 512);
+            m.setSettings ({ true, 100.0f });
+            for (int start = 0; start < (int) ol.size(); start += 512)
+            {
+                float* ch[] { ol.data() + start, orr.data() + start };
+                m.process (ch, 2, std::min (512, (int) ol.size() - start));
+            }
+            const auto frames = classify (clean, fs, (int) (2.0 * fs));
+            const int len = (int) (0.02 * fs);
+            auto aligned = [&] (const std::vector<float>& x) { std::vector<float> a (x.begin() + L, x.end()); a.resize (x.size(), 0.0f); return a; };
+            const auto al = aligned (ol), ar = aligned (orr);
+            const double panIn = meanDb (l, frames.voiced, len) - meanDb (r, frames.voiced, len);
+            const double panOut = meanDb (al, frames.voiced, len) - meanDb (ar, frames.voiced, len);
+            const double dropL = meanDb (l, frames.gaps, len) - meanDb (al, frames.gaps, len);
+            const double dropR = meanDb (r, frames.gaps, len) - meanDb (ar, frames.gaps, len);
+            logMessage ("  voice L-R " + juce::String (panIn, 2) + " -> " + juce::String (panOut, 2) + " dB, noise drop L "
+                        + juce::String (dropL, 1) + " / R " + juce::String (dropR, 1) + " dB");
+            expectLessOrEqual (std::abs (panOut - panIn), 0.2, "the voice stays where it was panned");
+            expectGreaterOrEqual (std::min (dropL, dropR), 10.0, "the noise drops on both sides");
+        }
+
         beginTest ("Off = the dry delayed by the latency; switching on and off is click free");
         {
             VocalSpec spec; spec.seconds = 4.0;

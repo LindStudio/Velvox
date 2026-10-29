@@ -16,7 +16,7 @@ namespace velvox::dsp
 
     // RAUMRAUSCHEN (0.7, docs/superpowers/plans/2026-10-27-denoise-breath-modules.md): lowers steady room
     // noise (fan, room hum, preamp hiss) without touching the voice. STFT (FFT 1024, hop 256, Hann analysis
-    // and synthesis), per channel. Noise floor per bin: the minimum of its smoothed power over the last
+    // and synthesis), stereo linked (one gain per bin for both channels). Noise floor per bin: the minimum of its smoothed power over the last
     // 5 s (minimum statistics: learned while the voice sings; a note held up to ~4 s is never "the floor"),
     // times a bias. Frames that touch digital silence (a muted or cut region) are left out: a zero floor
     // made the module do nothing for 5 s after every cut of an edited take. Gain per bin: Wiener filter with the
@@ -49,22 +49,24 @@ namespace velvox::dsp
         struct Channel
         {
             std::vector<float> in, out;                    // circular input / overlap-add output, fftSize each
-            std::vector<float> power, gain, prevClean;     // per bin: smoothed power, Wiener gain, last clean power
-            std::array<std::vector<float>, numSubWindows> subMin;
-            bool primed = false;                           // the smoothed power has its first value
-            int framesSeen = 0;                            // frames since the reset (the first ones hold the empty buffer)
             std::vector<uint8_t> silent;                   // per input sample: part of a run of digital silence
             int silentRun = 0;                             // consecutive samples under -100 dBFS
-            std::array<float, numSubWindows> edgeMin {};   // per sub-window: quietest edge of a cut (broadband power)
-            std::array<float, numSubWindows> edgeFlatness {};   // and its spectral flatness
+            std::vector<float> spectrum;                   // the frame being processed
         };
 
-        void processFrame (Channel& c) noexcept;
+        void processFrame (int chans) noexcept;
 
         DenoiseSettings settings;
         double fs = 48000.0;
         std::array<Channel, 2> channels;
-        std::vector<float> window, spectrum, noise;
+        // Linked over the channels, per bin: this frame's power, smoothed power, Wiener gain, last clean power
+        std::vector<float> framePower, power, gain, prevClean;
+        std::array<std::vector<float>, numSubWindows> subMin;
+        bool primed = false;                               // the smoothed power has its first value
+        int framesSeen = 0;                                // frames since the reset (the first ones hold the empty buffer)
+        std::array<float, numSubWindows> edgeMin {};       // per sub-window: quietest edge of a cut (broadband power)
+        std::array<float, numSubWindows> edgeFlatness {};  // and its spectral flatness
+        std::vector<float> window, noise;
         double windowEnergy = 1.0;                         // sum of window^2
         std::unique_ptr<juce::dsp::FFT> fft;
         int pos = 0, hopCounter = 0;
