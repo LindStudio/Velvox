@@ -312,6 +312,23 @@ namespace velvox::check
                     f.action.modules.push_back (ModuleId::eq);
                     f.action.eq.push_back ({ EqRole::air, EqShape::highShelf, 9000.0f, gain, 0.7071f, 12 });
                 }
+                // Highs in the window but no air (10-16 kHz): the main gap of a dry voice to finished vocals.
+                // A dull or very bright take has its air shelf from the finding above already.
+                else if (r.airDb < t.air.lo)
+                {
+                    const float deficit = t.air.lo - r.airDb;
+                    const float gain = halfDb (juce::jlimit (1.0f, 4.0f, 0.5f * deficit));
+                    auto& f = add ("air", Category::tonal, conf (deficit, 1.5f, 8.0f), severity (deficit, 2.0f, 8.0f), ModuleId::eq,
+                                   txt ("Wenig Luft ({0})", "Little air ({0})", { dbV (-deficit) }),
+                                   txt ("EQ {0} Luft ab 11 kHz", "EQ {0} air from 11 kHz", { dbV (gain) }),
+                                   txt ("10–16 kHz liegt {0} gegenüber dem Kern der Stimme (Ziel ab {1}).",
+                                        "10–16 kHz sits at {0} relative to the core of the voice (target from {1}).", { dbV (r.airDb), dbV (t.air.lo) }),
+                                   txt ("Fertige Profi-Vocals haben über 10 kHz deutlich mehr Luft; sie lässt die Stimme offen und nah klingen.",
+                                        "Finished professional vocals carry clearly more air above 10 kHz; it makes the voice sound open and close."));
+                    f.freqHz = 11000.0f;
+                    f.action.modules.push_back (ModuleId::eq);
+                    f.action.eq.push_back ({ EqRole::air, EqShape::highShelf, 11000.0f, gain, 0.7071f, 12 });
+                }
             }
 
             void harshness()

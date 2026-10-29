@@ -10,8 +10,7 @@ namespace velvox::check
         {
             case Genre::party:
                 break;
-            case Genre::pop:
-                t.top = { -12.0f, -4.0f };
+            case Genre::pop:   // the tonal windows of party: the finished vocals they come from include pop
                 t.phrase = { 3.0f, 8.0f };
                 t.crestMin = 6.0f;
                 t.lraMax = 12.0f;

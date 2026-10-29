@@ -14,6 +14,14 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 - **Stereo gekoppelt:** Room Noise rechnet für links und rechts mit einer gemeinsamen Absenkung. Vorher wanderte eine
   links gemischte Stimme um 1,1 dB weiter nach links, jetzt bleibt sie stehen (0,1 dB).
 
+### Vocal Check prüft die Luft (Analyse Phase 1, 2026-10-29)
+- **Neuer Befund „Wenig Luft“:** Liegen die Höhen im Ziel, aber 10–16 kHz darunter, schlägt Vocal Check einen
+  Luft-Shelf ab 11 kHz vor (+1 bis +4 dB). Das Luft-Ziel gab es schon, es wurde aber nie geprüft – dabei ist genau
+  das der größte Unterschied einer trockenen Stimme zu fertigen Profi-Vocals. Ist die Stimme dumpf, bleibt es beim
+  Befund „Dumpf“ (der setzt den Luft-Shelf schon).
+- **Pop** hat wieder dieselben Klangziele wie Party: Unter den gemessenen Profi-Vocals war auch Pop, für ein
+  dunkleres Pop-Ziel gab es keine Daten.
+
 ### Auto Mix an Profi-Vocals ausgerichtet (Jakob, 2026-10-29)
 Jakob: „Auto Mix nimmt immer Höhen raus, Profis boosten eher; nimmt nie Breath Control/Smooth.“ Gemessen an
 8 fertigen Profi-Vocals und 23 trockenen Stimmen.

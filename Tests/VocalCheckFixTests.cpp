@@ -326,6 +326,9 @@ public:
             expectLessThan (high.body.lo, -100.0f, "a high voice has no fundamentals in the body band");
             const auto acoustic = CheckTargets::make (Genre::acoustic, false, false);
             expectGreaterThan (acoustic.phrase.hi, t.phrase.hi, "acoustic allows more dynamics");
+            const auto pop = CheckTargets::make (Genre::pop, false, false);
+            expect (pop.top.lo == t.top.lo && pop.top.hi == t.top.hi && pop.air.lo == t.air.lo,
+                    "pop has the measured windows of finished vocals (pop among them)");
         }
 
         beginTest ("Voice template: finite, smooth, voice shaped (both voice classes)");
@@ -402,6 +405,40 @@ public:
                 }
             }
             expectLessThan (r.score, clean.score, "a problem lowers the score");
+        }
+
+        beginTest ("Rules: a voice with highs in the window but no air (10-16 kHz) gets an air shelf");
+        {
+            // 0.7.1: the air window was defined but never checked - the biggest gap to finished vocals.
+            // The template voice is dry (dark); +4 dB around 4 kHz brings its highs into the window.
+            auto withHighs = [&] (double airGainDb)
+            {
+                auto v = cleanVocal;
+                applyPeak (v, 4000.0, 0.7, 4.0);
+                applyPeak (v, 13000.0, 0.7, airGainDb);
+                return analyseVocal (v, fs);
+            };
+            const auto airy = withHighs (8.0), r = withHighs (-15.0);
+            logFindings (*this, "air cut", r);
+            logMessage ("  with air: top " + juce::String (airy.topDb, 1) + " dB, air " + juce::String (airy.airDb, 1)
+                        + " dB; air cut: top " + juce::String (r.topDb, 1) + " dB, air " + juce::String (r.airDb, 1) + " dB");
+            expect (findId (airy, "air") == nullptr, "air in the window: nothing to do");
+            const auto* f = findId (r, "air");
+            expect (f != nullptr, "missing air found");
+            expect (findId (r, "dull") == nullptr, "the highs above 2 kHz are still in the window: not dull");
+            // A dull take gets the air shelf from "dull" already, not a second finding
+            auto dark = cleanVocal;
+            applyPeak (dark, 13000.0, 0.7, -15.0);
+            const auto d = analyseVocal (dark, fs);
+            expect (findId (d, "air") == nullptr || findId (d, "dull") == nullptr, "dull and air never both");
+            if (f != nullptr && ! f->action.eq.empty())
+            {
+                expectEquals ((int) f->action.eq.size(), 1);
+                const auto& e = f->action.eq.front();
+                expect (e.role == check::EqRole::air && e.shape == check::EqShape::highShelf);
+                expect (e.freqHz >= 10000.0f, "a shelf for the air only: " + juce::String (e.freqHz));
+                expect (e.gainDb >= 1.0f && e.gainDb <= 4.0f, "a moderate lift: " + juce::String (e.gainDb));
+            }
         }
 
         beginTest ("Rules: a narrow 3.5 kHz resonance is a harsh resonance at its frequency");
