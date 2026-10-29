@@ -4,6 +4,14 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 
 ## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/modules-0.7`
 
+### Room Noise auf geschnittenen Takes (Analyse Phase 1, 2026-10-29)
+- **Digitale Stille ist kein Rauschboden mehr.** Vorher galt jede stumme Stelle (Schnitt, Gate, gemutete Region)
+  5 Sekunden lang als Boden, Room Noise tat danach nichts. Auf einem Take mit Schnitten alle 1,6 s nahm es nur
+  1 dB Rauschen weg, jetzt 16 dB.
+- Damit eine saubere Stimme zwischen digitaler Stille unberührt bleibt, schaut Room Noise auf die Ränder der
+  Stille: Ist dort Rauschen (spektral flach), wird es gelernt; ist dort nur das weiche Ende eines Wortes, gibt es
+  kein Raumrauschen und es wird nichts weggenommen.
+
 ### Auto Mix an Profi-Vocals ausgerichtet (Jakob, 2026-10-29)
 Jakob: „Auto Mix nimmt immer Höhen raus, Profis boosten eher; nimmt nie Breath Control/Smooth.“ Gemessen an
 8 fertigen Profi-Vocals und 23 trockenen Stimmen.
