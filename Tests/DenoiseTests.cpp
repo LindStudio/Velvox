@@ -91,8 +91,9 @@ public:
     {
         constexpr int L = DenoiseModule::latency;
 
-        beginTest ("After digital silence (a muted region) the noise is learned within the 5 s window");
+        beginTest ("After digital silence (a muted region) the noise is learned within 1 s");
         {
+            // 0.7.1: digital silence is no noise floor any more (it made the module do nothing for 5 s)
             const double fs = 48000.0;
             std::vector<float> x ((size_t) (10 * fs), 0.0f);
             const auto noise = pinkNoise ((int) (8 * fs), -45.0f, 7);
@@ -100,9 +101,38 @@ public:
             const auto out = run (x, fs, 100.0f);
             const double during = rmsDb (out, (int) (3.0 * fs) + L, (int) (3.0 * fs));
             const double after = rmsDb (out, (int) (8.0 * fs) + L, (int) (1.8 * fs));
-            logMessage ("  noise after the silence: within 5 s " + juce::String (during, 1) + " dB, later " + juce::String (after, 1) + " dB");
-            expectGreaterThan (during, -46.0, "the silence is the floor first: nothing is taken away");
-            expectLessThan (after, -57.0, "then the noise is learned");
+            logMessage ("  noise after the silence: 1..4 s later " + juce::String (during, 1) + " dB, later " + juce::String (after, 1) + " dB");
+            expectLessThan (during, -57.0, "learned right after the silence");
+            expectLessThan (after, -57.0, "and stays learned");
+        }
+
+        beginTest ("An edited take (digital silence between the phrases) still loses its noise");
+        {
+            // Phrases of voice + noise, cut with 0.4 s of digital zero every 1.6 s (comped / gated in the DAW)
+            const double fs = 48000.0;
+            VocalSpec spec; spec.sampleRate = fs; spec.seconds = 12.0;
+            const auto clean = makeVocal (spec).vocal[0];
+            const auto noise = pinkNoise ((int) clean.size(), -45.0f, 11);
+            std::vector<float> in (clean.size());
+            const int period = (int) (1.6 * fs), cut = (int) (0.4 * fs);
+            for (size_t i = 0; i < in.size(); ++i)
+                in[i] = ((int) i % period) < period - cut ? clean[i] + noise[i] : 0.0f;
+            const auto out = run (in, fs, 100.0f);
+
+            // Noise-only frames inside the phrases, after 2 s
+            const int len = (int) (0.02 * fs);
+            auto frames = classify (clean, fs, (int) (2.0 * fs));
+            std::vector<int> gaps;
+            for (int s : frames.gaps)
+                if ((s % period) + len < period - cut)
+                    gaps.push_back (s);
+            std::vector<float> outAligned (out.begin() + L, out.end());
+            outAligned.resize (out.size(), 0.0f);
+            const double noiseIn = meanDb (in, gaps, len), noiseOut = meanDb (outAligned, gaps, len);
+            logMessage ("  edited take: gaps " + juce::String (noiseIn, 1) + " -> " + juce::String (noiseOut, 1) + " dB ("
+                        + juce::String ((int) gaps.size()) + " frames)");
+            expect (gaps.size() > 10, "enough noise-only frames in the phrases");
+            expectGreaterOrEqual (noiseIn - noiseOut, 10.0, "the noise between the cuts is reduced");
         }
 
         beginTest ("Noise in the gaps drops by at least 12 dB at 100 %, the voice stays within 1 dB");
