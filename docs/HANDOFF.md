@@ -1,5 +1,16 @@
 # HEADLINER – Übergabe für die nächste Session
 
+## STAND 2026-11-02 (Haupt-PC) – HIER WEITERMACHEN
+Stand a551512 vom Shadow PC übernommen (Goldens neu gesetzt, Room Noise stereo-gekoppelt + digitale Stille,
+Vocal-Check-Befund „wenig Luft“). Damit sind Punkt 1 und 2 unten erledigt:
+- Voller Lauf **39.051 Checks grün**, pluginval Strictness 10 **SUCCESS** (Release-Build).
+- Vorher/Nachher-Renders für Jakob: `%USERPROFILE%\dev\velvox-bench\2026-11-02\jakob_vergleich\`
+  (1_original, 2_vorher_alter_automix = base-Lauf vom 29.10., 3_nachher_neuer_automix + Berichte).
+  Unterschied: Präsenz −4 dB bei 2,7 kHz → +1,5 dB bei 3 kHz, Room Noise 67 % → 40 %, Rest gleich.
+- Jakobs Reihenfolge-Fragen (Punkt 3) im Chat beantwortet.
+- Offen: **Installation** (UAC-Abfrage wurde abgebrochen, FL ist zu → `scripts/install-vst3.ps1` erneut),
+  Jakobs Hörtest in FL, Push nach GitHub nur nach Rückfrage.
+
 ## STAND 2026-10-29 NACHT (dieser PC) – HIER WEITERMACHEN: Auto Mix „trainieren“
 Jakob 2026-10-28 abends: „Auto Mix nimmt immer Höhen raus, Profis boosten eher; nimmt nie Breath Control/Smooth;
 für jede Stimmart passen, keine dummen Entscheidungen, wir trainieren jetzt das Plugin (ohne meine Hilfe)“.
