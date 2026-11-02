@@ -86,8 +86,9 @@ public:
                                        juce::jlimit (0.0f, 100.0f, on (pid::reverbOn) ? values.at (pid::reverbMix) / 0.3f : 0.0f), 0.6f);
             expectWithinAbsoluteError (pos (pid::macroWidth),
                                        juce::jlimit (0.0f, 100.0f, on (pid::doublerOn) ? values.at (pid::doublerMix) / 0.6f : 0.0f), 0.6f);
-            expect (pos (pid::macroPresence) + pos (pid::macroWarmth) + pos (pid::macroSpace) + pos (pid::macroWidth)
-                        + pos (pid::macroAggression) > 0.0f, "a mix that did something shows something");
+            // bipolar sliders (0.7): a cut shows below 0 (0.8: the curve fit cuts as often as it lifts)
+            expect (std::abs (pos (pid::macroPresence)) + std::abs (pos (pid::macroWarmth)) + pos (pid::macroSpace) + pos (pid::macroWidth)
+                        + std::abs (pos (pid::macroAggression)) > 0.0f, "a mix that did something shows something");
 
             // The positions are only shown: applying them changed no module
             expectWithinAbsoluteError (automix::roleGain ({}, valuesOf (h), dsp::EqRole::air), air, 1.0e-3f);
