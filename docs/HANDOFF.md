@@ -1,6 +1,25 @@
 # HEADLINER – Übergabe für die nächste Session
 
-## STAND 2026-11-02 (Haupt-PC) – HIER WEITERMACHEN
+## STAND 2026-11-03 NACHT (Haupt-PC) – HIER WEITERMACHEN: Auto Mix 0.8 fertig, Jakob muss hören
+Branch **`feature/automix-0.8`** (von `feature/modules-0.7`). Spec `docs/superpowers/specs/2026-11-02-automix-08-tailored-design.md`,
+Plan `docs/superpowers/plans/2026-11-02-automix-08-tailored.md`, Entscheidungen („Ruling“) im Ledger
+`.superpowers/sdd/2026-11-02-automix-08-tailored/progress.md` (nur auf diesem PC; Zusammenfassung im CHANGELOG 0.8).
+- Jakob (nach Hörtest): „klingt random, nicht auf die Stimme angepasst, nur lauter“; Ziel Partysongs (Tream/FiNCH):
+  voller, Brillanz, jedes Wort klar, sitzt im Beat. Er sagte „mach selbst“, testet später.
+- Gebaut: Genre/Vibe-Abfrage + Beat-Sidechain-Hinweis auf der Startkarte, keine vorzeitige Analyse, Zielkurve aus
+  7 Profi-Party-Stems (`VelvoxTests --target-curve`), EQ-Kurvenfit + Regelkreis, Kompressor-Suche, alle Module
+  stimmabhängig. Bench: echte Takes 2,77 → 2,46 dB Abstand zum Ziel (Median), alle im Mittel gleich (4,98 → 4,95),
+  Median aller 5,05 → 5,30 (verrauschte VocalSet-Übungen: Höhen-Anhebung bewusst auf 2 dB begrenzt).
+- Voller Lauf **40.097 Checks grün**, pluginval 10 **SUCCESS** (VST3 vom 2026-11-03 00:05). **Nicht installiert,
+  nicht gepusht.** Drive-Bundle aktualisiert.
+- Renders für Jakob: `%USERPROFILE%\dev\velvox-bench\2026-11-02\jakob_vergleich_08\` (Original, alter Auto Mix,
+  Stand Mittag, neu Party · Druckvoll / Aggressiv / Floaty + Berichte).
+- Werkzeuge: `VelvoxTests --bench <dry> <aus> [genre vibe]`, `--thirds <dir> <csv>`, `python tools/bench/target_distance.py`,
+  `summarise_reports.py` (zeigt jetzt „distinct settings“ je Modul).
+- Offen: Jakobs Hörtest in FL; Acapellas von Jakob → Zielkurve neu (`--target-curve`); die 25-s-Grenze der Analyse
+  hielt nur mit FL im Leerlauf (16 s), mit laufendem FL 35–42 s; Self-Review statt frischem Reviewer (siehe Ledger).
+
+## STAND 2026-11-02 (Haupt-PC)
 Stand a551512 vom Shadow PC übernommen (Goldens neu gesetzt, Room Noise stereo-gekoppelt + digitale Stille,
 Vocal-Check-Befund „wenig Luft“). Damit sind Punkt 1 und 2 unten erledigt:
 - Voller Lauf **39.051 Checks grün**, pluginval Strictness 10 **SUCCESS** (Release-Build).

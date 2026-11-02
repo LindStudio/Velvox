@@ -2,6 +2,35 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [Unveröffentlicht] – Branch `feature/automix-0.8`: Auto Mix „auf die Stimme angepasst“ (2026-11-02)
+
+Jakob nach dem Hörtest: „Viele Entscheidungen klingen random, jedes Modul klingt nicht genau auf die Stimme angepasst,
+die Stimme wird nur lauter gemacht.“ Ziel: Partysongs (Tream, FiNCH) – voller, Brillanz oben, jedes Wort klar,
+sitzt im Beat. Spec: `docs/superpowers/specs/2026-11-02-automix-08-tailored-design.md`.
+
+### Start
+- **Genre und Vibe** werden bei jedem Start gefragt (Party, Deutschrap / Hip-Hop, Pop, EDM / Techno,
+  Ballade / Akustik · Druckvoll, Aggressiv, Floaty, Warm, Klar & natürlich) und pro Instanz gespeichert.
+- **Beat als Sidechain** wird auf der Startkarte erklärt (FL-Studio-Schritte) mit Live-Anzeige „Beat erkannt“.
+- **Kein „Jetzt analysieren“ mehr:** Der Auto Mix hört die vollen 14 s Gesang („Noch X s Gesang“); stoppt der Song,
+  heißt es „Weiter abspielen – noch X s nötig“.
+
+### Zielbild
+- Gemessen an 7 fertigen Party-Vocals (Tream, HBz, Loona …) in Terzbändern (`VelvoxTests --target-curve`);
+  Genres und Vibes sind vorerst geschätzte Verschiebungen davon. Neue Acapellas → Befehl erneut ausführen.
+
+### Jedes Modul auf die Stimme
+- **EQ:** Kurvenabgleich statt fester Züge – Absenkungen genau dort, wo diese Stimme zu viel hat („Dröhnen −4 dB
+  bei 320 Hz“, „Pappig“, „Nasal“, „Härte“), Anhebungen, wo ihr etwas fehlt („Verständlichkeit“, „Brillanz“ bis
+  +6 dB auf sauberen Takes). Ein Regelkreis misst das Ergebnis der ganzen Kette und regelt nach. Liegt die Stimme
+  schon im Ziel, passiert nichts. Mit Beat: Anhebung, wo der Beat die Wörter verdeckt.
+- **Kompressor:** auf das Dynamik-Ziel gesucht (gerendert), Attack nach den Konsonanten, Release nach dem
+  Silbentempo. **Smash** nach der Dichte, **Sättigung** nach Vibe und Körper (dünne Stimme → Tube),
+  **Doubler** nach gehaltenen Tönen, **Delay** nach den Pausen, **Hall** nach Genre/Vibe und Songtempo,
+  **Breath Control** nach dem Atem-Anteil.
+- Bench (23 trockene Stimmen): Abstand zum Party-Ziel auf Jakobs Aufnahmen + Splice 2,77 → 2,46 dB (Median),
+  alle im Mittel 4,98 → 4,95 dB; kein Modul mehr mit derselben Einstellung auf allen Stimmen.
+
 ## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/modules-0.7`
 
 ### Room Noise auf geschnittenen Takes (Analyse Phase 1, 2026-10-29)
