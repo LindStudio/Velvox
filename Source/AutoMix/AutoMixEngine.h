@@ -96,6 +96,7 @@ namespace velvox::automix
         // instance, effects drier / wetter, de-esser stronger). Bounded, deterministic.
         // `current`: the values the plan overlays (EQ role bands find free slots there; empty = defaults).
         static std::vector<std::pair<juce::String, MixPlan>> candidatesFor (const MixPlan& base, const VocalProfile& profile,
-                                                                             const std::map<juce::String, float>& current = {});
+                                                                             const std::map<juce::String, float>& current = {},
+                                                                             const MixTarget& target = targetFor (Genre::party, Vibe::punchy));
     };
 }

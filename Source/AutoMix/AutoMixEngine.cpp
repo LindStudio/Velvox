@@ -397,7 +397,7 @@ namespace velvox::automix
     }
 
     std::vector<std::pair<juce::String, MixPlan>> AutoMixEngine::candidatesFor (const MixPlan& base, const VocalProfile& profile,
-                                                                               const std::map<juce::String, float>& current)
+                                                                               const std::map<juce::String, float>& current, const MixTarget& target)
     {
         using dsp::EqRole;
         using dsp::EqBandType;
@@ -425,10 +425,11 @@ namespace velvox::automix
             }
             if (profile.distortionLikely)
                 return false;
+            // 0.8: the character of the genre / vibe, a little gentler than the target
             c.set (pid::satOn, 1.0f);
-            c.set (pid::satCharacter, 1.0f);
-            c.set (pid::satDrive, 4.0f);
-            c.set (pid::satMix, 25.0f);
+            c.set (pid::satCharacter, (float) target.satCharacter);
+            c.set (pid::satDrive, std::max (2.0f, target.satDrive - 1.0f));
+            c.set (pid::satMix, std::max (10.0f, 0.8f * target.satMix));
             c.set (pid::satOutput, 0.0f);
             return true;
         });
@@ -570,7 +571,8 @@ namespace velvox::automix
                                             both ("Die Variante mit mehr Dichte schnitt in der Messung besser ab.", "The denser variant scored better in the measurement."), true });
             if (plan.on (pid::satOn) && plan.find (M::sat) == nullptr)
                 plan.decisions.push_back ({ M::sat, false,
-                                            both ("Sättigung Tape, {0} %", "Saturation Tape, {0} %", { juce::String (juce::roundToInt (plan.get (pid::satMix))) }),
+                                            both ("Sättigung {0}, {1} %", "Saturation {0}, {1} %", { juce::StringArray { "Warm", "Tape", "Tube", "Hard" }[juce::jlimit (0, 3, (int) plan.get (pid::satCharacter))],
+                                                                                        juce::String (juce::roundToInt (plan.get (pid::satMix))) }),
                                             both ("Leichte Obertöne - die Variante mit Sättigung schnitt in der Messung besser ab.",
                                                   "Light harmonics - the variant with saturation scored better in the measurement."), true });
             if (plan.routing.contains (M::eq, 1))
@@ -749,7 +751,7 @@ namespace velvox::automix
         //      target loudness (AutoMixObjective). A variant must beat the base plan.
         const float target = targetLufs (r.original.lufs);
         {
-            auto variants = candidatesFor (plan, r.profile, current);
+            auto variants = candidatesFor (plan, r.profile, current, mixTarget);
             const auto score = [&] (const juce::String& name, const MixPlan& cand, bool isBase)
             {
                 CandidateResult c;

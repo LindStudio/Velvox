@@ -531,9 +531,22 @@ namespace velvox::automix
         plan.set (pid::satOn, sat ? 1.0f : 0.0f);
         if (sat)
         {
-            const int character = harsh ? 0 : (dull || p.tiltDbPerOctave < -7.0f ? 2 : 1);   // Warm / Tube / Tape
-            const float drive = plan.conservative ? 3.0f : 5.0f;
-            const float mix = plan.conservative ? 20.0f : 30.0f;
+            // 0.8: the character of the vibe (aggressive Tube, warm Tape ...); a harsh voice gets the soft Warm; a
+            // voice whose body (125 - 250 Hz) lies on average more than 3 dB under the target curve gets Tube and 10 %
+            // more for body (the plain deviation: the finished vocals spread widely down there)
+            float bodyLack = 0.0f;
+            int bodyThirds = 0;
+            for (int k = 0; k < numThirds && p.thirdsDb.size() == (size_t) numThirds; ++k)
+                if (thirdCentre (k) >= 125.0f * 0.99f && thirdCentre (k) <= 250.0f * 1.01f && p.thirdsDb[(size_t) k] > -190.0f)
+                {
+                    bodyLack += p.thirdsDb[(size_t) k] - target.curveDb[(size_t) k];
+                    ++bodyThirds;
+                }
+            const bool thin = bodyThirds > 0 && bodyLack / (float) bodyThirds < -3.0f && ! (p.pitchValid && p.f0LowHz > 250.0f);
+            juce::ignoreUnused (dull);
+            const int character = harsh ? 0 : (thin ? 2 : target.satCharacter);   // Warm / Tape / Tube / Hard
+            const float drive = plan.conservative ? 3.0f : target.satDrive;
+            const float mix = (plan.conservative ? 20.0f : target.satMix) + (thin && ! harsh ? 10.0f : 0.0f);
             plan.set (pid::satCharacter, (float) character);
             plan.set (pid::satDrive, drive);
             plan.set (pid::satMix, mix);
@@ -542,8 +555,10 @@ namespace velvox::automix
             decide (M::sat, both ("Sättigung {0}, {1} %", "Saturation {0}, {1} %", { names[character], juce::String ((int) mix) }),
                     harsh ? both ("Dezente, weiche Obertöne für Dichte - ohne die Schärfe zu betonen.",
                                   "Subtle, soft harmonics for density - without emphasizing the harshness.")
-                          : dull ? both ("Obertöne bringen eine dunkle Stimme nach vorne.", "Harmonics bring a dark voice forward.")
-                                 : both ("Leichte Obertöne für Dichte und Durchsetzungskraft.", "Light harmonics for density and punch."), false);
+                          : thin ? both ("Wenig Körper (125-250 Hz unter dem Ziel) - Tube-Obertöne machen die Stimme voller.",
+                                         "Little body (125-250 Hz under the target) - Tube harmonics make the voice fuller.")
+                                 : both ("Obertöne für Dichte, Charakter für {0} · {1}.", "Harmonics for density, character for {0} · {1}.",
+                                         { genreName (target.genre), vibeName (target.vibe) }), true);
         }
         else
         {
@@ -554,19 +569,22 @@ namespace velvox::automix
 
         // ================= Width: doubler, mono-safe =================
         const bool alreadyWide = p.stereoContent && p.correlation < 0.8f;
-        const bool doubler = ! alreadyWide && ! plan.conservative && p.pitchedShare >= 0.45f;
+        // 0.8: the width of the genre / vibe; a rap lead (few held notes) only a little
+        const float doublerMix = p.pitchedShare < 0.45f ? std::min (target.space.doublerMix, 8.0f) : target.space.doublerMix;
+        const bool doubler = ! alreadyWide && ! plan.conservative && doublerMix >= 5.0f;
         plan.set (pid::doublerOn, doubler ? 1.0f : 0.0f);
         if (doubler)
         {
-            plan.set (pid::doublerMix, 20.0f);
+            plan.set (pid::doublerMix, doublerMix);
             plan.set (pid::doublerWidth, 70.0f);
             plan.set (pid::doublerDelay, 14.0f);
             plan.set (pid::doublerDetune, 7.0f);
             plan.set (pid::doublerMonoSafe, 100.0f);   // mono sum stays exactly the original
             plan.set (pid::doublerTone, 8000.0f);
-            decide (M::doubler, both ("Breite: Doubler 20 %, mono-sicher", "Width: Doubler 20 %, mono-safe"),
-                    both ("Leichte Doppelung links/rechts. \"Mono safe\" 100 %: In Mono klingt die Stimme exakt wie ohne Doubler.",
-                          "Light doubling left/right. \"Mono safe\" 100 %: in mono the voice sounds exactly as without the Doubler."), false);
+            decide (M::doubler, both ("Breite: Doubler {0} %, mono-sicher", "Width: Doubler {0} %, mono-safe", { num (doublerMix, 0) }),
+                    both ("Doppelung links/rechts für {0} · {1}. \"Mono safe\" 100 %: In Mono klingt die Stimme exakt wie ohne Doubler.",
+                          "Doubling left/right for {0} · {1}. \"Mono safe\" 100 %: in mono the voice sounds exactly as without the Doubler.",
+                          { genreName (target.genre), vibeName (target.vibe) }), true);
         }
         else if (alreadyWide)
         {
@@ -599,6 +617,15 @@ namespace velvox::automix
             if (spoken)         { revMix = std::min (revMix, 8.0f); decay = 1.0f; type = 0; }
             else if (largeHall) { decay = 2.3f; preDelay = 40.0f; type = 3; }   // the long tail already reads wetter
             else if (sustained) { revMix = std::min (revMix + 2.0f, 16.0f); decay = 1.9f; }
+            // 0.8: the amount of the genre / vibe; with the song tempo the tail lasts a number of bars and the
+            // pre-delay is a 1/64 note (no tempo: the times above)
+            revMix = std::round (clamp (revMix * target.space.reverbScale, 3.0f, 28.0f));
+            if (p.hostBpm > 0.0)
+            {
+                const float bar = 240.0f / (float) p.hostBpm;
+                decay = clamp (target.space.decayBars * bar * (spoken ? 0.6f : (largeHall ? 1.2f : 1.0f)), 0.8f, 3.0f);
+                preDelay = std::round (clamp (60000.0f / (float) p.hostBpm / 16.0f, 15.0f, 60.0f));
+            }
             // The beat on the sidechain: a dense one leaves no gaps for the tail, one with gaps leaves room
             // (not for a take with a room of its own)
             const auto density = someRoom && beatDensityOf (p) == BeatDensity::sparse ? BeatDensity::medium : beatDensityOf (p);
@@ -606,11 +633,15 @@ namespace velvox::automix
                 revMix = std::round (revMix * 0.7f);
             else if (density == BeatDensity::sparse)
                 revMix = std::min (revMix + 2.0f, 16.0f);
-            const juce::String beatReason = density == BeatDensity::dense
+            const juce::String beatReason = (density == BeatDensity::dense
                 ? both (" Dichter Beat (kaum Lücken gemessen): weniger Hall, damit die Stimme vorne bleibt.",
                         " Dense beat (hardly any gaps measured): less reverb so the voice stays in front.")
                 : density == BeatDensity::sparse ? both (" Beat mit Lücken: etwas mehr Raum.", " Beat with gaps: a little more room.")
-                                                 : juce::String();
+                                                 : juce::String())
+                + both (" Raum für {0} · {1}", " Space for {0} · {1}", { genreName (target.genre), vibeName (target.vibe) })
+                + (p.hostBpm > 0.0 ? both (", Hallzeit und Pre-Delay nach dem Songtempo ({0} BPM).", ", reverb time and pre-delay from the song tempo ({0} BPM).",
+                                           { num ((float) p.hostBpm, 0) })
+                                   : juce::String ("."));
             plan.set (pid::reverbOn, 1.0f);
             plan.set (pid::reverbType, (float) type);
             plan.set (pid::reverbMix, revMix);
@@ -642,10 +673,11 @@ namespace velvox::automix
             if (delay)
             {
                 plan.set (pid::delaySync, 1.0f);
-                plan.set (pid::delayDivision, spoken ? 9.0f : 7.0f);   // 1/4 for spoken, 1/8 dotted for sung
+                // 1/4 for spoken, 1/8 dotted for sung; 0.8: floaty 1/4 dotted, aggressive 1/16
+                plan.set (pid::delayDivision, target.vibe == Vibe::floaty ? 10.0f : (target.vibe == Vibe::aggressive ? 3.0f : (spoken ? 9.0f : 7.0f)));
                 plan.set (pid::delayTime, spoken ? 400.0f : 300.0f);  // used only without host tempo
                 plan.set (pid::delayFeedback, spoken ? 12.0f : 22.0f);
-                const float delayMix = (spoken ? 6.0f : 9.0f) - (density == BeatDensity::dense ? 2.0f : 0.0f);
+                const float delayMix = std::round (clamp (((spoken ? 6.0f : 9.0f) - (density == BeatDensity::dense ? 2.0f : 0.0f)) * target.space.delayScale, 2.0f, 20.0f));
                 plan.set (pid::delayMix, delayMix);
                 plan.set (pid::delayLowCut, 350.0f);
                 plan.set (pid::delayHighCut, 5000.0f);
@@ -655,8 +687,8 @@ namespace velvox::automix
                 plan.set (pid::delayDuckAttack, 10.0f);
                 plan.set (pid::delayDuckRelease, 300.0f);
                 plan.set (pid::delayToReverb, 15.0f);
-                decide (M::delay, spoken ? both ("Delay 1/4, {0} %, geduckt", "Delay 1/4, {0} %, ducked", { juce::String ((int) delayMix) })
-                                         : both ("Delay 1/8 punktiert, {0} %, geduckt", "Delay 1/8 dotted, {0} %, ducked", { juce::String ((int) delayMix) }),
+                decide (M::delay, both ("Delay {0}, {1} %, geduckt", "Delay {0}, {1} %, ducked",
+                                        { delaydiv::names()[(int) plan.get (pid::delayDivision)], juce::String ((int) delayMix) }),
                         both ("Tempo-synchrones Echo (folgt dem Songtempo, ohne Tempo-Info {0} ms). Es kommt erst in den Pausen hervor.",
                               "Tempo-synced echo (follows the song tempo, {0} ms without tempo info). It comes out only in the gaps.",
                               { spoken ? "400" : "300" })

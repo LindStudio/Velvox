@@ -5,6 +5,7 @@
 
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
+#include "TargetHelpers.h"
 #include "AutoMix/AutoMixEngine.h"
 #include "Parameters/EqBands.h"
 #include "PluginEditor.h"
@@ -512,6 +513,63 @@ public:
             const auto p = VocalProfiler::analyse (makeVocal (s));
             expect (AutoMixPlanner::plan (p, defaults(), { Genre::party, Vibe::aggressive }).get (pid::compAttack)
                     < AutoMixPlanner::plan (p, defaults(), { Genre::party, Vibe::floaty }).get (pid::compAttack), "aggressive attacks faster than floaty");
+        }
+
+        beginTest ("Colour and space: genre and vibe change the effects");
+        {
+            VocalSpec s; s.seconds = 14.0;
+            const auto p = VocalProfiler::analyse (makeVocal (s));
+            const auto with = [&p] (Genre g, Vibe v) { return AutoMixPlanner::plan (p, defaults(), { g, v }); };
+            const auto rap = with (Genre::rap, Vibe::punchy), party = with (Genre::party, Vibe::punchy), edm = with (Genre::edm, Vibe::punchy);
+            const auto floaty = with (Genre::party, Vibe::floaty);
+            logMessage ("    reverb mix rap " + juce::String (rap.get (pid::reverbMix)) + ", party " + juce::String (party.get (pid::reverbMix))
+                        + ", edm " + juce::String (edm.get (pid::reverbMix)) + "; delay party " + juce::String (party.get (pid::delayMix))
+                        + ", floaty " + juce::String (floaty.get (pid::delayMix)));
+            expect (rap.get (pid::reverbMix) < party.get (pid::reverbMix) && party.get (pid::reverbMix) < edm.get (pid::reverbMix), "reverb rap < party < edm");
+            expect (floaty.on (pid::delayOn) && party.on (pid::delayOn) && floaty.get (pid::delayMix) > party.get (pid::delayMix), "floaty: more delay");
+            expectEquals ((int) floaty.get (pid::delayDivision), 10, "floaty: 1/4 dotted");
+            expectEquals ((int) with (Genre::party, Vibe::aggressive).get (pid::delayDivision), 3, "aggressive: 1/16");
+        }
+
+        beginTest ("Colour and space: tempo sets reverb time and pre-delay");
+        {
+            VocalSpec s; s.seconds = 14.0;
+            auto p = VocalProfiler::analyse (makeVocal (s));
+            const auto at = [&p] (double bpm) { auto q = p; q.hostBpm = bpm; return AutoMixPlanner::plan (q, defaults()); };
+            const auto slow = at (90.0), fast = at (150.0), none = at (0.0);
+            logMessage ("    decay 90 bpm " + juce::String (slow.get (pid::reverbDecay), 2) + " s, 150 bpm " + juce::String (fast.get (pid::reverbDecay), 2)
+                        + " s, no tempo " + juce::String (none.get (pid::reverbDecay), 2) + " s; pre-delay " + juce::String (slow.get (pid::reverbPreDelay))
+                        + " / " + juce::String (fast.get (pid::reverbPreDelay)) + " / " + juce::String (none.get (pid::reverbPreDelay)) + " ms");
+            expect (slow.get (pid::reverbDecay) > fast.get (pid::reverbDecay), "slower song, longer tail");
+            expect (slow.get (pid::reverbPreDelay) > fast.get (pid::reverbPreDelay), "slower song, longer pre-delay");
+            expect (std::isfinite (none.get (pid::reverbDecay)) && none.get (pid::reverbDecay) >= 1.0f && none.get (pid::reverbDecay) <= 2.3f, "no tempo: the 0.7 times");
+            expect (none.get (pid::reverbPreDelay) == 30.0f || none.get (pid::reverbPreDelay) == 40.0f, "no tempo: the 0.7 pre-delays");
+        }
+
+        beginTest ("Colour and space: a thin voice gets Tube for body");
+        {
+            VocalSpec s; s.seconds = 14.0;
+            const auto party = targetFor (Genre::party, Vibe::punchy);
+            const auto thin = onTarget (VocalProfiler::analyse (makeVocal (s)), party, [] (float hz) { return hz < 260.0f ? -6.0f : 0.0f; });
+            const auto full = onTarget (VocalProfiler::analyse (makeVocal (s)), party, [] (float) { return 0.0f; });
+            const auto pt = AutoMixPlanner::plan (thin, defaults()), pf = AutoMixPlanner::plan (full, defaults());
+            expect (pt.on (pid::satOn) && (int) pt.get (pid::satCharacter) == 2, "Tube on a thin voice");
+            expect (pt.get (pid::satMix) > pf.get (pid::satMix), "and a little more of it");
+        }
+
+        beginTest ("Colour and space: a rap lead gets little doubling");
+        {
+            VocalSpec s; s.seconds = 14.0;
+            auto p = VocalProfiler::analyse (makeVocal (s));
+            const auto party = AutoMixPlanner::plan (p, defaults());
+            const auto floaty = AutoMixPlanner::plan (p, defaults(), { Genre::party, Vibe::floaty });
+            const auto rap = AutoMixPlanner::plan (p, defaults(), { Genre::rap, Vibe::punchy });
+            auto spoken = p;
+            spoken.pitchedShare = 0.3f;
+            const auto sp = AutoMixPlanner::plan (spoken, defaults());
+            const auto mixOf = [] (const MixPlan& m) { return m.on (pid::doublerOn) ? m.get (pid::doublerMix) : 0.0f; };
+            expect (mixOf (rap) <= 8.0f && mixOf (sp) <= 8.0f, "rap: little or none");
+            expect (mixOf (floaty) > mixOf (party), "floaty: wider");
         }
 
         beginTest ("Planner: the low cut follows the voice, not a fixed frequency");

@@ -78,7 +78,7 @@ namespace velvox::automix
                 break;
             case Genre::rap:      // drier, denser, words in front
                 lift (t, 2000.0f, 4000.0f, 1.0f);
-                t.space = { 0.5f, 0.6f, 8.0f, 0.25f };
+                t.space = { 0.5f, 0.6f, 8.0f, 0.5f };
                 t.dynamics = { 2.5f, 5.0f, 6.0f, 9.0f };
                 break;
             case Genre::pop:      // a little more air, less density
@@ -87,14 +87,14 @@ namespace velvox::automix
                 break;
             case Genre::edm:      // brighter, more room
                 lift (t, 5000.0f, 16000.0f, 1.5f);
-                t.space = { 1.3f, 1.2f, 25.0f, 0.75f };
+                t.space = { 1.3f, 1.2f, 25.0f, 1.25f };
                 break;
             case Genre::ballad:   // more dynamics and body, more reverb, less colour
                 lift (t, 125.0f, 250.0f, 1.0f);
                 t.dynamics = { 4.0f, 8.0f, 8.0f, 13.0f };
                 t.densityBlend = 8.0f;
                 t.satMix = 15.0f;
-                t.space = { 1.5f, 1.0f, 15.0f, 1.0f };
+                t.space = { 1.5f, 1.0f, 15.0f, 1.5f };
                 break;
         }
         t.estimated = genre != Genre::party;

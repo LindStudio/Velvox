@@ -30,8 +30,8 @@ namespace velvox::automix
     struct DynamicsTarget { float phraseLo, phraseHi, crestLo, crestHi; };   // dB (VocalProfiler dynamicsDb, crestDb)
 
     // Effect amounts relative to the planner's 0.7 values (1 = unchanged); doublerMix in %;
-    // decayBeats: reverb time in bars of 4 beats when the host tempo is known
-    struct SpaceTarget { float reverbScale, delayScale, doublerMix, decayBeats; };
+    // decayBars: reverb time in bars of 4 beats when the host tempo is known
+    struct SpaceTarget { float reverbScale, delayScale, doublerMix, decayBars; };
 
     struct MixTarget
     {
@@ -47,7 +47,7 @@ namespace velvox::automix
         int satCharacter = 1;                       // 0 Warm, 1 Tape, 2 Tube, 3 Hard
         float satDrive = 5.0f, satMix = 30.0f;
         float sibilanceMax = -6.0f;                 // S frames against vowel frames (dB)
-        SpaceTarget space { 1.0f, 1.0f, 20.0f, 0.5f };
+        SpaceTarget space { 1.0f, 1.0f, 20.0f, 1.0f };
         bool estimated = false;                     // offsets, not measured
     };
 
