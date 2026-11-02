@@ -274,14 +274,14 @@ namespace velvox::automix
         // quietest of the 60 ms before it, at least 90 ms after the previous one. The rate sets the
         // compressor's release, the sharpness (consonant peak against the vowel after it) its attack.
         {
-            const int hop = std::max (16, (int) std::lround (0.005 * fs));
+            const int envHop = std::max (16, (int) std::lround (0.005 * fs));
             std::vector<float> env;
-            for (int start = 0; start + hop <= n; start += hop)
+            for (int start = 0; start + envHop <= n; start += envHop)
             {
                 double s = 0.0;
-                for (int i = start; i < start + hop; ++i)
+                for (int i = start; i < start + envHop; ++i)
                     s += (double) mid[(size_t) i] * mid[(size_t) i];
-                env.push_back (toDb (s / hop));
+                env.push_back (toDb (s / envHop));
             }
             const int lookBack = 12, refractory = 18;
             int last = -refractory;
@@ -299,9 +299,9 @@ namespace velvox::automix
                 last = i;
                 ++onsets;
                 // the onset block may sit a little into the rise: the consonant is searched from 5 ms before it
-                const int s0 = std::max (0, (i - 1) * hop), s1 = std::min (n, s0 + (int) (0.015 * fs) + hop);
+                const int s0 = std::max (0, (i - 1) * envHop), s1 = std::min (n, s0 + (int) (0.015 * fs) + envHop);
                 const int s2 = std::min (n, s1 + (int) (0.1 * fs));
-                if (s2 - s1 < hop)
+                if (s2 - s1 < envHop)
                     continue;
                 float pk = 0.0f;
                 for (int k = s0; k < s1; ++k)

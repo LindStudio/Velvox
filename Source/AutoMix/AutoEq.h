@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VocalProfile.h"
+#include "MixTarget.h"
 #include "../DSP/EqDesign.h"
 
 // 0.6.1 (spec item 7): the EQ moves of the automatic mix - narrow notches on sustained
@@ -16,10 +17,10 @@
 namespace velvox::automix::autoeq
 {
     // Limits of the automatic mix in EQ 1
-    inline constexpr int maxBands = 6;                 // every band it uses, the low cut included
+    inline constexpr int maxBands = 8;                 // every band it uses, the low cut included (0.8: 6 -> 8)
     inline constexpr int maxNotches = 3;
     inline constexpr float maxNarrowCutDb = 9.0f;      // narrow: Q 10 .. 16, cuts only
-    inline constexpr float maxBroadCutDb = 4.0f;
+    inline constexpr float maxBroadCutDb = 6.0f;       // 0.8: 4 -> 6 (a clear mud / boxiness cut)
     inline constexpr float maxBroadBoostDb = 4.0f;
     inline constexpr float minNarrowQ = 10.0f, maxNarrowQ = 16.0f;
     inline constexpr float minMoveDb = 1.0f;           // smaller new broad moves are not worth a band
@@ -46,9 +47,6 @@ namespace velvox::automix::autoeq
     // `spectrumDb`: VocalProfiler::spectrumDb (power density per 1/12-octave band from 40 Hz,
     // -200 = empty). `bands`: EQ bands applied on top (only those switched on count).
     Levels levelsOf (const std::vector<float>& spectrumDb, const std::vector<dsp::EqBand>& bands);
-    // The objective's tonal + harshness terms for these levels (the target curve as one number;
-    // a high voice - lowest notes above 250 Hz - only pays for too much body)
-    float tonalPenalty (const Levels& levels, bool highVoice, float margin = 0.0f);   // margin: windows narrowed by it
     // Total magnitude (dB) of `bands` at `freq`
     float responseDb (const std::vector<dsp::EqBand>& bands, float freq);
 
@@ -66,19 +64,36 @@ namespace velvox::automix::autoeq
         std::vector<dsp::EqBand> fixed;   // bands that stay (user / Vocal Check bands, the planned low cut)
         bool conservative = false, noisy = false, sibilant = false, harsh = false;
         int budget = maxBands - 1;        // bands available besides the low cut
+        const MixTarget* target = nullptr;            // 0.8: the target curve (nullptr = party / punchy)
+        std::array<float, numThirds> unmaskDb {};     // 0.8: target lift per third where the beat covers the voice
     };
 
-    // Broad moves (roles warmth, autoMix, autoTone, air) and notches (autoNotch1..3), at most
-    // `budget`, each within the limits above. Deterministic.
-    std::vector<Move> planMoves (const Context& context);
+    // 0.8 (spec: "EQ: Kurvenabgleich"): notches on sustained resonances first, then a greedy fit of the
+    // voice's third-octave levels to the target curve: the largest connected stretch outside the
+    // target's spread gets a bell (Q from its width) or a shelf at the ends, its gain chosen on the
+    // model; then the next stretch, until the budget is used or nothing is left. Cuts down to
+    // -6 dB (-3 dB below 300 Hz), lifts up to +4 dB (2 dB above 5 kHz on a noisy or sibilant take,
+    // none on a resonance, none on the low end of a high voice, none of 2-5 kHz on a harsh take).
+    // Deterministic, within `budget`.
+    std::vector<Move> planCurveMoves (const Context& context);
 
-    // Closed loop: `rendered` are the levels of the real render with the auto-mix bands `owned`
-    // (broad and narrow, as in the plan). Returns the broad bands to change (gain 0 = flatten) or to
-    // create (at most context.budget new ones) so that the levels move into the windows. Empty when
-    // everything is inside (0.5 dB tolerance) or nothing can move any more.
-    std::vector<Move> correct (const Levels& rendered, const Context& context, const std::vector<Move>& owned);
+    // What a broad move at `hz` does, by region (German / English): "Dröhnen" (cut 150-450 Hz),
+    // "Pappig" (450-900), "Nasal" (900-1600), "Härte" (cut 2.5-5 kHz), "Körper" (lift below 300 Hz),
+    // "Verständlichkeit" (lift 1.6-5 kHz), "Brillanz" (lift above 7 kHz), else Tiefen / Mitten / Höhen
+    juce::String regionName (float hz, bool cut);
 
-    // The title of a move (German): "Höhen +2,0 dB (Shelf 9 kHz)", "Resonanz 1,8 kHz -6,0 dB (schmal, Q 12)"
+    // Closed loop (0.8): `rendered` are the third-octave levels of the real render with the auto-mix bands
+    // `owned` (broad and narrow, as in the plan). The broad bands get their gains re-tuned on the render
+    // (frequency and shape stay; gain 0 = flatten), and stretches still off the target get new moves
+    // (at most context.budget). Empty when everything is within 0.5 dB of the target.
+    std::vector<Move> correctCurve (const std::vector<float>& renderedThirds, const Context& context, const std::vector<Move>& owned);
+
+    // The thirds the curve fit and the objective look at: from 160 Hz (and 1.3 x the lowest sung note) to 12.9 kHz
+    std::pair<int, int> fitRange (const VocalProfile& profile);
+    // The target lift per third where the beat on the sidechain covers the voice (1 - 5 kHz, 0 .. 2.5 dB)
+    std::array<float, numThirds> unmaskOf (const VocalProfile& profile, bool conservative);
+
+    // The title of a move: "Dröhnen -3,5 dB bei 340 Hz", "Brillanz +3,0 dB (Shelf 10 kHz)", "Resonanz 1,8 kHz -6,0 dB (schmal, Q 12)"
     juce::String titleOf (dsp::EqRole role, const dsp::EqBand& band);
 
     // True when `band` respects the limits (narrow: cut only, Q 10..16, >= -9 dB; broad: -4..+4 dB)

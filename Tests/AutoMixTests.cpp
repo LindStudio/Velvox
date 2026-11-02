@@ -55,6 +55,30 @@ namespace
         return b.has_value() && b->on ? b->freq : 0.0f;
     }
     float airGain (const MixPlan& p, int instance = 0) { return roleGain (p, {}, dsp::EqRole::air, instance); }
+    // 0.8: the response of the auto-mix bands of EQ 1 at `hz` (the curve fit puts a move where it is
+    // needed, in whichever broad role is free)
+    static float eqAt (const MixPlan& plan, float hz)
+    {
+        auto values = plan.values;
+        const auto a = eqbands::accessFor (values);
+        std::vector<dsp::EqBand> bands;
+        for (int i = 0; i < dsp::maxEqBands; ++i)
+        {
+            const auto b = eqbands::readBand (a, 0, i);
+            if (b.on && autoeq::ownedRole (b.bandRole()))
+                bands.push_back (b);
+        }
+        return autoeq::responseDb (bands, hz);
+    }
+    static float eqMean (const MixPlan& plan, float lo, float hi)
+    {
+        float s = 0.0f;
+        int n = 0;
+        for (float f = lo; f <= hi * 1.001f; f *= std::pow (2.0f, 1.0f / 3.0f), ++n)
+            s += eqAt (plan, f);
+        return n > 0 ? s / (float) n : 0.0f;
+    }
+
     float liveLowCutHz (Harness& h)   // 0 = no low cut
     {
         const auto eq = h.proc.readSettings().eq;
@@ -365,11 +389,12 @@ public:
                     const int b = eqbands::findBand (a, 0, role);
                     return b >= 0 && eqbands::readBand (a, 0, b).on ? eqbands::readBand (a, 0, b).gain : 0.0f;
                 };
-                // A dark voice: 2-5 kHz is lifted or left, never cut
+                // A dark voice: 2-5 kHz is lifted or left, never cut (0.8: wherever the curve fit puts the move)
                 const auto darkPlan = AutoMixPlanner::plan (pd, {});
-                expect (eqGain (darkPlan, dsp::EqRole::autoTone) >= 0.0f, "no presence cut on a dark voice: " + juce::String (eqGain (darkPlan, dsp::EqRole::autoTone)));
-                expect (eqGain (darkPlan, dsp::EqRole::air) >= 0.0f, "no high cut on a dark voice");
-                expect (eqGain (darkPlan, dsp::EqRole::autoTone) + eqGain (darkPlan, dsp::EqRole::air) > 0.0f, "the dark voice gets brighter");
+                juce::ignoreUnused (eqGain);
+                expect (eqMean (darkPlan, 2000.0f, 5000.0f) >= 0.0f, "no presence cut on a dark voice: " + juce::String (eqMean (darkPlan, 2000.0f, 5000.0f), 1));
+                expect (eqMean (darkPlan, 6000.0f, 12000.0f) >= 0.0f, "no high cut on a dark voice");
+                expect (eqMean (darkPlan, 2000.0f, 12000.0f) > 0.5f, "the dark voice gets brighter");
                 // SMOOTH on every vocal with enough material, gently where nothing sticks out
                 const auto cleanPlan = AutoMixPlanner::plan (c, {});
                 expectEquals (cleanPlan.get (pid::smoothOn), 1.0f, "SMOOTH as basic care");
@@ -472,11 +497,11 @@ public:
             VocalSpec dark; dark.tiltDb = -5.0f; dark.seconds = 14.0;
             VocalSpec bright; bright.tiltDb = 4.0f; bright.seconds = 14.0;
             const auto pd = planFor (dark), pb = planFor (bright);
-            expect (airGain (pd) > 1.0f, "dark voice gets more highs");
-            // 0.6.1: a very bright take gets a broad shelf cut (at most -4 dB); 2026-10-29: at most a small lift of the air
-            // above 10 kHz where it lies below finished professional vocals - and always far less than the dark voice
-            expect (airGain (pb) <= 1.0f && airGain (pb) >= -4.0f && airGain (pb) < airGain (pd),
-                    "bright voice gets no real extra highs: " + juce::String (airGain (pb), 1) + " vs dark " + juce::String (airGain (pd), 1));
+            // 0.8: measured as the EQ's response (the curve fit picks the role), 3 - 10 kHz
+            const float highsD = eqMean (pd, 3000.0f, 10000.0f), highsB = eqMean (pb, 3000.0f, 10000.0f);
+            expect (highsD > 1.0f, "dark voice gets more highs: " + juce::String (highsD, 1));
+            expect (highsB <= 1.0f && highsB >= -6.0f && highsB < highsD,
+                    "bright voice gets no real extra highs: " + juce::String (highsB, 1) + " vs dark " + juce::String (highsD, 1));
 
             VocalSpec sib; sib.sibilance = 1.6f; sib.seconds = 14.0;
             VocalSpec soft; soft.sibilance = 0.05f; soft.seconds = 14.0;
@@ -702,6 +727,10 @@ public:
             m.valid = true;
             m.lufs = -18.0f; m.peakDb = -6.0f;
             m.bodyDb = -4.0f; m.lowMidDb = -3.0f; m.topDb = -7.0f; m.airDb = -16.0f; m.presenceDb = -8.0f;   // professional vocals (2026-10-29)
+            {
+                const auto party = targetFor (Genre::party, Vibe::punchy);   // 0.8: the thirds on the target curve
+                m.thirdsDb.assign (party.curveDb.begin(), party.curveDb.end());
+            }
             m.dynamicsDb = 6.0f; m.dynamicsValid = true; m.crestDb = 12.0f;
             m.correlation = 0.95f; m.monoLossDb = 0.0f;
             const auto original = m;
@@ -765,6 +794,9 @@ public:
             highVoice.f0LowHz = 360.0f;
             auto thinBody = m;
             thinBody.bodyDb = -40.0f;
+            for (int k = 0; k < numThirds; ++k)
+                if (thirdCentre (k) < 300.0f)
+                    thinBody.thirdsDb[(size_t) k] = -50.0f;
             expect (evaluate (thinBody, original, highVoice, -18.0f, true, false).tonal < 0.01f, "high voice: empty body band costs nothing");
             auto lowVoice = highVoice;
             lowVoice.f0LowHz = 110.0f;
@@ -796,17 +828,16 @@ public:
             const auto it = softer (candsB);
             expect (bright.topDb > -9.0f, "the test take is bright");
             // 0.6.1: the base plan itself may already soften the highs (AutoEq); then no variant
-            const bool baseSofter = airGain (baseB) <= -1.0f;
+            // (0.8: the curve fit's cut is wherever the voice is too bright - measured as its response)
+            const bool baseSofter = eqMean (baseB, 5000.0f, 12000.0f) <= -1.0f;
             expect (baseSofter || it != candsB.end(), "bright take -> softer highs (base plan or variant)");
             expect (! (baseSofter && it != candsB.end()), "no second softer-highs on top of the base plan's cut");
             if (it != candsB.end() || baseSofter)
             {
                 const auto& c = it != candsB.end() ? it->second : baseB;
                 expect (c.on (pid::eqOn) && c.routing.contains (ModuleId::eq), "EQ engaged");
-                const auto air = roleBand (c, {}, dsp::EqRole::air);
-                expect (air.has_value() && air->on && air->bandType() == dsp::EqBandType::highShelf, "shelf");
-                expect (airGain (c) <= -1.0f && airGain (c) >= -4.0f, "gentle cut: " + juce::String (airGain (c), 1));
-                expect (air.has_value() && air->freq <= 6000.0f, "shelf reaches into the upper mids");
+                const float cut = eqMean (c, 5000.0f, 12000.0f);
+                expect (cut <= -1.0f && cut >= -6.0f, "gentle cut: " + juce::String (cut, 1));
             }
 
             VocalSpec d; d.seconds = 12.0; d.tiltDb = -5.0f; d.f0 = 120.0f;

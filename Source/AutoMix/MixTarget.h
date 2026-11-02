@@ -39,6 +39,9 @@ namespace velvox::automix
         Vibe vibe = Vibe::punchy;
         std::array<float, numThirds> curveDb {};    // relative to the core, like thirdsOf
         std::array<float, numThirds> spreadDb {};   // what still counts as on target (dB)
+        // The vibe's share of curveDb: a deliberate shift, applied in full on top of the spread
+        // (residualDb), so a voice already on the genre's curve still moves by the vibe
+        std::array<float, numThirds> styleDb {};
         DynamicsTarget dynamics { 3.0f, 6.0f, 6.5f, 10.0f };
         float densityBlend = 18.0f;                 // Vocal Smash blend (%) for the target density
         int satCharacter = 1;                       // 0 Warm, 1 Tape, 2 Tube, 3 Hard
@@ -49,6 +52,10 @@ namespace velvox::automix
     };
 
     MixTarget targetFor (Genre genre, Vibe vibe);
+
+    // How far third k of a voice (relative to the core) is off the target: the deviation from the
+    // genre's curve outside its spread, minus the vibe's shift. > 0 = too much, 0 = on target.
+    float residualDb (const MixTarget& target, int k, float voiceDb) noexcept;
 
     // What the user chose at the start of the auto mix
     struct MixIntent

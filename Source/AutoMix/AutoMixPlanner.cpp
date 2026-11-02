@@ -203,8 +203,9 @@ namespace velvox::automix
     }
 
     //==========================================================================
-    MixPlan AutoMixPlanner::plan (const VocalProfile& p, const std::map<juce::String, float>& current)
+    MixPlan AutoMixPlanner::plan (const VocalProfile& p, const std::map<juce::String, float>& current, const MixIntent& intent)
     {
+        const auto target = targetFor (intent.genre, intent.vibe);
         MixPlan plan;
         plan.routing = standardRouting();
         plan.conservative = ! p.enoughMaterial || p.voicedSeconds < 8.0f;
@@ -224,7 +225,6 @@ namespace velvox::automix
         const float voice = p.voiceRmsDb + inGain;              // median voiced RMS (dBFS)
         const bool noisy = p.snrValid && p.snrDb < 28.0f;
         const bool harsh = p.hasIssue ("harsh");
-        const bool sibilant = p.hasIssue ("sibilance");
         const bool dull = p.hasIssue ("dull");
         const bool compressed = p.heavilyCompressed;
         const bool roomy = likely (p, "reverberant");
@@ -324,7 +324,10 @@ namespace velvox::automix
         // towards the target curve (AutoEq), in auto-mix role bands of EQ 1. Bands the auto-mix
         // does not own (user bands, Vocal Check's presence / mud) stay as they are and count in
         // the model: a resonance Vocal Check already cut is not cut twice.
-        const auto eqMoves = autoeq::planMoves (autoEqState (plan, current, p, true).context);
+        auto eqContext = autoEqState (plan, current, p, true).context;
+        eqContext.target = &target;
+        eqContext.unmaskDb = autoeq::unmaskOf (p, plan.conservative);
+        const auto eqMoves = autoeq::planCurveMoves (eqContext);
         const auto moveFor = [&eqMoves] (dsp::EqRole role) -> const autoeq::Move*
         {
             for (auto& m : eqMoves)

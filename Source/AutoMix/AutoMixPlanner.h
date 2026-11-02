@@ -82,7 +82,7 @@ namespace velvox::automix
     class AutoMixPlanner
     {
     public:
-        static MixPlan plan (const VocalProfile& profile, const std::map<juce::String, float>& current);
+        static MixPlan plan (const VocalProfile& profile, const std::map<juce::String, float>& current, const MixIntent& intent = {});
 
         // Serial order used by the automatic mix (delay and reverb as sends)
         static dsp::Routing standardRouting();

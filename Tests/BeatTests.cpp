@@ -3,6 +3,8 @@
 
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
+#include "TargetHelpers.h"
+#include "Parameters/EqBands.h"
 #include "SyntheticBeat.h"
 #include "AutoMix/VocalProfile.h"
 #include "AutoMix/AutoMixEngine.h"
@@ -241,6 +243,31 @@ public:
         }
     }
 
+
+    // 0.8: the response of the auto-mix bands of EQ 1 at `hz` (the curve fit puts a move where it is
+    // needed, in whichever broad role is free)
+    static float eqAt (const MixPlan& plan, float hz)
+    {
+        auto values = plan.values;
+        const auto a = eqbands::accessFor (values);
+        std::vector<dsp::EqBand> bands;
+        for (int i = 0; i < dsp::maxEqBands; ++i)
+        {
+            const auto b = eqbands::readBand (a, 0, i);
+            if (b.on && autoeq::ownedRole (b.bandRole()))
+                bands.push_back (b);
+        }
+        return autoeq::responseDb (bands, hz);
+    }
+    static float eqMean (const MixPlan& plan, float lo, float hi)
+    {
+        float s = 0.0f;
+        int n = 0;
+        for (float f = lo; f <= hi * 1.001f; f *= std::pow (2.0f, 1.0f / 3.0f), ++n)
+            s += eqAt (plan, f);
+        return n > 0 ? s / (float) n : 0.0f;
+    }
+
     void eqTests()
     {
         const auto vocal = makeVocal (vocalSpec());
@@ -260,44 +287,46 @@ public:
 
         beginTest ("Beat EQ: a lift only where the beat covers the voice");
         {
-            const auto none = AutoMixPlanner::plan (VocalProfiler::analyse (vocal), defaults());
+            // 0.8: the beat raises the target where it covers the voice (1 - 5 kHz); the curve fit lifts there
+            juce::ignoreUnused (toneBell);
+            // on a voice that sits on the target (a dark one is lifted to the limit anyway)
+            const auto party = targetFor (Genre::party, Vibe::punchy);
+            const auto flat = [] (float) { return 0.0f; };
+            const auto none = AutoMixPlanner::plan (onTarget (VocalProfiler::analyse (vocal), party, flat), defaults());
             for (auto kind : { BeatKind::presenceHeavy, BeatKind::dense, BeatKind::dark })
             {
-                const auto p = profileWith (kind);
+                const auto p = onTarget (profileWith (kind), party, flat);
                 const auto m = autoeq::maskingOf (p);
                 const auto plan = AutoMixPlanner::plan (p, defaults());
-                const auto b = toneBell (plan);
+                const float lift = eqAt (plan, m.hz) - eqAt (none, m.hz);
                 logMessage (juce::String ((int) kind) + ": beat over voice " + juce::String (m.presenceDb, 1) + " dB at "
-                            + juce::String (m.hz, 0) + " Hz -> tone bell " + (b && b->on ? juce::String (b->gain, 1) + " dB at " + juce::String (b->freq, 0) : juce::String ("off")));
+                            + juce::String (m.hz, 0) + " Hz -> EQ there " + juce::String (lift, 1) + " dB more than without the beat");
                 if (kind == BeatKind::presenceHeavy)
                 {
-                    expect (b.has_value() && b->on, "presence-heavy beat: a lift");
-                    if (b && b->on)
-                    {
-                        expect (b->freq >= 1500.0f && b->freq <= 6000.0f, juce::String (b->freq));
-                        expect (b->gain >= 0.5f && b->gain <= 2.5f, juce::String (b->gain));
-                    }
+                    expect (m.hz >= 1500.0f && m.hz <= 6000.0f, juce::String (m.hz));
+                    expect (lift >= 0.4f && lift <= 3.0f, "presence-heavy beat: a lift " + juce::String (lift, 1));
                 }
                 if (kind == BeatKind::dark)
-                    expect (! (b && b->on && b->gain > 0.0f), "a beat that leaves the presence free: no lift");
+                    expect (lift <= 0.25f, "a beat that leaves the presence free: no lift");
             }
-            const auto b0 = toneBell (none);
-            expect (! (b0 && b0->on && b0->gain > 0.0f), "no beat: no lift from it");
             expect (autoeq::unmaskGainDb (3.0f, false) == 0.0f && autoeq::unmaskGainDb (30.0f, false) == 2.5f
                     && autoeq::unmaskGainDb (4.0f, false) == 0.5f);
         }
 
         beginTest ("Beat EQ: a sharp voice is not lifted, the report says why");
         {
-            auto p = profileWith (BeatKind::presenceHeavy);
+            const auto party = targetFor (Genre::party, Vibe::punchy);
+            auto p = onTarget (profileWith (BeatKind::presenceHeavy), party, [] (float) { return 0.0f; });
             p.issues.push_back ({ "harsh", "Betonte obere Mitten", "", Confidence::likely, 10.0f });
             const auto plan = AutoMixPlanner::plan (p, defaults());
-            const auto b = toneBell (plan);
-            expect (! (b && b->on && b->gain > 0.0f), "no lift on a sharp voice");
+            auto sharpNoBeat = onTarget (VocalProfiler::analyse (vocal), party, [] (float) { return 0.0f; });
+            sharpNoBeat.issues.push_back ({ "harsh", "Betonte obere Mitten", "", Confidence::likely, 10.0f });
+            const float hz = autoeq::maskingOf (p).hz;
+            expect (eqAt (plan, hz) <= eqAt (AutoMixPlanner::plan (sharpNoBeat, defaults()), hz) + 0.25f, "no lift on a sharp voice");
             expect (hasNote (plan, "already sharp there"));
         }
 
-        beginTest ("Beat EQ: a crowded low mid deepens a mud cut, never makes one");
+        beginTest ("Beat EQ: a crowded low mid never makes a mud cut");
         {
             // The rule on set measurements: synthetic beats normalised to a loudness hardly crowd the low
             // mids of a voice set 1 LU above them, but bass-heavy productions can
@@ -323,10 +352,8 @@ public:
                 const float without = cutOf (AutoMixPlanner::plan (p, defaults()));
                 const float with = cutOf (AutoMixPlanner::plan (crowd (p), defaults()));
                 logMessage ("mud +" + juce::String (mud, 1) + " dB: cut " + juce::String (without, 1) + " -> " + juce::String (with, 1) + " with a crowded low mid");
-                if (without < 0.0f)
-                    expectWithinAbsoluteError (with, std::max (-autoeq::maxBroadCutDb, without - 1.0f), 0.01f);
-                else
-                    expectEquals (with, without, "no mud cut from the beat alone");
+                // 0.8 (spec: the beat moves the target at 1 - 5 kHz only): the low mids follow the voice
+                expectEquals (with, without, "no mud cut from the beat alone");
             }
         }
     }

@@ -39,32 +39,6 @@ namespace velvox::automix::autoeq
 
         float roundHalf (float v) { return std::round (v * 2.0f) / 2.0f; }
 
-        // Strongest point of 2.5-5 kHz (1/3-octave smoothed)
-        float presencePeakHz (const std::vector<float>& spec)
-        {
-            float f = 3150.0f, best = -1.0e9f;
-            for (int b = 2; b + 2 < (int) spec.size(); ++b)
-            {
-                const float c = VocalProfiler::bandCentre (b);
-                if (c < 2500.0f || c > 5000.0f)
-                    continue;
-                float s = 0.0f;
-                for (int j = b - 2; j <= b + 2; ++j)
-                    s += std::max (-120.0f, spec[(size_t) j]);
-                if (s > best) { best = s; f = c; }
-            }
-            return f;
-        }
-
-        // Where a high shelf can lift the top end: 9 kHz when there is content up there, else lower
-        float topShelfHz (const std::vector<float>& spec, const std::vector<EqBand>& applied)
-        {
-            auto probe = applied;
-            const float before = levelsOf (spec, probe).top;
-            probe.push_back (bandOf (EqBandType::highShelf, 9000.0f, 3.0f, 0.7071f));
-            return levelsOf (spec, probe).top - before > 0.35f * 3.0f ? 9000.0f : 4500.0f;
-        }
-
     }
 
     bool ownedRole (EqRole role) noexcept
@@ -124,158 +98,309 @@ namespace velvox::automix::autoeq
         return b.gain >= -maxBroadCutDb - eps && b.gain <= maxBroadBoostDb + eps;
     }
 
+    juce::String regionName (float f, bool cut)
+    {
+        if (cut)
+        {
+            if (f >= 150.0f && f < 450.0f)   return both ("Dröhnen", "Boomy");
+            if (f >= 450.0f && f < 900.0f)   return both ("Pappig", "Boxy");
+            if (f >= 900.0f && f < 1600.0f)  return both ("Nasal", "Nasal");
+            if (f >= 2500.0f && f < 5000.0f) return both ("Härte", "Harshness");
+        }
+        else
+        {
+            if (f < 300.0f)                   return both ("Körper", "Body");
+            if (f >= 1600.0f && f < 5000.0f)  return both ("Verständlichkeit", "Clarity");
+            if (f >= 7000.0f)                 return both ("Brillanz", "Brilliance");
+        }
+        return f < 300.0f ? both ("Tiefen", "Lows") : (f < 5000.0f ? both ("Mitten", "Mids") : both ("Höhen", "Highs"));
+    }
+
     juce::String titleOf (EqRole role, const EqBand& b)
     {
         const float g = b.gain;
-        switch (role)
+        const bool notchRole = role == EqRole::autoNotch1 || role == EqRole::autoNotch2 || role == EqRole::autoNotch3;
+        if (notchRole && b.q >= minNarrowQ - 1.0e-3f)
+            return both ("Resonanz {0} {1} (schmal, Q {2})", "Resonance {0} {1} (narrow, Q {2})", { hz (b.freq), db (g), juce::String (juce::roundToInt (b.q)) });
+        const auto t = b.bandType();
+        // a shelf acts beyond its corner: named after the range it moves
+        const auto region = regionName (t == EqBandType::lowShelf ? 0.5f * b.freq : (t == EqBandType::highShelf ? 1.5f * b.freq : b.freq), g < 0.0f);
+        if (t == EqBandType::lowShelf || t == EqBandType::highShelf)
+            return both ("{0} {1} (Shelf {2})", "{0} {1} (shelf {2})", { region, db (g), hz (b.freq) });
+        return both ("{0} {1} bei {2}", "{0} {1} at {2}", { region, db (g), hz (b.freq) });
+    }
+
+
+    std::pair<int, int> fitRange (const VocalProfile& p)
+    {
+        // From 160 Hz (below lives the low cut) - and above the lowest sung notes - to 12.9 kHz
+        const float lowest = std::max (160.0f, p.pitchValid ? 1.3f * p.f0LowHz : 160.0f);
+        int lo = 0, hi = numThirds - 1;
+        while (lo < numThirds - 1 && thirdCentre (lo) < lowest * 0.99f)
+            ++lo;
+        while (hi > 0 && thirdCentre (hi) > 13000.0f)
+            --hi;
+        return { lo, hi };
+    }
+
+    std::array<float, numThirds> unmaskOf (const VocalProfile& p, bool conservative)
+    {
+        // Where the beat covers the voice (sidechain, at the output level), 1 - 5 kHz: the target rises there
+        std::array<float, numThirds> u {};
+        if (! maskingOf (p).valid)
+            return u;
+        const float shift = leadOverBeatLu - p.vocalOverBeatLu;
+        for (int k = 0; k < numThirds; ++k)
         {
-            case EqRole::autoNotch1: case EqRole::autoNotch2: case EqRole::autoNotch3:
-                return both ("Resonanz {0} {1} (schmal, Q {2})", "Resonance {0} {1} (narrow, Q {2})", { hz (b.freq), db (g), juce::String (juce::roundToInt (b.q)) });
-            case EqRole::warmth:
-                return g < 0.0f ? both ("Tiefen {0} (Shelf {1})", "Lows {0} (shelf {1})", { db (g), hz (b.freq) })
-                                : both ("Wärme {0} (Shelf {1})", "Warmth {0} (shelf {1})", { db (g), hz (b.freq) });
-            case EqRole::autoMix:
-                return both ("Tiefmitten {0} bei {1}", "Low mids {0} at {1}", { db (g), hz (b.freq) });
-            case EqRole::autoTone:
-                return both ("Präsenz {0} bei {1} (breit)", "Presence {0} at {1} (broad)", { db (g), hz (b.freq) });
-            case EqRole::air:
-                return b.freq >= 10500.0f && g > 0.0f ? both ("Luft {0} (Shelf {1})", "Air {0} (shelf {1})", { db (g), hz (b.freq) })
-                                                      : both ("Höhen {0} (Shelf {1})", "Highs {0} (shelf {1})", { db (g), hz (b.freq) });
-            default:
-                return both ("EQ {0} bei {1}", "EQ {0} at {1}", { db (g), hz (b.freq) });
+            const float c = thirdCentre (k);
+            if (c < 1000.0f * 0.99f || c > 5000.0f * 1.01f)
+                continue;
+            float sum = 0.0f;
+            int n = 0;
+            for (int b = 12 + 4 * k - 2; b <= 12 + 4 * k + 1; ++b)
+                if (b >= 0 && b < (int) p.beatOverVocalDb.size())
+                {
+                    sum += p.beatOverVocalDb[(size_t) b];
+                    ++n;
+                }
+            u[(size_t) k] = n > 0 ? unmaskGainDb (sum / (float) n - shift, conservative) : 0.0f;
         }
+        return u;
     }
 
     namespace
     {
-        // The broad band of `role` for gain `g`: the shape depends on the direction (a cut of the
-        // low mids sits at their strongest point, a lift is wide at 350 Hz ...). `keep`: an existing
-        // band of the role whose frequency stays as long as the direction does not change.
-        EqBand shapeOf (EqRole role, float g, const Context& ctx, const std::vector<EqBand>& applied, const EqBand* keep)
+        const MixTarget& targetOf (const Context& ctx)
         {
-            if (keep != nullptr && keep->on && keep->gain != 0.0f && (keep->gain > 0.0f) == (g > 0.0f))
-            {
-                auto b = *keep;
-                b.gain = g;
-                return b;
-            }
-            const auto& p = *ctx.profile;
-            switch (role)
-            {
-                case EqRole::autoMix:
-                    return g < 0.0f ? bandOf (EqBandType::bell, juce::jlimit (200.0f, 500.0f, p.lowMidPeakHz), g, 1.2f)
-                                    : bandOf (EqBandType::bell, 350.0f, g, 1.0f);
-                case EqRole::warmth:
-                    return bandOf (EqBandType::lowShelf, g < 0.0f ? 200.0f : 170.0f, g, 0.7071f);
-                case EqRole::autoTone:
-                    return g < 0.0f ? bandOf (EqBandType::bell, presencePeakHz (p.spectrumDb), g, 1.0f)
-                                    : bandOf (EqBandType::bell, 3000.0f, g, 0.8f);
-                default:
-                    return bandOf (EqBandType::highShelf, g < 0.0f ? 5000.0f : topShelfHz (p.spectrumDb, applied), g, 0.7071f);
-            }
+            static const MixTarget party = targetFor (Genre::party, Vibe::punchy);
+            return ctx.target != nullptr ? *ctx.target : party;
         }
 
-        // How far a broad role may go from 0 in each direction for this take
-        std::pair<float, float> rangeOf (EqRole role, const Context& ctx)
+        // `voice` + `offset` against the target; > 0 = too much, 0 = on target (also outside [lo, hi])
+        std::vector<float> residualOf (const std::vector<float>& voice, const std::vector<float>& offset, const Context& ctx, int lo, int hi)
+        {
+            const auto& t = targetOf (ctx);
+            std::vector<float> r ((size_t) numThirds, 0.0f);
+            for (int k = lo; k <= hi; ++k)
+                if (voice[(size_t) k] > -190.0f)
+                    // the beat's lift applies in full, like the vibe (inside the spread it would vanish) - not on a harsh voice
+                    r[(size_t) k] = residualDb (t, k, voice[(size_t) k] + offset[(size_t) k]) - (ctx.harsh ? 0.0f : ctx.unmaskDb[(size_t) k]);
+            return r;
+        }
+
+        float costOf (const std::vector<float>& r)
+        {
+            float c = 0.0f;
+            for (auto v : r)
+                c += v * v;
+            return c;
+        }
+
+        constexpr float costPerDb = 0.3f;   // a move has to pay for its size
+
+        // Where a band acts: a shelf beyond its corner (like regionName in titleOf)
+        float actingHz (const EqBand& b)
+        {
+            const auto t = b.bandType();
+            return t == EqBandType::lowShelf ? 0.5f * b.freq : (t == EqBandType::highShelf ? 1.5f * b.freq : b.freq);
+        }
+
+        // How far a broad move at `centre` may go (spec: cuts down to -6 dB, -3 dB below 300 Hz; lifts up to
+        // +4 dB, 2 dB above 5 kHz on a noisy / sibilant take, none on a resonance, none on the low end of a
+        // high voice, none of 2-5 kHz on a harsh take)
+        std::pair<float, float> limitsOf (const Context& ctx, float centre, EqBandType type)
         {
             const auto& p = *ctx.profile;
             const float scale = ctx.conservative ? 0.6f : 1.0f;
             const bool highVoice = p.pitchValid && p.f0LowHz > 250.0f;
-            const float cut = -maxBroadCutDb * scale;
-            switch (role)
-            {
-                case EqRole::autoMix:  return { cut, highVoice || ctx.noisy ? 0.0f : 3.0f * scale };
-                case EqRole::warmth:   return { cut, highVoice || ctx.noisy || ! p.pitchValid ? 0.0f : maxBroadBoostDb * scale };
-                // 2026-10-29: 2-5 kHz is only cut on a take that is brighter there than finished professional vocals
-                // (or harsh); a dark voice gets a lift instead - also when it is noisy or sibilant, just a smaller one
-                case EqRole::autoTone: return { ctx.harsh || p.presenceDb > presenceWindow.hi ? cut : 0.0f,
-                                                ctx.harsh || p.presenceDb > presenceWindow.hi ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : 3.0f) * scale };
-                // A take that is already brighter above 2 kHz than finished vocals never gets its highs lifted,
-                // even when 10-16 kHz is low (the shelf would lift the harsh range with it)
-                default:               return { cut, ctx.harsh || p.topDb > topWindow.hi ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : maxBroadBoostDb) * scale };
-            }
+            const float cut = (centre < 300.0f ? 3.0f : maxBroadCutDb) * scale;
+            float lift = maxBroadBoostDb;
+            if ((type == EqBandType::highShelf || centre > 5000.0f) && (ctx.noisy || ctx.sibilant))
+                lift = 2.0f;
+            bool resonance = false;
+            for (auto& r : p.resonances)
+                resonance = resonance || (r.excessDb > 7.0f && std::abs (std::log2 (centre / r.hz)) < 1.0f / 3.0f);
+            if ((highVoice && centre < 300.0f) || resonance || (ctx.harsh && centre >= 2000.0f && centre <= 5000.0f))
+                lift = 0.0f;
+            return { -cut, lift * scale };
         }
-    }
 
-    float tonalPenalty (const Levels& l, bool highVoice, float margin)
-    {
-        const float m = margin;
-        const auto w = [] (float v, float lo, float hi, float s)
+        // A lift above 5 kHz on a noisy / sibilant take: never more than 2 dB at 8 or 12 kHz in all
+        bool liftTooHigh (const Context& ctx, const std::vector<EqBand>& before, const std::vector<EqBand>& after)
         {
-            const float d = v < lo ? lo - v : (v > hi ? v - hi : 0.0f);
-            return (d / s) * (d / s);
-        };
-        return 0.6f * w (l.body, highVoice ? -200.0f : bodyWindow.lo + m, bodyWindow.hi - m, 2.0f)
-             + 0.8f * w (l.lowMid, lowMidWindow.lo + m, lowMidWindow.hi - m, 2.0f)
-             + 1.0f * w (l.top, topWindow.lo + m, topWindow.hi - m, 2.0f)
-             + 0.4f * w (l.air, airWindow.lo + m, airWindow.hi - m, 3.0f)
-             + 1.0f * w (l.presence, presenceWindow.lo + m, presenceWindow.hi - m, 2.0f);
-    }
+            if (! (ctx.noisy || ctx.sibilant))
+                return false;
+            return responseDb (after, 8000.0f) - responseDb (before, 8000.0f) > 2.0f + 1.0e-3f
+                || responseDb (after, 12000.0f) - responseDb (before, 12000.0f) > 2.0f + 1.0e-3f;
+        }
 
-    namespace
-    {
-        constexpr float costPerDb = 0.03f;     // a move has to buy more than its size
-        constexpr float minGain = 0.05f;       // ... and at least this much penalty
-        constexpr float planningMargin = 1.0f; // aim 1 dB inside the windows: the chain does not follow the model 1:1
-
-        // Best gain of one broad role on a 0.5 dB grid in [lo, hi]: the smallest total of the
-        // predicted tonal penalty plus the size of the move. Returns g0 when nothing is clearly better.
-        float optimise (const std::function<Levels (float)>& predict, bool highVoice, float lo, float hi, float g0)
+        // Greedy fit of the broad moves (spec: "EQ: Kurvenabgleich"): the largest connected stretch of one
+        // sign outside the target gets a bell (Q from its width) or a shelf at an end of the fit range, its
+        // gain on the model (~75 %, the closed loop finishes the job), until `budget` moves exist.
+        // `offset`: what the chain does on top of the EQ (closed loop; 0 when planning).
+        void fitBroad (const Context& ctx, std::vector<Move>& moves, const std::vector<float>& offset, int budget, bool afterRender)
         {
-            const auto cost = [&] (float g) { return tonalPenalty (predict (g), highVoice, planningMargin) + costPerDb * std::abs (g); };
-            const float c0 = cost (g0);
-            float best = g0, bestCost = c0;
-            for (float g = std::ceil (lo * 2.0f) / 2.0f; g <= hi + 1.0e-4f; g += 0.5f)
-                if (const float c = cost (g); c < bestCost - 1.0e-6f)
+            const auto& p = *ctx.profile;
+            const auto& spec = p.spectrumDb;
+            const auto& target = targetOf (ctx);
+            const auto [lo, hi] = fitRange (p);
+            std::vector<bool> blocked ((size_t) numThirds, false);
+            // stretches a move already covers are not treated twice
+            for (auto& m : moves)
+                if (! m.narrow)
+                    for (int k = lo; k <= hi; ++k)
+                        if (std::abs (std::log2 (thirdCentre (k) / m.band.freq)) <= 0.5f)
+                            blocked[(size_t) k] = true;
+            const auto bandsOf = [&ctx, &moves]
+            {
+                auto bands = ctx.fixed;
+                for (auto& m : moves)
+                    bands.push_back (m.band);
+                return bands;
+            };
+            const auto roleFree = [&moves] (EqRole role)
+            {
+                return std::none_of (moves.begin(), moves.end(), [role] (const Move& m) { return m.role == role; });
+            };
+            const auto roleFor = [&] (float centre) -> EqRole
+            {
+                // The notch roles stay with the resonances; WARMTH (below 700 Hz) and the PRESENCE slider's air
+                // band (above 4 kHz) only take moves of their own range, so the SIMPLE sliders keep their meaning
+                std::vector<EqRole> order;
+                if (centre < 300.0f)
+                    order.push_back (EqRole::warmth);
+                else if (centre > 7000.0f)
+                    order.push_back (EqRole::air);
+                for (auto r : { EqRole::autoMix, EqRole::autoTone })
+                    order.push_back (r);
+                if (centre < 700.0f)
+                    order.push_back (EqRole::warmth);
+                if (centre > 4000.0f)
+                    order.push_back (EqRole::air);
+                for (auto r : order)
+                    if (roleFree (r))
+                        return r;
+                return EqRole::none;
+            };
+
+            while ((int) moves.size() < budget)
+            {
+                const auto applied = bandsOf();
+                const auto r = residualOf (thirdsOf (spec, applied), offset, ctx, lo, hi);
+
+                int bestA = -1, bestB = -1;
+                float bestScore = 0.0f;
+                for (int k = lo; k <= hi;)
                 {
-                    best = g;
-                    bestCost = c;
+                    if (r[(size_t) k] == 0.0f || blocked[(size_t) k])
+                    {
+                        ++k;
+                        continue;
+                    }
+                    const bool up = r[(size_t) k] > 0.0f;
+                    int e = k;
+                    float score = 0.0f, peak = 0.0f;
+                    while (e <= hi && r[(size_t) e] != 0.0f && (r[(size_t) e] > 0.0f) == up && ! blocked[(size_t) e])
+                    {
+                        score += std::abs (r[(size_t) e]);
+                        peak = std::max (peak, std::abs (r[(size_t) e]));
+                        ++e;
+                    }
+                    if (peak >= 1.0f && score > bestScore)
+                    {
+                        bestScore = score;
+                        bestA = k;
+                        bestB = e - 1;
+                    }
+                    k = e;
                 }
-            return bestCost < c0 - minGain ? best : g0;
-        }
+                if (bestA < 0)
+                    break;
 
-        juce::String reasonFor (EqRole role, float g, const Levels& l, const Context& ctx)
-        {
-            switch (role)
-            {
-                case EqRole::autoMix:
-                    return g < 0.0f ? both ("250-500 Hz ist {0} gegenüber dem Kern - leicht mulmig. Ein breiter Schnitt macht Platz für Kick und Bass.",
-                                            "250-500 Hz is {0} against the core - slightly muddy. A broad cut makes room for kick and bass.", { db (l.lowMid) })
-                                    : both ("250-500 Hz liegt nur bei {0} gegenüber dem Kern - eine breite Anhebung gibt der Stimme Fülle.",
-                                            "250-500 Hz is only {0} against the core - a broad boost gives the voice fullness.", { db (l.lowMid) });
-                case EqRole::warmth:
-                    return g < 0.0f ? both ("Viel Grundton-Energie (100-300 Hz: {0}) - wirkt im Club-Mix schnell dröhnend.",
-                                            "A lot of fundamental energy (100-300 Hz: {0}) - quickly sounds boomy in a club mix.", { db (l.body) })
-                                    : both ("Wenig Körper (100-300 Hz: {0}) - eine Anhebung gibt Wärme.",
-                                            "Little body (100-300 Hz: {0}) - a boost adds warmth.", { db (l.body) });
-                case EqRole::autoTone:
-                    return g < 0.0f ? both ("2-5 kHz liegt bei {0} gegenüber dem Kern (über 2 kHz: {1}) - der breite Schnitt sitzt dort, wo die Schärfe liegt, und lässt die Luft darüber stehen.",
-                                            "2-5 kHz is at {0} against the core (above 2 kHz: {1}) - the broad cut sits where the harshness is and leaves the air above it alone.",
-                                            { db (l.presence), db (l.top) })
-                                    : both ("Dunkel (über 2 kHz: {0}) - eine breite Anhebung bringt die Stimme nach vorne.",
-                                            "Dark (above 2 kHz: {0}) - a broad boost brings the voice forward.", { db (l.top) });
-                default:
-                    return g < 0.0f ? both ("Die Aufnahme ist sehr hell (über 2 kHz: {0}) - ein breiter Shelf nimmt die Schärfe.",
-                                            "The recording is very bright (above 2 kHz: {0}) - a broad shelf takes off the harshness.", { db (l.top) })
-                                    : both ("Wenig Höhen (über 2 kHz: {0}, über 10 kHz: {1})", "Few highs (above 2 kHz: {0}, above 10 kHz: {1})", { db (l.top), db (l.air) })
-                                          + (ctx.noisy || ctx.sibilant ? both (" - begrenzt wegen Rauschen/S-Lauten.", " - limited because of noise/sibilance.")
-                                                                       : both (" - etwas Glanz hilft der Stimme durch dichte Dance-Mixe.", " - a little sheen helps the voice through dense dance mixes."));
+                const auto blockRun = [&] { for (int k = bestA; k <= bestB; ++k) blocked[(size_t) k] = true; };
+                const bool cut = r[(size_t) bestA] > 0.0f;
+                double wsum = 0.0, lsum = 0.0;
+                for (int k = bestA; k <= bestB; ++k)
+                {
+                    wsum += std::abs (r[(size_t) k]);
+                    lsum += std::abs (r[(size_t) k]) * std::log2 (thirdCentre (k));
+                }
+                const float centre = (float) std::pow (2.0, lsum / wsum);
+                const float width = std::max (1.0f / 3.0f, (float) (bestB - bestA + 1) / 3.0f);
+
+                auto type = EqBandType::bell;
+                float freq = centre, q = juce::jlimit (0.7f, 4.0f, 1.4f / width);
+                if (bestA == lo && width >= 1.0f && centre < 250.0f)
+                {
+                    type = EqBandType::lowShelf;
+                    freq = thirdCentre (bestB);
+                    q = 0.7071f;
+                }
+                else if (bestB == hi && width >= 1.0f && thirdCentre (bestA) >= 5000.0f * 0.99f)
+                {
+                    type = EqBandType::highShelf;
+                    freq = thirdCentre (bestA);
+                    q = 0.7071f;
+                }
+
+                // A lift needs a stretch of at least two thirds and stays broad (Q <= 2): a lift of one
+                // third chases a dip between formants and sounds random
+                if (! cut)
+                    q = std::min (q, 2.0f);
+                const auto [gLo, gHi] = limitsOf (ctx, centre, type);
+                const auto role = roleFor (centre);
+                if ((cut ? gLo : gHi) == 0.0f || role == EqRole::none || (! cut && bestB == bestA))
+                {
+                    blockRun();
+                    continue;
+                }
+
+                const float c0 = costOf (r);
+                float best = 0.0f, bestCost = c0;
+                for (float g = cut ? -0.5f : 0.5f; cut ? g >= gLo - 1.0e-4f : g <= gHi + 1.0e-4f; g += cut ? -0.5f : 0.5f)
+                {
+                    auto bands = applied;
+                    bands.push_back (bandOf (type, freq, g, q));
+                    if (! cut && liftTooHigh (ctx, applied, bands))
+                        break;
+                    const float c = costOf (residualOf (thirdsOf (spec, bands), offset, ctx, lo, hi)) + costPerDb * std::abs (g);
+                    if (c < bestCost - 1.0e-4f)
+                    {
+                        best = g;
+                        bestCost = c;
+                    }
+                }
+                best = roundHalf (0.75f * best);
+                if (std::abs (best) < minMoveDb || bestCost > c0 - 0.5f)
+                {
+                    blockRun();
+                    continue;
+                }
+
+                const auto band = bandOf (type, freq, best, q);
+                const float excess = (float) (wsum / (bestB - bestA + 1)) * (cut ? 1.0f : -1.0f);
+                const auto why = both ("{0}: {1} gegenüber dem Ziel für {2} · {3} (fertige Profi-Vocals) - hier und nur hier.",
+                                       "{0}: {1} against the target for {2} · {3} (finished professional vocals) - here and only here.",
+                                       { regionName (centre, cut), db (excess), genreName (target.genre), vibeName (target.vibe) })
+                               + (! cut && gHi < maxBroadBoostDb ? both (" Anhebung begrenzt (Rauschen/S-Laute).", " Lift limited (noise/sibilance).") : juce::String());
+                moves.push_back ({ role, band, titleOf (role, band),
+                                   afterRender ? both ("Nach der Messung der ganzen Kette: {0}", "After measuring the whole chain: {0}", { why }) : why,
+                                   false });
+                blockRun();
             }
         }
     }
 
-    std::vector<Move> planMoves (const Context& ctx)
+    std::vector<Move> planCurveMoves (const Context& ctx)
     {
         std::vector<Move> moves;
         if (ctx.profile == nullptr || ctx.budget <= 0)
             return moves;
         const auto& p = *ctx.profile;
-        const auto& spec = p.spectrumDb;
-        if (! p.enoughMaterial || spec.size() != (size_t) VocalProfiler::numBands)
+        if (! p.enoughMaterial || p.spectrumDb.size() != (size_t) VocalProfiler::numBands)
             return moves;
 
         const float scale = ctx.conservative ? 0.6f : 1.0f;
-        const bool highVoice = p.pitchValid && p.f0LowHz > 250.0f;
         const auto bandsWithout = [&] (EqRole skip)
         {
             auto bands = ctx.fixed;
@@ -284,101 +409,113 @@ namespace velvox::automix::autoeq
                     bands.push_back (m.band);
             return bands;
         };
-        const auto find = [&moves] (EqRole role)
-        {
-            return std::find_if (moves.begin(), moves.end(), [role] (const Move& m) { return m.role == role; });
-        };
 
-        // ---- Narrow notches: sustained resonances, unless a kept band already takes them out
-        {
-            int n = 0;
-            for (auto& r : p.resonances)
-            {
-                if (n >= maxNotches || (int) moves.size() >= ctx.budget)
-                    break;
-                if (! r.sustained || r.hz < 250.0f || r.hz > 8000.0f)
-                    continue;
-                // What is left of the peak over its surroundings after the kept bands
-                const auto applied = bandsWithout (EqRole::none);
-                const float third = std::pow (2.0f, 1.0f / 3.0f);
-                const float remaining = r.excessDb + responseDb (applied, r.hz)
-                                      - 0.5f * (responseDb (applied, r.hz * third) + responseDb (applied, r.hz / third));
-                if (remaining < 8.0f)
-                    continue;
-                const float gain = -roundHalf (juce::jlimit (3.0f, maxNarrowCutDb, 0.6f * remaining) * scale);
-                const float q = juce::jlimit (minNarrowQ, maxNarrowQ, r.q);
-                const auto role = notchRoles[n++];
-                const auto b = bandOf (EqBandType::bell, r.hz, gain, q);
-                moves.push_back ({ role, b, titleOf (role, b),
-                                   both ("Schmale Spitze {0} über ihrer Umgebung, in der ganzen Aufnahme vorhanden (Raum oder Mikrofon) - ein schmaler Schnitt nimmt nur sie heraus.",
-                                         "Narrow peak {0} above its surroundings, present in the whole recording (room or microphone) - a narrow cut takes out only that.",
-                                         { db (remaining) }), true });
-            }
-        }
-
-        // ---- Broad moves on the model, towards the target curve (two passes: the roles interact).
-        // Open loop, from the analysis: cuts everywhere, lifts only of the highs (and the gentle
-        // 0.6.0 body lift). Lifts of body and low mids are left to the engine's correction on the
-        // real render - on many takes the chain (compression, saturation, effects) raises them itself.
-        const auto before = levelsOf (spec, bandsWithout (EqRole::none));
-        for (int pass = 0; pass < 2; ++pass)
-            for (auto role : broadRoles)
-            {
-                auto [lo, hi] = rangeOf (role, ctx);
-                if (role == EqRole::autoMix)
-                    hi = 0.0f;
-                else if (role == EqRole::warmth)
-                    hi = before.body < -16.0f && p.pitchValid && p.f0LowHz < 200.0f ? std::min (hi, 2.0f) : 0.0f;
-                auto it = find (role);
-                if (it == moves.end() && (int) moves.size() >= ctx.budget)
-                    continue;
-                const bool has = it != moves.end();
-                const EqBand keep = has ? it->band : EqBand {};
-                const float g0 = has ? it->band.gain : 0.0f;
-                const auto applied = bandsWithout (role);
-                const auto make = [&] (float g) { return shapeOf (role, g, ctx, applied, has ? &keep : nullptr); };
-                const auto predict = [&] (float g) { auto b = applied; b.push_back (make (g)); return levelsOf (spec, b); };
-                const float g = optimise (predict, highVoice, lo, hi, g0);
-                if (g == g0)
-                    continue;
-                if (has && std::abs (g) < 0.25f)
-                {
-                    moves.erase (it);
-                    continue;
-                }
-                if (! has && std::abs (g) < minMoveDb)
-                    continue;
-                Move m { role, make (g), {}, reasonFor (role, g, before, ctx), false };
-                m.title = titleOf (role, m.band);
-                if (has)
-                    *it = m;
-                else
-                    moves.push_back (m);
-            }
-
-        // ---- The beat covers the voice (sidechain measurement at the output level): lift where it covers
-        //      most, unless the voice is already sharp there or the presence band is taken
-        const auto mask = maskingOf (p);
-        if (const float g = unmaskGainDb (mask.presenceDb, ctx.conservative);
-            g > 0.0f && ! ctx.harsh && find (EqRole::autoTone) == moves.end() && (int) moves.size() < ctx.budget)
-        {
-            const auto b = bandOf (EqBandType::bell, mask.hz, g, 1.0f);
-            moves.push_back ({ EqRole::autoTone, b, titleOf (EqRole::autoTone, b),
-                               both ("Der Beat ist bei {0} um {1} lauter als die Stimme (gemessen am Sidechain, bei Stimme 1 LU über dem Beat) - eine breite Anhebung bringt sie dort durch.",
-                                     "At {0} the beat is {1} louder than the voice (measured on the sidechain, with the voice 1 LU above the beat) - a broad boost gets it through there.",
-                                     { hz (mask.hz), db (mask.presenceDb) }), false });
-        }
-
-        // The beat crowds the low mids: an existing mud cut goes 1 dB deeper (never a cut from the beat alone)
-        if (mask.valid && mask.lowMidDb > 6.0f)
-            if (auto it = find (EqRole::autoMix); it != moves.end() && it->band.gain < 0.0f && it->band.gain > -maxBroadCutDb)
-            {
-                it->band.gain = std::max (-maxBroadCutDb, it->band.gain - 1.0f);
-                it->title = titleOf (EqRole::autoMix, it->band);
-                it->reason += both (" Der Beat ist dort {0} lauter als die Stimme - 1 dB mehr.", " The beat is {0} louder than the voice there - 1 dB more.",
-                                    { db (mask.lowMidDb) });
-            }
+        // ---- Narrow notches: sustained resonances, unless a kept band already takes them out
+        {
+            int n = 0;
+            for (auto& r : p.resonances)
+            {
+                if (n >= maxNotches || (int) moves.size() >= ctx.budget)
+                    break;
+                if (! r.sustained || r.hz < 250.0f || r.hz > 8000.0f)
+                    continue;
+                // What is left of the peak over its surroundings after the kept bands
+                const auto applied = bandsWithout (EqRole::none);
+                const float third = std::pow (2.0f, 1.0f / 3.0f);
+                const float remaining = r.excessDb + responseDb (applied, r.hz)
+                                      - 0.5f * (responseDb (applied, r.hz * third) + responseDb (applied, r.hz / third));
+                if (remaining < 8.0f)
+                    continue;
+                const float gain = -roundHalf (juce::jlimit (3.0f, maxNarrowCutDb, 0.6f * remaining) * scale);
+                const float q = juce::jlimit (minNarrowQ, maxNarrowQ, r.q);
+                const auto role = notchRoles[n++];
+                const auto b = bandOf (EqBandType::bell, r.hz, gain, q);
+                moves.push_back ({ role, b, titleOf (role, b),
+                                   both ("Schmale Spitze {0} über ihrer Umgebung, in der ganzen Aufnahme vorhanden (Raum oder Mikrofon) - ein schmaler Schnitt nimmt nur sie heraus.",
+                                         "Narrow peak {0} above its surroundings, present in the whole recording (room or microphone) - a narrow cut takes out only that.",
+                                         { db (remaining) }), true });
+            }
+        }
+
+        fitBroad (ctx, moves, std::vector<float> ((size_t) numThirds, 0.0f), ctx.budget, false);
         return moves;
+    }
+
+    std::vector<Move> correctCurve (const std::vector<float>& rendered, const Context& ctx, const std::vector<Move>& owned)
+    {
+        std::vector<Move> out;
+        if (ctx.profile == nullptr || ! ctx.profile->enoughMaterial || ctx.profile->spectrumDb.size() != (size_t) VocalProfiler::numBands
+            || rendered.size() != (size_t) numThirds)
+            return out;
+        const auto& p = *ctx.profile;
+        const auto& spec = p.spectrumDb;
+        const auto [lo, hi] = fitRange (p);
+
+        // What the chain does on top of the EQ: the render against the model of the EQ as it is now
+        auto bands = ctx.fixed;
+        for (auto& m : owned)
+            bands.push_back (m.band);
+        const auto model = thirdsOf (spec, bands);
+        std::vector<float> offset ((size_t) numThirds, 0.0f);
+        for (int k = 0; k < numThirds; ++k)
+            if (rendered[(size_t) k] > -190.0f && model[(size_t) k] > -190.0f)
+                offset[(size_t) k] = rendered[(size_t) k] - model[(size_t) k];
+
+        const auto r0 = residualOf (model, offset, ctx, lo, hi);
+        if (std::all_of (r0.begin(), r0.end(), [] (float v) { return std::abs (v) <= 0.5f; }))
+            return out;
+
+        // 1) The broad moves of the plan: gains re-tuned on the render (frequency and shape stay)
+        auto state = owned;
+        for (size_t i = 0; i < state.size(); ++i)
+        {
+            if (state[i].narrow)
+                continue;
+            auto others = ctx.fixed;
+            for (size_t j = 0; j < state.size(); ++j)
+                if (j != i)
+                    others.push_back (state[j].band);
+            const auto& b0 = state[i].band;
+            const auto [gLo, gHi] = limitsOf (ctx, actingHz (b0), b0.bandType());
+            const auto costAt = [&] (float g)
+            {
+                auto b = b0;
+                b.gain = g;
+                auto all = others;
+                all.push_back (b);
+                return costOf (residualOf (thirdsOf (spec, all), offset, ctx, lo, hi)) + costPerDb * std::abs (g);
+            };
+            float best = b0.gain, bestCost = costAt (b0.gain);
+            for (float g = std::ceil (std::min (gLo, b0.gain) * 2.0f) / 2.0f; g <= std::max (gHi, b0.gain) + 1.0e-4f; g += 0.5f)
+            {
+                if (g < gLo - 1.0e-4f || g > gHi + 1.0e-4f)
+                    continue;
+                auto b = b0;
+                b.gain = g;
+                auto all = others;
+                all.push_back (b);
+                if (g > b0.gain && liftTooHigh (ctx, others, all))
+                    continue;
+                if (const float c = costAt (g); c < bestCost - 0.25f)
+                {
+                    best = g;
+                    bestCost = c;
+                }
+            }
+            if (std::abs (best - b0.gain) < 0.5f)
+                continue;
+            state[i].band.gain = std::abs (best) < 0.25f ? 0.0f : best;
+            state[i].title = titleOf (state[i].role, state[i].band);
+            state[i].reason = both ("Nach der Messung der ganzen Kette auf das Ziel nachgeregelt.", "Readjusted to the target after measuring the whole chain.");
+            out.push_back (state[i]);
+        }
+
+        // 2) What is still off: new moves within the budget
+        const size_t before = state.size();
+        fitBroad (ctx, state, offset, (int) owned.size() + ctx.budget, true);
+        for (size_t i = before; i < state.size(); ++i)
+            out.push_back (state[i]);
+        return out;
     }
 
     Masking maskingOf (const VocalProfile& p)
@@ -427,72 +564,4 @@ namespace velvox::automix::autoeq
         return std::max (0.5f, roundHalf (g));
     }
 
-    std::vector<Move> correct (const Levels& rendered, const Context& ctx, const std::vector<Move>& owned)
-    {
-        std::vector<Move> out;
-        if (ctx.profile == nullptr || ctx.profile->spectrumDb.size() != (size_t) VocalProfiler::numBands || ! ctx.profile->enoughMaterial)
-            return out;
-        const auto& p = *ctx.profile;
-        const bool highVoice = p.pitchValid && p.f0LowHz > 250.0f;
-        if (tonalPenalty (rendered, highVoice) <= 0.0f)
-            return out;
-        int budget = ctx.budget;
-
-        // The render is the starting point; the model predicts what a move changes
-        std::vector<Move> state = owned;
-        const auto bandsWithout = [&] (EqRole skip)
-        {
-            auto bands = ctx.fixed;
-            for (auto& m : state)
-                if (m.role != skip)
-                    bands.push_back (m.band);
-            return bands;
-        };
-        const auto modelAtRender = levelsOf (p.spectrumDb, bandsWithout (EqRole::none));
-
-        for (auto role : broadRoles)
-        {
-            auto it = std::find_if (state.begin(), state.end(), [role] (const Move& m) { return m.role == role; });
-            const bool has = it != state.end();
-            if (! has && budget <= 0)
-                continue;
-            const EqBand keep = has ? it->band : EqBand {};
-            const float g0 = has ? it->band.gain : 0.0f;
-            const auto [lo, hi] = rangeOf (role, ctx);
-            const auto applied = bandsWithout (role);
-            const auto make = [&] (float g) { return shapeOf (role, g, ctx, applied, has ? &keep : nullptr); };
-            const auto predict = [&] (float g)
-            {
-                auto b = applied;
-                b.push_back (make (g));
-                const auto m = levelsOf (p.spectrumDb, b);
-                Levels r = rendered;   // rendered + the change on the model since the render
-                r.body += m.body - modelAtRender.body;
-                r.lowMid += m.lowMid - modelAtRender.lowMid;
-                r.presence += m.presence - modelAtRender.presence;
-                r.top += m.top - modelAtRender.top;
-                r.air += m.air - modelAtRender.air;
-                return r;
-            };
-            const float g = std::clamp (optimise (predict, highVoice, std::min (lo, g0), std::max (hi, g0), g0), lo, hi);
-            if (std::abs (g - g0) < 0.5f || (! has && std::abs (g) < minMoveDb))
-                continue;
-
-            const auto v = predict (g0);
-            Move m { role, make (g), {}, {}, false };
-            if (std::abs (g) < 0.25f)
-                m.band.gain = 0.0f;
-            m.title = titleOf (role, m.band);
-            m.reason = both ("Nach der Messung der ganzen Kette: {0}", "After measuring the whole chain: {0}", { reasonFor (role, g, v, ctx) });
-            if (has)
-                it->band = m.band;
-            else
-            {
-                state.push_back (m);
-                --budget;
-            }
-            out.push_back (m);
-        }
-        return out;
-    }
 }

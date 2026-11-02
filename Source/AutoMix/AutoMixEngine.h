@@ -22,6 +22,7 @@ namespace velvox::automix
 
         // 0.4: what the candidate search compares
         float lowMidDb = -60.0f, airDb = -60.0f;
+        std::vector<float> thirdsDb;       // 0.8: third octaves relative to the core (thirdsOf)
         float dynamicsDb = 0.0f;           // phrase-level variation (VocalProfiler)
         bool dynamicsValid = false;
         float crestDb = 0.0f;
@@ -63,7 +64,8 @@ namespace velvox::automix
         using Progress = std::function<void (float fraction, const juce::String& stage)>;
 
         static AutoMixResult run (const CapturedAudio& audio, const std::map<juce::String, float>& current,
-                                  const std::function<bool()>& shouldStop = {}, const Progress& progress = {});
+                                  const std::function<bool()>& shouldStop = {}, const Progress& progress = {},
+                                  const MixIntent& intent = {});
 
         // Renders `audio` with `current` overridden by `values` and measures the result.
         // `output` (optional) receives the processed audio (clip guard off).

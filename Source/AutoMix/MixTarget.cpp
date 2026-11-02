@@ -43,11 +43,15 @@ namespace velvox::automix
     namespace
     {
         // Adds `db` to the target curve in the thirds whose centre lies within [lo, hi]
-        void lift (MixTarget& t, float lo, float hi, float db)
+        void lift (MixTarget& t, float lo, float hi, float db, bool style = false)
         {
             for (int k = 0; k < numThirds; ++k)
                 if (const float c = thirdCentre (k); c >= lo * 0.99f && c <= hi * 1.01f)
+                {
                     t.curveDb[(size_t) k] += db;
+                    if (style)
+                        t.styleDb[(size_t) k] += db;
+                }
         }
         void scaleSpace (MixTarget& t, float s)
         {
@@ -101,7 +105,7 @@ namespace velvox::automix
             case Vibe::punchy:       // the genre's standard
                 break;
             case Vibe::aggressive:   // bite in the presence, denser, harder colour, drier
-                lift (t, 2500.0f, 4000.0f, 2.0f);
+                lift (t, 2500.0f, 4000.0f, 3.0f, true);   // clearly beyond the spread of the finished vocals (1.5 - 2 dB)
                 t.dynamics.crestLo -= 1.0f;
                 t.dynamics.crestHi -= 1.5f;
                 t.densityBlend += 8.0f;
@@ -110,8 +114,8 @@ namespace velvox::automix
                 scaleSpace (t, 0.7f);
                 break;
             case Vibe::floaty:       // airy, softer, more room and width
-                lift (t, 2000.0f, 4000.0f, -1.0f);
-                lift (t, 10000.0f, 16000.0f, 2.0f);
+                lift (t, 2000.0f, 4000.0f, -1.0f, true);
+                lift (t, 10000.0f, 16000.0f, 3.0f, true);
                 t.dynamics.crestLo += 1.0f;
                 t.dynamics.crestHi += 1.0f;
                 t.space.reverbScale *= 1.5f;
@@ -119,8 +123,8 @@ namespace velvox::automix
                 t.space.doublerMix += 10.0f;
                 break;
             case Vibe::warm:         // more body, less air, tape
-                lift (t, 160.0f, 250.0f, 1.5f);
-                lift (t, 10000.0f, 16000.0f, -2.0f);
+                lift (t, 160.0f, 250.0f, 2.0f, true);
+                lift (t, 10000.0f, 16000.0f, -3.0f, true);
                 t.satCharacter = 1;
                 break;
             case Vibe::natural:      // close to the recording: little density, little colour, little effect
@@ -132,6 +136,15 @@ namespace velvox::automix
         if (vibe != Vibe::punchy)
             t.estimated = true;
         return t;
+    }
+
+    float residualDb (const MixTarget& t, int k, float voiceDb) noexcept
+    {
+        const size_t i = (size_t) k;
+        const float d = voiceDb - (t.curveDb[i] - t.styleDb[i]);   // against the genre's curve
+        const float s = t.spreadDb[i];
+        const float outside = d > s ? d - s : (d < -s ? d + s : 0.0f);
+        return outside - t.styleDb[i];
     }
 
     juce::String genreName (Genre genre)

@@ -10,8 +10,8 @@ namespace velvox::automix
     // (docs/AUTOMIX_OBJECTIVE.md). Every term is a penalty (0 = inside the target window),
     // computed from a real render of the captured audio through the production DSP:
     //
-    //   tonal     band levels relative to the 300 Hz - 2 kHz core, outside a window that
-    //             suits a lead vocal in a dense electronic mix (squared distance)
+    //   tonal     third-octave levels relative to the 300 Hz - 2 kHz core against the target curve of
+    //             the genre / vibe (0.8; squared distance outside its spread)
     //   dynamics  phrase-level variation (dynamicsDb) outside 4 .. 8 dB, crest factor below
     //             7 dB (over-compression: flat, pumping, breathy)
     //   sibilance S / vowel balance above -6 dB, or more than 10 dB below the original (lisp)
@@ -28,7 +28,8 @@ namespace velvox::automix
     {
         float tonal = 0.0f, dynamics = 0.0f, sibilance = 0.0f, harshness = 0.0f;
         float stereo = 0.0f, space = 0.0f, artifacts = 0.0f, change = 0.0f;
-        float total() const noexcept { return tonal + dynamics + sibilance + harshness + stereo + space + artifacts + change; }
+        float beat = 0.0f;   // 0.8: the beat on the sidechain covers the words (1 - 5 kHz)
+        float total() const noexcept { return tonal + dynamics + sibilance + harshness + stereo + space + artifacts + change + beat; }
         juce::String describe() const;   // "tonal 0.4, dynamics 1.2, ..." (non-zero terms)
     };
 
@@ -41,6 +42,9 @@ namespace velvox::automix
     BeatDensity beatDensityOf (const VocalProfile& p) noexcept;
 
     // `effectsPlanned`: the plan adds reverb or delay (then a too dry result also costs)
+    // 0.8: `target` = the genre / vibe target (tonal: third octaves against its curve; dynamics,
+    // sibilance from it)
     ObjectiveBreakdown evaluate (const RenderMetrics& m, const RenderMetrics& original, const VocalProfile& profile,
-                                 float targetLufs, bool isBasePlan, bool effectsPlanned);
+                                 float targetLufs, bool isBasePlan, bool effectsPlanned,
+                                 const MixTarget& target = targetFor (Genre::party, Vibe::punchy));
 }

@@ -79,6 +79,7 @@ namespace velvox::automix
             m.bodyDb = prof.bodyDb;
             m.lowMidDb = prof.lowMidDb;
             m.airDb = prof.airDb;
+            m.thirdsDb = prof.thirdsDb;
             m.dynamicsDb = prof.dynamicsDb;
             m.dynamicsValid = prof.dynamicsValid;
             m.crestDb = prof.crestDb;
@@ -483,8 +484,9 @@ namespace velvox::automix
 
     //==========================================================================
     AutoMixResult AutoMixEngine::run (const CapturedAudio& audio, const std::map<juce::String, float>& current,
-                                      const std::function<bool()>& shouldStop, const Progress& progress)
+                                      const std::function<bool()>& shouldStop, const Progress& progress, const MixIntent& intent)
     {
+        const auto mixTarget = targetFor (intent.genre, intent.vibe);
         AutoMixResult r;
         const auto startMs = juce::Time::getMillisecondCounterHiRes();
         const auto stop = [&shouldStop] { return shouldStop && shouldStop(); };
@@ -506,7 +508,7 @@ namespace velvox::automix
         }
 
         report (0.3f, "Mix wird geplant", "Planning the mix");
-        r.plan = AutoMixPlanner::plan (r.profile, current);
+        r.plan = AutoMixPlanner::plan (r.profile, current, intent);
         r.original = measure (audio);
         r.original.sibilanceVsVowelDb = r.profile.sibilanceVsVowelDb;
         r.original.sibilanceValid = r.profile.sibilanceValid;
@@ -595,13 +597,17 @@ namespace velvox::automix
                 airAdjusted = true;
             }
 
-            // Tone (0.6.1): the broad auto-mix bands follow the levels of the real render into the
-            // target curve - compression, saturation and effects move the balance as well
+            // Tone (0.8): the auto-mix bands follow the third octaves of the real render onto the target
+            // curve - compression, saturation, the de-esser and effects move the balance as well (every round:
+            // a de-esser strengthened in a later round darkens the top again)
             if (plan.on (pid::eqOn) && plan.routing.contains (dsp::ModuleId::eq))
             {
-                const auto state = autoEqState (plan, current, r.profile);
-                const autoeq::Levels rendered { m.bodyDb, m.lowMidDb, m.presenceDb, m.topDb, m.airDb };
-                for (const auto& c : autoeq::correct (rendered, state.context, state.owned))
+                auto state = autoEqState (plan, current, r.profile);
+                state.context.target = &mixTarget;
+                state.context.unmaskDb = autoeq::unmaskOf (r.profile, plan.conservative);
+                // S sounds still too strong after the chain: no more lift up there than on a sibilant take
+                state.context.sibilant = state.context.sibilant || (m.sibilanceValid && m.sibilanceVsVowelDb > mixTarget.sibilanceMax);
+                for (const auto& c : autoeq::correctCurve (m.thirdsDb, state.context, state.owned))
                 {
                     if (c.role == dsp::EqRole::air && airAdjusted)
                         continue;
@@ -657,7 +663,7 @@ namespace velvox::automix
                 c.name = name;
                 c.metrics = renderChecked (audio, current, cand, r.profile);
                 c.routing = cand.routing;
-                c.score = evaluate (c.metrics, r.original, r.profile, target, isBase, cand.on (pid::reverbOn) || cand.on (pid::delayOn));
+                c.score = evaluate (c.metrics, r.original, r.profile, target, isBase, cand.on (pid::reverbOn) || cand.on (pid::delayOn), mixTarget);
                 ++r.iterations;
                 return c;
             };

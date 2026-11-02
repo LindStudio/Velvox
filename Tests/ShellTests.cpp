@@ -79,8 +79,8 @@ public:
             const float warmth = automix::roleGain ({}, values, dsp::EqRole::warmth);
             const auto& st = h.proc.getState();
             const auto pos = [&] (const char* id) { return st.getParameter (id)->convertFrom0to1 (st.getParameter (id)->getValue()); };
-            expectWithinAbsoluteError (pos (pid::macroPresence), juce::jlimit (0.0f, 100.0f, air / 5.0f * 100.0f), 0.6f);
-            expectWithinAbsoluteError (pos (pid::macroWarmth), juce::jlimit (0.0f, 100.0f, warmth / 3.0f * 100.0f), 0.6f);
+            expectWithinAbsoluteError (pos (pid::macroPresence), juce::jlimit (-100.0f, 100.0f, air / 5.0f * 100.0f), 0.6f);
+            expectWithinAbsoluteError (pos (pid::macroWarmth), juce::jlimit (-100.0f, 100.0f, warmth / 3.0f * 100.0f), 0.6f);
             const auto on = [&] (const char* id) { return values.at (id) > 0.5f; };
             expectWithinAbsoluteError (pos (pid::macroSpace),
                                        juce::jlimit (0.0f, 100.0f, on (pid::reverbOn) ? values.at (pid::reverbMix) / 0.3f : 0.0f), 0.6f);

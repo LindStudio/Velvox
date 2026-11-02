@@ -19,7 +19,7 @@ namespace velvox::automix
         juce::StringArray parts;
         const std::pair<const char*, float> terms[] { { "tonal", tonal }, { "dynamics", dynamics }, { "sibilance", sibilance },
                                                       { "harshness", harshness }, { "stereo", stereo }, { "space", space },
-                                                      { "artifacts", artifacts }, { "change", change } };
+                                                      { "artifacts", artifacts }, { "change", change }, { "beat", beat } };
         for (auto& [name, v] : terms)
             if (v > 0.005f)
                 parts.add (juce::String (name) + " " + juce::String (v, 2));
@@ -43,7 +43,7 @@ namespace velvox::automix
     }
 
     ObjectiveBreakdown evaluate (const RenderMetrics& m, const RenderMetrics& original, const VocalProfile& profile,
-                                 float targetLufs, bool isBasePlan, bool effectsPlanned)
+                                 float targetLufs, bool isBasePlan, bool effectsPlanned, const MixTarget& target)
     {
         ObjectiveBreakdown b;
         if (! m.valid)
@@ -52,38 +52,72 @@ namespace velvox::automix
             return b;
         }
 
-        // ---- Tonal balance (relative to the core of the voice). Windows from the analysis
-        // thresholds that were calibrated on real vocals (VocalProfiler issues): inside
-        // them a vocal reads as neither muddy, thin, dull nor harsh. A high voice (lowest
-        // notes above 250 Hz) has no fundamentals in the 100-300 Hz body band, so there
-        // only too much body counts.
-        const bool highVoice = profile.pitchValid && profile.f0LowHz > 250.0f;
-        // (2026-10-29: the windows of AutoEq.h, calibrated on finished professional vocals; a presence
-        // below the professional range now costs too - a dark voice gets lifted, not cut further)
-        using namespace autoeq;
-        b.tonal = 0.6f * window (m.bodyDb, highVoice ? -200.0f : bodyWindow.lo, bodyWindow.hi)
-                + 0.8f * window (m.lowMidDb, lowMidWindow.lo, lowMidWindow.hi)
-                + 1.0f * window (m.topDb, topWindow.lo, topWindow.hi)
-                + 0.4f * window (m.airDb, airWindow.lo, airWindow.hi, 3.0f)
-                + 0.8f * window (m.presenceDb, presenceWindow.lo, 100.0f);
+        // ---- Tonal balance (0.8): the third octaves against the target curve of the genre / vibe, outside its
+        // spread (residualDb), over the range the EQ works on; 3 dB off in every third costs 9
+        {
+            const auto [lo, hi] = autoeq::fitRange (profile);
+            float sum = 0.0f;
+            int n = 0;
+            if (m.thirdsDb.size() == (size_t) numThirds)
+                for (int k = lo; k <= hi; ++k)
+                    if (m.thirdsDb[(size_t) k] > -190.0f)
+                    {
+                        const float r = residualDb (target, k, m.thirdsDb[(size_t) k]);
+                        sum += r * r;
+                        ++n;
+                    }
+            b.tonal = n > 0 ? sum / (float) n : 0.0f;
+        }
 
-        // ---- Dynamics: a lead vocal in an EDM mix sits steady and upfront. Calibrated on the
-        // blind listening test of 2026-10-24: the denser, more compressed versions won
-        // ("verständlicher", "komprimierter, klarer"), so the phrase window is tighter and
-        // only real squashing (crest below 5.5 dB) costs
+        // ---- Dynamics: the window of the genre / vibe (party: calibrated on the blind listening test of
+        // 2026-10-24 - the denser, more compressed versions won); squashing below crestLo - 1 costs most
         if (m.dynamicsValid)
-            b.dynamics = 0.8f * window (m.dynamicsDb, 3.0f, 6.0f);
-        b.dynamics += 1.2f * window (m.crestDb, 5.5f, 100.0f, 1.5f);
+            b.dynamics = 0.8f * window (m.dynamicsDb, target.dynamics.phraseLo, target.dynamics.phraseHi);
+        b.dynamics += 1.2f * window (m.crestDb, target.dynamics.crestLo - 1.0f, 100.0f, 1.5f);
 
         // ---- Sibilance (only where the S / vowel frames could be measured)
         if (m.sibilanceValid && original.sibilanceValid)
         {
-            b.sibilance = 1.2f * window (m.sibilanceVsVowelDb, -100.0f, -6.0f);
+            b.sibilance = 1.2f * window (m.sibilanceVsVowelDb, -100.0f, target.sibilanceMax);
             b.sibilance += 0.8f * window (m.sibilanceVsVowelDb, original.sibilanceVsVowelDb - 10.0f, 100.0f);
         }
 
-        // ---- Harshness: presence far forward
-        b.harshness = 1.0f * window (m.presenceDb, -100.0f, autoeq::presenceWindow.hi);
+        // ---- Harshness: presence far forward (a vibe that wants more bite moves the limit with it)
+        {
+            float style = 0.0f;
+            int n = 0;
+            for (int k = 0; k < numThirds; ++k)
+                if (thirdCentre (k) >= 2000.0f * 0.99f && thirdCentre (k) <= 5000.0f * 1.01f)
+                {
+                    style += target.styleDb[(size_t) k];
+                    ++n;
+                }
+            b.harshness = 1.0f * window (m.presenceDb, -100.0f, autoeq::presenceWindow.hi + std::max (0.0f, n > 0 ? style / (float) n : 0.0f));
+        }
+
+        // ---- The beat on the sidechain covers the words (0.8): beat minus voice per third at 1 - 5 kHz with the
+        // voice leadOverBeatLu above the beat, after the chain changed the voice there (render vs original)
+        if (profile.beatPresent && profile.beatOverVocalDb.size() == (size_t) VocalProfiler::numBands
+            && m.thirdsDb.size() == (size_t) numThirds && original.thirdsDb.size() == (size_t) numThirds)
+        {
+            const float shift = autoeq::leadOverBeatLu - profile.vocalOverBeatLu;
+            for (int k = 0; k < numThirds; ++k)
+            {
+                if (thirdCentre (k) < 1000.0f * 0.99f || thirdCentre (k) > 5000.0f * 1.01f)
+                    continue;
+                float sum = 0.0f;
+                int n = 0;
+                for (int bb = 12 + 4 * k - 2; bb <= 12 + 4 * k + 1; ++bb)
+                    if (bb >= 0 && bb < VocalProfiler::numBands)
+                    {
+                        sum += profile.beatOverVocalDb[(size_t) bb];
+                        ++n;
+                    }
+                const float change = m.thirdsDb[(size_t) k] - original.thirdsDb[(size_t) k];
+                const float over = (n > 0 ? sum / (float) n : -100.0f) - shift - change;
+                b.beat += 0.2f * std::max (0.0f, over - autoeq::unmaskFromDb);
+            }
+        }
 
         // ---- Stereo / mono compatibility
         b.stereo = 2.0f * window (m.monoLossDb, -1.0f, 100.0f, 1.0f) + 1.0f * window (m.correlation, 0.5f, 1.0f, 0.25f);
