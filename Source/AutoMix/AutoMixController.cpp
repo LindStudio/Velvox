@@ -27,6 +27,8 @@ namespace velvox::automix
         t.setProperty ("captured", capturedSeconds, nullptr);
         t.setProperty ("conservative", conservative, nullptr);
         t.setProperty ("beat", beatAnalysed, nullptr);
+        t.setProperty ("genre", genre, nullptr);
+        t.setProperty ("vibe", vibe, nullptr);
         t.setProperty ("inLufs", inputLufs, nullptr);
         t.setProperty ("outLufs", outputLufs, nullptr);
         t.setProperty ("outPeak", outputPeakDb, nullptr);
@@ -67,6 +69,8 @@ namespace velvox::automix
         r.capturedSeconds = (float) t.getProperty ("captured", 0.0f);
         r.conservative = (bool) t.getProperty ("conservative", false);
         r.beatAnalysed = (bool) t.getProperty ("beat", false);
+        r.genre = juce::jlimit (0, numGenres - 1, (int) t.getProperty ("genre", 0));
+        r.vibe = juce::jlimit (0, numVibes - 1, (int) t.getProperty ("vibe", 0));
         r.inputLufs = (float) t.getProperty ("inLufs", -100.0f);
         r.outputLufs = (float) t.getProperty ("outLufs", -100.0f);
         r.outputPeakDb = (float) t.getProperty ("outPeak", -100.0f);
@@ -93,8 +97,8 @@ namespace velvox::automix
     class AutoMixController::Worker final : public juce::Thread
     {
     public:
-        Worker (CapturedAudio a, std::map<juce::String, float> values)
-            : juce::Thread ("Headliner auto mix"), audio (std::move (a)), current (std::move (values)) {}
+        Worker (CapturedAudio a, std::map<juce::String, float> values, MixIntent mixIntent)
+            : juce::Thread ("Headliner auto mix"), audio (std::move (a)), current (std::move (values)), intent (mixIntent) {}
 
         ~Worker() override { stopThread (10000); }
 
@@ -106,7 +110,7 @@ namespace velvox::automix
                                              fraction.store (f);
                                              const juce::SpinLock::ScopedLockType l (stageLock);
                                              stageText = stage;
-                                         });
+                                         }, intent);
             result = std::move (r);
             finished.store (true);
         }
@@ -119,6 +123,7 @@ namespace velvox::automix
 
         CapturedAudio audio;
         std::map<juce::String, float> current;
+        MixIntent intent;
         AutoMixResult result;
         std::atomic<bool> finished { false };
         std::atomic<float> fraction { 0.0f };
@@ -222,7 +227,7 @@ namespace velvox::automix
 
     void AutoMixController::startWorker (CapturedAudio audio)
     {
-        worker = std::make_unique<Worker> (std::move (audio), currentValues());
+        worker = std::make_unique<Worker> (std::move (audio), currentValues(), intent);
         worker->startThread (juce::Thread::Priority::low);
         setPhase (Phase::analysing);
     }
@@ -267,9 +272,14 @@ namespace velvox::automix
         stopTimer();
     }
 
+    void AutoMixController::setIntent (MixIntent i)
+    {
+        intent = i;
+    }
+
     AutoMixResult AutoMixController::runSynchronously (const CapturedAudio& audio)
     {
-        return AutoMixEngine::run (audio, currentValues());
+        return AutoMixEngine::run (audio, currentValues(), {}, {}, intent);
     }
 
     void AutoMixController::applyResult (const AutoMixResult& result)
@@ -314,6 +324,8 @@ namespace velvox::automix
         r.capturedSeconds = result.profile.capturedSeconds;
         r.conservative = result.plan.conservative;
         r.beatAnalysed = result.profile.beatPresent;
+        r.genre = (int) result.intent.genre;
+        r.vibe = (int) result.intent.vibe;
         r.inputLufs = result.original.lufs;
         r.outputLufs = result.processed.lufs;
         r.outputPeakDb = result.processed.peakDb;
@@ -391,6 +403,8 @@ namespace velvox::automix
 
         juce::ValueTree t (treeType);
         t.setProperty (promptAttr, promptState, nullptr);
+        t.setProperty ("intentGenre", (int) intent.genre, nullptr);
+        t.setProperty ("intentVibe", (int) intent.vibe, nullptr);
         if (report.valid)
             t.appendChild (report.toValueTree(), nullptr);
         if (hasPreviousSnapshot)
@@ -417,6 +431,7 @@ namespace velvox::automix
         stopTimer();
 
         report = {};
+        intent = {};
         previousSnapshot = {};
         mixSnapshot = {};
         hasPreviousSnapshot = showingPrevious = false;
@@ -434,6 +449,8 @@ namespace velvox::automix
         }
 
         promptState = t.getProperty (promptAttr, "done").toString();
+        intent.genre = (Genre) juce::jlimit (0, numGenres - 1, (int) t.getProperty ("intentGenre", 0));
+        intent.vibe = (Vibe) juce::jlimit (0, numVibes - 1, (int) t.getProperty ("intentVibe", 0));
         report = MixReport::fromValueTree (t.getChildWithName (reportType));
         if (auto prev = t.getChildWithName (previousType); prev.isValid() && prev.getNumChildren() > 0)
         {

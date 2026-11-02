@@ -53,6 +53,7 @@ namespace velvox::automix
         std::vector<CandidateResult> candidates; // every candidate of the search (index 0 = base plan)
         int chosenCandidate = 0;
         double seconds = 0.0;                    // analysis + all renders
+        MixIntent intent;                        // 0.8: the genre / vibe it mixed for
     };
 
     // analyse -> plan -> render -> measure -> adjust (max. 4 rounds) -> set the

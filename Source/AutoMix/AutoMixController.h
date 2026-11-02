@@ -19,6 +19,7 @@ namespace velvox::automix
         float capturedSeconds = 0.0f;
         bool conservative = false;
         bool beatAnalysed = false;
+        int genre = 0, vibe = 0;           // 0.8: automix::Genre / Vibe it mixed for (0.7 reports: Party / Druckvoll)
         float inputLufs = -100.0f, outputLufs = -100.0f, outputPeakDb = -100.0f;
         int iterations = 0;
         std::vector<Line> steps;           // processing that was actually set up
@@ -55,6 +56,10 @@ namespace velvox::automix
         void cancel();
         bool analyseNow();          // analyse what has been captured so far (needs the minimum)
         void dismissPrompt();       // "Später"
+
+        // 0.8: genre and vibe of the next mix (chosen at the start, saved with the project)
+        void setIntent (MixIntent intent);
+        MixIntent getIntent() const noexcept { return intent; }
 
         // ---- audio thread
         void push (const float* const* vocal, int vocalChannels, const float* const* beat, int beatChannels,
@@ -132,5 +137,6 @@ namespace velvox::automix
         ParameterSnapshot previousSnapshot, mixSnapshot;
         bool hasPreviousSnapshot = false, showingPrevious = false;
         juce::String promptState { "pending" };
+        MixIntent intent;
     };
 }

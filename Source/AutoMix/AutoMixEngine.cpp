@@ -597,6 +597,7 @@ namespace velvox::automix
     {
         const auto mixTarget = targetFor (intent.genre, intent.vibe);
         AutoMixResult r;
+        r.intent = intent;
         const auto startMs = juce::Time::getMillisecondCounterHiRes();
         const auto stop = [&shouldStop] { return shouldStop && shouldStop(); };
         // The stage text is shown later on the message thread: both languages

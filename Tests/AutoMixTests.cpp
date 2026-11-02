@@ -1231,6 +1231,55 @@ public:
             expect (h4.proc.getAutoMix().shouldShowPrompt(), "unanalysed instance still pending after save/load");
         }
 
+        beginTest ("Workflow: the chosen genre and vibe reach the mix and are saved");
+        {
+            Harness h;
+            auto& c = h.proc.getAutoMix();
+            expect (c.getIntent().genre == Genre::party && c.getIntent().vibe == Vibe::punchy, "default: Party / Druckvoll");
+            c.setIntent ({ Genre::rap, Vibe::aggressive });
+            VocalSpec s; s.seconds = 12.0;
+            const auto r = c.runSynchronously (makeVocal (s));
+            expect (r.ok, r.error);
+            expect (r.intent.genre == Genre::rap && r.intent.vibe == Vibe::aggressive, "the engine mixed for the choice");
+            c.applyResult (r);
+            expectEquals (c.getReport().genre, (int) Genre::rap);
+            expectEquals (c.getReport().vibe, (int) Vibe::aggressive);
+
+            juce::MemoryBlock state;
+            h.proc.getStateInformation (state);
+            Harness h2;
+            h2.proc.setStateInformation (state.getData(), (int) state.getSize());
+            expect (h2.proc.getAutoMix().getIntent().genre == Genre::rap && h2.proc.getAutoMix().getIntent().vibe == Vibe::aggressive, "saved with the project");
+            expectEquals (h2.proc.getAutoMix().getReport().genre, (int) Genre::rap, "the report remembers it");
+        }
+
+        beginTest ("State: a 0.7 project without genre / vibe loads as Party / Druckvoll");
+        {
+            Harness h;
+            VocalSpec s; s.seconds = 12.0;
+            auto& c = h.proc.getAutoMix();
+            c.applyResult (c.runSynchronously (makeVocal (s)));
+            juce::MemoryBlock state;
+            h.proc.getStateInformation (state);
+            auto xml = juce::AudioProcessor::getXmlFromBinary (state.getData(), (int) state.getSize());
+            auto tree = juce::ValueTree::fromXml (*xml);
+            auto am = tree.getChildWithName (AutoMixController::treeType);
+            am.removeProperty ("intentGenre", nullptr);
+            am.removeProperty ("intentVibe", nullptr);
+            for (auto child : am)
+            {
+                child.removeProperty ("genre", nullptr);
+                child.removeProperty ("vibe", nullptr);
+            }
+            juce::MemoryBlock old;
+            juce::AudioProcessor::copyXmlToBinary (*tree.createXml(), old);
+            Harness h2;
+            h2.proc.setStateInformation (old.getData(), (int) old.getSize());
+            expect (h2.proc.getAutoMix().getIntent().genre == Genre::party && h2.proc.getAutoMix().getIntent().vibe == Vibe::punchy);
+            expect (h2.proc.getAutoMix().getReport().valid, "the old report stays");
+            expectEquals (h2.proc.getAutoMix().getReport().genre, (int) Genre::party);
+        }
+
         beginTest ("Workflow: cancelling changes nothing; the audio never stops");
         {
             Harness h;
