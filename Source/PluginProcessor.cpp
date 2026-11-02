@@ -479,7 +479,7 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     // is armed - a bounded, pre-allocated buffer, nothing else on this thread
     autoMix.push (main.getArrayOfReadPointers(), vocalChannels,
                   hasSidechain ? sidechain.getArrayOfReadPointers() : nullptr, hasSidechain ? sidechain.getNumChannels() : 0,
-                  main.getNumSamples(), settings.hostPlaying);
+                  main.getNumSamples(), settings.hostPlaying, settings.hostBpm);
 
     chain.process (main, std::min (mainIn, main.getNumChannels()), settings, hasSidechain ? &sidechain : nullptr);
 }

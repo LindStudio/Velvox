@@ -16,6 +16,7 @@ namespace velvox::automix
         std::vector<std::vector<float>> beat;        // sidechain [channel][sample], empty = none
         int clipSamples = 0;                         // vocal samples at or above full scale
         bool stoppedEarly = false;                   // the user analysed before the target was reached
+        double hostBpm = 0.0;                        // 0.8: host tempo during the capture (0 = unknown)
 
         int numSamples() const noexcept { return vocal.empty() ? 0 : (int) vocal[0].size(); }
         double seconds() const noexcept { return sampleRate > 0.0 ? numSamples() / sampleRate : 0.0; }
@@ -57,7 +58,7 @@ namespace velvox::automix
 
         // ---- audio thread
         void push (const float* const* vocal, int vocalChannels, const float* const* beat, int beatChannels,
-                   int numSamples, bool hostPlaying) noexcept;
+                   int numSamples, bool hostPlaying, double bpm = 0.0) noexcept;
 
         // ---- any thread (relaxed read-outs for the UI)
         struct Progress
@@ -96,6 +97,7 @@ namespace velvox::automix
         std::atomic<int> written { 0 }, voicedSamples { 0 }, clips { 0 };
         std::atomic<float> recentRms { -100.0f }, peak { 0.0f };
         std::atomic<bool> stopped { false }, beatPresent { false }, beatStored { false }, early { false };
+        std::atomic<double> lastBpm { 0.0 };
         bool sawPlaying = false;   // audio thread only
     };
 }

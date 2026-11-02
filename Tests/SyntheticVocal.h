@@ -31,6 +31,8 @@ namespace velvox::test
         float compress = 0.0f;        // 0..1 heavy static compression
         float clipGain = 0.0f;        // > 0: drives into hard clipping by this many dB
         float stereoDifference = 0.0f;// 0 = identical channels
+        double syllableSeconds = 0.0; // > 0: every syllable this long (default: 0.18 .. 0.32 s at random)
+        float consonantDb = -100.0f;  // > -100: a 5 ms click at each syllable start, this many dB above the vowel
         unsigned seed = 1;
     };
 
@@ -54,7 +56,8 @@ namespace velvox::test
                 double p = t;
                 while (p < std::min (t + phraseLen, s.seconds - 0.3))
                 {
-                    const double len = 0.18 + 0.14 * rnd.nextDouble();
+                    const double randomLen = 0.18 + 0.14 * rnd.nextDouble();
+                    const double len = s.syllableSeconds > 0.0 ? s.syllableSeconds : randomLen;
                     const int semis = (int) rnd.nextInt (11) - 5;
                     syls.push_back ({ (int) (p * fs), (int) (len * fs), s.f0 * std::pow (2.0f, (float) semis / 12.0f),
                                       phraseGain * (0.8f + 0.4f * rnd.nextFloat()), rnd.nextInt (4), rnd.nextFloat() < 0.35f });
@@ -92,6 +95,15 @@ namespace velvox::test
                 y = f3.process (y, 0);
                 y = tilt.process (y, 0);
                 v[(size_t) (syl.start + i)] += 0.12f * y * env * syl.gain;
+            }
+
+            // Hard consonant: a short click at the syllable start
+            if (s.consonantDb > -100.0f)
+            {
+                const int len = (int) (0.005 * fs);
+                const float g = 0.12f * syl.gain * juce::Decibels::decibelsToGain (s.consonantDb) * 0.5f;
+                for (int i = 0; i < len && syl.start + i < n; ++i)
+                    v[(size_t) (syl.start + i)] += g * (i % 2 == 0 ? 1.0f : -1.0f) * (1.0f - (float) i / (float) len);
             }
 
             // S burst at the start of some syllables

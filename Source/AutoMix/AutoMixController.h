@@ -58,9 +58,9 @@ namespace velvox::automix
 
         // ---- audio thread
         void push (const float* const* vocal, int vocalChannels, const float* const* beat, int beatChannels,
-                   int numSamples, bool hostPlaying) noexcept
+                   int numSamples, bool hostPlaying, double bpm = 0.0) noexcept
         {
-            capture.push (vocal, vocalChannels, beat, beatChannels, numSamples, hostPlaying);
+            capture.push (vocal, vocalChannels, beat, beatChannels, numSamples, hostPlaying, bpm);
         }
 
         struct Status

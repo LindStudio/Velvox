@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CaptureBuffer.h"
+#include "MixTarget.h"
 #include <optional>
 
 namespace velvox::automix
@@ -46,6 +47,7 @@ namespace velvox::automix
         float voicedSeconds = 0.0f;
         bool enoughMaterial = false;      // >= minimum voiced seconds
         bool stoppedEarly = false;
+        double hostBpm = 0.0;             // 0.8: song tempo during the capture (0 = unknown)
 
         // ---- Level (measured)
         float integratedLufs = -100.0f;   // ITU-R BS.1770 gated, all channels
@@ -85,6 +87,12 @@ namespace velvox::automix
         float topDb = -60.0f;             // everything above 2 kHz
         float tiltDbPerOctave = 0.0f;     // regression 250 Hz .. 8 kHz
         float lowMidPeakHz = 300.0f;      // strongest point of 180 .. 500 Hz
+        std::vector<float> thirdsDb;      // 0.8: third octaves 80 Hz .. 16 kHz relative to the core (thirdsOf)
+
+        // ---- Articulation (0.8): word / syllable onsets of the voice
+        float onsetRate = 0.0f;           // onsets per voiced second
+        float onsetSharpnessDb = 0.0f;    // median: peak of the first 15 ms after an onset minus the RMS of the next 100 ms
+        bool onsetsValid = false;         // at least 8 onsets
 
         // ---- Sibilance
         bool sibilanceValid = false;

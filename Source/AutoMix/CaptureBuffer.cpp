@@ -50,6 +50,7 @@ namespace velvox::automix
         peak.store (0.0f);
         stopped.store (false);
         beatPresent.store (false);
+        lastBpm.store (0.0);
         beatStored.store (false);
         early.store (false);
         sawPlaying = false;
@@ -74,10 +75,12 @@ namespace velvox::automix
     }
 
     void CaptureBuffer::push (const float* const* vocal, int vocalChannels, const float* const* beat, int beatChannels,
-                              int numSamples, bool hostPlaying) noexcept
+                              int numSamples, bool hostPlaying, double bpm) noexcept
     {
         if (numSamples <= 0 || vocalChannels <= 0)
             return;
+        if (bpm > 0.0)
+            lastBpm.store (bpm, std::memory_order_relaxed);
 
         writing.store (true);
         const auto s = (State) state.load();
@@ -215,6 +218,7 @@ namespace velvox::automix
         a.channels = channels;
         a.clipSamples = clips.load();
         a.stoppedEarly = early.load();
+        a.hostBpm = lastBpm.load();
         for (int ch = 0; ch < channels; ++ch)
             a.vocal.emplace_back (vocalBuf[(size_t) ch].begin(), vocalBuf[(size_t) ch].begin() + n);
         if (beatStored.load() && beatPresent.load())

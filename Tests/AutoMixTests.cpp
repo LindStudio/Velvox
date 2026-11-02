@@ -164,6 +164,24 @@ public:
             expect (out.numSamples() <= cb.capacitySamples());
         }
 
+        beginTest ("Capture: host tempo travels with the audio");
+        {
+            CaptureBuffer cb;
+            CaptureConfig cfg;
+            cfg.targetVoicedSeconds = 2.0f;
+            cfg.minVoicedSeconds = 1.0f;
+            cb.arm (48000.0, 1, cfg);
+            VocalSpec s; s.seconds = 4.0;
+            const auto voice = makeVocal (s);
+            const auto p = ptrs (voice);
+            for (int start = 0; start < voice.numSamples(); start += 512)
+            {
+                const float* ch[] { p[0] + start };
+                cb.push (ch, 1, nullptr, 0, std::min (512, voice.numSamples() - start), true, 128.0);
+            }
+            expectEquals (cb.copyOut().hostBpm, 128.0);
+        }
+
         beginTest ("Capture: fixed capacity at every sample rate, also above 96 kHz");
         {
             for (double fs : { 44100.0, 48000.0, 96000.0, 192000.0 })
@@ -384,6 +402,32 @@ public:
 
             VocalSpec shortOne = clean; shortOne.seconds = 3.0;
             expect (! VocalProfiler::analyse (makeVocal (shortOne)).enoughMaterial, "3 s is not enough");
+        }
+
+        beginTest ("Analysis: syllable rate and consonant sharpness");
+        {
+            const auto rateOf = [] (double perSecond, float consonantDb)
+            {
+                // no S bursts: in the synthetic voice they bridge the gap between syllables
+                VocalSpec s; s.seconds = 14.0; s.syllableSeconds = 1.0 / perSecond - 0.02; s.consonantDb = consonantDb; s.sibilance = 0.0f;
+                return VocalProfiler::analyse (makeVocal (s));
+            };
+            const auto slow = rateOf (3.0, -100.0f), fast = rateOf (6.0, -100.0f), sharp = rateOf (3.0, 12.0f);
+            logMessage ("    onsets/s slow " + juce::String (slow.onsetRate, 2) + ", fast " + juce::String (fast.onsetRate, 2)
+                        + "; sharpness soft " + juce::String (slow.onsetSharpnessDb, 1) + " dB, clicks " + juce::String (sharp.onsetSharpnessDb, 1) + " dB");
+            expect (slow.onsetsValid && fast.onsetsValid && sharp.onsetsValid);
+            expect (slow.onsetRate >= 2.4f && slow.onsetRate <= 3.6f, "3 syllables/s: " + juce::String (slow.onsetRate, 2));
+            expect (fast.onsetRate >= 4.8f && fast.onsetRate <= 7.2f, "6 syllables/s: " + juce::String (fast.onsetRate, 2));
+            expect (sharp.onsetSharpnessDb >= slow.onsetSharpnessDb + 4.0f, "clicks are sharper");
+        }
+
+        beginTest ("Analysis: third-octave levels");
+        {
+            VocalSpec s; s.seconds = 12.0;
+            const auto p = VocalProfiler::analyse (makeVocal (s));
+            expectEquals ((int) p.thirdsDb.size(), numThirds);
+            const float k1 = p.thirdsDb[(size_t) 9];   // 806 Hz .. the core
+            expect (k1 > -15.0f && k1 < 0.0f, "a core third " + juce::String (k1, 1));
         }
     }
 

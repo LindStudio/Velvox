@@ -146,6 +146,7 @@ namespace velvox::automix
         p.channels = audio.channels;
         p.capturedSeconds = (float) audio.seconds();
         p.stoppedEarly = audio.stoppedEarly;
+        p.hostBpm = audio.hostBpm;
 
         const int n = audio.numSamples();
         const double fs = audio.sampleRate;
@@ -267,6 +268,55 @@ namespace velvox::automix
                 lowered += breath.getReductionDb() < -6.0f ? 1 : 0;
             }
             p.breathShare = blocks > 0 ? (float) lowered / (float) blocks : 0.0f;
+        }
+
+        // Onsets (0.8): 5 ms RMS envelope of the mid signal; an onset is a voiced block 9 dB above the
+        // quietest of the 60 ms before it, at least 90 ms after the previous one. The rate sets the
+        // compressor's release, the sharpness (consonant peak against the vowel after it) its attack.
+        {
+            const int hop = std::max (16, (int) std::lround (0.005 * fs));
+            std::vector<float> env;
+            for (int start = 0; start + hop <= n; start += hop)
+            {
+                double s = 0.0;
+                for (int i = start; i < start + hop; ++i)
+                    s += (double) mid[(size_t) i] * mid[(size_t) i];
+                env.push_back (toDb (s / hop));
+            }
+            const int lookBack = 12, refractory = 18;
+            int last = -refractory;
+            std::vector<float> sharpness;
+            int onsets = 0;
+            for (int i = lookBack; i < (int) env.size(); ++i)
+            {
+                if (env[(size_t) i] <= gate || i - last < refractory)
+                    continue;
+                float lo = env[(size_t) i];
+                for (int j = i - lookBack; j < i; ++j)
+                    lo = std::min (lo, env[(size_t) j]);
+                if (env[(size_t) i] - lo < 9.0f)
+                    continue;
+                last = i;
+                ++onsets;
+                // the onset block may sit a little into the rise: the consonant is searched from 5 ms before it
+                const int s0 = std::max (0, (i - 1) * hop), s1 = std::min (n, s0 + (int) (0.015 * fs) + hop);
+                const int s2 = std::min (n, s1 + (int) (0.1 * fs));
+                if (s2 - s1 < hop)
+                    continue;
+                float pk = 0.0f;
+                for (int k = s0; k < s1; ++k)
+                    pk = std::max (pk, std::abs (mid[(size_t) k]));
+                double e = 0.0;
+                for (int k = s1; k < s2; ++k)
+                    e += (double) mid[(size_t) k] * mid[(size_t) k];
+                sharpness.push_back (juce::Decibels::gainToDecibels (pk, -120.0f) - toDb (e / (s2 - s1)));
+            }
+            p.onsetsValid = onsets >= 8 && p.voicedSeconds > 0.0f;
+            if (p.onsetsValid)
+            {
+                p.onsetRate = (float) onsets / p.voicedSeconds;
+                p.onsetSharpnessDb = percentile (sharpness, 0.5f);
+            }
         }
 
         // Word / phrase dynamics: 400 ms windows that are mostly voice
@@ -445,6 +495,7 @@ namespace velvox::automix
         p.spectrumDb.resize (nb);
         for (int b = 0; b < nb; ++b)
             p.spectrumDb[(size_t) b] = binsPerBand[(size_t) b] > 0 ? toDb (avg[(size_t) b] / binsPerBand[(size_t) b]) : -200.0f;
+        p.thirdsDb = thirdsOf (p.spectrumDb);
 
         const auto energy = [&] (float lo, float hi, const std::array<float, nb>* fb = nullptr)
         {
