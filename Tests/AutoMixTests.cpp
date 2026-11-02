@@ -12,6 +12,7 @@
 #include "UI/UserSettings.h"
 #include "Text/I18n.h"
 #include <thread>
+#include <set>
 
 using namespace velvox;
 using namespace velvox::test;
@@ -482,6 +483,37 @@ public:
                 expect (d.outputStage || active.count (d.module) > 0, "decision for an active module: " + d.title);
         }
 
+        beginTest ("Dynamics: release follows the syllable rate");
+        {
+            const auto planAt = [] (double perSecond, float consonantDb)
+            {
+                VocalSpec s; s.seconds = 14.0; s.syllableSeconds = 1.0 / perSecond - 0.02; s.consonantDb = consonantDb; s.sibilance = 0.0f;
+                return AutoMixPlanner::plan (VocalProfiler::analyse (makeVocal (s)), defaults());
+            };
+            const auto slow = planAt (3.0, -100.0f), fast = planAt (6.0, -100.0f);
+            logMessage ("    release slow " + juce::String (slow.get (pid::compRelease)) + " ms, fast " + juce::String (fast.get (pid::compRelease)) + " ms");
+            expect (fast.get (pid::compRelease) <= 0.75f * slow.get (pid::compRelease), "faster syllables, faster release");
+            expect (slow.get (pid::compRelease) >= 40.0f && slow.get (pid::compRelease) <= 250.0f);
+        }
+
+        beginTest ("Dynamics: sharp consonants get a faster attack");
+        {
+            const auto planAt = [] (float consonantDb)
+            {
+                // even phrases: no LEVEL RIDE (a ridden take keeps a 3 ms attack for the onsets it lifts)
+                VocalSpec s; s.seconds = 14.0; s.syllableSeconds = 0.3; s.consonantDb = consonantDb; s.sibilance = 0.0f; s.phraseRangeDb = 0.0f;
+                return AutoMixPlanner::plan (VocalProfiler::analyse (makeVocal (s)), defaults());
+            };
+            const auto soft = planAt (-100.0f), sharp = planAt (12.0f);
+            logMessage ("    attack soft " + juce::String (soft.get (pid::compAttack)) + " ms, sharp " + juce::String (sharp.get (pid::compAttack)) + " ms");
+            expect (sharp.get (pid::compAttack) < soft.get (pid::compAttack));
+            // the vibe moves it too
+            VocalSpec s; s.seconds = 14.0; s.phraseRangeDb = 0.0f;
+            const auto p = VocalProfiler::analyse (makeVocal (s));
+            expect (AutoMixPlanner::plan (p, defaults(), { Genre::party, Vibe::aggressive }).get (pid::compAttack)
+                    < AutoMixPlanner::plan (p, defaults(), { Genre::party, Vibe::floaty }).get (pid::compAttack), "aggressive attacks faster than floaty");
+        }
+
         beginTest ("Planner: the low cut follows the voice, not a fixed frequency");
         {
             VocalSpec low; low.f0 = 105.0f; low.seconds = 14.0;
@@ -632,6 +664,68 @@ public:
             expect (r.plan.decisions.size() >= 3, "a real plan");
             if (juce::String (c.name) == "reverberant")
                 expect (! r.plan.on (pid::delayOn), "no delay on a reverberant recording");
+        }
+
+        beginTest ("Dynamics: the compressor search lands in the target window");
+        {
+            VocalSpec s; s.seconds = 14.0; s.phraseRangeDb = 14.0f;
+            const auto r = AutoMixEngine::run (makeVocal (s), defaults());
+            expect (r.ok, r.error);
+            const auto t = targetFor (Genre::party, Vibe::punchy);
+            logMessage ("    in " + juce::String (r.profile.dynamicsDb, 1) + " dB phrase spread -> out " + juce::String (r.processed.dynamicsDb, 1)
+                        + " dB, crest " + juce::String (r.processed.crestDb, 1) + ", comp " + juce::String (r.plan.get (pid::compRatio), 1) + ":1 at "
+                        + juce::String (r.plan.get (pid::compThreshold), 1) + " dB");
+            expect (r.processed.dynamicsValid && r.processed.dynamicsDb >= t.dynamics.phraseLo - 1.0f && r.processed.dynamicsDb <= t.dynamics.phraseHi + 1.0f,
+                    "phrase spread in the window: " + juce::String (r.processed.dynamicsDb, 1));
+            expect (r.processed.compGrMedianDb <= 7.0f, "no over-compression");
+        }
+
+        beginTest ("Dynamics: no fixed compressor");
+        {
+            std::set<std::pair<int, int>> settings;
+            for (auto spec : { [] { VocalSpec s; s.seconds = 12.0; return s; }(),
+                               [] { VocalSpec s; s.seconds = 12.0; s.phraseRangeDb = 14.0f; return s; }(),
+                               [] { VocalSpec s; s.seconds = 12.0; s.phraseRangeDb = 2.0f; s.syllableSeconds = 0.15; return s; }(),
+                               [] { VocalSpec s; s.seconds = 12.0; s.compress = 0.6f; s.f0 = 140.0f; return s; }(),
+                               [] { VocalSpec s; s.seconds = 12.0; s.consonantDb = 12.0f; s.phraseRangeDb = 10.0f; s.f0 = 300.0f; return s; }() })
+            {
+                const auto r = AutoMixEngine::run (makeVocal (spec), defaults());
+                expect (r.ok, r.error);
+                const int ratio = juce::roundToInt (r.plan.get (pid::compRatio) * 10.0f);
+                const int below = juce::roundToInt (r.profile.voiceRmsDb - r.plan.get (pid::compThreshold));
+                logMessage ("    ratio " + juce::String (ratio / 10.0f, 1) + ", threshold " + juce::String (below) + " dB below the voice, release "
+                            + juce::String (r.plan.get (pid::compRelease)) + " ms, attack " + juce::String (r.plan.get (pid::compAttack)) + " ms");
+                settings.insert ({ ratio, below });
+            }
+            expect (settings.size() >= 3, "at least three different compressor settings: " + juce::String ((int) settings.size()));
+        }
+
+        beginTest ("Dynamics: Smash blend follows the density target");
+        {
+            VocalSpec s; s.seconds = 12.0;
+            const auto audio = makeVocal (s);
+            const auto blendOf = [] (const AutoMixResult& r) { return r.plan.on (pid::smashOn) ? r.plan.get (pid::smashBlend) : 0.0f; };
+            const auto natural = AutoMixEngine::run (audio, defaults(), {}, {}, { Genre::party, Vibe::natural });
+            const auto party = AutoMixEngine::run (audio, defaults());
+            const auto aggressive = AutoMixEngine::run (audio, defaults(), {}, {}, { Genre::party, Vibe::aggressive });
+            logMessage ("    Smash blend natural " + juce::String (blendOf (natural)) + ", party " + juce::String (blendOf (party))
+                        + ", aggressive " + juce::String (blendOf (aggressive)));
+            expect (blendOf (natural) <= 9.0f, "natural: little or no Smash");
+            expect (blendOf (aggressive) >= blendOf (party), "aggressive at least as dense as party");
+        }
+
+        beginTest ("Dynamics: at most 25 s on a 14 s take");
+        {
+            VocalSpec s; s.seconds = 14.0;
+            const auto r = AutoMixEngine::run (makeVocal (s), defaults());
+            expect (r.ok, r.error);
+           #if JUCE_DEBUG
+            const double limit = 100.0;
+           #else
+            const double limit = 25.0;
+           #endif
+            logMessage ("    analysis + " + juce::String (r.iterations) + " renders: " + juce::String (r.seconds, 1) + " s");
+            expect (r.seconds <= limit, juce::String (r.seconds, 1) + " s");
         }
 
         beginTest ("Engine: too little voice is refused, not mixed");

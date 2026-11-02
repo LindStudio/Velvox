@@ -75,6 +75,13 @@ namespace velvox::automix
 
         static RenderMetrics measure (const CapturedAudio& audio);
 
+        // 0.8 (spec: "Kompressor gezielt"): renders compressor settings around the plan's (threshold -4 .. +4 dB,
+        // ratio 1.8 / 2.5 / 3.5 / 5, greedy, at most `maxRenders`) and keeps the one whose phrase spread and crest
+        // land closest to the target's dynamics window; then the Vocal Smash blend (0, 1/2, 1, 1.5 x the density
+        // target, at most 2 renders) for the crest. Returns the renders used; the plan's texts follow.
+        static int tuneDynamics (const CapturedAudio& audio, const std::map<juce::String, float>& current, MixPlan& plan,
+                                 const VocalProfile& profile, const MixTarget& target, int maxRenders = 5);
+
         // render() plus the S / vowel balance measured on the reference frames of `profile`
         static RenderMetrics renderChecked (const CapturedAudio& audio, const std::map<juce::String, float>& current,
                                             const MixPlan& plan, const VocalProfile& profile);

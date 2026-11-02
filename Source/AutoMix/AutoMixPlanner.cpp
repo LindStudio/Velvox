@@ -368,7 +368,8 @@ namespace velvox::automix
         // Also on wet hooks with a small loudness range: in the blind listening test of
         // 2026-10-24 the ridden version was the more intelligible one (quiet syllables, not
         // only reverb tails). The onsets it lifts are caught by a faster compressor attack.
-        const bool rideWanted = p.dynamicsValid && p.dynamicsDb > 8.0f && ! compressed && ! plan.conservative;
+        // 0.8: from the genre / vibe's phrase window (party: above 8 dB as before)
+        const bool rideWanted = p.dynamicsValid && p.dynamicsDb > target.dynamics.phraseHi + 2.0f && ! compressed && ! plan.conservative;
         plan.set (pid::rideOn, rideWanted ? 1.0f : 0.0f);
         if (rideWanted)
         {
@@ -395,10 +396,15 @@ namespace velvox::automix
         {
             // After the rider, words sit around the rider target
             const float level = rideWanted ? plan.get (pid::rideTarget) : voice;
-            float ratio = 3.0f;
-            float below = 4.0f;          // threshold below the median word (RMS detector reads +3 dB for a sine)
+            // 0.8: the start of the engine's search follows this voice - the ratio from how far its phrase
+            // spread (after the ride) is from the middle of the target window, the threshold from its crest
+            // (peaky words: deeper), on the search's ratio steps 1.8 / 2.5 / 3.5 / 5
+            const float mid = 0.5f * (target.dynamics.phraseLo + target.dynamics.phraseHi);
+            const float spread = rideWanted ? target.dynamics.phraseHi : (p.dynamicsValid ? p.dynamicsDb : mid + 2.0f);
+            const float wanted = clamp (spread / mid, 1.5f, 5.0f);
+            float ratio = wanted < 2.15f ? 1.8f : (wanted < 3.0f ? 2.5f : (wanted < 4.25f ? 3.5f : 5.0f));
+            float below = clamp (3.0f + 0.5f * (p.crestDb - target.dynamics.crestHi), 1.5f, 8.0f);   // below the median word (RMS detector reads +3 dB for a sine)
             if (compressed)       { ratio = 1.8f; below = 1.0f; }
-            else if (! rideWanted && p.dynamicsValid && p.dynamicsDb > 14.0f) { ratio = 4.0f; below = 6.0f; }
             if (plan.conservative) { ratio = std::min (ratio, 2.5f); below = std::min (below, 3.0f); }
 
             const float threshold = clamp (level + 3.0f - below, -60.0f, -6.0f);
@@ -407,34 +413,49 @@ namespace velvox::automix
             plan.set (pid::compDetector, 1.0f);   // RMS: follows the voice, not single consonants
             plan.set (pid::compThreshold, threshold);
             plan.set (pid::compRatio, ratio);
-            // Fast enough to catch the onsets the ride lifts (3 ms: about 1 dB less peak-to-
-            // loudness on ridden hooks than 12 ms); upfront and dense was preferred in the
-            // listening test, so the default is quicker than a "natural" 12 ms
-            plan.set (pid::compAttack, rideWanted ? 3.0f : (p.crestDb > 15.0f ? 5.0f : 8.0f));
-            plan.set (pid::compRelease, 110.0f);
+            // 0.8 (spec: "Kompressor gezielt"): the attack follows the consonants - soft onsets (consonant peak at
+            // most level with the vowel after it) keep 9 ms of transient, sharp ones (6 dB over it) are caught at
+            // 3 ms, in between on a sliding scale; aggressive -2 ms,
+            // floaty +8 ms. A ridden take keeps the fast attack for the onsets the ride lifts (3 ms: about
+            // 1 dB less peak-to-loudness on ridden hooks than 12 ms). The release follows the syllable rate,
+            // so the compressor is back between the syllables (60 % of their spacing, 40 .. 250 ms).
+            float attack = p.onsetsValid ? juce::jmap (clamp (p.onsetSharpnessDb, 0.0f, 6.0f), 0.0f, 6.0f, 9.0f, 3.0f) : (p.crestDb > 15.0f ? 5.0f : 8.0f);
+            attack = std::round (attack);
+            if (rideWanted)
+                attack = std::min (attack, 3.0f);
+            attack += target.vibe == Vibe::aggressive ? -2.0f : (target.vibe == Vibe::floaty ? 8.0f : 0.0f);
+            attack = clamp (attack, 1.0f, 30.0f);
+            const float release = p.onsetsValid && p.onsetRate > 0.5f ? clamp (600.0f / p.onsetRate, 40.0f, 250.0f) : 110.0f;
+            plan.set (pid::compAttack, attack);
+            plan.set (pid::compRelease, release);
             plan.set (pid::compKnee, 6.0f);
             plan.set (pid::compMakeup, clamp (std::round (expectedGr * 2.0f) / 2.0f, 0.0f, 6.0f));
             plan.set (pid::compMix, 100.0f);
             plan.set (pid::compScHpf, 100.0f);
             decide (M::comp, both ("Kompressor {0}:1, Schwelle {1}", "Compressor {0}:1, threshold {1}", { num (ratio, 1), db (threshold) }),
-                    compressed ? both ("Die Aufnahme ist bereits dicht - nur sanfte Kontrolle.", "The recording is already dense - only gentle control.")
-                               : both ("Etwa {0} dB Reduktion auf typischen Wörtern für einen gleichmäßigen, durchsetzungsfähigen Pegel.",
-                                       "About {0} dB of reduction on typical words for an even level that cuts through.", { num (expectedGr, 1) }),
+                    (compressed ? both ("Die Aufnahme ist bereits dicht - nur sanfte Kontrolle.", "The recording is already dense - only gentle control.")
+                                : both ("Etwa {0} dB Reduktion auf typischen Wörtern für einen gleichmäßigen, durchsetzungsfähigen Pegel.",
+                                        "About {0} dB of reduction on typical words for an even level that cuts through.", { num (expectedGr, 1) }))
+                        + (p.onsetsValid ? both (" Attack {0} ms ({1}), Release {2} ms ({3} Silben/s).", " Attack {0} ms ({1}), release {2} ms ({3} syllables/s).",
+                                                 { num (attack, 0), p.onsetSharpnessDb >= 3.0f ? both ("scharfe Konsonanten", "sharp consonants") : both ("weiche Einsätze", "soft onsets"),
+                                                   num (release, 0), num (p.onsetRate, 1) })
+                                         : juce::String()),
                     true);
         }
 
         // ================= Vocal Smash: density (parallel) =================
-        const bool smash = ! compressed && ! plan.conservative && ! p.distortionLikely;
+        // 0.8: the blend of the genre / vibe's density target (the engine tunes it on the render; natural = none)
+        const bool smash = ! compressed && ! plan.conservative && ! p.distortionLikely && target.densityBlend > 0.0f;
         plan.set (pid::smashOn, smash ? 1.0f : 0.0f);
         if (smash)
         {
             plan.set (pid::smashAmount, 40.0f);
-            plan.set (pid::smashBlend, 18.0f);
+            plan.set (pid::smashBlend, target.densityBlend);
             plan.set (pid::smashAttack, 2.0f);
             plan.set (pid::smashRelease, 90.0f);
             plan.set (pid::smashTone, harsh ? -10.0f : (dull ? 25.0f : 10.0f));
             plan.set (pid::smashOutput, 0.0f);
-            decide (M::smash, both ("Parallelkompression 18 % Blend", "Parallel compression 18 % blend"),
+            decide (M::smash, both ("Parallelkompression {0} % Blend", "Parallel compression {0} % blend", { num (target.densityBlend, 0) }),
                     both ("Ein kleiner Anteil stark komprimierter Stimme unter dem Original gibt Dichte, ohne die Transienten zu verlieren.",
                           "A little heavily compressed voice under the original adds density without losing the transients."), false);
         }

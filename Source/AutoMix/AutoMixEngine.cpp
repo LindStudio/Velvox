@@ -257,6 +257,145 @@ namespace velvox::automix
     }
 
     //==========================================================================
+    namespace
+    {
+        float outside (float v, float lo, float hi) { return v < lo ? lo - v : (v > hi ? v - hi : 0.0f); }
+
+        // How far a render's dynamics are from the target window (phrases, crest, and no squashing)
+        float dynamicsError (const RenderMetrics& m, const MixTarget& t)
+        {
+            float e = 0.5f * outside (m.crestDb, t.dynamics.crestLo, t.dynamics.crestHi) + std::max (0.0f, m.compGrMedianDb - 6.5f);
+            if (m.dynamicsValid)
+                e += outside (m.dynamicsDb, t.dynamics.phraseLo, t.dynamics.phraseHi);
+            return e;
+        }
+    }
+
+    int AutoMixEngine::tuneDynamics (const CapturedAudio& audio, const std::map<juce::String, float>& current, MixPlan& plan,
+                                     const VocalProfile& profile, const MixTarget& target, int maxRenders)
+    {
+        if (! plan.on (pid::compOn))
+            return 0;
+        static constexpr float ratios[] { 1.8f, 2.5f, 3.5f, 5.0f };
+        const float t0 = plan.get (pid::compThreshold);
+        int ri = 0;
+        for (int i = 1; i < 4; ++i)
+            if (std::abs (ratios[i] - plan.get (pid::compRatio)) < std::abs (ratios[ri] - plan.get (pid::compRatio)))
+                ri = i;
+        float thr = t0;
+        const auto apply = [&plan] (float threshold, float ratio)
+        {
+            plan.set (pid::compThreshold, threshold);
+            plan.set (pid::compRatio, ratio);
+        };
+        apply (thr, ratios[ri]);
+        int renders = 0;
+        auto m = renderChecked (audio, current, plan, profile);
+        ++renders;
+        float err = dynamicsError (m, target);
+        const float inDyn = profile.dynamicsDb;
+
+        while (renders < maxRenders && err > 0.05f)
+        {
+            const bool loose = (m.dynamicsValid && m.dynamicsDb > target.dynamics.phraseHi) || m.crestDb > target.dynamics.crestHi;
+            std::vector<std::pair<float, int>> moves;   // threshold, ratio index
+            if (loose)
+                moves = { { thr - 2.0f, ri }, { thr, std::min (3, ri + 1) } };
+            else
+                moves = { { thr + 2.0f, ri }, { thr, std::max (0, ri - 1) } };
+            bool improved = false;
+            for (auto [t, r] : moves)
+            {
+                if (renders >= maxRenders || (t == thr && r == ri) || t < t0 - 4.0f || t > t0 + 4.0f || t < -60.0f || t > -6.0f)
+                    continue;
+                apply (t, ratios[r]);
+                const auto mt = renderChecked (audio, current, plan, profile);
+                ++renders;
+                if (const float e = dynamicsError (mt, target); e < err - 0.05f)
+                {
+                    thr = t;
+                    ri = r;
+                    m = mt;
+                    err = e;
+                    improved = true;
+                    break;
+                }
+                apply (thr, ratios[ri]);
+            }
+            if (! improved)
+                break;
+        }
+        apply (thr, ratios[ri]);
+
+        // Vocal Smash: the blend that brings the crest into the window (the vibe's density as the preference)
+        const bool smashAllowed = ! profile.heavilyCompressed && ! plan.conservative && ! profile.distortionLikely;
+        if (smashAllowed)
+        {
+            const float d = target.densityBlend;
+            const float b0 = plan.on (pid::smashOn) ? plan.get (pid::smashBlend) : 0.0f;
+            std::vector<float> blends;
+            if (m.crestDb > target.dynamics.crestHi)
+                blends = { std::max (6.0f, 1.5f * std::max (d, b0)) };
+            else if (m.crestDb < target.dynamics.crestLo && b0 > 0.0f)
+                blends = { 0.5f * b0, 0.0f };
+            const auto setBlend = [&plan] (float b)
+            {
+                if (b <= 0.0f)
+                {
+                    plan.set (pid::smashOn, 0.0f);
+                    return;
+                }
+                if (! plan.on (pid::smashOn))
+                {
+                    plan.set (pid::smashAmount, 40.0f);
+                    plan.set (pid::smashAttack, 2.0f);
+                    plan.set (pid::smashRelease, 90.0f);
+                    plan.set (pid::smashTone, 10.0f);
+                    plan.set (pid::smashOutput, 0.0f);
+                }
+                plan.set (pid::smashOn, 1.0f);
+                plan.set (pid::smashBlend, std::round (b));
+            };
+            const auto cost = [&] (const RenderMetrics& x, float b) { return dynamicsError (x, target) + 0.02f * std::abs (b - d); };
+            float best = b0, bestCost = cost (m, b0);
+            for (float b : blends)
+            {
+                if (renders >= maxRenders + 2)
+                    break;
+                setBlend (b);
+                const auto mb = renderChecked (audio, current, plan, profile);
+                ++renders;
+                if (const float c = cost (mb, b); c < bestCost - 0.05f)
+                {
+                    best = b;
+                    bestCost = c;
+                    m = mb;
+                }
+            }
+            setBlend (best);
+            plan.decisions.erase (std::remove_if (plan.decisions.begin(), plan.decisions.end(),
+                                                  [] (const Decision& x) { return ! x.outputStage && x.module == dsp::ModuleId::smash; }), plan.decisions.end());
+            if (best > 0.0f)
+                plan.decisions.push_back ({ dsp::ModuleId::smash, false,
+                                            both ("Parallelkompression {0} % Blend", "Parallel compression {0} % blend", { num (best, 0) }),
+                                            both ("Dichte für {0} · {1}: Crest nach der Kette {2} dB (Ziel {3}-{4} dB).",
+                                                  "Density for {0} · {1}: crest after the chain {2} dB (target {3}-{4} dB).",
+                                                  { genreName (target.genre), vibeName (target.vibe), num (m.crestDb, 1),
+                                                    num (target.dynamics.crestLo, 1), num (target.dynamics.crestHi, 1) }), true });
+        }
+
+        if (auto it = std::find_if (plan.decisions.begin(), plan.decisions.end(), [] (const Decision& x) { return ! x.outputStage && x.module == dsp::ModuleId::comp; });
+            it != plan.decisions.end())
+        {
+            it->title = both ("Kompressor {0}:1, Schwelle {1}", "Compressor {0}:1, threshold {1}", { num (ratios[ri], 1), db (thr) });
+            if (m.dynamicsValid && profile.dynamicsValid)
+                it->reason += both (" Gesucht auf das Dynamik-Ziel ({0}-{1} dB): Phrasen {2} -> {3} dB.", " Searched for the dynamics target ({0}-{1} dB): phrases {2} -> {3} dB.",
+                                    { num (target.dynamics.phraseLo, 0), num (target.dynamics.phraseHi, 0), num (inDyn, 1), num (m.dynamicsDb, 1) });
+            it->measured = true;
+        }
+        return renders;
+    }
+
     std::vector<std::pair<juce::String, MixPlan>> AutoMixEngine::candidatesFor (const MixPlan& base, const VocalProfile& profile,
                                                                                const std::map<juce::String, float>& current)
     {
@@ -274,39 +413,7 @@ namespace velvox::automix
         const auto k2 = [] (const char* id) { return dsp::instanceParamId (id, 1); };
         const auto style = styleOf (profile);
 
-        // Dynamics: lighter
-        add (both ("Dynamik leichter", "Lighter dynamics"), [&] (MixPlan& c)
-        {
-            if (! c.on (pid::compOn))
-                return false;
-            c.set (pid::compRatio, std::max (1.5f, c.get (pid::compRatio) * 0.7f));
-            c.set (pid::compThreshold, c.get (pid::compThreshold) + 2.0f);
-            c.set (pid::compMakeup, std::max (0.0f, c.get (pid::compMakeup) - 1.0f));
-            if (c.on (pid::smashOn))
-                c.set (pid::smashOn, 0.0f);
-            return true;
-        });
-
-        // Dynamics: denser (never on an already squashed take)
-        add (both ("Dynamik dichter", "Denser dynamics"), [&] (MixPlan& c)
-        {
-            if (! c.on (pid::compOn) || profile.heavilyCompressed)
-                return false;
-            c.set (pid::compRatio, std::min (6.0f, c.get (pid::compRatio) * 1.35f));
-            c.set (pid::compThreshold, c.get (pid::compThreshold) - 2.0f);
-            c.set (pid::compMakeup, std::min (8.0f, c.get (pid::compMakeup) + 1.0f));
-            if (! c.on (pid::smashOn) && ! profile.distortionLikely)
-            {
-                c.set (pid::smashOn, 1.0f);
-                c.set (pid::smashAmount, 40.0f);
-                c.set (pid::smashBlend, 18.0f);
-                c.set (pid::smashAttack, 2.0f);
-                c.set (pid::smashRelease, 90.0f);
-                c.set (pid::smashTone, 10.0f);
-                c.set (pid::smashOutput, 0.0f);
-            }
-            return true;
-        });
+        // 0.8: no "lighter / denser dynamics" variants - tuneDynamics searched the compressor and Smash on the render
 
         // Saturation: the other way round
         add (base.on (pid::satOn) ? both ("Ohne Sättigung", "Without saturation") : both ("Mit Sättigung", "With saturation"), [&] (MixPlan& c)
@@ -513,6 +620,10 @@ namespace velvox::automix
         r.original.sibilanceVsVowelDb = r.profile.sibilanceVsVowelDb;
         r.original.sibilanceValid = r.profile.sibilanceValid;
 
+        // ---- Dynamics (0.8): compressor and Smash searched on the render into the target window
+        report (0.33f, "Dynamik wird gesucht", "Searching the dynamics");
+        r.iterations += tuneDynamics (audio, current, r.plan, r.profile, mixTarget);
+
         // ---- Verify the whole chain and adjust where the measurement is reliable
         auto& plan = r.plan;
         RenderMetrics m;
@@ -527,24 +638,6 @@ namespace velvox::automix
             m = renderChecked (audio, current, plan, r.profile);
             ++r.iterations;
             bool changed = false;
-
-            // Compressor: neither squashed nor idle
-            if (plan.on (pid::compOn))
-            {
-                const float thr = plan.get (pid::compThreshold);
-                if (m.compGrMedianDb > 6.5f)
-                {
-                    plan.set (pid::compThreshold, thr + std::min (4.0f, m.compGrMedianDb - 4.5f));
-                    r.adjustments.push_back (both ("Kompressor entschärft ({0} dB Reduktion gemessen).", "Compressor eased ({0} dB of reduction measured).", { num (m.compGrMedianDb, 1) }));
-                    changed = true;
-                }
-                else if (m.compGrMedianDb < 0.8f && ! r.profile.heavilyCompressed && thr > -50.0f)
-                {
-                    plan.set (pid::compThreshold, thr - 2.0f);
-                    r.adjustments.push_back (both ("Kompressor-Schwelle gesenkt (kaum Reduktion gemessen).", "Compressor threshold lowered (hardly any reduction measured)."));
-                    changed = true;
-                }
-            }
 
             // De-esser: S sounds controlled, but no lisp
             if (plan.on (pid::deessOn) && m.sibilanceValid && r.profile.sibilanceValid)
