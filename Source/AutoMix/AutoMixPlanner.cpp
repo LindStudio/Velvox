@@ -251,7 +251,8 @@ namespace velvox::automix
         // 2026-10-29: audible breaths are common - measured 0 .. 3.6 % of the blocks on 31 takes; from 1 % on it lowers them
         if (p.breathShare > 0.01f)
         {
-            const float amount = p.pitchedShare < 0.45f ? 40.0f : 50.0f;   // rap / speech: a little more natural breath
+            // 0.8: with the measured share (1 % -> 40 %, 4 % -> 70 %); rap / speech keeps a little more natural breath
+            const float amount = 5.0f * std::round (clamp (30.0f + 1000.0f * p.breathShare - (p.pitchedShare < 0.45f ? 10.0f : 0.0f), 30.0f, 70.0f) / 5.0f);
             plan.set (pid::breathOn, 1.0f);
             plan.set (pid::breathAmount, amount);
             plan.routing.insertDefault (M::breath, 0);
@@ -570,7 +571,11 @@ namespace velvox::automix
         // ================= Width: doubler, mono-safe =================
         const bool alreadyWide = p.stereoContent && p.correlation < 0.8f;
         // 0.8: the width of the genre / vibe; a rap lead (few held notes) only a little
-        const float doublerMix = p.pitchedShare < 0.45f ? std::min (target.space.doublerMix, 8.0f) : target.space.doublerMix;
+        // ... and more of it the more the voice holds notes (0.45 -> x 0.7, 0.95 -> x 1.2)
+        const float doublerMix = p.pitchedShare < 0.45f ? std::min (target.space.doublerMix, 8.0f)
+                                                         : std::round (target.space.doublerMix * juce::jmap (clamp (p.pitchedShare, 0.45f, 0.95f), 0.45f, 0.95f, 0.7f,
+                                                                                                             // a genre with little width (rap: 8 %) never gets more
+                                                                                                             target.space.doublerMix <= 8.0f ? 1.0f : 1.2f));
         const bool doubler = ! alreadyWide && ! plan.conservative && doublerMix >= 5.0f;
         plan.set (pid::doublerOn, doubler ? 1.0f : 0.0f);
         if (doubler)
@@ -677,7 +682,10 @@ namespace velvox::automix
                 plan.set (pid::delayDivision, target.vibe == Vibe::floaty ? 10.0f : (target.vibe == Vibe::aggressive ? 3.0f : (spoken ? 9.0f : 7.0f)));
                 plan.set (pid::delayTime, spoken ? 400.0f : 300.0f);  // used only without host tempo
                 plan.set (pid::delayFeedback, spoken ? 12.0f : 22.0f);
-                const float delayMix = std::round (clamp (((spoken ? 6.0f : 9.0f) - (density == BeatDensity::dense ? 2.0f : 0.0f)) * target.space.delayScale, 2.0f, 20.0f));
+                // 0.8: the echo needs the pauses - singing without gaps gets less, phrases with room more
+                const float singing = p.capturedSeconds > 0.0f ? p.voicedSeconds / p.capturedSeconds : 0.8f;
+                const float gaps = juce::jmap (clamp (singing, 0.6f, 0.95f), 0.6f, 0.95f, 1.3f, 0.8f);
+                const float delayMix = std::round (clamp (((spoken ? 6.0f : 9.0f) - (density == BeatDensity::dense ? 2.0f : 0.0f)) * target.space.delayScale * gaps, 2.0f, 20.0f));
                 plan.set (pid::delayMix, delayMix);
                 plan.set (pid::delayLowCut, 350.0f);
                 plan.set (pid::delayHighCut, 5000.0f);

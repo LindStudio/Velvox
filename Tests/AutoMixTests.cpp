@@ -557,6 +557,20 @@ public:
             expect (pt.get (pid::satMix) > pf.get (pid::satMix), "and a little more of it");
         }
 
+        beginTest ("Colour and space: Breath Control, doubler and delay follow the voice");
+        {
+            VocalSpec s; s.seconds = 14.0;
+            const auto base = VocalProfiler::analyse (makeVocal (s));
+            auto a = base, b = base;
+            a.breathShare = 0.012f; b.breathShare = 0.035f;
+            a.pitchedShare = 0.55f; b.pitchedShare = 0.92f;
+            a.voicedSeconds = 0.92f * a.capturedSeconds; b.voicedSeconds = 0.62f * b.capturedSeconds;
+            const auto pa = AutoMixPlanner::plan (a, defaults()), pb = AutoMixPlanner::plan (b, defaults());
+            expect (pa.get (pid::breathAmount) < pb.get (pid::breathAmount), "more breaths, more Breath Control");
+            expect (pa.get (pid::doublerMix) < pb.get (pid::doublerMix), "more held notes, more width");
+            expect (pa.get (pid::delayMix) < pb.get (pid::delayMix), "more pauses, more echo");
+        }
+
         beginTest ("Colour and space: a rap lead gets little doubling");
         {
             VocalSpec s; s.seconds = 14.0;

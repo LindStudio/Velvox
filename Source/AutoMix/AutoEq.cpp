@@ -95,7 +95,8 @@ namespace velvox::automix::autoeq
         constexpr float eps = 1.0e-3f;
         if (b.q >= minNarrowQ - eps)
             return t == EqBandType::bell && b.gain <= eps && b.gain >= -maxNarrowCutDb - eps && b.q <= maxNarrowQ + eps;
-        return b.gain >= -maxBroadCutDb - eps && b.gain <= maxBroadBoostDb + eps;
+        const bool high = t == EqBandType::highShelf || b.freq > 5000.0f;
+        return b.gain >= -maxBroadCutDb - eps && b.gain <= (high ? maxHighLiftDb : maxBroadBoostDb) + eps;
     }
 
     juce::String regionName (float f, bool cut)
@@ -208,30 +209,36 @@ namespace velvox::automix::autoeq
         // How far a broad move at `centre` may go (spec: cuts down to -6 dB, -3 dB below 300 Hz; lifts up to
         // +4 dB, 2 dB above 5 kHz on a noisy / sibilant take, none on a resonance, none on the low end of a
         // high voice, none of 2-5 kHz on a harsh take)
-        std::pair<float, float> limitsOf (const Context& ctx, float centre, EqBandType type)
+        std::pair<float, float> limitsOf (const Context& ctx, float centre, EqBandType type, const std::vector<Move>& moves)
         {
             const auto& p = *ctx.profile;
             const float scale = ctx.conservative ? 0.6f : 1.0f;
             const bool highVoice = p.pitchValid && p.f0LowHz > 250.0f;
             const float cut = (centre < 300.0f ? 3.0f : maxBroadCutDb) * scale;
             float lift = maxBroadBoostDb;
-            if ((type == EqBandType::highShelf || centre > 5000.0f) && (ctx.noisy || ctx.sibilant))
-                lift = 2.0f;
+            if (type == EqBandType::highShelf || centre > 5000.0f)
+                lift = ctx.noisy ? maxHighLiftNoisyDb : (ctx.sibilant ? maxHighLiftSibilantDb : maxHighLiftDb);
             bool resonance = false;
             for (auto& r : p.resonances)
-                resonance = resonance || (r.excessDb > 7.0f && std::abs (std::log2 (centre / r.hz)) < 1.0f / 3.0f);
+            {
+                // a resonance the plan already notches does not stand in the way of a broad lift around it
+                const bool notched = std::any_of (moves.begin(), moves.end(), [&r] (const Move& m)
+                                                  { return m.narrow && std::abs (std::log2 (m.band.freq / r.hz)) < 1.0f / 12.0f; });
+                resonance = resonance || (! notched && r.excessDb > 7.0f && std::abs (std::log2 (centre / r.hz)) < 1.0f / 3.0f);
+            }
             if ((highVoice && centre < 300.0f) || resonance || (ctx.harsh && centre >= 2000.0f && centre <= 5000.0f))
                 lift = 0.0f;
             return { -cut, lift * scale };
         }
 
-        // A lift above 5 kHz on a noisy / sibilant take: never more than 2 dB at 8 or 12 kHz in all
+        // A lift above 5 kHz on a noisy / sibilant take: never more than 2 / 4 dB at 8 or 12 kHz in all
         bool liftTooHigh (const Context& ctx, const std::vector<EqBand>& before, const std::vector<EqBand>& after)
         {
             if (! (ctx.noisy || ctx.sibilant))
                 return false;
-            return responseDb (after, 8000.0f) - responseDb (before, 8000.0f) > 2.0f + 1.0e-3f
-                || responseDb (after, 12000.0f) - responseDb (before, 12000.0f) > 2.0f + 1.0e-3f;
+            const float cap = (ctx.noisy ? maxHighLiftNoisyDb : maxHighLiftSibilantDb) + 1.0e-3f;
+            return responseDb (after, 8000.0f) - responseDb (before, 8000.0f) > cap
+                || responseDb (after, 12000.0f) - responseDb (before, 12000.0f) > cap;
         }
 
         // Greedy fit of the broad moves (spec: "EQ: Kurvenabgleich"): the largest connected stretch of one
@@ -347,7 +354,7 @@ namespace velvox::automix::autoeq
                 // third chases a dip between formants and sounds random
                 if (! cut)
                     q = std::min (q, 2.0f);
-                const auto [gLo, gHi] = limitsOf (ctx, centre, type);
+                const auto [gLo, gHi] = limitsOf (ctx, centre, type, moves);
                 const auto role = roleFor (centre);
                 if ((cut ? gLo : gHi) == 0.0f || role == EqRole::none || (! cut && bestB == bestA))
                 {
@@ -382,7 +389,8 @@ namespace velvox::automix::autoeq
                 const auto why = both ("{0}: {1} gegenüber dem Ziel für {2} · {3} (fertige Profi-Vocals) - hier und nur hier.",
                                        "{0}: {1} against the target for {2} · {3} (finished professional vocals) - here and only here.",
                                        { regionName (centre, cut), db (excess), genreName (target.genre), vibeName (target.vibe) })
-                               + (! cut && gHi < maxBroadBoostDb ? both (" Anhebung begrenzt (Rauschen/S-Laute).", " Lift limited (noise/sibilance).") : juce::String());
+                               + (! cut && (ctx.noisy || ctx.sibilant) && (type == EqBandType::highShelf || centre > 5000.0f)
+                                      ? both (" Anhebung begrenzt (Rauschen/S-Laute).", " Lift limited (noise/sibilance).") : juce::String());
                 moves.push_back ({ role, band, titleOf (role, band),
                                    afterRender ? both ("Nach der Messung der ganzen Kette: {0}", "After measuring the whole chain: {0}", { why }) : why,
                                    false });
@@ -476,7 +484,7 @@ namespace velvox::automix::autoeq
                 if (j != i)
                     others.push_back (state[j].band);
             const auto& b0 = state[i].band;
-            const auto [gLo, gHi] = limitsOf (ctx, actingHz (b0), b0.bandType());
+            const auto [gLo, gHi] = limitsOf (ctx, actingHz (b0), b0.bandType(), state);
             const auto costAt = [&] (float g)
             {
                 auto b = b0;

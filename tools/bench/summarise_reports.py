@@ -13,30 +13,33 @@ MODULES = ["Room Noise", "Breath Control", "EQ", "Level Ride", "Compressor", "Vo
 def decisions(report):
     text = open(report, encoding="utf-8", errors="replace").read()
     block = text.split("DECISIONS", 1)[1].split("RESULT", 1)[0] if "DECISIONS" in text else ""
-    used, eq = set(), []
+    used, eq, titles = set(), [], {}
     for line in block.splitlines():
         m = re.match(r"\s{2}([A-Za-z\- ]+): (.*?)\s+\((measured|rule)\)\s*$", line)
         if m:
             used.add(m.group(1).strip())
+            titles.setdefault(m.group(1).strip(), []).append(m.group(2))
             if m.group(1).strip() == "EQ":
                 eq.append(m.group(2))
-    return used, eq
+    return used, eq, titles
 
 
 def main():
     for out in sys.argv[1:]:
         rows = list(csv.DictReader(open(os.path.join(out, "bench.csv"), encoding="utf-8")))
         counts = {m: 0 for m in MODULES}
+        settings = {m: set() for m in MODULES}   # 0.8: distinct settings per module (the titles carry the values)
         flags = []
         print("\n== %s (%d files)" % (out, len(rows)))
         print("%-32s %7s %7s %7s %7s %7s  %s" % ("file", "pres_in", "pres_out", "top_in", "top_out", "air_out", "EQ"))
         for r in rows:
             name = os.path.splitext(r["file"])[0]
             rep = glob.glob(os.path.join(out, "renders", name + "_report.txt"))
-            used, eq = decisions(rep[0]) if rep else (set(), [])
+            used, eq, titles = decisions(rep[0]) if rep else (set(), [], {})
             for m in used:
                 if m in counts:
                     counts[m] += 1
+                    settings[m].add(" | ".join(sorted(titles.get(m, []))))
             def f(k):
                 try:
                     return float(r[k])
@@ -49,6 +52,10 @@ def main():
                 if cut and f("presence_in") < -8.0:
                     flags.append("%s: %s on a dark take (2-5 kHz %.1f dB)" % (name, e, f("presence_in")))
         print("modules used: " + ", ".join("%s %d/%d" % (m, c, len(rows)) for m, c in counts.items()))
+        print("distinct settings (used): " + ", ".join("%s %d/%d" % (m, len(settings[m]), counts[m]) for m in MODULES if counts[m]))
+        for m in MODULES:
+            if counts[m] >= 3 and len(settings[m]) == 1:
+                flags.append("%s has the same setting on all %d voices: %s" % (m, counts[m], next(iter(settings[m]))))
         for fl in flags:
             print("  DUMB: " + fl)
 

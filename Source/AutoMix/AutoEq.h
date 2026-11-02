@@ -22,6 +22,9 @@ namespace velvox::automix::autoeq
     inline constexpr float maxNarrowCutDb = 9.0f;      // narrow: Q 10 .. 16, cuts only
     inline constexpr float maxBroadCutDb = 6.0f;       // 0.8: 4 -> 6 (a clear mud / boxiness cut)
     inline constexpr float maxBroadBoostDb = 4.0f;
+    // 0.8 (bench 2026-11-02: dry takes lie 8-17 dB under finished party vocals above 4 kHz): a lift above 5 kHz
+    // may go to 6 dB on a clean take, 4 dB on a sibilant one (the de-esser follows), 2 dB on a noisy one
+    inline constexpr float maxHighLiftDb = 6.0f, maxHighLiftSibilantDb = 4.0f, maxHighLiftNoisyDb = 2.0f;
     inline constexpr float minNarrowQ = 10.0f, maxNarrowQ = 16.0f;
     inline constexpr float minMoveDb = 1.0f;           // smaller new broad moves are not worth a band
 
@@ -96,7 +99,7 @@ namespace velvox::automix::autoeq
     // The title of a move: "Dröhnen -3,5 dB bei 340 Hz", "Brillanz +3,0 dB (Shelf 10 kHz)", "Resonanz 1,8 kHz -6,0 dB (schmal, Q 12)"
     juce::String titleOf (dsp::EqRole role, const dsp::EqBand& band);
 
-    // True when `band` respects the limits (narrow: cut only, Q 10..16, >= -9 dB; broad: -4..+4 dB)
+    // True when `band` respects the limits (narrow: cut only, Q 10..16, >= -9 dB; broad: -6..+4 dB, +6 dB above 5 kHz)
     bool withinLimits (const dsp::EqBand& band) noexcept;
 
     // ---- The beat on the sidechain (plan 2026-10-28). The output puts the voice leadOverBeatLu above

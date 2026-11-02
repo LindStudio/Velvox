@@ -50,6 +50,37 @@ struct BenchRow
 //   VelvoxTests --automix in.wav outDir
 // With a BenchRow it also writes <name>_original.wav, level matched to the mix,
 // and prints nothing.
+// 0.8: genre / vibe for --automix and --bench (optional arguments 4 and 5: Genre and Vibe as numbers)
+static velvox::automix::MixIntent benchIntent;
+
+// 0.8: third octaves of every .wav in a folder, measured like the plugin (for before / after comparisons):
+//   VelvoxTests --thirds <dir> <out.csv>
+static int runThirds (const juce::File& dir, const juce::File& outCsv)
+{
+    using namespace velvox::automix;
+    auto files = dir.findChildFiles (juce::File::findFiles, false, "*.wav");
+    std::sort (files.begin(), files.end(), [] (const juce::File& a, const juce::File& b) { return a.getFileName() < b.getFileName(); });
+    juce::String csv ("file,f0_low");
+    for (int k = 0; k < numThirds; ++k)
+        csv << ",t" << juce::String (juce::roundToInt (thirdCentre (k)));
+    csv << "\n";
+    for (auto& f : files)
+    {
+        const auto v = velvox::test::loadVocal (f, 300.0);
+        if (! v.has_value())
+            continue;
+        const auto p = VocalProfiler::analyse (*v);
+        if (p.thirdsDb.size() != (size_t) numThirds)
+            continue;
+        csv << "\"" << f.getFileName() << "\"," << juce::String (p.pitchValid ? p.f0LowHz : 0.0f, 1);
+        for (auto t : p.thirdsDb)
+            csv << "," << juce::String (t, 2);
+        csv << "\n";
+        std::printf ("%s\n", f.getFileName().toRawUTF8());
+    }
+    return outCsv.replaceWithText (csv, false, false, "\n") ? 0 : 1;
+}
+
 static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, BenchRow* row = nullptr)
 {
     using namespace velvox::automix;
@@ -88,7 +119,7 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
     for (auto& s : velvox::getParameterSpecs())
         current[s.id] = s.defaultValue;
     const auto start = juce::Time::getMillisecondCounterHiRes();
-    const auto r = AutoMixEngine::run (captured, current);
+    const auto r = AutoMixEngine::run (captured, current, {}, {}, benchIntent);
     const double ms = juce::Time::getMillisecondCounterHiRes() - start;
     if (! r.ok)
     {
@@ -686,6 +717,13 @@ int main (int argc, char* argv[])
         return juce::String (argv[1]) == "--check-template" ? velvox::test::runCheckTemplate (out, files)
                                                             : velvox::test::runCheckEval (out, files);
     }
+
+    if (argc >= 6 && (juce::String (argv[1]) == "--automix" || juce::String (argv[1]) == "--bench"))
+        benchIntent = { (velvox::automix::Genre) juce::jlimit (0, velvox::automix::numGenres - 1, juce::String (argv[4]).getIntValue()),
+                        (velvox::automix::Vibe) juce::jlimit (0, velvox::automix::numVibes - 1, juce::String (argv[5]).getIntValue()) };
+
+    if (argc >= 4 && juce::String (argv[1]) == "--thirds")
+        return runThirds (juce::File (juce::String::fromUTF8 (argv[2])), juce::File (juce::String::fromUTF8 (argv[3])));
 
     if (argc >= 4 && juce::String (argv[1]) == "--automix")
         return runAutoMixOnFile (juce::File (juce::String::fromUTF8 (argv[2])), juce::File (juce::String::fromUTF8 (argv[3])));

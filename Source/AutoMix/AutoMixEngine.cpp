@@ -331,7 +331,12 @@ namespace velvox::automix
         const bool smashAllowed = ! profile.heavilyCompressed && ! plan.conservative && ! profile.distortionLikely;
         if (smashAllowed)
         {
-            const float d = target.densityBlend;
+            // the density target, scaled by how peaky the voice still is after the compressor (crest at the
+            // bottom of the window x 0.6, at the top x 1.4)
+            const float lo = target.dynamics.crestLo, hi = target.dynamics.crestHi;
+            const float d = std::round (target.densityBlend * juce::jmap (juce::jlimit (lo, hi, m.crestDb), lo, hi, 0.6f, 1.4f));
+            if (plan.on (pid::smashOn) && d > 0.0f)
+                plan.set (pid::smashBlend, d);
             const float b0 = plan.on (pid::smashOn) ? plan.get (pid::smashBlend) : 0.0f;
             std::vector<float> blends;
             if (m.crestDb > target.dynamics.crestHi)

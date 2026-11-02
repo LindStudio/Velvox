@@ -395,6 +395,32 @@ public:
             expect (at4k >= 2.0f && at4k <= 4.0f, "4 kHz lifted " + juce::String (at4k, 1));
         }
 
+        beginTest ("Curve fit: a clean dark take gets real brilliance");
+        {
+            // Bench 2026-11-02: dry takes lie 8-17 dB under finished party vocals above 4 kHz - a clean one gets up to 6 dB there
+            auto p = onTarget (profileOf (clean14()), party, [] (float hz) { return hz >= 5000.0f ? -10.0f : 0.0f; });
+            const auto moves = autoeq::planCurveMoves (curveCtx (p, party));
+            logMessage ("    clean dark: " + titles (moves));
+            expect (modelAt (moves, 10000.0f) >= 4.0f, "10 kHz lifted " + juce::String (modelAt (moves, 10000.0f), 1));
+            for (auto& m : moves)
+                expect (autoeq::withinLimits (m.band) && m.band.gain <= 6.0f, m.title);
+            auto ctx = curveCtx (p, party);
+            ctx.sibilant = true;
+            expect (modelAt (autoeq::planCurveMoves (ctx), 10000.0f) <= 4.0f + 1.0e-3f, "sibilant: at most 4 dB up there");
+        }
+
+        beginTest ("Curve fit: a notched resonance does not block the lift around it");
+        {
+            auto p = onTarget (profileOf (clean14()), party, [] (float hz) { return hz >= 5000.0f ? -10.0f : 0.0f; });
+            Resonance r;
+            r.hz = 7200.0f; r.excessDb = 12.0f; r.strong = true; r.persistence = 1.0f; r.sustained = true; r.q = 14.0f;
+            p.resonances.push_back (r);
+            const auto moves = autoeq::planCurveMoves (curveCtx (p, party));
+            logMessage ("    notched + dark: " + titles (moves));
+            expect (std::any_of (moves.begin(), moves.end(), [] (const autoeq::Move& m) { return m.narrow && std::abs (m.band.freq - 7200.0f) < 1.0f; }), "the notch");
+            expect (modelAt (moves, 11000.0f) >= 3.0f, "and the brilliance above it: " + juce::String (modelAt (moves, 11000.0f), 1));
+        }
+
         beginTest ("Curve fit: a voice on the target is left alone");
         {
             juce::Random r (7);
