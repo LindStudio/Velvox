@@ -211,6 +211,7 @@ HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
                                                               : juce::String ("start"));
     };
     simpleView.onAnalyse = [this] { startAnalysis(); };
+    analysis.beatPresent = [this] { return proc.getSidechainStatus().hasSignal(); };
     simpleView.onShowDetails = [this] { showMixDetails(); };
     simpleView.onVocalCheck = [this] { setTab (Tab::vocalCheck); };
     mixView.onAnalyse = [this] { detailsOverlay.setVisible (false); startAnalysis(); };
@@ -384,8 +385,8 @@ void HeadlinerView::startAnalysis()
     help.close();
     if (tutorial.isActive())
         tutorial.finish (TutorialOverlay::Outcome::later);
-    proc.getAutoMix().start();
-    analysis.showProgress();
+    // 0.8: every start asks genre and vibe and explains the beat sidechain first
+    analysis.showIntro();
     raiseOverlays();
 }
 

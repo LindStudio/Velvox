@@ -1310,13 +1310,11 @@ public:
                 auto& ov = asVelvox (*e).getAnalysisOverlay();
                 expect (ov.isOpen(), "popup on the first open of a new instance");
                 expect (ov.getView() == ui::AnalysisOverlay::View::intro);
-                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Vocal analysieren"), "one word per thing (review 2026-10-28)");
-                // The intro in three numbered steps instead of the same sentence twice
-                const auto steps = ui::AnalysisOverlay::introSteps();
-                expectEquals (steps.size(), 3);
-                expect (steps[0].contains ("Song") && steps[1].contains ("15 s") && steps[2].contains ("Vorher / Nachher"), steps.joinIntoString (" | "));
+                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Auto Mix starten"));
+                // 0.8: genre and vibe are asked at the start (Party / Druckvoll preselected)
+                expect (ov.getGenreChip (Genre::party).getToggleState() && ov.getVibeChip (Vibe::punchy).getToggleState(), "default choice");
                 const auto body = ui::AnalysisOverlay::introText();
-                expect (body.indexOf ("analysiert") == body.lastIndexOf ("analysiert"), "not twice: " + body);
+                expect (body.contains ("14 s"), "the listening time: " + body);
                 click (ov.getSecondaryButton());   // "Später"
                 expect (! ov.isOpen());
             }
@@ -1327,9 +1325,73 @@ public:
             expect (asVelvox (*again).getSimpleView().isVisible() && asVelvox (*again).getSimpleView().getAnalyseButton().isVisible(), "analyse visible in Simple mode");
             click (asVelvox (*again).getSimpleView().getAnalyseButton());
             auto& ov = asVelvox (*again).getAnalysisOverlay();
+            // 0.8: every start asks genre and vibe first
+            expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::intro, "the analyse button opens the start card");
+            click (ov.getPrimaryButton());
             expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::listening);
             click (ov.getSecondaryButton());   // Abbrechen
             expect (h.proc.getAutoMix().getPhase() == AutoMixController::Phase::idle);
+        }
+
+        beginTest ("Overlay: intro asks genre and vibe, preselects the saved choice");
+        {
+            Harness h;
+            h.proc.getAutoMix().setIntent ({ Genre::rap, Vibe::floaty });
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            auto& ov = asVelvox (*e).getAnalysisOverlay();
+            ov.showIntro();
+            expect (ov.getGenreChip (Genre::rap).getToggleState() && ov.getVibeChip (Vibe::floaty).getToggleState(), "saved choice preselected");
+            expect (! ov.getGenreChip (Genre::party).getToggleState(), "one genre at a time");
+            expectEquals (ov.getGenreChip (Genre::rap).getButtonText(), juce::String ("Deutschrap / Hip-Hop"));
+            expectEquals (ov.getVibeChip (Vibe::natural).getButtonText(), juce::String::fromUTF8 ("Klar & natürlich"));
+            click (ov.getGenreChip (Genre::pop));
+            click (ov.getVibeChip (Vibe::warm));
+            expect (ov.getGenreChip (Genre::pop).getToggleState() && ! ov.getGenreChip (Genre::rap).getToggleState());
+            click (ov.getPrimaryButton());
+            expect (h.proc.getAutoMix().getIntent().genre == Genre::pop && h.proc.getAutoMix().getIntent().vibe == Vibe::warm, "the choice is the mix's");
+            expect (ov.getView() == ui::AnalysisOverlay::View::listening);
+            click (ov.getSecondaryButton());
+        }
+
+        beginTest ("Overlay: the beat on the sidechain is explained and its status shown");
+        {
+            Harness h;
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            auto& ov = asVelvox (*e).getAnalysisOverlay();
+            ov.showIntro();
+            expect (ui::AnalysisOverlay::beatHelpText().contains ("Sidechain to this track"), "FL Studio steps");
+            ov.beatPresent = [] { return false; };
+            ov.update();
+            expectEquals (ov.getBeatStatusText(), juce::String::fromUTF8 ("\xe2\x97\x8b Kein Beat am Sidechain"));
+            ov.beatPresent = [] { return true; };
+            ov.update();
+            expectEquals (ov.getBeatStatusText(), juce::String::fromUTF8 ("\xe2\x97\x8f Beat erkannt"));
+        }
+
+        beginTest ("Overlay: no early analysis; a stopped song asks to keep playing");
+        {
+            Harness h;
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            auto& ov = asVelvox (*e).getAnalysisOverlay();
+            auto& c = h.proc.getAutoMix();
+            c.start();
+            ov.showProgress();
+            expect (! ov.getPrimaryButton().isVisible(), "listening: no analyse button");
+            VocalSpec s; s.seconds = 6.0;
+            const auto voice = makeVocal (s);
+            feed (c.getCapture(), voice);
+            const auto silence = [] { CapturedAudio a; a.sampleRate = 48000.0; a.channels = 1; a.vocal.push_back (std::vector<float> (48000, 0.0f)); return a; }();
+            feed (c.getCapture(), silence, 512, false);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (120);
+            ov.update();
+            const auto st = c.getStatus();
+            expect (ov.getView() == ui::AnalysisOverlay::View::capturing, "capturing");
+            expect (! ov.getPrimaryButton().isVisible(), "capturing: no analyse button, the full time is needed");
+            const int missing = (int) std::ceil (st.capture.targetSeconds - st.capture.voicedSeconds);
+            expect (ov.getWarningText().contains ("Weiter abspielen") && ov.getWarningText().contains ("noch " + juce::String (missing) + " s"),
+                    ov.getWarningText());
+            expect (ov.getStatusText().contains ("Noch " + juce::String (missing) + " s Gesang"), ov.getStatusText());
+            click (ov.getSecondaryButton());
         }
 
         beginTest ("0.7: the auto mix sets Room Noise and Breath Control only when the vocal needs them");
@@ -1589,14 +1651,18 @@ public:
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
                 auto& ov = asVelvox (*e).getAnalysisOverlay();
                 expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::intro);
-                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Analyze vocal"));
-                expect (ui::AnalysisOverlay::introSteps()[1].contains ("15 s"), "English steps");
+                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Start auto mix"));
+                expect (ui::AnalysisOverlay::introText().contains ("14 s"), "English intro");
+                expectEquals (ov.getGenreChip (Genre::ballad).getButtonText(), juce::String ("Ballad / Acoustic"));
+                expectEquals (ov.getVibeChip (Vibe::natural).getButtonText(), juce::String ("Clear & natural"));
                 expectEquals (ov.getSecondaryButton().getButtonText(), juce::String ("Later"));
                 click (ov.getSecondaryButton());
                 expectEquals (asVelvox (*e).getSimpleView().getAnalyseButton().getButtonText(), juce::String ("Analyze vocal"));
                 click (asVelvox (*e).getSimpleView().getAnalyseButton());
+                expect (ov.getView() == ui::AnalysisOverlay::View::intro);
+                click (ov.getPrimaryButton());
                 expect (ov.getView() == ui::AnalysisOverlay::View::listening);
-                expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Analyze now"));
+                expect (! ov.getPrimaryButton().isVisible(), "no early analysis");
                 expectEquals (ov.getSecondaryButton().getButtonText(), juce::String ("Cancel"));
                 ov.update();
                 expect (ov.getStatusText().startsWith ("Waiting for a signal"), ov.getStatusText());

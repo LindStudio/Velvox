@@ -9,6 +9,40 @@ namespace velvox::ui
         using Phase = automix::AutoMixController::Phase;
 
         constexpr int cardW = 620, cardH = 470;
+        constexpr int introW = 760, introH = 560;   // 0.8: genre, vibe and the beat box
+
+        // A pill to choose one of a group (genre / vibe)
+        class Chip final : public juce::Button
+        {
+        public:
+            explicit Chip (const juce::String& text) : juce::Button (text)
+            {
+                setClickingTogglesState (true);
+                setMouseCursor (juce::MouseCursor::PointingHandCursor);
+            }
+
+            void paintButton (juce::Graphics& g, bool over, bool down) override
+            {
+                const auto r = getLocalBounds().toFloat().reduced (1.0f);
+                const float corner = r.getHeight() * 0.5f;
+                if (getToggleState())
+                {
+                    g.setGradientFill (auroraGradient (r.getTopLeft(), r.getBottomRight()));
+                    g.fillRoundedRectangle (r, corner);
+                    g.setColour (colours::background);
+                }
+                else
+                {
+                    g.setColour (colours::accent.withAlpha (over ? 0.14f : 0.07f));
+                    g.fillRoundedRectangle (r, corner);
+                    g.setColour (colours::accent.withAlpha (down ? 0.5f : 0.25f));
+                    g.drawRoundedRectangle (r, corner, 1.0f);
+                    g.setColour (colours::text.withAlpha (over ? 1.0f : 0.85f));
+                }
+                g.setFont (medium (13.5f));
+                g.drawText (getButtonText(), r, juce::Justification::centred, false);
+            }
+        };
 
         juce::String seconds (float s) { return i18n::number (s, 1); }
 
@@ -32,6 +66,34 @@ namespace velvox::ui
         addAndMakeVisible (primary);
         addAndMakeVisible (secondary);
 
+        // 0.8: genre and vibe (one of each), written to the controller when chosen
+        for (int g = 0; g < automix::numGenres; ++g)
+        {
+            auto chip = std::make_unique<Chip> (i18n::show (automix::genreName ((automix::Genre) g)));
+            chip->setRadioGroupId (8801);
+            chip->onClick = [this, g]
+            {
+                auto intent = controller.getIntent();
+                intent.genre = (automix::Genre) g;
+                controller.setIntent (intent);
+            };
+            addChildComponent (*chip);
+            genreChips.push_back (std::move (chip));
+        }
+        for (int v = 0; v < automix::numVibes; ++v)
+        {
+            auto chip = std::make_unique<Chip> (i18n::show (automix::vibeName ((automix::Vibe) v)));
+            chip->setRadioGroupId (8802);
+            chip->onClick = [this, v]
+            {
+                auto intent = controller.getIntent();
+                intent.vibe = (automix::Vibe) v;
+                controller.setIntent (intent);
+            };
+            addChildComponent (*chip);
+            vibeChips.push_back (std::move (chip));
+        }
+
         primary.onClick = [this]
         {
             switch (view)
@@ -41,9 +103,7 @@ namespace velvox::ui
                     controller.start();
                     setView (View::listening);
                     break;
-                case View::capturing:
-                    if (controller.analyseNow())
-                        setView (View::analysing);
+                case View::capturing:   // 0.8: no early analysis - the button is hidden
                     break;
                 case View::done:
                     close();
@@ -78,7 +138,60 @@ namespace velvox::ui
 
     juce::Rectangle<int> AnalysisOverlay::cardBounds() const
     {
-        return getLocalBounds().withSizeKeepingCentre (cardW, cardH);
+        return view == View::intro ? getLocalBounds().withSizeKeepingCentre (introW, introH)
+                                   : getLocalBounds().withSizeKeepingCentre (cardW, cardH);
+    }
+
+    AnalysisOverlay::IntroLayout AnalysisOverlay::introLayout() const
+    {
+        IntroLayout l;
+        auto r = cardBounds().toFloat().reduced (40.0f, 30.0f);
+        l.title = r.removeFromTop (36.0f);
+        r.removeFromTop (4.0f);
+        l.body = r.removeFromTop (42.0f);
+        r.removeFromTop (10.0f);
+        l.genreLabel = r.removeFromTop (20.0f);
+        l.genreRow = r.removeFromTop (34.0f);
+        r.removeFromTop (12.0f);
+        l.vibeLabel = r.removeFromTop (20.0f);
+        l.vibeRow = r.removeFromTop (34.0f);
+        r.removeFromTop (18.0f);
+        l.beatBox = r.removeFromTop (104.0f);
+        return l;
+    }
+
+    void AnalysisOverlay::layoutChips()
+    {
+        const auto l = introLayout();
+        const auto place = [] (std::vector<std::unique_ptr<juce::Button>>& chips, juce::Rectangle<float> row)
+        {
+            const float gap = 8.0f;
+            std::vector<float> widths;
+            float total = 0.0f;
+            for (auto& c : chips)
+            {
+                widths.push_back ((float) juce::GlyphArrangement::getStringWidthInt (medium (13.5f), c->getButtonText()) + 30.0f);
+                total += widths.back();
+            }
+            total += gap * (float) (chips.size() - 1);
+            float x = row.getCentreX() - 0.5f * total;
+            for (size_t i = 0; i < chips.size(); ++i)
+            {
+                chips[i]->setBounds (juce::Rectangle<float> (x, row.getY() + 1.0f, widths[i], row.getHeight() - 2.0f).toNearestInt());
+                x += widths[i] + gap;
+            }
+        };
+        place (genreChips, l.genreRow);
+        place (vibeChips, l.vibeRow);
+    }
+
+    void AnalysisOverlay::syncChips()
+    {
+        const auto intent = controller.getIntent();
+        for (int g = 0; g < (int) genreChips.size(); ++g)
+            genreChips[(size_t) g]->setToggleState (g == (int) intent.genre, juce::dontSendNotification);
+        for (int v = 0; v < (int) vibeChips.size(); ++v)
+            vibeChips[(size_t) v]->setToggleState (v == (int) intent.vibe, juce::dontSendNotification);
     }
 
     void AnalysisOverlay::showIntro()
@@ -86,6 +199,8 @@ namespace velvox::ui
         setVisible (true);
         toFront (true);
         setView (View::intro);
+        syncChips();
+        update();
         grabKeyboardFocus();
     }
 
@@ -120,17 +235,22 @@ namespace velvox::ui
 
         switch (v)
         {
-            case View::intro:     primary.setButtonText (tr ("Vocal analysieren", "Analyze vocal")); secondary.setButtonText (tr ("Später", "Later")); break;
-            case View::listening: primary.setButtonText (tr ("Jetzt analysieren", "Analyze now")); secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
-            case View::capturing: primary.setButtonText (tr ("Jetzt analysieren", "Analyze now")); secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
+            case View::intro:     primary.setButtonText (tr ("Auto Mix starten", "Start auto mix")); secondary.setButtonText (tr ("Später", "Later")); break;
+            case View::listening: secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
+            case View::capturing: secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
             case View::analysing: primary.setButtonText (tr ("Bitte warten", "Please wait")); secondary.setButtonText (tr ("Abbrechen", "Cancel")); break;
             case View::done:      primary.setButtonText (tr ("Ergebnis ansehen", "View result")); secondary.setButtonText (tr ("Schließen", "Close")); break;
             case View::failed:    primary.setButtonText (tr ("Erneut versuchen", "Try again")); secondary.setButtonText (tr ("Schließen", "Close")); break;
         }
-        primary.setVisible (v != View::analysing);
-        primary.setEnabled (v != View::listening);
+        // 0.8: while listening there is no button to analyse early - the full listening time is needed
+        primary.setVisible (v == View::intro || v == View::done || v == View::failed);
+        primary.setEnabled (true);
         secondary.setVisible (v != View::done);
+        for (auto* chips : { &genreChips, &vibeChips })
+            for (auto& c : *chips)
+                c->setVisible (v == View::intro);
         layoutButtons();
+        layoutChips();
         repaint();
     }
 
@@ -166,6 +286,9 @@ namespace velvox::ui
         level = st.capture.recentRmsDb;
         juce::String newStatus, newWarning;
         float target = 0.0f;
+        const bool beat = (beatPresent && beatPresent()) || ((view == View::listening || view == View::capturing) && st.capture.beatSeen);
+        const auto newBeat = beat ? juce::String::fromUTF8 ("\xe2\x97\x8f ") + tr ("Beat erkannt", "Beat detected")
+                                  : juce::String::fromUTF8 ("\xe2\x97\x8b ") + tr ("Kein Beat am Sidechain", "No beat on the sidechain");
 
         switch (view)
         {
@@ -189,21 +312,18 @@ namespace velvox::ui
             {
                 const auto& c = st.capture;
                 target = c.fraction();
-                newStatus = i18n::format (tr ("{0} von {1} s Gesang erfasst", "{0} of {1} s of singing captured"),
-                                          { seconds (c.voicedSeconds), seconds (c.targetSeconds) });
+                const int missing = std::max (1, (int) std::ceil (c.targetSeconds - c.voicedSeconds - 1.0e-3f));
+                newStatus = i18n::format (tr ("Noch {0} s Gesang", "{0} s of singing to go"), { juce::String (missing) });
                 if (c.clipSamples > 0)
                     newWarning = i18n::format (tr ("Übersteuerung im Eingang erkannt ({0} Samples). Headliner kann Verzerrung nicht entfernen - besser den Pegel senken und neu starten.",
                                                    "Clipping detected at the input ({0} samples). Headliner can't remove distortion - better lower the level and start again."),
                                                { juce::String (c.clipSamples) });
                 else if (c.transportStopped && level < -60.0f)
-                    newWarning = c.enough() ? i18n::format (tr ("Wiedergabe gestoppt. Starte sie erneut, um weiter zu erfassen - oder analysiere die bisherigen {0} s.",
-                                                                "Playback stopped. Start it again to keep capturing - or analyze the {0} s so far."),
-                                                            { seconds (c.voicedSeconds) })
-                                            : tr ("Wiedergabe gestoppt - bisher zu wenig Gesang. Starte die Wiedergabe erneut, Headliner erfasst weiter.",
-                                                  "Playback stopped - not enough singing yet. Start playback again and Headliner keeps capturing.");
+                    newWarning = i18n::format (tr ("Weiter abspielen - noch {0} s nötig. Headliner hört weiter zu, sobald der Song wieder läuft.",
+                                                   "Keep playing - {0} s still needed. Headliner keeps listening as soon as the song plays again."),
+                                               { juce::String (missing) });
                 else if (level < -60.0f && (now - viewStartMs) > 3000.0)
                     newWarning = tr ("Gerade kein Signal - Pausen werden übersprungen.", "No signal right now - gaps are skipped.");
-                primary.setEnabled (c.enough());
                 break;
             }
 
@@ -232,25 +352,30 @@ namespace velvox::ui
 
         shownProgress.target = target;
         const bool moved = shownProgress.tick (0.18f);
-        if (newStatus != status || newWarning != warning || moved || view == View::listening || view == View::capturing || view == View::analysing)
+        if (newStatus != status || newWarning != warning || newBeat != beatStatus || moved || view == View::listening || view == View::capturing || view == View::analysing)
         {
             status = newStatus;
             warning = newWarning;
+            beatStatus = newBeat;
             repaint (cardBounds());
         }
     }
 
     juce::String AnalysisOverlay::introText()
     {
-        return tr ("Headliner hört sich deine Vocal an und stellt dann Klang, Dynamik, S-Laute und Raum für sie ein.",
-                   "Headliner listens to your vocal and then sets up tone, dynamics, sibilance and space for it.");
+        return i18n::format (tr ("Spiel deinen Song ab, am besten mit der unbearbeiteten Vocal. Headliner hört {0} s Gesang zu und stellt dann jedes Modul auf deine Stimme ein.",
+                                 "Play your song, ideally with the unprocessed vocal. Headliner listens to {0} s of singing and then sets every module for your voice."),
+                             { juce::String (juce::roundToInt (automix::CaptureConfig {}.targetVoicedSeconds)) });
     }
 
-    juce::StringArray AnalysisOverlay::introSteps()
+    juce::String AnalysisOverlay::beatHelpText()
     {
-        return { tr ("Song abspielen - am besten mit der unbearbeiteten Vocal", "Play your song - ideally with the unprocessed vocal"),
-                 tr ("Headliner hört zu - ca. 15 s Gesang, Pausen zählen nicht", "Headliner listens - about 15 s of singing, gaps don't count"),
-                 tr ("Fertig - vergleiche Vorher / Nachher", "Done - compare Before / After") };
+        return tr ("Dann passt der Auto Mix die Stimme an den Beat an und stellt sie über den Beat. FL Studio: Beat-Kanal im Mixer auswählen "
+                   "\xe2\x86\x92 Rechtsklick auf den Pfeil unter dem Headliner-Kanal \xe2\x86\x92 \xe2\x80\x9eSidechain to this track\xe2\x80\x9c "
+                   "\xe2\x86\x92 im Plugin-Fenster (Zahnrad) den Sidechain-Eingang wählen.",
+                   "Then the auto mix fits the vocal to the beat and sets it above the beat. FL Studio: select the beat channel in the mixer "
+                   "\xe2\x86\x92 right-click the arrow below the Headliner channel \xe2\x86\x92 \"Sidechain to this track\" "
+                   "\xe2\x86\x92 choose the sidechain input in the plugin window (gear).");
     }
 
     void AnalysisOverlay::paint (juce::Graphics& g)
@@ -261,6 +386,38 @@ namespace velvox::ui
         drawGlow (g, card.getTopLeft().translated (80.0f, 30.0f), 340.0f, 0.10f, colours::teal);
         drawGlow (g, card.getBottomRight().translated (-60.0f, -40.0f), 360.0f, 0.10f, colours::violet);
         drawGlassPanel (g, card, radius::panel + 6.0f, colours::violet, 0.07f);
+
+        // ---- 0.8 intro: genre, vibe and the beat box
+        if (view == View::intro)
+        {
+            const auto l = introLayout();
+            g.setColour (colours::text);
+            g.setFont (font (28.0f, true));
+            g.drawFittedText (tr ("Lass uns deine Vocal mixen.", "Let's mix your vocal."), l.title.toNearestInt(), juce::Justification::centred, 1, 0.85f);
+            drawParagraph (g, introText(), l.body.reduced (30.0f, 0.0f), 14.5f, colours::textDim);
+            g.setColour (colours::textFaint);
+            g.setFont (semiBold (12.0f, 0.08f));
+            g.drawText (i18n::upper (tr ("Was mischst du?", "What are you mixing?")), l.genreLabel, juce::Justification::centred, false);
+            g.drawText (i18n::upper (tr ("Wie soll die Stimme klingen?", "How should the vocal sound?")), l.vibeLabel, juce::Justification::centred, false);
+
+            const auto box = l.beatBox.reduced (10.0f, 0.0f);
+            const bool beat = beatStatus.startsWith (juce::String::fromUTF8 ("\xe2\x97\x8f"));
+            g.setColour ((beat ? colours::ok : colours::accent).withAlpha (0.08f));
+            g.fillRoundedRectangle (box, 12.0f);
+            g.setColour ((beat ? colours::ok : colours::accent).withAlpha (0.3f));
+            g.drawRoundedRectangle (box, 12.0f, 1.0f);
+            auto inner = box.reduced (18.0f, 12.0f);
+            auto head = inner.removeFromTop (22.0f);
+            g.setColour (beat ? colours::ok : colours::textDim);
+            g.setFont (medium (13.5f));
+            g.drawText (beatStatus, head.removeFromRight (230.0f), juce::Justification::centredRight, false);
+            g.setColour (colours::text);
+            g.setFont (semiBold (14.5f));
+            g.drawText (tr ("Tipp: Beat als Sidechain (empfohlen)", "Tip: beat as sidechain (recommended)"), head, juce::Justification::centredLeft, false);
+            inner.removeFromTop (6.0f);
+            drawParagraph (g, beatHelpText(), inner, 13.0f, colours::textDim);
+            return;
+        }
 
         auto r = card.reduced (40.0f, 34.0f);
         const double t = juce::Time::getMillisecondCounterHiRes() * 0.001;
@@ -384,26 +541,7 @@ namespace velvox::ui
         auto bodyArea = r.removeFromTop (view == View::intro ? 44.0f : 76.0f).reduced (8.0f, 0.0f);
         drawParagraph (g, body, bodyArea, 15.0f, colours::textDim);
 
-        // ---- Intro: three numbered steps; others: status and warning
-        if (view == View::intro)
-        {
-            r.removeFromTop (6.0f);
-            const auto steps = introSteps();
-            for (int i = 0; i < steps.size(); ++i)
-            {
-                auto row = r.removeFromTop (34.0f).reduced (24.0f, 0.0f);
-                const auto badge = juce::Rectangle<float> (24.0f, 24.0f).withCentre ({ row.getX() + 12.0f, row.getCentreY() });
-                g.setGradientFill (auroraGradient (badge.getTopLeft(), badge.getBottomRight()));
-                g.fillEllipse (badge);
-                g.setColour (colours::background);
-                g.setFont (semiBold (13.0f));
-                g.drawText (juce::String (i + 1), badge, juce::Justification::centred, false);
-                g.setColour (colours::text.withAlpha (0.9f));
-                g.setFont (font (14.5f));
-                g.drawFittedText (steps[i], row.withTrimmedLeft (38.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.85f);
-            }
-        }
-        else
+        // ---- Status and warning
         {
             g.setColour (view == View::failed ? colours::warning : colours::text);
             g.setFont (medium (16.0f));
@@ -437,6 +575,10 @@ namespace velvox::ui
                     g.setColour (lit ? hue.withAlpha (0.9f) : colours::accent.withAlpha (0.07f));
                     g.fillRoundedRectangle (seg, 1.5f);
                 }
+                // 0.8: whether the beat comes in on the sidechain
+                g.setColour (beatStatus.startsWith (juce::String::fromUTF8 ("\xe2\x97\x8f")) ? colours::ok : colours::textFaint);
+                g.setFont (font (12.5f));
+                g.drawText (beatStatus, r.removeFromTop (18.0f), juce::Justification::centred, false);
             }
 
             if (warning.isNotEmpty())
@@ -473,6 +615,7 @@ namespace velvox::ui
     void AnalysisOverlay::resized()
     {
         layoutButtons();
+        layoutChips();
     }
 
     void AnalysisOverlay::mouseUp (const juce::MouseEvent& e)
