@@ -10,8 +10,8 @@ Plan `docs/superpowers/plans/2026-11-02-automix-08-tailored.md`, Entscheidungen 
   7 Profi-Party-Stems (`VelvoxTests --target-curve`), EQ-Kurvenfit + Regelkreis, Kompressor-Suche, alle Module
   stimmabhängig. Bench: echte Takes 2,77 → 2,46 dB Abstand zum Ziel (Median), alle im Mittel gleich (4,98 → 4,95),
   Median aller 5,05 → 5,30 (verrauschte VocalSet-Übungen: Höhen-Anhebung bewusst auf 2 dB begrenzt).
-- Voller Lauf **40.097 Checks grün**, pluginval 10 **SUCCESS** (VST3 vom 2026-11-03 00:05). **Nicht installiert,
-  nicht gepusht.** Drive-Bundle aktualisiert.
+- Voller Lauf **40.097 Checks grün**, pluginval 10 **SUCCESS** (VST3 vom 2026-11-03 00:05), **installiert** (2026-11-03). **Nicht
+  gepusht.** Drive-Bundle aktualisiert.
 - Renders für Jakob: `%USERPROFILE%\dev\velvox-bench\2026-11-02\jakob_vergleich_08\` (Original, alter Auto Mix,
   Stand Mittag, neu Party · Druckvoll / Aggressiv / Floaty + Berichte).
 - Werkzeuge: `VelvoxTests --bench <dry> <aus> [genre vibe]`, `--thirds <dir> <csv>`, `python tools/bench/target_distance.py`,
