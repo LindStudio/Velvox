@@ -667,7 +667,7 @@ int main (int argc, char* argv[])
                                           argc >= 4 ? juce::File (juce::String::fromUTF8 (argv[3])) : juce::File());
 
     // VOCAL CHECK calibration (Tests/CheckEval.cpp); an argument ending in .txt is a list of files
-    if (argc >= 4 && (juce::String (argv[1]) == "--check-template" || juce::String (argv[1]) == "--check-eval"))
+    if (argc >= 4 && (juce::String (argv[1]) == "--check-template" || juce::String (argv[1]) == "--check-eval" || juce::String (argv[1]) == "--target-curve"))
     {
         juce::StringArray files;
         for (int i = 3; i < argc; ++i)
@@ -681,6 +681,8 @@ int main (int argc, char* argv[])
         files.trim();
         files.removeEmptyStrings();
         const juce::File out (juce::String::fromUTF8 (argv[2]));
+        if (juce::String (argv[1]) == "--target-curve")
+            return velvox::test::runTargetCurve (out, files);
         return juce::String (argv[1]) == "--check-template" ? velvox::test::runCheckTemplate (out, files)
                                                             : velvox::test::runCheckEval (out, files);
     }

@@ -26,4 +26,5 @@ namespace velvox::test
 
     int runCheckTemplate (const juce::File& outFile, const juce::StringArray& wavs);
     int runCheckEval (const juce::File& outDir, const juce::StringArray& wavs);
+    int runTargetCurve (const juce::File& outFile, const juce::StringArray& wavs);
 }
