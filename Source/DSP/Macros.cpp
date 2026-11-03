@@ -277,8 +277,8 @@ namespace vocalypse::dsp
             case MacroId::space:
                 if (up)
                 {
-                    addMix (s.reverbOn, s.reverbMix, 0.3f * d);
-                    addMix (s.delayOn, s.delayMix, 0.15f * d);
+                    addMix (s.reverbOn, s.reverbMix, spaceReverbPerTravel * d);
+                    addMix (s.delayOn, s.delayMix, spaceDelayPerTravel * d);
                     s.reverbDuck.amountDb += 6.0f * d;
                     s.delayDuck.amountDb += 6.0f * d;
                 }
@@ -288,8 +288,8 @@ namespace vocalypse::dsp
                         s.reverbDuck.amountDb += 6.0f * d;
                     if (s.delayOn)
                         s.delayDuck.amountDb += 6.0f * d;
-                    reduceMix (s.reverbOn, s.reverbMix, 0.3f * d);
-                    reduceMix (s.delayOn, s.delayMix, 0.15f * d);
+                    reduceMix (s.reverbOn, s.reverbMix, spaceReverbPerTravel * d);
+                    reduceMix (s.delayOn, s.delayMix, spaceDelayPerTravel * d);
                 }
                 break;
         }

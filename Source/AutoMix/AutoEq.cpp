@@ -228,6 +228,18 @@ namespace vocalypse::automix::autoeq
             }
             if ((highVoice && centre < 300.0f) || resonance || (ctx.harsh && centre >= 2000.0f && centre <= 5000.0f))
                 lift = 0.0f;
+            // The vibe's deliberate shift comes on top of the clean-up limit (2026-11-03: with one shared 4 dB
+            // the clean-up used it up and AGGRESSIV / FLOATY reached only a third of their shift)
+            else if (lift > 0.0f && ! ctx.noisy)
+            {
+                // the largest shift within half an octave: a broad band reaches its neighbours (a presence bell at
+                // 4.2 kHz carries Aggressive's 2.5 - 4 kHz lift)
+                float style = 0.0f;
+                for (int k = 0; k < numThirds; ++k)
+                    if (std::abs (std::log2 (thirdCentre (k) / centre)) <= 0.5f)
+                        style = juce::jmax (style, targetOf (ctx).styleDb[(size_t) k]);
+                lift += style;
+            }
             return { -cut, lift * scale };
         }
 

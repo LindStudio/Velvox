@@ -1,5 +1,19 @@
 # HEADLINER – Übergabe für die nächste Session
 
+## STAND 2026-11-03 NACHT (Haupt-PC) – HIER WEITERMACHEN: offene Punkte abgearbeitet
+Branch **`feature/vocalypse-rebrand`**. Jakob: „mach alle Punkte als Info … erledige, was du kannst“ (er war weg).
+**Die Liste für Jakob: `docs/OFFENE_PUNKTE.md`** (Preise, Empfehlungen, was er tun muss). Details: CHANGELOG oben.
+- Jakobs Antworten: Lizenz **vorbereiten** (aus), Hörbeispiele **liefert er später**, GitHub **hochladen +
+  umbenennen** (Umbenennen geht hier nicht: kein `gh` installiert → Jakob im Browser, dann `git remote set-url`),
+  Installer **später**.
+- Lizenz: `Source/Licensing/License.*`, `docs/LICENSING.md`, CMake-Option `VOCALYPSE_LICENSING` (OFF). Einschalten:
+  IDs + buyUrl in `ProductInfo.h`, neu konfigurieren.
+- Klang: SPACE-Regler 0,7 statt 0,3 pro Weg (`dsp::spaceReverbPerTravel`), Stil-Zuschlag im EQ-Limit (`limitsOf`),
+  Raum-Charakter pro Vibe (Planer), breiterer Ride in `tuneDynamics`. Bench `velvox-bench\2026-11-03\sonovox\r5_*`
+  (Genre/Vibe beim `--bench` als **Zahlen**: party 0, rap 1, pop 2, edm 3, ballad 4 / punchy 0, aggressive 1,
+  floaty 2, warm 3, natural 4 – r4 war mit Wörtern gestartet = alles Party · Druckvoll).
+- Offen: Rap·Aggressiv-Dynamikziel (1–3 dB) vermutlich zu streng → nach Jakobs Hörtest; Floaty-Luft bleibt klein.
+
 ## STAND 2026-11-03 SPÄT (Haupt-PC) – HIER WEITERMACHEN: Rebranding VOCALYPSE + Website
 Branch **`feature/vocalypse-rebrand`** (von `feature/automix-0.8`), Commit `5ecb55e`. Details: CHANGELOG oben.
 - **Name:** Headliner und Velvox gibt es nicht mehr → **VOCALYPSE** (Jakob). Code: Namespace `vocalypse`, Ziele

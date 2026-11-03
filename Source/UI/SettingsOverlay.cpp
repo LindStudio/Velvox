@@ -80,6 +80,27 @@ namespace vocalypse::ui
         tourButton.onClick = [this] { if (onStartTutorial) onStartTutorial(); };
         addAndMakeVisible (tourButton);
 
+        licenceButton.onClick = [this]
+        {
+            if (licence == nullptr)
+                return;
+            if (licence->status().access == licensing::Access::licensed)
+            {
+                licence->deactivate ([safe = juce::Component::SafePointer<SettingsOverlay> (this)] (bool, const juce::String& message)
+                {
+                    if (message.isNotEmpty())
+                        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, tr ("Lizenz", "Licence"), message);
+                    if (safe != nullptr)
+                        safe->syncLicence();
+                });
+            }
+            else
+            {
+                showActivationDialog (*licence, getTopLevelComponent());
+            }
+        };
+        addChildComponent (licenceButton);
+
         closeButton.setTooltip (tr ("Schließen", "Close"));
         closeButton.onClick = [this] { close(); };
         addAndMakeVisible (closeButton);
@@ -98,6 +119,30 @@ namespace vocalypse::ui
               tr ("Name, Wert und Wirkung nach kurzem Verweilen.", "Name, value and effect after a short hover."), {} },
             { tr ("Tour", "Tour"), tr ("Eine Minute durch die Oberfläche.", "One minute through the interface."), {} },
         };
+    }
+
+    void SettingsOverlay::setLicence (licensing::Manager* m)
+    {
+        licence = m != nullptr && m->isOn() ? m : nullptr;
+        if (licence != nullptr && rows.size() == 6)
+            rows.push_back ({ tr ("Lizenz", "Licence"), {}, {} });
+        syncLicence();
+        resized();
+    }
+
+    void SettingsOverlay::syncLicence()
+    {
+        licenceButton.setVisible (licence != nullptr);
+        if (licence == nullptr)
+            return;
+        const bool active = licence->status().access == licensing::Access::licensed;
+        licenceButton.setButtonText (active ? tr ("Freigeben", "Release") : tr ("Aktivieren", "Activate"));
+        licenceButton.setTooltip (active ? tr ("Gibt diesen Computer frei, damit du den Schlüssel auf einem anderen aktivieren kannst.",
+                                               "Releases this computer so you can activate the key on another one.")
+                                         : tr ("Schlüssel aus der Bestell-Mail eingeben.", "Enter the key from the order mail."));
+        if (rows.size() > 6)
+            rows[6].hint = licence->describe();
+        repaint();
     }
 
     void SettingsOverlay::setGroup (juce::OwnedArray<juce::TextButton>& group, int selected)
@@ -120,6 +165,7 @@ namespace vocalypse::ui
 
         offerAnalysis.setToggleState (settings::getBool (settings::offerAnalysis, true), juce::dontSendNotification);
         infoCards.setToggleState (settings::getBool (settings::infoCards, true), juce::dontSendNotification);
+        syncLicence();
     }
 
     void SettingsOverlay::open()
@@ -169,6 +215,8 @@ namespace vocalypse::ui
         offerAnalysis.setBounds (placeRow (3, 0).removeFromRight (30).withSizeKeepingCentre (30, 18));
         infoCards.setBounds (placeRow (4, 0).removeFromRight (30).withSizeKeepingCentre (30, 18));
         tourButton.setBounds (placeRow (5, 0).removeFromRight (112).withSizeKeepingCentre (112, 28));
+        if (rows.size() > 6)
+            licenceButton.setBounds (placeRow (6, 0).removeFromRight (112).withSizeKeepingCentre (112, 28));
     }
 
     void SettingsOverlay::paint (juce::Graphics& g)
@@ -235,5 +283,105 @@ namespace vocalypse::ui
     {
         if (! sheetBounds().contains (e.getPosition()))
             close();
+    }
+
+    //==============================================================================
+    void showActivationDialog (licensing::Manager& m, juce::Component* over)
+    {
+        auto* w = new juce::AlertWindow (tr ("VOCALYPSE aktivieren", "Activate VOCALYPSE"),
+                                         tr ("Kopier den Lizenzschlüssel aus deiner Bestell-Mail hier hinein.",
+                                             "Paste the licence key from your order mail here."),
+                                         juce::MessageBoxIconType::NoIcon, over);
+        w->addTextEditor ("key", {}, tr ("Lizenzschlüssel", "Licence key"));
+        w->addButton (tr ("Aktivieren", "Activate"), 1, juce::KeyPress (juce::KeyPress::returnKey));
+        w->addButton (tr ("Abbrechen", "Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([w, &m] (int result)
+        {
+            const auto key = w->getTextEditorContents ("key");
+            if (result != 1)
+                return;
+            m.activate (key, [] (bool ok, const juce::String& message)
+            {
+                juce::AlertWindow::showMessageBoxAsync (ok ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon,
+                                                        tr ("Lizenz", "Licence"), message);
+            });
+        }), true);
+    }
+
+    LicenceLock::LicenceLock()
+    {
+        setVisible (false);
+        enterButton.setButtonText (tr ("Lizenzschlüssel eingeben", "Enter licence key"));
+        enterButton.getProperties().set ("fire", true);
+        enterButton.onClick = [this] { if (licence != nullptr) showActivationDialog (*licence, getTopLevelComponent()); };
+        buyButton.setButtonText (tr ("VOCALYPSE kaufen", "Buy VOCALYPSE"));
+        buyButton.onClick = [] { juce::URL (licensing::Manager::buyUrl()).launchInDefaultBrowser(); };
+        addAndMakeVisible (enterButton);
+        addAndMakeVisible (buyButton);
+    }
+
+    LicenceLock::~LicenceLock()
+    {
+        if (licence != nullptr)
+            licence->removeChangeListener (this);
+    }
+
+    void LicenceLock::setLicence (licensing::Manager* m)
+    {
+        if (licence != nullptr)
+            licence->removeChangeListener (this);
+        licence = m != nullptr && m->isOn() ? m : nullptr;
+        if (licence != nullptr)
+            licence->addChangeListener (this);
+        sync();
+    }
+
+    void LicenceLock::changeListenerCallback (juce::ChangeBroadcaster*) { sync(); }
+
+    void LicenceLock::sync()
+    {
+        const bool show = licence != nullptr && licence->status().access == licensing::Access::locked;
+        setVisible (show);
+        if (show)
+            toFront (false);
+        repaint();
+    }
+
+    juce::Rectangle<int> LicenceLock::cardBounds() const
+    {
+        return getLocalBounds().withSizeKeepingCentre (440, 220);
+    }
+
+    void LicenceLock::resized()
+    {
+        auto r = cardBounds().reduced (pad).removeFromBottom (34);
+        enterButton.setBounds (r.removeFromLeft (r.getWidth() / 2 - 6));
+        r.removeFromLeft (12);
+        buyButton.setBounds (r);
+    }
+
+    void LicenceLock::paint (juce::Graphics& g)
+    {
+        g.fillAll (colours::scrim.withMultipliedAlpha (0.85f));
+        const auto card = cardBounds().toFloat();
+        g.setColour (colours::panel);
+        g.fillRoundedRectangle (card, 12.0f);
+        g.setColour (colours::fire);
+        g.drawRoundedRectangle (card.reduced (0.5f), 12.0f, 1.2f);
+
+        auto r = card.reduced ((float) pad);
+        g.setColour (colours::text);
+        g.setFont (font (typesize::heading + 1.5f, true));
+        const bool revoked = licence != nullptr && licence->record().revoked;
+        g.drawText (revoked ? tr ("Lizenz nicht mehr gültig", "Licence no longer valid") : tr ("Die Testzeit ist vorbei", "The trial is over"),
+                    r.removeFromTop (30.0f), juce::Justification::centredLeft, true);
+        r.removeFromTop (8.0f);
+        g.setColour (colours::textDim);
+        g.setFont (font (typesize::small));
+        g.drawFittedText (tr ("VOCALYPSE lässt deine Vocal gerade unbearbeitet durch. Aktiviere es mit dem Schlüssel aus deiner "
+                              "Bestell-Mail - deine Projekte und Einstellungen bleiben, wie sie sind.",
+                              "VOCALYPSE is passing your vocal through unprocessed. Activate it with the key from your order mail - "
+                              "your projects and settings stay as they are."),
+                          r.removeFromTop (80.0f).toNearestInt(), juce::Justification::topLeft, 4, 1.0f);
     }
 }

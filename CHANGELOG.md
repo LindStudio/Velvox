@@ -2,6 +2,23 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [Unveröffentlicht] – Branch `feature/vocalypse-rebrand`: Lizenz vorbereitet, Stile, SPACE (2026-11-03 Nacht)
+
+Jakob: „mach alle Punkte als Info … und alle Punkte, die du machen kannst, erledige“. Übersicht mit Preisen und
+Empfehlungen: `docs/OFFENE_PUNKTE.md`.
+- **Lizenzprüfung (Lemon Squeezy), vorbereitet und AUS** (`-DVOCALYPSE_LICENSING=ON` schaltet sie ein,
+  `docs/LICENSING.md`): 14 Tage Test, Aktivierung mit dem Schlüssel aus der Bestell-Mail, wöchentliche
+  Hintergrund-Prüfung, aktiviert bleibt offline aktiviert, gesperrt = unbearbeiteter Durchgang + Karte
+  „Schlüssel eingeben / Kaufen“, „Freigeben“ für den PC-Wechsel. 46 neue Checks gegen einen nachgebauten Server.
+- **SPACE-Regler** deckt 0–70 % Hall ab (vorher 0–30 %): nach dem Auto Mix (20–70 % Hall seit heute) stand er am
+  Anschlag. Alte Projekte unverändert (`applyMacros` behält 0,3 / 0,15).
+- **EQ der Stile:** die Stil-Verschiebung kommt zusätzlich zur Korrektur-Grenze (vorher teilte sie sich die 4 dB;
+  der Zuschlag gilt eine halbe Oktave um das Band). Aggressiv: Präsenz +1,3 dB gegenüber Druckvoll (vorher +0,35).
+- **Raum pro Stil:** Floaty offene, helle Hall (+20 ms Pre-Delay), Warm dunkle kleine Plate, Aggressiv enger Raum.
+- **Dynamik:** schafft der Kompressor das Phrasen-Ziel nicht, bekommt der Level Ride mehr Spielraum (+10 / −12 dB),
+  nur wenn es messbar hilft.
+- Entwurf der Lizenzbedingungen (`docs/EULA_ENTWURF.md`, rechtlich zu prüfen).
+
 ## [Unveröffentlicht] – Branch `feature/vocalypse-rebrand`: Headliner heißt jetzt VOCALYPSE (2026-11-03)
 
 - Produktname **VOCALYPSE** (Plugin-Liste, Fenstertitel, alle Texte), `VOCALYPSE.vst3`. Kopfzeile zeigt den neuen

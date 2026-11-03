@@ -436,6 +436,8 @@ void VocalypseAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     mixLawShared.tryLoad (audioMixLaws);
     auto settings = reader.read (audioRouting, monoMonitor.load (std::memory_order_relaxed));   // 0.6.1: no macro layer
     settings.mixLaws = audioMixLaws;
+    if (licence->isLocked())
+        settings.bypass = true;   // trial over / key invalid: unprocessed, latency-aligned (License.h)
     // Module solo (listening aid): every other instance bypassed, latency unchanged
     if (const int solo = soloCode.load (std::memory_order_relaxed); solo >= 0)
         if (audioRouting.contains (dsp::selectionModule (solo), dsp::selectionInstance (solo)))

@@ -185,7 +185,7 @@ VocalypseView::VocalypseView (VocalypseAudioProcessor& p, Reopen reopen)
 
     for (auto* c : std::initializer_list<juce::Component*> { &topBar, &chainView, &simpleView, &meters })
         canvas.addAndMakeVisible (c);
-    for (auto* c : std::initializer_list<juce::Component*> { &checkView, &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser, &settingsOverlay })
+    for (auto* c : std::initializer_list<juce::Component*> { &checkView, &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser, &licenceLock, &settingsOverlay })
         canvas.addChildComponent (c);
 
     chainView.setLiveData (&live);
@@ -273,6 +273,8 @@ VocalypseView::VocalypseView (VocalypseAudioProcessor& p, Reopen reopen)
     };
 
     topBar.onSettings = [this] { showSettings(); };
+    settingsOverlay.setLicence (&proc.getLicence());
+    licenceLock.setLicence (&proc.getLicence());
     settingsOverlay.onLanguage = [this] (i18n::Preference preference)
     {
         settings::setLanguagePreference (preference);
@@ -295,7 +297,7 @@ VocalypseView::VocalypseView (VocalypseAudioProcessor& p, Reopen reopen)
     chainView.setBounds (chainArea());
     simpleView.setBounds (bodyArea());
     meters.setBounds (meterArea().reduced (6, 4));
-    for (auto* overlay : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser, &settingsOverlay })
+    for (auto* overlay : std::initializer_list<juce::Component*> { &detailsOverlay, &analysis, &dialog, &help, &tutorial, &browser, &presetBrowser, &licenceLock, &settingsOverlay })
         overlay->setBounds (0, 0, baseWidth, baseHeight);
 
     // ---- View state (stored with the project, never affects audio)
@@ -520,8 +522,12 @@ void VocalypseView::select (int id)
 void VocalypseView::raiseOverlays()
 {
     canvas.info.toFront (false);
-    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &browser, &presetBrowser, &analysis, &dialog, &help, &settingsOverlay, &tutorial })
+    for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &browser, &presetBrowser, &analysis, &dialog, &help })
         c->toFront (false);
+    if (licenceLock.isVisible())
+        licenceLock.toFront (false);   // over the plugin, under the settings (key entry) and the tour
+    settingsOverlay.toFront (false);
+    tutorial.toFront (false);
     if (analysis.isVisible())
         analysis.toFront (true);
 }

@@ -109,7 +109,7 @@ namespace vocalypse::automix
         return {
             { pid::macroPresence,   pct (roleGain ({}, values, dsp::EqRole::air) / 5.0f) },
             { pid::macroWarmth,     pct (roleGain ({}, values, dsp::EqRole::warmth) / 3.0f) },
-            { pid::macroSpace,      pct (get (pid::reverbOn) > 0.5f ? get (pid::reverbMix) / 100.0f / 0.3f : 0.0f) },
+            { pid::macroSpace,      pct (get (pid::reverbOn) > 0.5f ? get (pid::reverbMix) / 100.0f / dsp::spaceReverbPerTravel : 0.0f) },
             { pid::macroWidth,      pct (get (pid::doublerOn) > 0.5f ? get (pid::doublerMix) / 100.0f / 0.6f : 0.0f) },
             { pid::macroAggression, pct (comp ? (get (pid::compRatio) - 2.0f) / 4.0f : 0.0f) },
         };
@@ -639,6 +639,30 @@ namespace vocalypse::automix
                 decay = clamp (target.space.decayBars * bar * (spoken ? 0.6f : (largeHall ? 1.2f : 1.0f)), 0.8f, 3.0f);
                 preDelay = std::round (clamp (60000.0f / (float) p.hostBpm / 16.0f, 15.0f, 60.0f));
             }
+            // 2026-11-03: the vibe also colours the room (Floaty and Ballade · Warm had the same amount and length):
+            // Floaty an open, bright hall with a later onset, Warm a darker, smaller plate, Aggressive a tight one
+            float damping = harsh ? 5500.0f : 6500.0f, size = 55.0f;
+            if (! spoken && ! someRoom)
+            {
+                if (target.vibe == Vibe::floaty)
+                {
+                    damping = harsh ? 7000.0f : 9500.0f;
+                    size = 80.0f;
+                    preDelay += 20.0f;
+                    if (type == 1)
+                        type = 2;   // plate -> hall
+                }
+                else if (target.vibe == Vibe::warm)
+                {
+                    damping = 4200.0f;
+                    size = 45.0f;
+                }
+                else if (target.vibe == Vibe::aggressive)
+                {
+                    damping = harsh ? 5000.0f : 6000.0f;
+                    size = 40.0f;
+                }
+            }
             // The beat on the sidechain: a dense one leaves no gaps for the tail, one with gaps leaves room
             // (not for a take with a room of its own)
             const auto density = someRoom && beatDensityOf (p) == BeatDensity::sparse ? BeatDensity::medium : beatDensityOf (p);
@@ -660,8 +684,8 @@ namespace vocalypse::automix
             plan.set (pid::reverbMix, revMix);
             plan.set (pid::reverbDecay, decay);
             plan.set (pid::reverbPreDelay, preDelay);
-            plan.set (pid::reverbSize, 55.0f);
-            plan.set (pid::reverbDamping, harsh ? 5500.0f : 6500.0f);
+            plan.set (pid::reverbSize, size);
+            plan.set (pid::reverbDamping, damping);
             plan.set (pid::reverbLowCut, 300.0f);
             plan.set (pid::reverbWidth, 100.0f);
             plan.set (pid::reverbDuckAmount, 6.0f);

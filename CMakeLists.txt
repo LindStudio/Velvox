@@ -25,6 +25,8 @@ endif()
 add_subdirectory("${JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE")
 
 option(VOCALYPSE_BUILD_TESTS "Build the offline DSP/state test runner" ON)
+# Licence check (Lemon Squeezy): OFF until the store exists - docs/LICENSING.md
+option(VOCALYPSE_LICENSING "Trial + licence key activation in the plugin" OFF)
 
 # ---------------------------------------------------------------------------
 # Sources shared by the plugin and the test runner
@@ -109,6 +111,7 @@ set(VOCALYPSE_SOURCES
     Source/UI/SettingsOverlay.cpp
     Source/Text/I18n.cpp
     Source/Text/ParamText.cpp
+    Source/Licensing/License.cpp
 )
 
 # Saturation panel (0.6: character tiles, big Drive, Low / Mid / High strip)
@@ -119,6 +122,7 @@ set(VOCALYPSE_COMMON_DEFINITIONS
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
+    VOCALYPSE_LICENSING=$<BOOL:${VOCALYPSE_LICENSING}>
     VOCALYPSE_VERSION_STRING="${PROJECT_VERSION}"   # the one place of the version: project() above
 )
 
@@ -198,7 +202,7 @@ target_link_libraries(Vocalypse
 # ---------------------------------------------------------------------------
 if(VOCALYPSE_BUILD_TESTS)
     juce_add_console_app(VocalypseTests PRODUCT_NAME "VocalypseTests")
-    target_sources(VocalypseTests PRIVATE ${VOCALYPSE_SOURCES} Tests/TestMain.cpp Tests/VocalypseTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/MacroBakeTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/MixTargetTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/VocalCheckRealDataTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/SaturationTests.cpp Tests/ReverbQualityTests.cpp Tests/EqPanelTests.cpp Tests/ReverbPanelTests.cpp Tests/CheckPanelTests.cpp Tests/SmoothPanelTests.cpp Tests/DynamicsQualityTests.cpp Tests/StateRestoreTests.cpp)
+    target_sources(VocalypseTests PRIVATE ${VOCALYPSE_SOURCES} Tests/TestMain.cpp Tests/VocalypseTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/MacroBakeTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/MixTargetTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/VocalCheckRealDataTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/SaturationTests.cpp Tests/ReverbQualityTests.cpp Tests/EqPanelTests.cpp Tests/ReverbPanelTests.cpp Tests/CheckPanelTests.cpp Tests/SmoothPanelTests.cpp Tests/DynamicsQualityTests.cpp Tests/StateRestoreTests.cpp Tests/LicenseTests.cpp)
     target_include_directories(VocalypseTests PRIVATE Source ${VOCALYPSE_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VocalypseTests PRIVATE /bigobj /utf-8)

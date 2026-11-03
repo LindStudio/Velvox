@@ -54,6 +54,12 @@ namespace vocalypse::dsp
     // create anything. Results are clamped to the parameter ranges. Pure, no allocation.
     ChainSettings applyMacroMove (const ChainSettings& base, MacroId id, float from, float to) noexcept;
 
+    // SPACE: reverb / delay Mix per full fader travel (0 -> 100 %). Since 2026-11-03 the auto mix sets
+    // 20 - 70 % reverb; with the old 0.3 its fader was pinned at the end. applyMacros (old projects)
+    // keeps 0.3 / 0.15 so they sound as before.
+    inline constexpr float spaceReverbPerTravel = 0.7f;
+    inline constexpr float spaceDelayPerTravel  = 0.35f;
+
     // The 0.2 - 0.6.0 offset layer: base settings + macro values -> what those versions processed.
     // No longer in the audio path (0.6.1); kept unchanged to bake old projects / presets once on load
     // (Parameters/MacroBake.h) so they sound exactly as before. With all macros at 0 it returns `base`.

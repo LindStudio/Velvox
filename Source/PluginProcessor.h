@@ -15,6 +15,7 @@
 #include "Presets/PresetManager.h"
 #include "Presets/UndoHistory.h"
 #include "AutoMix/AutoMixController.h"
+#include "Licensing/License.h"
 
 class VocalypseAudioProcessor final : public juce::AudioProcessor,
                                    private juce::ValueTree::Listener,
@@ -65,6 +66,9 @@ public:
 
     // Automatic mix: capture during playback, analysis, plan, apply (see AutoMix/)
     vocalypse::automix::AutoMixController& getAutoMix() noexcept { return autoMix; }
+
+    // Trial / licence (off unless built with VOCALYPSE_LICENSING); locked = the vocal passes through
+    vocalypse::licensing::Manager& getLicence() noexcept { return *licence; }
 
 
     // Module instances in the chain, order, send-insert modes. setRouting is
@@ -175,6 +179,7 @@ private:
     vocalypse::PresetManager presetManager;
     vocalypse::dsp::VocalChain chain;
     vocalypse::automix::AutoMixController autoMix { *this, apvts };
+    juce::SharedResourcePointer<vocalypse::licensing::Manager> licence;
     vocalypse::eqbands::LegacyBridge eqBridge { apvts };   // 0.5 fixed-band edits -> role bands
 
     vocalypse::SettingsReader reader;

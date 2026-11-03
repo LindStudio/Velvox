@@ -83,7 +83,7 @@ public:
             expectWithinAbsoluteError (pos (pid::macroWarmth), juce::jlimit (-100.0f, 100.0f, warmth / 3.0f * 100.0f), 0.6f);
             const auto on = [&] (const char* id) { return values.at (id) > 0.5f; };
             expectWithinAbsoluteError (pos (pid::macroSpace),
-                                       juce::jlimit (0.0f, 100.0f, on (pid::reverbOn) ? values.at (pid::reverbMix) / 0.3f : 0.0f), 0.6f);
+                                       juce::jlimit (0.0f, 100.0f, on (pid::reverbOn) ? values.at (pid::reverbMix) / (100.0f * vocalypse::dsp::spaceReverbPerTravel) * 100.0f : 0.0f), 0.6f);
             expectWithinAbsoluteError (pos (pid::macroWidth),
                                        juce::jlimit (0.0f, 100.0f, on (pid::doublerOn) ? values.at (pid::doublerMix) / 0.6f : 0.0f), 0.6f);
             // bipolar sliders (0.7): a cut shows below 0 (0.8: the curve fit cuts as often as it lifts)

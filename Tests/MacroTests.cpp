@@ -43,8 +43,8 @@ public:
             h.set (pid::macroSpace, 100.0f);
             const auto eff = h.proc.readSettings();
             expect (eff.reverbOn && eff.delayOn);
-            expectWithinAbsoluteError (h.get (pid::reverbMix), 30.0f, 1.0e-3f, "the Advanced panel shows the Mix you hear");
-            expectWithinAbsoluteError (h.get (pid::delayMix), 15.0f, 1.0e-3f);
+            expectWithinAbsoluteError (h.get (pid::reverbMix), 70.0f, 1.0e-3f, "the Advanced panel shows the Mix you hear");
+            expectWithinAbsoluteError (h.get (pid::delayMix), 35.0f, 1.0e-3f);
             expectWithinAbsoluteError (h.get (pid::reverbDuckAmount), 6.0f, 1.0e-3f);
             expectWithinAbsoluteError (h.get (pid::delayDuckAmount), 6.0f, 1.0e-3f);
             expect (h.get (pid::eqOn) < 0.5f, "SPACE leaves the EQ alone");
@@ -360,11 +360,11 @@ void MacroTests::simpleSetsModulesTests()
         Harness h;
         h.neutral();
         dragTo (h, pid::macroSpace, { 50.0f });
-        expectWithinAbsoluteError (h.get (pid::reverbMix), 15.0f, 1.0e-3f);
-        dragTo (h, pid::reverbMix, { 40.0f });   // the user in the Reverb panel
+        expectWithinAbsoluteError (h.get (pid::reverbMix), 35.0f, 1.0e-3f);
+        dragTo (h, pid::reverbMix, { 50.0f });   // the user in the Reverb panel
         dragTo (h, pid::macroSpace, { 0.0f });
         expect (h.get (pid::reverbOn) > 0.5f, "the user's reverb stays on");
-        expectWithinAbsoluteError (h.get (pid::reverbMix), 25.0f, 1.0e-3f, "SPACE removes only its share");
+        expectWithinAbsoluteError (h.get (pid::reverbMix), 15.0f, 1.0e-3f, "SPACE removes only its share");
     }
 
     beginTest ("WIDTH on a Doubler at 50 %: the original stays (additive law), back down restores the true law");
@@ -396,7 +396,7 @@ void MacroTests::simpleSetsModulesTests()
         automation.join();
         juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
         expect (h.get (pid::reverbOn) > 0.5f, "mapped on the message thread");
-        expectWithinAbsoluteError (h.get (pid::reverbMix), 15.0f, 1.0e-3f);
+        expectWithinAbsoluteError (h.get (pid::reverbMix), 35.0f, 1.0e-3f);
         std::thread back ([p] { p->setValueNotifyingHost (p->convertTo0to1 (0.0f)); });
         back.join();
         juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
@@ -414,7 +414,7 @@ void MacroTests::simpleSetsModulesTests()
         expectWithinAbsoluteError (h.get (pid::macroSpace), 70.0f, 1.0e-3f);
         expect (h.get (pid::reverbOn) < 0.5f, "nothing added on top of the preset");
         dragTo (h, pid::macroSpace, { 80.0f });
-        expectWithinAbsoluteError (h.get (pid::reverbMix), 3.0f, 1.0e-3f, "a later move maps from there (+10 % of 30)");
+        expectWithinAbsoluteError (h.get (pid::reverbMix), 7.0f, 1.0e-3f, "a later move maps from there (+10 % of 70)");
     }
 }
 
@@ -441,11 +441,13 @@ void MacroTests::moveTests()
         bases.push_back ({ "neutral", n.proc.readSettings() });
     }
 
-    beginTest ("Simple move from 0 = the 0.6.0 macro mapping of that macro alone");
+    beginTest ("Simple move from 0 = the 0.6.0 macro mapping of that macro alone (SPACE: wider travel since 2026-11-03)");
     for (const auto& [name, base] : bases)
         for (auto id : all)
             for (float to : { 0.25f, 0.6f, 1.0f })
             {
+                if (id == MacroId::space)
+                    continue;
                 dsp::MacroValues m;
                 m.set (id, to);
                 const auto diff = macroFieldDifference (dsp::applyMacroMove (base, id, 0.0f, to), dsp::applyMacros (base, m));
@@ -466,12 +468,13 @@ void MacroTests::moveTests()
         const auto neutral = bases.back().second;
         const auto up = dsp::applyMacroMove (neutral, MacroId::space, 0.0f, 0.5f);
         expect (up.reverbOn && up.delayOn);
-        expectWithinAbsoluteError (up.reverbMix, 0.15f, 1.0e-6f);
+        expectWithinAbsoluteError (up.reverbMix, 0.35f, 1.0e-6f);
+        expectWithinAbsoluteError (up.delayMix, 0.175f, 1.0e-6f);
         expectWithinAbsoluteError (up.reverbDuck.amountDb, 3.0f, 1.0e-5f);
 
         const auto half = dsp::applyMacroMove (up, MacroId::space, 0.5f, 0.25f);
         expect (half.reverbOn);
-        expectWithinAbsoluteError (half.reverbMix, 0.075f, 1.0e-6f);
+        expectWithinAbsoluteError (half.reverbMix, 0.175f, 1.0e-6f);
         expectWithinAbsoluteError (half.reverbDuck.amountDb, 1.5f, 1.0e-5f);
 
         const auto down = dsp::applyMacroMove (up, MacroId::space, 0.5f, 0.0f);

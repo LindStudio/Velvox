@@ -343,6 +343,38 @@ namespace vocalypse::automix
         }
         apply (thr, ratios[ri]);
 
+        // Still too far apart between phrases (2026-11-03: Rap / Aggressive ended at 4-8 dB for a 1-3 dB window: the
+        // compressor hardly moves the distance between phrases, and the Level Ride, already at 85 %, stopped at its
+        // +6 / -8 dB range): the ride gets a wider range (and full amount), kept only when it measurably helps
+        {
+            const float phraseMid = 0.5f * (target.dynamics.phraseLo + target.dynamics.phraseHi);
+            if (m.dynamicsValid && m.dynamicsDb > phraseMid + 0.75f && plan.on (pid::rideOn) && renders < maxRenders + 1)
+            {
+                const float amount0 = plan.get (pid::rideAmount), boost0 = plan.get (pid::rideMaxBoost), cut0 = plan.get (pid::rideMaxCut);
+                const float boost = boost0 >= 6.0f ? 10.0f : boost0 + 2.0f;   // a noisy take (3 dB) gets only a little more
+                plan.set (pid::rideAmount, std::max (amount0, 85.0f));
+                plan.set (pid::rideMaxBoost, boost);
+                plan.set (pid::rideMaxCut, std::max (cut0, 12.0f));
+                const auto mr = renderChecked (audio, current, withoutSpace (plan), profile);
+                ++renders;
+                if (const float e = dynamicsError (mr, target); e < err - 0.05f)
+                {
+                    m = mr;
+                    err = e;
+                    for (auto& d : plan.decisions)
+                        if (! d.outputStage && d.module == dsp::ModuleId::ride)
+                            d.title = "Level Ride " + juce::String (juce::roundToInt (plan.get (pid::rideAmount))) + " %, max. +"
+                                      + juce::String (juce::roundToInt (boost)) + " dB";
+                }
+                else
+                {
+                    plan.set (pid::rideAmount, amount0);
+                    plan.set (pid::rideMaxBoost, boost0);
+                    plan.set (pid::rideMaxCut, cut0);
+                }
+            }
+        }
+
         // Vocal Smash: the blend that brings the crest into the window (the vibe's density as the preference)
         const bool smashAllowed = ! profile.heavilyCompressed && ! plan.conservative && ! profile.distortionLikely;
         if (smashAllowed)

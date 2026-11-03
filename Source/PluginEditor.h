@@ -161,6 +161,7 @@ private:
     vocalypse::ui::HelpOverlay help;
     vocalypse::ui::TutorialOverlay tutorial;
     vocalypse::ui::SettingsOverlay settingsOverlay;
+    vocalypse::ui::LicenceLock licenceLock;   // trial over / key invalid (only with VOCALYPSE_LICENSING)
     vocalypse::ui::ModuleBrowser browser;
     vocalypse::ui::PresetBrowser presetBrowser;
     vocalypse::ui::TopBar topBar;

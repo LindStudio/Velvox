@@ -2,6 +2,7 @@
 
 #include "Widgets.h"
 #include "../Text/I18n.h"
+#include "../Licensing/License.h"
 
 namespace vocalypse::ui
 {
@@ -34,6 +35,10 @@ namespace vocalypse::ui
         bool keyPressed (const juce::KeyPress&) override;
         void mouseDown (const juce::MouseEvent&) override;
 
+        // Licence row (only when the build checks licences): status, activate / release this computer
+        void setLicence (licensing::Manager* m);
+        juce::Button& getLicenceButton() noexcept { return licenceButton; }
+
         // For tests
         juce::Button& getLanguageButton (i18n::Preference p) { return *languageButtons[(int) p]; }
         juce::Button& getModeButton (bool advanced) { return *modeButtons[advanced ? 1 : 0]; }
@@ -44,14 +49,41 @@ namespace vocalypse::ui
 
     private:
         void syncFromSettings();
+        void syncLicence();
         void setGroup (juce::OwnedArray<juce::TextButton>& group, int selected);
 
         juce::OwnedArray<juce::TextButton> languageButtons, modeButtons, scaleButtons;
         juce::ToggleButton offerAnalysis, infoCards;
         juce::TextButton tourButton, closeButton { juce::String::fromUTF8 ("\xc3\x97") };
+        juce::TextButton licenceButton;
+        licensing::Manager* licence = nullptr;
 
         // Row layout (sheet coordinates), computed in resized() and used by paint()
         struct Row { juce::String title, hint; juce::Rectangle<int> bounds; };
         std::vector<Row> rows;
+    };
+
+    // Asks for the key from the order mail and activates it (a small modal card)
+    void showActivationDialog (licensing::Manager&, juce::Component* over);
+
+    // Trial over / key invalid: covers the plugin, says why the vocal passes through unprocessed,
+    // offers the key entry and the shop. Hidden whenever the licence is fine (or not checked at all).
+    class LicenceLock final : public juce::Component, private juce::ChangeListener
+    {
+    public:
+        LicenceLock();
+        ~LicenceLock() override;
+        void setLicence (licensing::Manager* m);
+
+        void paint (juce::Graphics&) override;
+        void resized() override;
+
+    private:
+        void changeListenerCallback (juce::ChangeBroadcaster*) override;
+        void sync();
+        juce::Rectangle<int> cardBounds() const;
+
+        licensing::Manager* licence = nullptr;
+        juce::TextButton enterButton, buyButton;
     };
 }
