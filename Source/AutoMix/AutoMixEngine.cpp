@@ -261,12 +261,27 @@ namespace velvox::automix
     {
         float outside (float v, float lo, float hi) { return v < lo ? lo - v : (v > hi ? v - hi : 0.0f); }
 
-        // How far a render's dynamics are from the target window (phrases, crest, and no squashing)
+        // The voice without its reverb / delay sends, for the dynamics search and the tone loop (2026-11-03):
+        // measured with the tails, more reverb read as a brighter, denser voice - Floaty got darker highs and
+        // every style the same compression. The sends run in parallel, so the voice itself is what is left.
+        MixPlan withoutSpace (const MixPlan& plan)
+        {
+            auto dry = plan;
+            dry.set (pid::reverbOn, 0.0f);
+            dry.set (pid::delayOn, 0.0f);
+            return dry;
+        }
+
+        // How far a render's dynamics are from the target (phrases, crest, and no squashing). 2026-11-03: aimed at
+        // the middle of the style's window (+-0.75 dB phrases, +-1 dB crest) - the windows of the styles overlap,
+        // and "anywhere inside" left every style at the same dynamics (SONOVOX bench: 6.8-7.8 dB for all five)
         float dynamicsError (const RenderMetrics& m, const MixTarget& t)
         {
-            float e = 0.5f * outside (m.crestDb, t.dynamics.crestLo, t.dynamics.crestHi) + std::max (0.0f, m.compGrMedianDb - 6.5f);
+            const float crestMid = 0.5f * (t.dynamics.crestLo + t.dynamics.crestHi);
+            const float phraseMid = 0.5f * (t.dynamics.phraseLo + t.dynamics.phraseHi);
+            float e = 0.5f * outside (m.crestDb, crestMid - 1.0f, crestMid + 1.0f) + std::max (0.0f, m.compGrMedianDb - 6.5f);
             if (m.dynamicsValid)
-                e += outside (m.dynamicsDb, t.dynamics.phraseLo, t.dynamics.phraseHi);
+                e += outside (m.dynamicsDb, phraseMid - 0.75f, phraseMid + 0.75f);
             return e;
         }
     }
@@ -290,26 +305,27 @@ namespace velvox::automix
         };
         apply (thr, ratios[ri]);
         int renders = 0;
-        auto m = renderChecked (audio, current, plan, profile);
+        auto m = renderChecked (audio, current, withoutSpace (plan), profile);
         ++renders;
         float err = dynamicsError (m, target);
         const float inDyn = profile.dynamicsDb;
 
         while (renders < maxRenders && err > 0.05f)
         {
-            const bool loose = (m.dynamicsValid && m.dynamicsDb > target.dynamics.phraseHi) || m.crestDb > target.dynamics.crestHi;
+            const bool loose = (m.dynamicsValid && m.dynamicsDb > 0.5f * (target.dynamics.phraseLo + target.dynamics.phraseHi) + 0.75f)
+                            || m.crestDb > 0.5f * (target.dynamics.crestLo + target.dynamics.crestHi) + 1.0f;
             std::vector<std::pair<float, int>> moves;   // threshold, ratio index
             if (loose)
-                moves = { { thr - 2.0f, ri }, { thr, std::min (3, ri + 1) } };
+                moves = { { thr - 3.0f, ri }, { thr, std::min (3, ri + 1) } };
             else
-                moves = { { thr + 2.0f, ri }, { thr, std::max (0, ri - 1) } };
+                moves = { { thr + 3.0f, ri }, { thr, std::max (0, ri - 1) } };
             bool improved = false;
             for (auto [t, r] : moves)
             {
-                if (renders >= maxRenders || (t == thr && r == ri) || t < t0 - 4.0f || t > t0 + 4.0f || t < -60.0f || t > -6.0f)
+                if (renders >= maxRenders || (t == thr && r == ri) || t < t0 - 12.0f || t > t0 + 12.0f || t < -60.0f || t > -6.0f)
                     continue;
                 apply (t, ratios[r]);
-                const auto mt = renderChecked (audio, current, plan, profile);
+                const auto mt = renderChecked (audio, current, withoutSpace (plan), profile);
                 ++renders;
                 if (const float e = dynamicsError (mt, target); e < err - 0.05f)
                 {
@@ -368,7 +384,7 @@ namespace velvox::automix
                 if (renders >= maxRenders + 2)
                     break;
                 setBlend (b);
-                const auto mb = renderChecked (audio, current, plan, profile);
+                const auto mb = renderChecked (audio, current, withoutSpace (plan), profile);
                 ++renders;
                 if (const float c = cost (mb, b); c < bestCost - 0.05f)
                 {
@@ -643,7 +659,7 @@ namespace velvox::automix
                 return r;
             }
             report (0.35f + 0.12f * (float) round, "Mix wird geprüft", "Checking the mix");
-            m = renderChecked (audio, current, plan, r.profile);
+            m = renderChecked (audio, current, withoutSpace (plan), r.profile);
             ++r.iterations;
             bool changed = false;
 
@@ -684,9 +700,22 @@ namespace velvox::automix
                 changed = true;
             }
 
-            // Brightness: the chain must not make an already bright voice brighter
+            // Brightness: the chain must not make an already bright voice brighter (a vibe that asks for more
+            // highs, e.g. Floaty, moves the limit by its own lift - otherwise this undid the style, 2026-11-03)
             bool airAdjusted = false;
-            if (auto air = roleBand (plan, current, dsp::EqRole::air); m.topDb > r.original.topDb + 5.0f && air.has_value() && air->on && air->gain > 0.0f)
+            const float styleTopDb = [&mixTarget]
+            {
+                float sum = 0.0f;
+                int n = 0;
+                for (int k = 0; k < numThirds; ++k)
+                    if (thirdCentre (k) >= 5000.0f * 0.99f)
+                    {
+                        sum += mixTarget.styleDb[(size_t) k];
+                        ++n;
+                    }
+                return n > 0 ? std::max (0.0f, sum / (float) n) : 0.0f;
+            }();
+            if (auto air = roleBand (plan, current, dsp::EqRole::air); m.topDb > r.original.topDb + 5.0f + styleTopDb && air.has_value() && air->on && air->gain > 0.0f)
             {
                 const auto before = *air;
                 air->gain = std::max (0.0f, air->gain - 1.5f);

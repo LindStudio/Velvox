@@ -542,7 +542,7 @@ public:
                         + " / " + juce::String (fast.get (pid::reverbPreDelay)) + " / " + juce::String (none.get (pid::reverbPreDelay)) + " ms");
             expect (slow.get (pid::reverbDecay) > fast.get (pid::reverbDecay), "slower song, longer tail");
             expect (slow.get (pid::reverbPreDelay) > fast.get (pid::reverbPreDelay), "slower song, longer pre-delay");
-            expect (std::isfinite (none.get (pid::reverbDecay)) && none.get (pid::reverbDecay) >= 1.0f && none.get (pid::reverbDecay) <= 2.3f, "no tempo: the 0.7 times");
+            expect (std::isfinite (none.get (pid::reverbDecay)) && none.get (pid::reverbDecay) >= 1.0f && none.get (pid::reverbDecay) <= 2.6f, "no tempo: the fixed times (2026-11-03: 1.2 / 2.0 / 2.3 / 2.6 s)");
             expect (none.get (pid::reverbPreDelay) == 30.0f || none.get (pid::reverbPreDelay) == 40.0f, "no tempo: the 0.7 pre-delays");
         }
 
@@ -741,15 +741,22 @@ public:
         beginTest ("Dynamics: the compressor search lands in the target window");
         {
             VocalSpec s; s.seconds = 14.0; s.phraseRangeDb = 14.0f;
-            const auto r = AutoMixEngine::run (makeVocal (s), defaults());
+            const auto audio = makeVocal (s);
+            const auto r = AutoMixEngine::run (audio, defaults());
             expect (r.ok, r.error);
             const auto t = targetFor (Genre::party, Vibe::punchy);
-            logMessage ("    in " + juce::String (r.profile.dynamicsDb, 1) + " dB phrase spread -> out " + juce::String (r.processed.dynamicsDb, 1)
-                        + " dB, crest " + juce::String (r.processed.crestDb, 1) + ", comp " + juce::String (r.plan.get (pid::compRatio), 1) + ":1 at "
-                        + juce::String (r.plan.get (pid::compThreshold), 1) + " dB");
-            expect (r.processed.dynamicsValid && r.processed.dynamicsDb >= t.dynamics.phraseLo - 1.0f && r.processed.dynamicsDb <= t.dynamics.phraseHi + 1.0f,
-                    "phrase spread in the window: " + juce::String (r.processed.dynamicsDb, 1));
-            expect (r.processed.compGrMedianDb <= 7.0f, "no over-compression");
+            // 2026-11-03: the voice without its reverb / delay sends - what the compressor search controls (the
+            // audible tails of the calibrated space would read as quiet phrases)
+            auto voiceOnly = r.plan;
+            voiceOnly.set (pid::reverbOn, 0.0f);
+            voiceOnly.set (pid::delayOn, 0.0f);
+            const auto m = AutoMixEngine::renderChecked (audio, defaults(), voiceOnly, r.profile);
+            logMessage ("    in " + juce::String (r.profile.dynamicsDb, 1) + " dB phrase spread -> out " + juce::String (m.dynamicsDb, 1)
+                        + " dB (with the sends " + juce::String (r.processed.dynamicsDb, 1) + "), crest " + juce::String (m.crestDb, 1) + ", comp "
+                        + juce::String (r.plan.get (pid::compRatio), 1) + ":1 at " + juce::String (r.plan.get (pid::compThreshold), 1) + " dB");
+            expect (m.dynamicsValid && m.dynamicsDb >= t.dynamics.phraseLo - 1.0f && m.dynamicsDb <= t.dynamics.phraseHi + 1.0f,
+                    "phrase spread in the window: " + juce::String (m.dynamicsDb, 1));
+            expect (m.compGrMedianDb <= 7.0f, "no over-compression");
         }
 
         beginTest ("Dynamics: no fixed compressor");

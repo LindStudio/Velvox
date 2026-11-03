@@ -181,7 +181,7 @@ public:
             expectGreaterThan (sparse.get (pid::reverbMix), none.get (pid::reverbMix));
             if (none.on (pid::delayOn))
             {
-                expectEquals (dense.get (pid::delayMix), none.get (pid::delayMix) - 2.0f);
+                expectEquals (dense.get (pid::delayMix), none.get (pid::delayMix) - 4.0f);   // 2026-11-03: base x2.2, the dense step too
                 expectEquals (sparse.get (pid::delayMix), none.get (pid::delayMix));
             }
             bool reported = false;

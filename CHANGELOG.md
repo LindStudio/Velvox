@@ -2,6 +2,35 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [Unveröffentlicht] – Branch `feature/automix-0.8`: FL-Hänger, hörbarer Raum, unterscheidbare Stile (2026-11-03)
+
+Jakob: „FL Studio bleibt beim Schließen immer hängen wegen meinem Plugin; zwischen den Stilen ändert sich nicht viel;
+Reverb und Delay hört man gefühlt gar nicht; Mixing klingt nicht professionell.“ Grundlage: SONOVOX Free Demo Vocal
+Dataset (50 Packs, 11 Lead-Paare trocken / vom Produzenten fertig), gemessen mit `tools/bench/pair_metrics.py` und
+`tools/bench/style_compare.py` (Daten nur lokal, nicht weitergeben).
+
+### Behoben
+- **FL Studio hing beim Beenden**, sobald der Editor einmal offen war: Die Memphy-Sticker lagen als `static juce::Image`
+  im Speicher und wurden erst beim Entladen der DLL (unter dem Windows-Loader-Lock) freigegeben – Direct2D blockierte.
+  Jetzt gehören sie den offenen Ansichten. Prüfung: `HeadlinerRefHost --editor --plugin <vst3>` (vorher 3/3 hängend,
+  jetzt 3/3 in 4 s beendet).
+
+### Auto Mix
+- **Hall und Delay hörbar:** Die Profis lassen ihre Fahnen −25 / −29 / −41 dB unter der Stimme stehen
+  (0,15–0,4 / 0,4–0,8 / 0,8–1,6 s nach einer Phrase), der Auto Mix lag 10–12 dB darunter. Neu kalibriert: Hall-Grundwert
+  42 % statt 14 %, Delay 20 % statt 9 %, Plate 2,0 s statt 1,6 s – Party · Druckvoll trifft jetzt −26 / −31 / −41 dB.
+- **Stile unterscheiden sich hörbar:** vorher im Mittel 0,7–2,7 dB auseinander, jetzt 1,5–8 dB. Raum je Stil von
+  trocken (Rap · Aggressiv) bis nass (Floaty, Ballade); Aggressiv dichter, härter gesättigt, kürzer; Warm mit mehr
+  Tape und dunkleren Höhen ab 6,4 kHz; Natürlich mit mehr Dynamik, wenig Farbe.
+- **Dynamik je Stil:** Die Kompressor-Suche zielt auf die Mitte des Stil-Fensters statt „irgendwo drin“ (die Fenster
+  überlappten – alle Stile endeten gleich), größere Schritte und mehr Versuche; der Level Rider arbeitet je nach Stil
+  stärker oder schwächer.
+- **Gemessen wird die Stimme ohne Hall/Delay:** Dynamik-Suche und Klang-Regelkreis hörten die Hallfahnen mit – mehr
+  Hall machte die Stimme dunkler (Floaty schnitt die Höhen stärker als Druckvoll). Die Helligkeits-Bremse lässt einem
+  Stil, der mehr Höhen will, jetzt seinen Anteil.
+- Tests: 5 Auto-Mix-Goldens bewusst neu gesetzt (andere Raum-Variante gewählt), Hallzeit ohne Tempo bis 2,6 s,
+  Delay bei dichtem Beat −4 statt −2 %, Kompressor-Test misst die Stimme ohne Sends.
+
 ## [Unveröffentlicht] – Branch `feature/automix-0.8`: Auto Mix „auf die Stimme angepasst“ (2026-11-02)
 
 Jakob nach dem Hörtest: „Viele Entscheidungen klingen random, jedes Modul klingt nicht genau auf die Stimme angepasst,

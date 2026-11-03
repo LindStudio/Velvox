@@ -374,7 +374,10 @@ namespace velvox::automix
         plan.set (pid::rideOn, rideWanted ? 1.0f : 0.0f);
         if (rideWanted)
         {
-            const float amount = clamp (40.0f + 4.0f * (p.dynamicsDb - 8.0f), 40.0f, 80.0f);
+            // 2026-11-03: the style's phrase window scales the ride (party 3-6 dB = x1; Natural / Ballad ride less,
+            // Aggressive / Rap more) - with one amount for all, every style ended at the same dynamics
+            const float styleScale = 4.5f / std::max (2.0f, 0.5f * (target.dynamics.phraseLo + target.dynamics.phraseHi));
+            const float amount = std::round (clamp ((40.0f + 4.0f * (p.dynamicsDb - 8.0f)) * styleScale, 25.0f, 85.0f));
             const float boost = noisy ? 3.0f : 6.0f;
             float silence = p.voiceRmsLowDb + inGain - 12.0f;
             if (p.snrValid)
@@ -616,15 +619,20 @@ namespace velvox::automix
             const bool spoken = p.pitchedShare < 0.45f;
             const bool sustained = p.pitchedShare > 0.75f && p.pitchSpreadSemitones > 2.0f;
             const bool largeHall = sustained && ! someRoom;
-            float revMix = someRoom ? 7.0f : (plan.conservative ? 10.0f : 14.0f);
-            float decay = 1.6f, preDelay = 30.0f;
+            // 2026-11-03: calibrated on 11 SONOVOX dry / producer-wet lead pairs - the producers' tails sit
+            // -25 / -29 / -41 dB under the phrases 0.15-0.4 / 0.4-0.8 / 0.8-1.6 s after them; the old 14 %
+            // left them 10 dB quieter ("Hall und Delay hört man gar nicht"). Measured through the whole chain
+            // (ride, compressor, ducking) reverb ~42 % + delay ~20 % with a 2 s plate hit it.
+            float revMix = someRoom ? 18.0f : (plan.conservative ? 26.0f : 42.0f);
+            float decay = 2.0f, preDelay = 30.0f;
             int type = 1;   // plate
-            if (spoken)         { revMix = std::min (revMix, 8.0f); decay = 1.0f; type = 0; }
-            else if (largeHall) { decay = 2.3f; preDelay = 40.0f; type = 3; }   // the long tail already reads wetter
-            else if (sustained) { revMix = std::min (revMix + 2.0f, 16.0f); decay = 1.9f; }
+            if (spoken)         { revMix = std::min (revMix, 20.0f); decay = 1.2f; type = 0; }
+            else if (largeHall) { decay = 2.6f; preDelay = 40.0f; type = 3; }   // the long tail already reads wetter
+            else if (sustained) { revMix = std::min (revMix + 4.0f, 48.0f); decay = 2.3f; }
             // 0.8: the amount of the genre / vibe; with the song tempo the tail lasts a number of bars and the
             // pre-delay is a 1/64 note (no tempo: the times above)
-            revMix = std::round (clamp (revMix * target.space.reverbScale, 3.0f, 28.0f));
+            revMix = std::round (clamp (revMix * target.space.reverbScale, 4.0f, 70.0f));
+            decay = clamp (decay * target.space.decayBars, 0.8f, 3.5f);   // without tempo: the style's length too
             if (p.hostBpm > 0.0)
             {
                 const float bar = 240.0f / (float) p.hostBpm;
@@ -637,7 +645,7 @@ namespace velvox::automix
             if (density == BeatDensity::dense)
                 revMix = std::round (revMix * 0.7f);
             else if (density == BeatDensity::sparse)
-                revMix = std::min (revMix + 2.0f, 16.0f);
+                revMix = std::min (revMix + 4.0f, 70.0f);
             const juce::String beatReason = (density == BeatDensity::dense
                 ? both (" Dichter Beat (kaum Lücken gemessen): weniger Hall, damit die Stimme vorne bleibt.",
                         " Dense beat (hardly any gaps measured): less reverb so the voice stays in front.")
@@ -685,7 +693,8 @@ namespace velvox::automix
                 // 0.8: the echo needs the pauses - singing without gaps gets less, phrases with room more
                 const float singing = p.capturedSeconds > 0.0f ? p.voicedSeconds / p.capturedSeconds : 0.8f;
                 const float gaps = juce::jmap (clamp (singing, 0.6f, 0.95f), 0.6f, 0.95f, 1.3f, 0.8f);
-                const float delayMix = std::round (clamp (((spoken ? 6.0f : 9.0f) - (density == BeatDensity::dense ? 2.0f : 0.0f)) * target.space.delayScale * gaps, 2.0f, 20.0f));
+                // 2026-11-03: x2.2 (SONOVOX calibration, see the reverb above)
+                const float delayMix = std::round (clamp (((spoken ? 13.0f : 20.0f) - (density == BeatDensity::dense ? 4.0f : 0.0f)) * target.space.delayScale * gaps, 3.0f, 40.0f));
                 plan.set (pid::delayMix, delayMix);
                 plan.set (pid::delayLowCut, 350.0f);
                 plan.set (pid::delayHighCut, 5000.0f);
