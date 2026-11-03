@@ -5,9 +5,9 @@
 #include "LiveData.h"
 #include "MascotView.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Simple mode, variant A3 (spec 2.3) with Memphy as assistant (approved concept, canvas artboard "Teufel"):
     //   left    after an analysis a small Vorher | Nachher switch top right, the live spectrum of the
@@ -21,7 +21,7 @@ namespace velvox::ui
     class SimpleView final : public juce::Component, private juce::ChangeListener
     {
     public:
-        SimpleView (VelvoxAudioProcessor& processor, const SpectrumSource* spectrum);
+        SimpleView (VocalypseAudioProcessor& processor, const SpectrumSource* spectrum);
         ~SimpleView() override;
 
         void paint (juce::Graphics&) override;
@@ -101,7 +101,7 @@ namespace velvox::ui
             std::function<void()> onClick;
         };
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         SpectrumView spectrumView;
         Legend legend;   // unbearbeitet (dashed) / bearbeitet (filled), always visible (review 2026-10-28)
         juce::TextButton analyse, before, after, details { "Details" };   // texts set in the constructor (language)

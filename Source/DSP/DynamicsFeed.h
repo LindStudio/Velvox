@@ -5,7 +5,7 @@
 #include <array>
 #include <cmath>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Lock-free single-producer / single-consumer queue of small values for the UI
     // data feeds (0.6 module panels). The audio thread pushes (never blocks, never

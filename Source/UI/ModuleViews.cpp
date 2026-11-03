@@ -10,7 +10,7 @@
 #include "DynPanels.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
 
@@ -87,9 +87,9 @@ namespace velvox::ui
             return f >= 1000.0f ? juce::String (f / 1000.0f, f >= 10000.0f ? 1 : 2) + " kHz" : juce::String (juce::roundToInt (f)) + " Hz";
         }
 
-        float raw (VelvoxAudioProcessor& p, const char* id) { return p.getState().getRawParameterValue (id)->load(); }
+        float raw (VocalypseAudioProcessor& p, const char* id) { return p.getState().getRawParameterValue (id)->load(); }
 
-        void setParam (VelvoxAudioProcessor& p, const char* id, float value)
+        void setParam (VocalypseAudioProcessor& p, const char* id, float value)
         {
             if (auto* prm = p.getState().getParameter (id))
                 prm->setValueNotifyingHost (prm->convertTo0to1 (value));
@@ -190,7 +190,7 @@ namespace velvox::ui
 
     }
 
-    std::unique_ptr<ModuleView> createModuleView (VelvoxAudioProcessor& p, int code, const SpectrumSource* spectrum)
+    std::unique_ptr<ModuleView> createModuleView (VocalypseAudioProcessor& p, int code, const SpectrumSource* spectrum)
     {
         if (code < 0)
             return std::make_unique<OutputView>();

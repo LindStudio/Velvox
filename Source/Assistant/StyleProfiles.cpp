@@ -1,7 +1,7 @@
 #include "StyleProfiles.h"
 
 // Source is compiled as UTF-8 (/utf-8): German texts are plain literals.
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
     namespace
     {
@@ -22,7 +22,7 @@ namespace velvox::assistant
               { { Goal::brightness, 1, I::moderate }, { Goal::presence, 1, I::slight }, { Goal::harshness, -1, I::slight },
                 { Goal::reverb, 1, I::slight }, { Goal::delay, 1, I::slight }, { Goal::width, 1, I::slight },
                 { Goal::compression, 1, I::slight } },
-              de ("Falls der Stil eine hörbare Tonhöhenkorrektur (Auto-Tune) nutzt: Das bietet Velvox nicht - das Pitch-Modul transponiert nur.") },
+              de ("Falls der Stil eine hörbare Tonhöhenkorrektur (Auto-Tune) nutzt: Das bietet Vocalypse nicht - das Pitch-Modul transponiert nur.") },
         };
         return profiles;
     }

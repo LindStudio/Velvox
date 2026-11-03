@@ -6,7 +6,7 @@
 #include "../Source/Text/I18n.h"
 #include "../Source/UI/UserSettings.h"
 
-using namespace velvox;
+using namespace vocalypse;
 
 namespace
 {
@@ -30,7 +30,7 @@ namespace
 class I18nTests final : public juce::UnitTest
 {
 public:
-    I18nTests() : juce::UnitTest ("Interface language", "Velvox") {}
+    I18nTests() : juce::UnitTest ("Interface language", "Vocalypse") {}
 
     void runTest() override
     {
@@ -103,9 +103,9 @@ public:
             ui::settings::set (ui::settings::tutorialDone, false);
             expect (! ui::settings::hasLanguageChoice());
 
-            auto procPtr = std::make_unique<VelvoxAudioProcessor>(); auto& proc = *procPtr;
+            auto procPtr = std::make_unique<VocalypseAudioProcessor>(); auto& proc = *procPtr;
             std::unique_ptr<juce::AudioProcessorEditor> editor (proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*editor);
+            auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*editor);
             expect (ed.getTutorial().isActive(), "welcome card shown on the very first start");
             expectEquals (ed.getTutorial().getStep(), -1);
 
@@ -130,9 +130,9 @@ public:
         {
             SettingsRestore restore;
             ui::settings::getFile().deleteFile();
-            auto procPtr = std::make_unique<VelvoxAudioProcessor>(); auto& proc = *procPtr;
+            auto procPtr = std::make_unique<VocalypseAudioProcessor>(); auto& proc = *procPtr;
             std::unique_ptr<juce::AudioProcessorEditor> editor (proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*editor);
+            auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*editor);
             expect (i18n::current() == i18n::systemLanguage());
             ed.getTutorial().getPluginButton().triggerClick(); pumpMessages();
             expectEquals (ui::settings::getString (ui::settings::language), juce::String ("system"));
@@ -144,11 +144,11 @@ public:
             ui::settings::set (ui::settings::language, "de");
             ui::settings::set (ui::settings::tutorialDone, true);
 
-            auto procPtr = std::make_unique<VelvoxAudioProcessor>(); auto& proc = *procPtr;
+            auto procPtr = std::make_unique<VocalypseAudioProcessor>(); auto& proc = *procPtr;
             proc.getAutoMix().dismissPrompt();
             std::unique_ptr<juce::AudioProcessorEditor> editor (proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*editor);
-            ed.setMode (VelvoxAudioProcessorEditor::Mode::advanced);
+            auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*editor);
+            ed.setMode (VocalypseAudioProcessorEditor::Mode::advanced);
             const auto sizeBefore = ed.getBounds();
 
             ed.getTopBar().getSettingsButton().triggerClick(); pumpMessages();
@@ -172,9 +172,9 @@ public:
         beginTest ("Settings sheet: start view, analysis popup and info cards are stored");
         {
             SettingsRestore restore;
-            auto procPtr = std::make_unique<VelvoxAudioProcessor>(); auto& proc = *procPtr;
+            auto procPtr = std::make_unique<VocalypseAudioProcessor>(); auto& proc = *procPtr;
             std::unique_ptr<juce::AudioProcessorEditor> editor (proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*editor);
+            auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*editor);
             ed.showSettings();
             auto& s = ed.getSettings();
 
@@ -186,9 +186,9 @@ public:
             expect (! ui::settings::getBool (ui::settings::infoCards, true));
 
             // A new instance opens in the stored view and without the analysis popup
-            auto proc2Ptr = std::make_unique<VelvoxAudioProcessor>(); auto& proc2 = *proc2Ptr;
+            auto proc2Ptr = std::make_unique<VocalypseAudioProcessor>(); auto& proc2 = *proc2Ptr;
             std::unique_ptr<juce::AudioProcessorEditor> editor2 (proc2.createEditor());
-            auto& ed2 = dynamic_cast<VelvoxAudioProcessorEditor&> (*editor2);
+            auto& ed2 = dynamic_cast<VocalypseAudioProcessorEditor&> (*editor2);
             expect (ed2.isAdvanced());
             expect (! ed2.getAnalysisOverlay().isVisible());
 

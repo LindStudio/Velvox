@@ -1,6 +1,6 @@
 #pragma once
 
-// Effect lab (VelvoxTests --fxrender <outDir> [vocal.wav]): renders impulse responses and
+// Effect lab (VocalypseTests --fxrender <outDir> [vocal.wav]): renders impulse responses and
 // example audio through the production ReverbModule / DelayModule, for measurement
 // (tools/bench/fx_analyse.py) and listening. Nothing here is used by the plugin.
 
@@ -10,7 +10,7 @@
 #include "SyntheticVocal.h"
 #include "LegacyReverbV03.h"
 
-namespace velvox::test
+namespace vocalypse::test
 {
     inline bool writeWav (const juce::File& f, const juce::AudioBuffer<float>& b, double fs, int bits = 32)
     {

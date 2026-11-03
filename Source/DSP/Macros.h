@@ -2,7 +2,7 @@
 
 #include "VocalChain.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // The six Simple-mode sliders ("macros"; PUNCH = aggression, Density lives in the auto-mix view)
     enum class MacroId { presence = 0, warmth, aggression, width, space, density };

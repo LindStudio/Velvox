@@ -4,7 +4,7 @@
 #include "Theme.h"
 #include "../DSP/DspUtilities.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Turns the chain's sample taps into smoothed spectra on a log-frequency
     // axis. UI thread only: the editor calls update() once per frame and every

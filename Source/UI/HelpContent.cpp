@@ -1,6 +1,6 @@
 #include "HelpContent.h"
 
-namespace velvox::ui::help
+namespace vocalypse::ui::help
 {
     namespace
     {
@@ -31,16 +31,16 @@ namespace velvox::ui::help
         {
             const Pick t { l == Language::german };
             const auto gStart = t ("Erste Schritte", "Getting started");
-            const auto gWork = t ("Arbeiten mit Headliner", "Working with Headliner");
+            const auto gWork = t ("Arbeiten mit VOCALYPSE", "Working with VOCALYPSE");
             const auto gModules = t ("Module", "Modules");
             std::vector<Page> p;
 
             //==================================================================
-            p.push_back ({ "start", t ("Willkommen bei Headliner", "Welcome to Headliner"), gStart, t (R"~(Headliner ist ein automatischer Vocal-Mixer für EDM, Hypertechno, Hard Dance, Party- und Pop-Vocals. Er hört einen Abschnitt deiner Vocal an, misst ihn und stellt seine Module ein – Aufräumen, Dynamik, S-Laute, Klang, Breite und Raum – für eine fertig klingende Vocal. Jedes Modul bleibt danach frei einstellbar.
+            p.push_back ({ "start", t ("Willkommen bei VOCALYPSE", "Welcome to VOCALYPSE"), gStart, t (R"~(VOCALYPSE ist ein automatischer Vocal-Mixer für EDM, Hypertechno, Hard Dance, Party- und Pop-Vocals. Er hört einen Abschnitt deiner Vocal an, misst ihn und stellt seine Module ein – Aufräumen, Dynamik, S-Laute, Klang, Breite und Raum – für eine fertig klingende Vocal. Jedes Modul bleibt danach frei einstellbar.
 
 ## Deine erste Minute
-- Lade Headliner auf die Mixer-Spur deiner Vocal. Eine neue Instanz bietet dir gleich die Analyse an.
-- Klick auf „Vocal analysieren“ und starte die Wiedergabe der Vocal in deiner DAW. Headliner nimmt einen begrenzten Abschnitt auf (Pausen werden übersprungen) und hört von selbst auf.
+- Lade VOCALYPSE auf die Mixer-Spur deiner Vocal. Eine neue Instanz bietet dir gleich die Analyse an.
+- Klick auf „Vocal analysieren“ und starte die Wiedergabe der Vocal in deiner DAW. VOCALYPSE nimmt einen begrenzten Abschnitt auf (Pausen werden übersprungen) und hört von selbst auf.
 - Analyse und Mix laufen im Hintergrund; die Wiedergabe wird nie unterbrochen.
 - Vergleiche mit Vorher / Nachher neben dem Knopf und stell mit den sechs Fadern fein nach.
 
@@ -58,11 +58,11 @@ Ein Wechsel von Modus oder Tab ändert nie einen Wert und setzt nichts zurück.
 
 ## Hilfe ist immer da
 Der ?-Knopf oben rechts öffnet diese Anleitung. In einem Modul springt der ?-Knopf direkt zur Seite dieses Moduls. Die Tour startest du jederzeit unten in der Navigation neu.)~",
-R"~(Headliner is an automatic vocal mixer for EDM, hypertechno, hard dance, party and pop vocals. It listens to a section of your vocal, measures it, and sets up its modules - cleaning, dynamics, S sounds, tone, width and space - for a finished-sounding vocal. Every module stays fully editable afterwards.
+R"~(VOCALYPSE is an automatic vocal mixer for EDM, hypertechno, hard dance, party and pop vocals. It listens to a section of your vocal, measures it, and sets up its modules - cleaning, dynamics, S sounds, tone, width and space - for a finished-sounding vocal. Every module stays fully editable afterwards.
 
 ## Your first minute
-- Load Headliner on the mixer track of your vocal. A new instance offers the analysis right away.
-- Click "Analyze vocal" and start playback of the vocal in your DAW. Headliner captures a limited section (pauses are skipped) and stops by itself.
+- Load VOCALYPSE on the mixer track of your vocal. A new instance offers the analysis right away.
+- Click "Analyze vocal" and start playback of the vocal in your DAW. VOCALYPSE captures a limited section (pauses are skipped) and stops by itself.
 - The analysis and the mix run in the background; playback is never interrupted.
 - Compare with Before / After next to the button, and fine-tune with the six faders.
 
@@ -170,7 +170,7 @@ Right-click the empty part of the row for the chain menu: sort into the usual or
 Jede Änderung ist ein Schritt in einem gemeinsamen Verlauf: Strg+Z macht rückgängig, Strg+Y oder Strg+Shift+Z wiederholt. Ein Modul verschieben, ein Preset laden und der automatische Mix sind jeweils ein Schritt.
 
 ## Automation
-Jeder Regler, Schalter und jedes Menü ist ein echter Plugin-Parameter: Deine DAW kann ihn automatisieren, Presets speichern ihn. Headliner meldet Änderungen dem Host als saubere Gesten, aufgenommene Automation wird also sauber.)~",
+Jeder Regler, Schalter und jedes Menü ist ein echter Plugin-Parameter: Deine DAW kann ihn automatisieren, Presets speichern ihn. VOCALYPSE meldet Änderungen dem Host als saubere Gesten, aufgenommene Automation wird also sauber.)~",
 R"~(Every knob, fader and segment group works the same way:
 - Drag to change the value (up or right raises it).
 - Hold Shift or Ctrl while dragging for fine adjustment (1/10 of the speed).
@@ -184,10 +184,10 @@ R"~(Every knob, fader and segment group works the same way:
 Every change is one step of one history: Ctrl+Z undoes, Ctrl+Y or Ctrl+Shift+Z redoes. Moving a module, loading a preset and the automatic mix are one step each.
 
 ## Automation
-Every knob, switch and menu is a real plugin parameter: your DAW can automate it and presets store it. Headliner reports changes to the host as proper gestures, so recorded automation is clean.)~") });
+Every knob, switch and menu is a real plugin parameter: your DAW can automate it and presets store it. VOCALYPSE reports changes to the host as proper gestures, so recorded automation is clean.)~") });
 
             p.push_back ({ "modes", t ("Modi, Tabs und die Makros", "Modes, tabs and the macros"), gWork, t (R"~(## SIMPEL
-- Das Spektrum zeigt deine Vocal vor (gestrichelt) und nach (gefüllt) Headliner.
+- Das Spektrum zeigt deine Vocal vor (gestrichelt) und nach (gefüllt) VOCALYPSE.
 - „Vocal analysieren“ startet den automatischen Mix. Danach vergleicht ein kleiner Schalter Vorher / Nachher mit dem Zustand davor; Details zeigt, was eingestellt wurde und warum, dazu Density und den fairen Vergleich.
 - Die sechs Fader: Presence (Höhen und De-Essing), Space (Reverb und Delay mit Ducking), Width (Doubler und Stereobreite), Punch (schnellere, festere Kompression und Drive), Warmth (Körper, weichere Höhen, Saturation), Vocal Level (der finale Ausgangspegel). Jeder stellt die echten Modul-Parameter ein (ein Rückgängig-Schritt pro Bewegung): ADVANCED zeigt genau das, was du hörst, und ein Modul, das du dort ausschaltest, bleibt stumm.
 
@@ -200,7 +200,7 @@ Eine Diagnose deiner Vocal nach der ganzen Modul-Kette (kein Modul in der Kette,
 ## Wechseln
 Alle Ansichten zeigen dieselben Einstellungen. Ein Wechsel ändert nie den Klang und setzt nichts zurück.)~",
 R"~(## SIMPLE
-- The spectrum shows your vocal before (dashed) and after (filled) Headliner.
+- The spectrum shows your vocal before (dashed) and after (filled) VOCALYPSE.
 - "Analyze vocal" starts the automatic mix. Afterwards a small Before / After switch compares with the state before; Details shows what was set up and why, Density and the fair compare.
 - The six faders: Presence (highs and de-essing), Space (ducked reverb and delay), Width (doubler and stereo width), Punch (faster, firmer compression and drive), Warmth (body, softer highs, saturation), Vocal Level (the final output level). Each one sets the real module parameters (one undo step per move): ADVANCED shows exactly what you hear, and a module you switch off there stays silent.
 
@@ -214,18 +214,18 @@ A diagnosis of your vocal after the whole module chain (not a module in the chai
 All views show the same settings. Switching never changes the sound or resets anything.)~") });
 
             p.push_back ({ "automix", t ("Automatischer Mix", "Automatic mix"), gWork, t (R"~(## Was er tut
-Headliner nimmt einen begrenzten Abschnitt der Vocal auf, während deine DAW sie abspielt (etwa 14 Sekunden Gesang, höchstens 24 Sekunden mit kurzen Lücken), analysiert ihn und stellt die Module ein. Alles läuft im Plugin: kein Internet, keine Cloud, kein KI-Dienst. Ein Plugin hört nur, was die DAW durch es abspielt – Headliner liest nie die Audiodatei selbst, analysiert wird also nur der aufgenommene Abschnitt.
+VOCALYPSE nimmt einen begrenzten Abschnitt der Vocal auf, während deine DAW sie abspielt (etwa 14 Sekunden Gesang, höchstens 24 Sekunden mit kurzen Lücken), analysiert ihn und stellt die Module ein. Alles läuft im Plugin: kein Internet, keine Cloud, kein KI-Dienst. Ein Plugin hört nur, was die DAW durch es abspielt – VOCALYPSE liest nie die Audiodatei selbst, analysiert wird also nur der aufgenommene Abschnitt.
 
 ## Was gemessen wird
 - Lautheit (ITU-R BS.1770), Spitzen, Clipping, der Pegelunterschied zwischen lauten und leisen Wörtern, Crest-Faktor und Grundrauschen (wenn es Pausen gibt).
 - Tonumfang der Stimme, das Langzeit-Spektrum (Rumpeln, Körper, Tiefmitten, Präsenz, S-Bereich, Luft), S-Laute im Verhältnis zu Vokalen, schmale Resonanzen (Teiltöne der gesungenen Noten werden ausgenommen), Raum- oder Effektfahnen und Stereobreite.
-- Mit einem Beat auf dem Sidechain: sein Pegel und wie stark er den Präsenzbereich der Stimme überlappt. Das ist nur ein Hinweis, nie ein Beweis für Verdeckung – der Beat ist durch Headliner nie zu hören.
+- Mit einem Beat auf dem Sidechain: sein Pegel und wie stark er den Präsenzbereich der Stimme überlappt. Das ist nur ein Hinweis, nie ein Beweis für Verdeckung – der Beat ist durch VOCALYPSE nie zu hören.
 
 ## Was eingestellt wird
 Die Entscheidungen folgen den Messungen: Der Low Cut sitzt deutlich unter den tiefsten gesungenen Noten, Höhen werden nur bei dunklen Aufnahmen angehoben, der Threshold des De-Essers liegt zwischen Vokal- und S-Pegel, die Resonanz-Kontrolle läuft nur, wenn etwas heraussticht, Reverb und Delay werden bei halligen Aufnahmen reduziert oder bleiben aus.
 
 ## Geprüft, bevor er angewendet wird
-Headliner rechnet den aufgenommenen Abschnitt durch die komplette Kette, misst das Ergebnis und korrigiert es dort, wo die Messung verlässlich ist: zu starke oder zu schwache Kompression, S-Laute, die die Kette lauter gemacht hat, verlorener Körper oder zu viel Helligkeit, Mono-Kompatibilität. Zum Schluss wird der Ausgang an die Lautheit des Originals angeglichen (damit der Vergleich fair ist), mit 1 dB Headroom.
+VOCALYPSE rechnet den aufgenommenen Abschnitt durch die komplette Kette, misst das Ergebnis und korrigiert es dort, wo die Messung verlässlich ist: zu starke oder zu schwache Kompression, S-Laute, die die Kette lauter gemacht hat, verlorener Körper oder zu viel Helligkeit, Mono-Kompatibilität. Zum Schluss wird der Ausgang an die Lautheit des Originals angeglichen (damit der Vergleich fair ist), mit 1 dB Headroom.
 
 ## Vergleichen und rückgängig machen
 - Vorher / Nachher (SIMPEL, neben „Vocal analysieren“) schaltet die echten Parameter zwischen dem Zustand vor der Analyse und dem Mix um (einschließlich deiner Änderungen daran).
@@ -234,20 +234,20 @@ Headliner rechnet den aufgenommenen Abschnitt durch die komplette Kette, misst d
 - „Vocal analysieren“ ist immer verfügbar; der aktuelle Zustand wird zum neuen „Vorher“.
 
 ## Grenzen
-Eine kurze oder leise Aufnahme ergibt vorsichtige Einstellungen (und Headliner sagt das). Die Analyse beurteilt die Aufnahme, nicht deinen Geschmack – nimm das Ergebnis als gut vorbereiteten Startpunkt und hör hin. Ein perfekter Mix für jede Aufnahme ist nicht garantiert.)~",
+Eine kurze oder leise Aufnahme ergibt vorsichtige Einstellungen (und VOCALYPSE sagt das). Die Analyse beurteilt die Aufnahme, nicht deinen Geschmack – nimm das Ergebnis als gut vorbereiteten Startpunkt und hör hin. Ein perfekter Mix für jede Aufnahme ist nicht garantiert.)~",
 R"~(## What it does
-Headliner records a limited section of the vocal while your DAW plays it (about 14 seconds of singing, at most 24 seconds including short gaps), analyzes it and sets up the modules. Everything runs inside the plugin: no internet, no cloud, no AI service. A plugin only hears what the DAW plays through it - Headliner never reads the audio file itself, so only the captured section is analyzed.
+VOCALYPSE records a limited section of the vocal while your DAW plays it (about 14 seconds of singing, at most 24 seconds including short gaps), analyzes it and sets up the modules. Everything runs inside the plugin: no internet, no cloud, no AI service. A plugin only hears what the DAW plays through it - VOCALYPSE never reads the audio file itself, so only the captured section is analyzed.
 
 ## What is measured
 - Loudness (ITU-R BS.1770), peaks, clipping, the level difference between loud and quiet words, crest factor and noise floor (when there are pauses).
 - Pitch range of the voice, the long-term spectrum (rumble, body, low mids, presence, S range, air), S sounds against vowels, narrow resonances (partials of the sung notes are excluded), room or effect tails, and stereo width.
-- With a beat on the sidechain: its level and how much it overlaps the voice's presence range. This is only a hint, never proof of masking - the beat is never heard through Headliner.
+- With a beat on the sidechain: its level and how much it overlaps the voice's presence range. This is only a hint, never proof of masking - the beat is never heard through VOCALYPSE.
 
 ## What is set up
 The decisions follow the measurements: the low cut sits well below the lowest sung notes, highs are only raised on dark recordings, the de-esser threshold sits between vowel and S level, resonance control only runs when something sticks out, reverb and delay are reduced or left off on roomy recordings.
 
 ## Checked before it is applied
-Headliner renders the captured section through the complete chain, measures the result and corrects it where the measurement is reliable: compression that is too strong or too weak, S sounds that the chain made louder, lost body or too much brightness, mono compatibility. Finally the output is matched to the loudness of the original (so the comparison is fair) with 1 dB of headroom.
+VOCALYPSE renders the captured section through the complete chain, measures the result and corrects it where the measurement is reliable: compression that is too strong or too weak, S sounds that the chain made louder, lost body or too much brightness, mono compatibility. Finally the output is matched to the loudness of the original (so the comparison is fair) with 1 dB of headroom.
 
 ## Compare and undo
 - Before / After (SIMPLE, next to "Analyze vocal") switches the real parameters between the state before the analysis and the mix (including your changes to it).
@@ -268,7 +268,7 @@ Die Kopfleiste zeigt ‹ Name ›. Die Pfeile blättern durch alle Presets; ein 
 ## Deine eigenen Presets
 - Speichern überschreibt das geladene eigene Preset; bei einem Werks-Preset fragt es nach einem Namen.
 - Speichern als, Umbenennen und Löschen gelten für deine eigenen Presets. Werks-Presets werden nie verändert.
-- Eigene Presets sind Dateien in deinem Dokumente-Ordner (Lind Audio/Headliner/Presets) – du kannst sie sichern oder weitergeben.
+- Eigene Presets sind Dateien in deinem Dokumente-Ordner (Lind Audio/VOCALYPSE/Presets) – du kannst sie sichern oder weitergeben.
 - Ein * hinter dem Namen in der Kopfleiste heißt: Das geladene Preset wurde verändert.
 
 ## Modul-Presets
@@ -278,7 +278,7 @@ Der Presets-Knopf in einem Modul-Panel lädt Startpunkte nur für dieses Modul; 
 Input Gain, Bypass und der faire Vergleich (Level Match) gehören zu deiner Aufnahme und deinem Abhören, deshalb ändern Presets sie nie.
 
 ## Projekte
-Dein DAW-Projekt speichert den kompletten Zustand jeder Headliner-Instanz: alle Parameter, die Modul-Reihenfolge, Modus und Tab, die Fenstergröße, den Bericht des automatischen Mixes und den Zustand davor.)~",
+Dein DAW-Projekt speichert den kompletten Zustand jeder VOCALYPSE-Instanz: alle Parameter, die Modul-Reihenfolge, Modus und Tab, die Fenstergröße, den Bericht des automatischen Mixes und den Zustand davor.)~",
 R"~(## The preset list
 The header shows ‹ name ›. The arrows step through all presets; click the name for the list:
 - Categories on the left: All, the factory categories (Clean, Punchy, Aggressive, Wide, Creative, ...), User (your presets) and Favorites.
@@ -289,7 +289,7 @@ The header shows ‹ name ›. The arrows step through all presets; click the na
 ## Your own presets
 - Save overwrites the loaded preset of your own; with a factory preset it asks for a name.
 - Save as, Rename and Delete work on your own presets. Factory presets are never changed.
-- User presets are files in your Documents folder (Lind Audio/Headliner/Presets), so you can back them up or share them.
+- User presets are files in your Documents folder (Lind Audio/VOCALYPSE/Presets), so you can back them up or share them.
 - A * after the name in the header means the loaded preset was changed.
 
 ## Module presets
@@ -299,10 +299,10 @@ The Presets button inside a module panel loads starting points for that module o
 Input gain, Bypass and the fair compare (Level Match) belong to your recording and monitoring, so presets never change them.
 
 ## Projects
-Your DAW project stores the complete state of every Headliner instance: all parameters, the module order, the mode and tab, the window size, the automatic-mix report and the state before it.)~") });
+Your DAW project stores the complete state of every VOCALYPSE instance: all parameters, the module order, the mode and tab, the window size, the automatic-mix report and the state before it.)~") });
 
             p.push_back ({ "compare", t ("Bypass und Vorher / Nachher", "Compare: Bypass and Before / After"), gWork, t (R"~(## Bypass
-Bypass (oben rechts) spielt die unbearbeitete Vocal, latenzkompensiert, damit sie im Takt bleibt. Solange Bypass an ist, zeigt Headliner einen bernsteinfarbenen Rahmen und einen Hinweis, damit du es nie vergisst. Es ist auch der Bypass-Parameter des Hosts.
+Bypass (oben rechts) spielt die unbearbeitete Vocal, latenzkompensiert, damit sie im Takt bleibt. Solange Bypass an ist, zeigt VOCALYPSE einen bernsteinfarbenen Rahmen und einen Hinweis, damit du es nie vergisst. Es ist auch der Bypass-Parameter des Hosts.
 
 ## Vorher / Nachher
 Nach einer Analyse zeigt SIMPEL neben „Vocal analysieren“ den Schalter Vorher / Nachher: Er wechselt zwischen den Einstellungen vor der Analyse und dem Mix. Umschalten ist Hören, nicht Bearbeiten – deshalb ist es kein Rückgängig-Schritt.
@@ -314,7 +314,7 @@ Lauter klingt fast immer besser. Stell den fairen Vergleich (Details) oder Level
 - Aus: keine Pegelanpassung.
 Der Pegel wird nie heimlich angeglichen: nur, wenn du es wählst.)~",
 R"~(## Bypass
-Bypass (top right) plays the unprocessed vocal, delay-compensated so it stays in time. While bypass is on, Headliner shows an amber frame and a label so you never forget it. It is also the host's bypass parameter.
+Bypass (top right) plays the unprocessed vocal, delay-compensated so it stays in time. While bypass is on, VOCALYPSE shows an amber frame and a label so you never forget it. It is also the host's bypass parameter.
 
 ## Before / After
 After an analysis, SIMPLE shows Before / After next to "Analyze vocal": it switches between the settings before the analysis and the mix. Switching is listening, not editing, so it is not an undo step.
@@ -386,8 +386,8 @@ R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosi
                    "- Low cut 80 to 120 Hz, 24 dB/oct.\n- A Bell -2 to -4 dB around 400 Hz if the voice sounds boxy.\n- A High Shelf +2 to +4 dB at 10 kHz for air."),
                 t ("- Viele Bänder anheben, statt das Problem abzusenken.\n- Sehr schmale, große Anhebungen, die zu klingeln beginnen.\n- Den Low Cut so hoch setzen, dass die Stimme ihren Körper verliert.\n- Nur nach der Kurve urteilen – immer hinhören.",
                    "- Boosting many bands instead of cutting the problem.\n- Very narrow, large boosts that start to ring.\n- Setting the low cut so high that the voice loses its body.\n- Judging only by the curve - always listen."),
-                t ("Setz den EQ vor den Compressor, damit der Compressor nicht auf Rumpeln reagiert. Große Höhen-Anhebungen können S-Laute schärfer machen; lass den De-Esser folgen. Smooth fängt Resonanzen, die wandern – das kann ein statischer EQ nicht. Projekte aus Headliner 0.5 behalten ihre alten Filterkurven; unter Mehr stellt „Alte EQ-Kurve – umstellen“ auf die neuen, analog angepassten Kurven um.",
-                   "Put the EQ before the Compressor so the compressor does not react to rumble. Large high boosts can make S sounds sharper; follow with the De-Esser. Smooth catches resonances that move, which a static EQ cannot. Projects from Headliner 0.5 keep their old filter curves; More offers \"Old EQ curve - switch\" to change to the new analog-matched curves.") }));
+                t ("Setz den EQ vor den Compressor, damit der Compressor nicht auf Rumpeln reagiert. Große Höhen-Anhebungen können S-Laute schärfer machen; lass den De-Esser folgen. Smooth fängt Resonanzen, die wandern – das kann ein statischer EQ nicht. Projekte aus VOCALYPSE 0.5 behalten ihre alten Filterkurven; unter Mehr stellt „Alte EQ-Kurve – umstellen“ auf die neuen, analog angepassten Kurven um.",
+                   "Put the EQ before the Compressor so the compressor does not react to rumble. Large high boosts can make S sounds sharper; follow with the De-Esser. Smooth catches resonances that move, which a static EQ cannot. Projects from VOCALYPSE 0.5 keep their old filter curves; More offers \"Old EQ curve - switch\" to change to the new analog-matched curves.") }));
 
             p.push_back (modulePage (l, gModules, "comp", "Compressor", {
                 t ("Senkt den Pegel lauter Passagen, damit die Vocal gleichmäßig bleibt und jedes Wort im Mix sitzt. Die Anzeige scrollt den Eingang (grau), den Ausgang und die Pegelreduktion (pink, von oben); die Zahl ist die Reduktion in diesem Moment. Rechts daneben die Kennlinie: Eingangspegel nach rechts, Ausgangspegel nach oben.",
@@ -654,7 +654,7 @@ R"~(- Rumble, plosives, muddy low end: EQ Low cut around 80 to 120 Hz. For plosi
     }
 }
 
-namespace velvox::ui::help
+namespace vocalypse::ui::help
 {
     juce::String shortDescription (int id)
     {

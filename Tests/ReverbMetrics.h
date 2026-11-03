@@ -85,9 +85,9 @@ namespace reverbmetrics
         std::vector<double> x (m.begin() + on, m.end());
         for (int k = 0; k < 2; ++k)
         {
-            velvox::dsp::Biquad hp, lp;
-            hp.setCoeffs (velvox::dsp::design::highPass (fs, fc / 1.414, 0.7071));
-            lp.setCoeffs (velvox::dsp::design::lowPass (fs, fc * 1.414, 0.7071));
+            vocalypse::dsp::Biquad hp, lp;
+            hp.setCoeffs (vocalypse::dsp::design::highPass (fs, fc / 1.414, 0.7071));
+            lp.setCoeffs (vocalypse::dsp::design::lowPass (fs, fc * 1.414, 0.7071));
             for (auto& v : x)
                 v = lp.process (hp.process ((float) v, 0), 0);
         }

@@ -2,8 +2,8 @@
 
 #include "TestHelpers.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 namespace
 {
@@ -47,7 +47,7 @@ namespace
 class DuckingTests final : public juce::UnitTest
 {
 public:
-    DuckingTests() : juce::UnitTest ("Velvox ducking", "Velvox") {}
+    DuckingTests() : juce::UnitTest ("Vocalypse ducking", "Vocalypse") {}
 
     void runTest() override
     {

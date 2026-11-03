@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Every processing module that can be placed in the chain. The numeric
     // values are persisted - append only, never renumber.

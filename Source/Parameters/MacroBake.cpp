@@ -1,7 +1,7 @@
 #include "MacroBake.h"
 #include "SettingsReader.h"
 
-namespace velvox::macrobake
+namespace vocalypse::macrobake
 {
     namespace
     {

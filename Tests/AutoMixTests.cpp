@@ -15,9 +15,9 @@
 #include <thread>
 #include <set>
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::automix;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::automix;
 using dsp::ModuleId;
 
 namespace
@@ -88,7 +88,7 @@ namespace
         return i >= 0 && eq.bands[(size_t) i].on ? eq.bands[(size_t) i].freq : 0.0f;
     }
 
-    VelvoxAudioProcessorEditor& asVelvox (juce::AudioProcessorEditor& e) { return dynamic_cast<VelvoxAudioProcessorEditor&> (e); }
+    VocalypseAudioProcessorEditor& asVocalypse (juce::AudioProcessorEditor& e) { return dynamic_cast<VocalypseAudioProcessorEditor&> (e); }
 
     // Button clicks are delivered asynchronously: click and let the message loop run
     // long enough that a busy loop (editor animations, first paints) still delivers it
@@ -138,7 +138,7 @@ namespace
 class AutoMixTests final : public juce::UnitTest
 {
 public:
-    AutoMixTests() : juce::UnitTest ("Velvox automatic mix", "Velvox") {}
+    AutoMixTests() : juce::UnitTest ("Vocalypse automatic mix", "Vocalypse") {}
 
     void runTest() override
     {
@@ -1328,7 +1328,7 @@ public:
             Harness h;
             {
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-                auto& ov = asVelvox (*e).getAnalysisOverlay();
+                auto& ov = asVocalypse (*e).getAnalysisOverlay();
                 expect (ov.isOpen(), "popup on the first open of a new instance");
                 expect (ov.getView() == ui::AnalysisOverlay::View::intro);
                 expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Auto Mix starten"));
@@ -1340,12 +1340,12 @@ public:
                 expect (! ov.isOpen());
             }
             std::unique_ptr<juce::AudioProcessorEditor> again (h.proc.createEditor());
-            expect (! asVelvox (*again).getAnalysisOverlay().isOpen(), "not again after Später");
+            expect (! asVocalypse (*again).getAnalysisOverlay().isOpen(), "not again after Später");
 
             // Simple mode (opened by default) has "Vocal analysieren" under the spectrum; it opens the progress card
-            expect (asVelvox (*again).getSimpleView().isVisible() && asVelvox (*again).getSimpleView().getAnalyseButton().isVisible(), "analyse visible in Simple mode");
-            click (asVelvox (*again).getSimpleView().getAnalyseButton());
-            auto& ov = asVelvox (*again).getAnalysisOverlay();
+            expect (asVocalypse (*again).getSimpleView().isVisible() && asVocalypse (*again).getSimpleView().getAnalyseButton().isVisible(), "analyse visible in Simple mode");
+            click (asVocalypse (*again).getSimpleView().getAnalyseButton());
+            auto& ov = asVocalypse (*again).getAnalysisOverlay();
             // 0.8: every start asks genre and vibe first
             expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::intro, "the analyse button opens the start card");
             click (ov.getPrimaryButton());
@@ -1359,7 +1359,7 @@ public:
             Harness h;
             h.proc.getAutoMix().setIntent ({ Genre::rap, Vibe::floaty });
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ov = asVelvox (*e).getAnalysisOverlay();
+            auto& ov = asVocalypse (*e).getAnalysisOverlay();
             ov.showIntro();
             expect (ov.getGenreChip (Genre::rap).getToggleState() && ov.getVibeChip (Vibe::floaty).getToggleState(), "saved choice preselected");
             expect (! ov.getGenreChip (Genre::party).getToggleState(), "one genre at a time");
@@ -1378,7 +1378,7 @@ public:
         {
             Harness h;
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ov = asVelvox (*e).getAnalysisOverlay();
+            auto& ov = asVocalypse (*e).getAnalysisOverlay();
             ov.showIntro();
             expect (ui::AnalysisOverlay::beatHelpText().contains ("Sidechain to this track"), "FL Studio steps");
             ov.beatPresent = [] { return false; };
@@ -1393,7 +1393,7 @@ public:
         {
             Harness h;
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ov = asVelvox (*e).getAnalysisOverlay();
+            auto& ov = asVocalypse (*e).getAnalysisOverlay();
             auto& c = h.proc.getAutoMix();
             c.start();
             ov.showProgress();
@@ -1495,7 +1495,7 @@ public:
             h.proc.getAutoMix().applyResult (result);
 
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             expect (! ed.getAnalysisOverlay().isOpen(), "overlay closed");
             expect (! ed.isAdvanced(), "Simple mode");
             const auto& report = h.proc.getAutoMix().getReport();
@@ -1531,7 +1531,7 @@ public:
             const auto result = h.proc.getAutoMix().runSynchronously (makeVocal (s));
             h.proc.getAutoMix().applyResult (result);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             auto& simple = ed.getSimpleView();
             auto& fair = simple.getFairCompareButton();
             expect (fair.isVisible() && fair.getToggleState(), "visible and on");
@@ -1670,7 +1670,7 @@ public:
             Harness h;
             {
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-                auto& ov = asVelvox (*e).getAnalysisOverlay();
+                auto& ov = asVocalypse (*e).getAnalysisOverlay();
                 expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::intro);
                 expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Start auto mix"));
                 expect (ui::AnalysisOverlay::introText().contains ("14 s"), "English intro");
@@ -1678,8 +1678,8 @@ public:
                 expectEquals (ov.getVibeChip (Vibe::natural).getButtonText(), juce::String ("Clear & natural"));
                 expectEquals (ov.getSecondaryButton().getButtonText(), juce::String ("Later"));
                 click (ov.getSecondaryButton());
-                expectEquals (asVelvox (*e).getSimpleView().getAnalyseButton().getButtonText(), juce::String ("Analyze vocal"));
-                click (asVelvox (*e).getSimpleView().getAnalyseButton());
+                expectEquals (asVocalypse (*e).getSimpleView().getAnalyseButton().getButtonText(), juce::String ("Analyze vocal"));
+                click (asVocalypse (*e).getSimpleView().getAnalyseButton());
                 expect (ov.getView() == ui::AnalysisOverlay::View::intro);
                 click (ov.getPrimaryButton());
                 expect (ov.getView() == ui::AnalysisOverlay::View::listening);
@@ -1695,7 +1695,7 @@ public:
             expect (result.ok, "ok");
             h.proc.getAutoMix().applyResult (result);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             expectEquals (ed.getSimpleView().getAnalyseButton().getButtonText(), juce::String ("Analyze again"));
             expectEquals (ed.getSimpleView().getBeforeButton().getButtonText(), juce::String ("Before"));
             expectEquals (ed.getSimpleView().getAfterButton().getButtonText(), juce::String ("After"));

@@ -2,7 +2,7 @@
 
 #include <complex>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     bool sanitize (float* const* channels, int numChannels, int numSamples) noexcept
     {

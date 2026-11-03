@@ -1,4 +1,4 @@
-// Headliner 0.6.1 chain items: module solo (spec item 4) and horizontal scrolling of the chain row (item 3).
+// VOCALYPSE 0.6.1 chain items: module solo (spec item 4) and horizontal scrolling of the chain row (item 3).
 // Solo is a monitoring state: every other module instance bypassed, latency unchanged, never saved, never an undo step.
 
 #include "TestHelpers.h"
@@ -8,8 +8,8 @@
 #include "UI/SoloButton.h"
 #include "PluginEditor.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -37,7 +37,7 @@ namespace
         c.mouseUp (mouse (c, to, from, true, mods));
     }
 
-    VelvoxAudioProcessorEditor& asVelvox (juce::AudioProcessorEditor& e) { return dynamic_cast<VelvoxAudioProcessorEditor&> (e); }
+    VocalypseAudioProcessorEditor& asVocalypse (juce::AudioProcessorEditor& e) { return dynamic_cast<VocalypseAudioProcessorEditor&> (e); }
 
     std::unique_ptr<juce::AudioProcessorEditor> proEditor (Harness& h)
     {
@@ -125,7 +125,7 @@ namespace
 class ChainSoloTests final : public juce::UnitTest
 {
 public:
-    ChainSoloTests() : juce::UnitTest ("Chain solo and scrolling (0.6.1)", "Velvox") {}
+    ChainSoloTests() : juce::UnitTest ("Chain solo and scrolling (0.6.1)", "Vocalypse") {}
 
     void runTest() override
     {
@@ -306,7 +306,7 @@ public:
             {
                 auto e = proEditor (h);
                 e->setSize (width, width * 600 / 1000);
-                auto& ed = asVelvox (*e);
+                auto& ed = asVocalypse (*e);
                 auto& chain = ed.getChainView();
                 for (const auto& s : h.proc.getRouting())
                 {
@@ -409,7 +409,7 @@ public:
             setupBusyChain (h);
             {
                 auto e = proEditor (h);
-                auto& ed = asVelvox (*e);
+                auto& ed = asVocalypse (*e);
                 ed.selectModule (comp);
                 auto* panel = ed.getDetail();
                 expect (panel != nullptr && panel->getSoloButton() != nullptr, "S in the compressor's header");

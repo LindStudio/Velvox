@@ -4,9 +4,9 @@
 #include "Spectrum.h"
 #include "LiveData.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // The visual stage at the top of every Pro panel: each module has its own
     // live picture (EQ curve with draggable bands, compressor history and
@@ -22,5 +22,5 @@ namespace velvox::ui
     };
 
     // `selection` = dsp::selectionCode (module, instance), or < 0 for the output stage
-    std::unique_ptr<ModuleView> createModuleView (VelvoxAudioProcessor& p, int selection, const SpectrumSource* spectrum);
+    std::unique_ptr<ModuleView> createModuleView (VocalypseAudioProcessor& p, int selection, const SpectrumSource* spectrum);
 }

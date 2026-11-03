@@ -2,7 +2,7 @@
 
 #include "AssistantTypes.h"
 
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
     // "Im Stil von ..." - a style is translated into ordinary sound targets
     // (presence, highs, compression ...), which then go through the same
@@ -17,7 +17,7 @@ namespace velvox::assistant
         juce::StringArray names;            // normalised spellings ("ski aggu", "aggu")
         juce::String character;             // one sentence: the sound in words
         std::vector<Trait> traits;
-        juce::String caveat;                // what Velvox cannot do for this style (may be empty)
+        juce::String caveat;                // what Vocalypse cannot do for this style (may be empty)
     };
 
     const std::vector<StyleProfile>& styleProfiles();

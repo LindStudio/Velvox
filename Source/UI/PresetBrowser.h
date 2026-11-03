@@ -3,7 +3,7 @@
 #include "Widgets.h"
 #include "../Presets/PresetManager.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     class DialogOverlay;
 

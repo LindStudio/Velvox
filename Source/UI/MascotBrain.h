@@ -19,7 +19,7 @@
 //
 // A new mood waits until the current one has shown minHold seconds and scores near a border keep the
 // current mood (hysteresis), so he does not flicker; a scene (tour) plays its moods to their end.
-namespace velvox::ui::mascot
+namespace vocalypse::ui::mascot
 {
     enum class Mood { listening, talking, wink, celebrate, sad, shocked, thinking, proud, annoyed };
     constexpr int numMoods = 9;

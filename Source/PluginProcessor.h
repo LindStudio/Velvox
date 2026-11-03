@@ -16,14 +16,14 @@
 #include "Presets/UndoHistory.h"
 #include "AutoMix/AutoMixController.h"
 
-class VelvoxAudioProcessor final : public juce::AudioProcessor,
+class VocalypseAudioProcessor final : public juce::AudioProcessor,
                                    private juce::ValueTree::Listener,
                                    private juce::AudioProcessorValueTreeState::Listener,
                                    private juce::AsyncUpdater
 {
 public:
-    VelvoxAudioProcessor();
-    ~VelvoxAudioProcessor() override;
+    VocalypseAudioProcessor();
+    ~VocalypseAudioProcessor() override;
 
     //==========================================================================
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -55,35 +55,35 @@ public:
 
     //==========================================================================
     juce::AudioProcessorValueTreeState& getState() noexcept { return apvts; }
-    velvox::PresetManager& getPresetManager() noexcept { return presetManager; }
+    vocalypse::PresetManager& getPresetManager() noexcept { return presetManager; }
 
     // One global undo history (parameter gestures, routing edits, preset loads, transactions).
     // Message thread only. Other code groups several edits into one step with
     // getUndo().beginTransaction (name) / endTransaction() or getUndo().perform (name, fn).
-    velvox::UndoHistory& getUndo() noexcept { return undoHistory; }
-    velvox::dsp::VocalChain& getChain() noexcept { return chain; }
+    vocalypse::UndoHistory& getUndo() noexcept { return undoHistory; }
+    vocalypse::dsp::VocalChain& getChain() noexcept { return chain; }
 
     // Automatic mix: capture during playback, analysis, plan, apply (see AutoMix/)
-    velvox::automix::AutoMixController& getAutoMix() noexcept { return autoMix; }
+    vocalypse::automix::AutoMixController& getAutoMix() noexcept { return autoMix; }
 
 
     // Module instances in the chain, order, send-insert modes. setRouting is
     // message-thread only; the audio thread reads a lock-free copy (SeqLockValue).
-    velvox::dsp::Routing getRouting() const noexcept;
-    void setRouting (const velvox::dsp::Routing& routing);
+    vocalypse::dsp::Routing getRouting() const noexcept;
+    void setRouting (const vocalypse::dsp::Routing& routing);
 
     // Mix law per module instance (0.6, spec Q1; see DSP/MixLaw.h). Projects from 0.5 and older
     // load with every instance on the legacy law (Mix adds the wet to a unity dry), a new
     // plugin and every instance that joins the chain while switched off (added through the
     // browser) use the true dry/wet law. Message thread for the setters; the getters are lock-free.
-    velvox::dsp::MixLaws getMixLaws() const noexcept { return mixLawShared.load(); }
+    vocalypse::dsp::MixLaws getMixLaws() const noexcept { return mixLawShared.load(); }
     // True when this instance's Mix still uses the old law ("Alte Mix-Kurve"); only modules
     // whose Mix depends on the law can be true (Delay, Reverb, Doubler, Smash)
-    bool usesLegacyMixLaw (velvox::dsp::ModuleId id, int instance = 0) const noexcept;
+    bool usesLegacyMixLaw (vocalypse::dsp::ModuleId id, int instance = 0) const noexcept;
     // "Alte Mix-Kurve - umstellen": this instance from now on uses the true dry/wet law
     // (settings up to 50 % keep their sound, above it the dry fades out). One undo step.
-    void switchToTrueMixLaw (velvox::dsp::ModuleId id, int instance = 0);
-    void setLegacyMixLaw (velvox::dsp::ModuleId id, int instance, bool legacy);
+    void switchToTrueMixLaw (vocalypse::dsp::ModuleId id, int instance = 0);
+    void setLegacyMixLaw (vocalypse::dsp::ModuleId id, int instance, bool legacy);
 
     // Listening aid: sums the output to mono. Deliberately not a parameter and
     // not saved, so a project can never be left in mono by accident.
@@ -124,16 +124,16 @@ public:
 
     // VOCAL CHECK analysis (message thread). Fed from the Check module in the
     // chain by a timer that runs while the module is on - also with the editor closed.
-    velvox::dsp::VocalAnalyzer& getAnalyzer() noexcept { return analyzer; }
+    vocalypse::dsp::VocalAnalyzer& getAnalyzer() noexcept { return analyzer; }
     // Drains the Check tap into the analyzer (called by the timer; tests call it directly)
     void pumpAnalyzer();
     // Latest findings (recomputed about twice a second while the module is on)
-    const velvox::dsp::AnalysisResult& getLatestAnalysis() const noexcept { return latestAnalysis; }
+    const vocalypse::dsp::AnalysisResult& getLatestAnalysis() const noexcept { return latestAnalysis; }
     void refreshAnalysis();
     // VOCAL CHECK findings, score, Anwenden / Alles anwenden / Ignorieren for the UI
-    velvox::check::VocalCheckController& getVocalCheck() noexcept { return vocalCheck; }
+    vocalypse::check::VocalCheckController& getVocalCheck() noexcept { return vocalCheck; }
     // True when that module instance is in the chain and audible with the current settings
-    bool isInstanceAudible (velvox::dsp::ModuleId id, int instance) const;
+    bool isInstanceAudible (vocalypse::dsp::ModuleId id, int instance) const;
 
     // The thread that may write the routing / mix-law SeqLockValues (single writer): the message
     // thread (or a thread holding the MessageManagerLock); any thread when no message manager exists
@@ -145,7 +145,7 @@ private:
     void syncRoutingFromState();
     void syncMixLawFromState();
     // Instances that joined the chain while switched off are fresh: true law
-    void markFreshInstances (const velvox::dsp::Routing& before, const velvox::dsp::Routing& after);
+    void markFreshInstances (const vocalypse::dsp::Routing& before, const vocalypse::dsp::Routing& after);
     bool loadingState = false;
 
     // Latency follows the latent modules in the chain; reported on the message thread
@@ -164,20 +164,20 @@ public:
     // Thread-safe reads (atomics): the settings the DSP processes. Since 0.6.1 nothing is layered on
     // the parameters (the Simple sliders write the modules, Parameters/MacroMapper.h), so the
     // "effective" settings ARE the parameters; the name stays for the panels that read it.
-    velvox::dsp::ChainSettings readSettings() const noexcept;
-    velvox::dsp::ChainSettings readEffectiveSettings() const noexcept { return readSettings(); }
+    vocalypse::dsp::ChainSettings readSettings() const noexcept;
+    vocalypse::dsp::ChainSettings readEffectiveSettings() const noexcept { return readSettings(); }
     // Positions of the six Simple sliders (0..1); they carry no sound of their own
-    velvox::dsp::MacroValues readMacros() const noexcept;
+    vocalypse::dsp::MacroValues readMacros() const noexcept;
 private:
 
     juce::AudioProcessorValueTreeState apvts;
-    velvox::UndoHistory undoHistory { apvts };
-    velvox::PresetManager presetManager;
-    velvox::dsp::VocalChain chain;
-    velvox::automix::AutoMixController autoMix { *this, apvts };
-    velvox::eqbands::LegacyBridge eqBridge { apvts };   // 0.5 fixed-band edits -> role bands
+    vocalypse::UndoHistory undoHistory { apvts };
+    vocalypse::PresetManager presetManager;
+    vocalypse::dsp::VocalChain chain;
+    vocalypse::automix::AutoMixController autoMix { *this, apvts };
+    vocalypse::eqbands::LegacyBridge eqBridge { apvts };   // 0.5 fixed-band edits -> role bands
 
-    velvox::SettingsReader reader;
+    vocalypse::SettingsReader reader;
 
     std::atomic<bool> monoMonitor { false };
     std::atomic<int> soloCode { -1 };
@@ -189,44 +189,44 @@ private:
     std::atomic<float> scRmsDb { -100.0f }, vocalRmsDb { -100.0f };
     void measureLevels (const juce::AudioBuffer<float>& vocal, int vocalChannels, const juce::AudioBuffer<float>* sidechain) noexcept;
 
-    velvox::dsp::VocalAnalyzer analyzer { chain.getCheck() };
-    velvox::dsp::AnalysisResult latestAnalysis;
-    velvox::check::VocalCheckController vocalCheck { apvts, analyzer,
-        { [this]() -> const velvox::dsp::AnalysisResult& { return latestAnalysis; },
+    vocalypse::dsp::VocalAnalyzer analyzer { chain.getCheck() };
+    vocalypse::dsp::AnalysisResult latestAnalysis;
+    vocalypse::check::VocalCheckController vocalCheck { apvts, analyzer,
+        { [this]() -> const vocalypse::dsp::AnalysisResult& { return latestAnalysis; },
           [this] { refreshAnalysis(); },
           [this] { return getRouting(); },
-          [this] (velvox::dsp::ModuleId id, int k) { return isInstanceAudible (id, k); },
+          [this] (vocalypse::dsp::ModuleId id, int k) { return isInstanceAudible (id, k); },
           &undoHistory } };
     double lastAnalysisMs = 0.0;
     bool analysedOpen = false;   // the last pump had an editor open
     struct AnalyzerTimer final : juce::Timer
     {
-        explicit AnalyzerTimer (VelvoxAudioProcessor& p) : owner (p) {}
+        explicit AnalyzerTimer (VocalypseAudioProcessor& p) : owner (p) {}
         void timerCallback() override { owner.pumpAnalyzer(); }
-        VelvoxAudioProcessor& owner;
+        VocalypseAudioProcessor& owner;
     } analyzerTimer { *this };
 
-    velvox::dsp::SeqLockValue<velvox::dsp::Routing> routingShared { velvox::dsp::Routing::defaults() };
-    velvox::dsp::Routing audioRouting = velvox::dsp::Routing::defaults();   // audio thread's last good copy
-    velvox::dsp::SeqLockValue<velvox::dsp::MixLaws> mixLawShared { velvox::dsp::MixLaws::allTrue() };
-    velvox::dsp::MixLaws audioMixLaws = velvox::dsp::MixLaws::allTrue();   // audio thread's last good copy
+    vocalypse::dsp::SeqLockValue<vocalypse::dsp::Routing> routingShared { vocalypse::dsp::Routing::defaults() };
+    vocalypse::dsp::Routing audioRouting = vocalypse::dsp::Routing::defaults();   // audio thread's last good copy
+    vocalypse::dsp::SeqLockValue<vocalypse::dsp::MixLaws> mixLawShared { vocalypse::dsp::MixLaws::allTrue() };
+    vocalypse::dsp::MixLaws audioMixLaws = vocalypse::dsp::MixLaws::allTrue();   // audio thread's last good copy
 
     // Simple sliders -> module parameters (message thread)
-    velvox::MacroMapper macroMapper { apvts, {
+    vocalypse::MacroMapper macroMapper { apvts, {
         [this] { return readSettings(); },
         [this] { return getRouting(); },
-        [this] (const velvox::dsp::Routing& r) { setRouting (r); },
+        [this] (const vocalypse::dsp::Routing& r) { setRouting (r); },
         [this] { return getMixLaws(); },
-        [this] (const velvox::dsp::MixLaws& l) { apvts.state.setProperty (velvox::statekeys::mixLaw, l.toString(), nullptr); },
+        [this] (const vocalypse::dsp::MixLaws& l) { apvts.state.setProperty (vocalypse::statekeys::mixLaw, l.toString(), nullptr); },
         // Values restored as saved (load, undo / redo, presets and snapshots, the auto-mix) are positions only
         [this] { return loadingState || undoHistory.isApplyingHistory() || undoHistory.isInTransaction()
-                        || velvox::eqbands::ScopedBridgeSuspend::isActive (apvts); } } };
+                        || vocalypse::eqbands::ScopedBridgeSuspend::isActive (apvts); } } };
 
     // Feeds the undo history (and the macro mapper) with the plugin's own gestures (message thread).
     // The mapper hears a gesture begin first, so the module writes of that move carry gestures.
     struct GestureListener final : juce::AudioProcessorListener
     {
-        GestureListener (velvox::UndoHistory& h, velvox::MacroMapper& m) : history (h), mapper (m) {}
+        GestureListener (vocalypse::UndoHistory& h, vocalypse::MacroMapper& m) : history (h), mapper (m) {}
         void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
         void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
         void audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int index) override
@@ -241,9 +241,9 @@ private:
             if (juce::MessageManager::existsAndIsCurrentThread())
                 mapper.gestureEnded (index);
         }
-        velvox::UndoHistory& history;
-        velvox::MacroMapper& mapper;
+        vocalypse::UndoHistory& history;
+        vocalypse::MacroMapper& mapper;
     } gestureListener { undoHistory, macroMapper };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VelvoxAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalypseAudioProcessor)
 };

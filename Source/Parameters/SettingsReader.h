@@ -8,7 +8,7 @@
 #include <map>
 #include <memory>
 
-namespace velvox
+namespace vocalypse
 {
     // Turns raw parameter values (atomics) into the plain ChainSettings the DSP
     // consumes. The processor binds it to its APVTS; the offline renderer of

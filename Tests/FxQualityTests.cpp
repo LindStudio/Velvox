@@ -4,7 +4,7 @@
 #include "DSP/ReverbModule.h"
 #include "DSP/DelayModule.h"
 
-using namespace velvox::dsp;
+using namespace vocalypse::dsp;
 
 namespace
 {
@@ -136,7 +136,7 @@ namespace
 class FxQualityTests final : public juce::UnitTest
 {
 public:
-    FxQualityTests() : juce::UnitTest ("Headliner reverb and delay engine", "Headliner") {}
+    FxQualityTests() : juce::UnitTest ("VOCALYPSE reverb and delay engine", "VOCALYPSE") {}
 
     void runTest() override
     {

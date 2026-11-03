@@ -5,8 +5,8 @@
 #include "StateKeys.h"
 #include "Parameters/RoutingMigration.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 using dsp::Routing;
 
@@ -51,7 +51,7 @@ namespace
 class RoutingTests final : public juce::UnitTest
 {
 public:
-    RoutingTests() : juce::UnitTest ("Headliner routing, instances & migration", "Headliner") {}
+    RoutingTests() : juce::UnitTest ("VOCALYPSE routing, instances & migration", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -496,9 +496,9 @@ public:
 
         beginTest ("Routing / mix-law hand-over: only the message thread writes (SeqLockValue single writer)");
         {
-            expect (VelvoxAudioProcessor::isStateWriterThread(), "the message thread (tests run on it)");
+            expect (VocalypseAudioProcessor::isStateWriterThread(), "the message thread (tests run on it)");
             std::atomic<int> onWorker { -1 };
-            juce::Thread::launch ([&onWorker] { onWorker = VelvoxAudioProcessor::isStateWriterThread() ? 1 : 0; });
+            juce::Thread::launch ([&onWorker] { onWorker = VocalypseAudioProcessor::isStateWriterThread() ? 1 : 0; });
             for (int i = 0; i < 200 && onWorker.load() < 0; ++i)
                 juce::Thread::sleep (5);
             expectEquals (onWorker.load(), 0, "a worker thread is not a writer");

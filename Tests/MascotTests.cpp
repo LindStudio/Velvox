@@ -9,8 +9,8 @@
 #include "UI/TutorialOverlay.h"
 #include "UI/UserSettings.h"
 
-using namespace velvox;
-using namespace velvox::ui::mascot;
+using namespace vocalypse;
+using namespace vocalypse::ui::mascot;
 
 namespace
 {
@@ -39,7 +39,7 @@ namespace
 class MascotTests final : public juce::UnitTest
 {
 public:
-    MascotTests() : juce::UnitTest ("Mascot", "Headliner") {}
+    MascotTests() : juce::UnitTest ("Mascot", "VOCALYPSE") {}
 
     void runTest() override
     {

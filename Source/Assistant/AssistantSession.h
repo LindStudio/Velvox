@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "AssistantTypes.h"
 
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
     // Applies a plan to the real plugin parameters and keeps an undo history.
     // Message thread only. Works exclusively through the APVTS parameters

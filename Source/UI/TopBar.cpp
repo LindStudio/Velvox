@@ -3,7 +3,7 @@
 #include "../PluginProcessor.h"
 #include "../ProductInfo.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     //==========================================================================
     DialogOverlay::DialogOverlay()
@@ -248,7 +248,7 @@ namespace velvox::ui
         };
     }
 
-    TopBar::TopBar (VelvoxAudioProcessor& p, DialogOverlay& d)
+    TopBar::TopBar (VocalypseAudioProcessor& p, DialogOverlay& d)
         : proc (p), dialog (d), bypass (p.getState(), pid::bypass, "Bypass")
     {
         modeButtons.add (new ModeButton (i18n::tr ("SIMPEL", "SIMPLE"), true));
@@ -429,16 +429,15 @@ namespace velvox::ui
         g.setGradientFill (line);
         g.fillRect (r.withTop (r.getBottom() - 1.0f));
 
-        // Logo: icon + HEADLINER (bold)
-        const auto big = display (15.0f, true).withExtraKerningFactor (0.06f);
+        // Logo: icon + the VOCALYPSE wordmark (W3: Metal Mania in fire, Jakob 2026-11-03)
         const auto area = logoArea.toFloat();
         const float iconW = 22.0f;
         const auto icon = juce::Rectangle<float> (iconW, iconW).withPosition (area.getX(), area.getCentreY() - iconW * 0.5f);
         drawGlow (g, icon.getCentre(), 20.0f, 0.22f, colours::blue);
         drawBrand (g, Brand::icon, icon);
-        g.setColour (colours::textStrong);
-        g.setFont (big);
-        g.drawText ("HEADLINER", area.withTrimmedLeft (iconW + 8.0f), juce::Justification::centredLeft, false);
+        const auto word = area.withTrimmedLeft (iconW + 7.0f).withSizeKeepingCentre (area.getWidth() - iconW - 7.0f, 30.0f);
+        drawGlow (g, word.getCentre(), word.getWidth() * 0.45f, 0.10f, juce::Colour (0xffff5a1f));
+        drawBrand (g, Brand::wordmark, word, juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid);
 
         // Pill behind SIMPEL | ADVANCED
         const auto pill = getModeArea().toFloat();

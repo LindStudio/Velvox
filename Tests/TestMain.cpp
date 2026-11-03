@@ -46,18 +46,18 @@ struct BenchRow
 // Runs the automatic mix on a real recording, exactly like the plugin would:
 // the file is streamed through the bounded capture (as during playback), the
 // captured section is analysed and mixed, and then the WHOLE file is rendered
-// with the result. Writes <name>_velvox.wav and <name>_report.txt.
-//   VelvoxTests --automix in.wav outDir
+// with the result. Writes <name>_vocalypse.wav and <name>_report.txt.
+//   VocalypseTests --automix in.wav outDir
 // With a BenchRow it also writes <name>_original.wav, level matched to the mix,
 // and prints nothing.
 // 0.8: genre / vibe for --automix and --bench (optional arguments 4 and 5: Genre and Vibe as numbers)
-static velvox::automix::MixIntent benchIntent;
+static vocalypse::automix::MixIntent benchIntent;
 
 // 0.8: third octaves of every .wav in a folder, measured like the plugin (for before / after comparisons):
-//   VelvoxTests --thirds <dir> <out.csv>
+//   VocalypseTests --thirds <dir> <out.csv>
 static int runThirds (const juce::File& dir, const juce::File& outCsv)
 {
-    using namespace velvox::automix;
+    using namespace vocalypse::automix;
     auto files = dir.findChildFiles (juce::File::findFiles, false, "*.wav");
     std::sort (files.begin(), files.end(), [] (const juce::File& a, const juce::File& b) { return a.getFileName() < b.getFileName(); });
     juce::String csv ("file,f0_low");
@@ -66,7 +66,7 @@ static int runThirds (const juce::File& dir, const juce::File& outCsv)
     csv << "\n";
     for (auto& f : files)
     {
-        const auto v = velvox::test::loadVocal (f, 300.0);
+        const auto v = vocalypse::test::loadVocal (f, 300.0);
         if (! v.has_value())
             continue;
         const auto p = VocalProfiler::analyse (*v);
@@ -83,7 +83,7 @@ static int runThirds (const juce::File& dir, const juce::File& outCsv)
 
 static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, BenchRow* row = nullptr)
 {
-    using namespace velvox::automix;
+    using namespace vocalypse::automix;
     juce::AudioFormatManager formats;
     formats.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (input));
@@ -116,7 +116,7 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
 
     // 2) Analysis, plan, verification
     std::map<juce::String, float> current;
-    for (auto& s : velvox::getParameterSpecs())
+    for (auto& s : vocalypse::getParameterSpecs())
         current[s.id] = s.defaultValue;
     const auto start = juce::Time::getMillisecondCounterHiRes();
     const auto r = AutoMixEngine::run (captured, current, {}, {}, benchIntent);
@@ -127,10 +127,10 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         return 1;
     }
 
-    // Diagnostics: VELVOX_OVERRIDE="rideOn=0,compAttack=3" changes the finished plan before
+    // Diagnostics: VOCALYPSE_OVERRIDE="rideOn=0,compAttack=3" changes the finished plan before
     // the whole-file render (the captured-section result above stays as mixed)
     auto finalValues = r.plan.values;
-    for (auto& kv : juce::StringArray::fromTokens (juce::SystemStats::getEnvironmentVariable ("VELVOX_OVERRIDE", {}), ",", {}))
+    for (auto& kv : juce::StringArray::fromTokens (juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_OVERRIDE", {}), ",", {}))
         if (kv.containsChar ('='))
             finalValues[kv.upToFirstOccurrenceOf ("=", false, false).trim()] = kv.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
 
@@ -152,8 +152,8 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
             out.copyFrom (ch, 0, rendered.vocal[(size_t) ch].data(), rendered.numSamples());
         for (int ch = 0; ch < channels; ++ch)                 // the plugin's clip guard
             for (int i = 0; i < out.getNumSamples(); ++i)
-                out.setSample (ch, i, velvox::dsp::VocalChain::safetyClip (out.getSample (ch, i)));
-        writeWav24 (outDir.getChildFile (base + "_velvox.wav"), out, reader->sampleRate);
+                out.setSample (ch, i, vocalypse::dsp::VocalChain::safetyClip (out.getSample (ch, i)));
+        writeWav24 (outDir.getChildFile (base + "_vocalypse.wav"), out, reader->sampleRate);
     }
 
     if (row != nullptr)
@@ -163,9 +163,9 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         orig.applyGain (juce::Decibels::decibelsToGain (wholeOut.lufs - wholeIn.lufs));
         for (int ch = 0; ch < channels; ++ch)
             for (int i = 0; i < orig.getNumSamples(); ++i)
-                orig.setSample (ch, i, velvox::dsp::VocalChain::safetyClip (orig.getSample (ch, i)));
+                orig.setSample (ch, i, vocalypse::dsp::VocalChain::safetyClip (orig.getSample (ch, i)));
         row->original = outDir.getChildFile (base + "_original.wav");
-        row->processed = outDir.getChildFile (base + "_velvox.wav");
+        row->processed = outDir.getChildFile (base + "_vocalypse.wav");
         writeWav24 (row->original, orig, reader->sampleRate);
 
         row->file = input.getFileName();
@@ -192,7 +192,7 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
 
     juce::String rep;
     const auto& p = r.profile;
-    rep << "Velvox auto mix report - " << input.getFileName() << "\n"
+    rep << "Vocalypse auto mix report - " << input.getFileName() << "\n"
         << "File: " << juce::String (total / reader->sampleRate, 1) << " s, " << channels << " ch, " << reader->sampleRate << " Hz\n"
         << "Captured: " << juce::String (p.capturedSeconds, 1) << " s, voiced " << juce::String (p.voicedSeconds, 1) << " s"
         << (r.plan.conservative ? "  (conservative)" : "") << "; analysis + " << r.iterations << " renders: " << juce::String (ms / 1000.0, 2) << " s\n\n"
@@ -209,15 +209,15 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         << ", tail " << juce::String (p.tailSeconds, 2) << " s (" << p.tailCount << "), breaths " << juce::String (100.0f * p.breathShare, 1) << " %, stereo " << (p.stereoContent ? "yes, corr " + juce::String (p.correlation, 2) : juce::String ("no")) << "\n\n"
         << "ISSUES\n";
     for (auto& i : p.issues)
-        rep << "  [" << (i.confidence == Confidence::measured ? "measured" : i.confidence == Confidence::likely ? "likely" : "possible") << "] " << velvox::i18n::show (i.title) << " - " << velvox::i18n::show (i.detail) << "\n";
+        rep << "  [" << (i.confidence == Confidence::measured ? "measured" : i.confidence == Confidence::likely ? "likely" : "possible") << "] " << vocalypse::i18n::show (i.title) << " - " << vocalypse::i18n::show (i.detail) << "\n";
     rep << "\nDECISIONS\n";
     for (auto& d : r.plan.decisions)
-        rep << "  " << (d.outputStage ? juce::String ("Output") : juce::String (velvox::dsp::moduleDisplayName (d.module))) << ": " << velvox::i18n::show (d.title)
-            << (d.measured ? "  (measured)" : "  (rule)") << "\n      " << velvox::i18n::show (d.reason) << "\n";
+        rep << "  " << (d.outputStage ? juce::String ("Output") : juce::String (vocalypse::dsp::moduleDisplayName (d.module))) << ": " << vocalypse::i18n::show (d.title)
+            << (d.measured ? "  (measured)" : "  (rule)") << "\n      " << vocalypse::i18n::show (d.reason) << "\n";
     for (auto& n : r.plan.notes)
-        rep << "  note: " << velvox::i18n::show (n) << "\n";
+        rep << "  note: " << vocalypse::i18n::show (n) << "\n";
     for (auto& a : r.adjustments)
-        rep << "  verify: " << velvox::i18n::show (a) << "\n";
+        rep << "  verify: " << vocalypse::i18n::show (a) << "\n";
     rep << "\nRESULT (captured section)\n"
         << "  " << juce::String (r.original.lufs, 1) << " -> " << juce::String (r.processed.lufs, 1) << " LUFS, peak " << juce::String (r.processed.peakDb, 1)
         << " dBFS, comp GR median " << juce::String (r.processed.compGrMedianDb, 1) << " dB (max " << juce::String (r.processed.compGrMaxDb, 1)
@@ -237,7 +237,7 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
     return 0;
 }
 
-static bool loadCaptured (const juce::File& f, velvox::automix::CapturedAudio& out)
+static bool loadCaptured (const juce::File& f, vocalypse::automix::CapturedAudio& out)
 {
     juce::AudioFormatManager formats;
     formats.registerBasicFormats();
@@ -257,11 +257,11 @@ static bool loadCaptured (const juce::File& f, velvox::automix::CapturedAudio& o
 }
 
 // Scores any finished mix with the current objective, e.g. renders of an older version:
-//   VelvoxTests --score original.wav mix.wav
+//   VocalypseTests --score original.wav mix.wav
 // Prints "score <total> | <breakdown> | <mix LUFS> <mix peak>" (whole files, effects assumed planned)
 static int runScore (const juce::File& originalFile, const juce::File& mixFile)
 {
-    using namespace velvox::automix;
+    using namespace vocalypse::automix;
     CapturedAudio original, mix;
     if (! loadCaptured (originalFile, original) || ! loadCaptured (mixFile, mix))
     {
@@ -284,7 +284,7 @@ static int runScore (const juce::File& originalFile, const juce::File& mixFile)
 
 // Benchmark over a folder of vocals (recursive, *.wav), for comparing versions and
 // for a blind listening test:
-//   VelvoxTests --bench <dir> <outDir>
+//   VocalypseTests --bench <dir> <outDir>
 // Writes outDir/bench.csv (one row per file), outDir/renders/ (mix + report per file)
 // and outDir/listening/: NN_A.wav / NN_B.wav = original and mix in random order at the
 // same loudness, the answer in listening_key.csv (open it only after listening).
@@ -350,8 +350,8 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 }
 
 // Renders the real editor to a PNG (for visual review without a DAW):
-//   VelvoxTests --snapshot out.png [presetName] [width] [beginner|pro] [moduleId|-1] [overlay]
-// Language: environment variable HEADLINER_LANG = de (default) / en.
+//   VocalypseTests --snapshot out.png [presetName] [width] [beginner|pro] [moduleId|-1] [overlay]
+// Language: environment variable VOCALYPSE_LANG = de (default) / en.
 // overlay: "help:<page>", "welcome", "settings", "tutorial:<step>", "bypass", "hide:<key,key>", "focus:<moduleId>", "edit",
 //          "intro" (analysis popup), "listening", "capturing", "analysing", "mixed" (overview after a synthetic auto mix),
 //          "mixed+done" (with the confirmation card), "mixed+details" (report after the mix), "more" (the panel's Mehr drawer open), "details" (auto-mix report),
@@ -370,7 +370,7 @@ static int runBench (const juce::File& dir, const juce::File& outDir)
 static int renderSnapshot (const juce::File& file, const juce::String& presetName, int width,
                            const juce::String& mode, int selection, const juce::String& rawOverlay)
 {
-    using namespace velvox;
+    using namespace vocalypse;
     // One parser for every overlay form: ';' tokens, each a flag, a route, a set: list or the overlay itself
     bool reso = false, moreOpen = false, hasSet = false, hoverPoint = false;
     int soloBand = -1;   // "bandsolo:<band>": EQ band / Saturation band soloed (0.6.1); "hoverpoint": EQ hot spot shown
@@ -418,16 +418,16 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     prefs.deleteFile();
     ui::settings::useFileForTesting (prefs);
     ui::settings::set (ui::settings::tutorialDone, overlay != "welcome");
-    const bool english = juce::SystemStats::getEnvironmentVariable ("HEADLINER_LANG", "de") == "en";
+    const bool english = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_LANG", "de") == "en";
     ui::settings::set (ui::settings::language, english ? "en" : "de");
     ui::settings::applyLanguage();
-    if (overlay == "welcome")   // the very first start: no language chosen yet (the computer "runs" in HEADLINER_LANG)
+    if (overlay == "welcome")   // the very first start: no language chosen yet (the computer "runs" in VOCALYPSE_LANG)
     {
         ui::settings::getFile().deleteFile();
         i18n::overrideSystemLanguage (english ? i18n::Language::english : i18n::Language::german);
     }
 
-    VelvoxAudioProcessor proc;
+    VocalypseAudioProcessor proc;
     proc.setRateAndBufferSizeDetails (48000.0, 512);
     proc.prepareToPlay (48000.0, 512);
 
@@ -510,26 +510,26 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
             proc.pumpAnalyzer();
         }
         proc.refreshAnalysis();
-        proc.getState().state.setProperty ("uiSelection", (int) velvox::dsp::ModuleId::check, nullptr);
+        proc.getState().state.setProperty ("uiSelection", (int) vocalypse::dsp::ModuleId::check, nullptr);
     }
     if (overlay.startsWith ("eq"))
     {
         // A typical vocal EQ: low cut, a mud cut, a presence bell, an air shelf from the Presence macro, a notch
-        using velvox::dsp::EqBandType;
+        using vocalypse::dsp::EqBandType;
         auto& pr = proc;
         const auto cut = ui::eqedit::addBand (pr, 0, 90.0f, 0.0f);
         ui::eqedit::setType (pr, 0, cut, EqBandType::lowCut);
         ui::eqedit::addBand (pr, 0, 320.0f, -3.5f);
         const auto presence = ui::eqedit::addBand (pr, 0, 3200.0f, 2.5f);
-        pr.getState().getParameter (ui::eqedit::paramId (0, presence, velvox::pid::eqband::q))->setValueNotifyingHost (
-            pr.getState().getParameter (ui::eqedit::paramId (0, presence, velvox::pid::eqband::q))->convertTo0to1 (0.8f));
+        pr.getState().getParameter (ui::eqedit::paramId (0, presence, vocalypse::pid::eqband::q))->setValueNotifyingHost (
+            pr.getState().getParameter (ui::eqedit::paramId (0, presence, vocalypse::pid::eqband::q))->convertTo0to1 (0.8f));
         const auto notch = ui::eqedit::addBand (pr, 0, 6500.0f, 0.0f);
         ui::eqedit::setType (pr, 0, notch, EqBandType::notch);
         pr.getState().getParameter ("macroPresence")->setValueNotifyingHost (0.5f);
         pr.getState().getParameter ("eqOn")->setValueNotifyingHost (1.0f);
         if (overlay == "eqmore")
             pr.getState().getParameter ("eqLegacyResponse")->setValueNotifyingHost (1.0f);
-        proc.getState().state.setProperty ("uiSelection", (int) velvox::dsp::ModuleId::eq, nullptr);
+        proc.getState().state.setProperty ("uiSelection", (int) vocalypse::dsp::ModuleId::eq, nullptr);
         proc.getState().state.setProperty ("uiMode", "pro", nullptr);
     }
     if (overlay == "bypass")
@@ -548,7 +548,7 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
     if (width > 0)
         editor->setSize (width, width * ui::baseHeight / ui::baseWidth);
 
-    if (auto* ed = dynamic_cast<VelvoxAudioProcessorEditor*> (editor.get()))
+    if (auto* ed = dynamic_cast<VocalypseAudioProcessorEditor*> (editor.get()))
     {
         if (overlay.startsWith ("help:"))
             ed->showHelp (overlay.fromFirstOccurrenceOf (":", false, false));
@@ -675,16 +675,16 @@ int main (int argc, char* argv[])
 
     if (argc >= 2 && juce::String (argv[1]) == "--sizes")
     {
-        std::printf ("processor %d, chain %d, automix %d, capture %d, editor %d\n", (int) sizeof (VelvoxAudioProcessor),
-                     (int) sizeof (velvox::dsp::VocalChain), (int) sizeof (velvox::automix::AutoMixController),
-                     (int) sizeof (velvox::automix::CaptureBuffer), (int) sizeof (VelvoxAudioProcessorEditor));
+        std::printf ("processor %d, chain %d, automix %d, capture %d, editor %d\n", (int) sizeof (VocalypseAudioProcessor),
+                     (int) sizeof (vocalypse::dsp::VocalChain), (int) sizeof (vocalypse::automix::AutoMixController),
+                     (int) sizeof (vocalypse::automix::CaptureBuffer), (int) sizeof (VocalypseAudioProcessorEditor));
         return 0;
     }
 
-    // VelvoxTests --popscan <silence|floor|tone|vocal> <automix 0/1> <editor 0/1> <seconds> <sampleRate> <realtime 0/1>
+    // VocalypseTests --popscan <silence|floor|tone|vocal> <automix 0/1> <editor 0/1> <seconds> <sampleRate> <realtime 0/1>
     if (argc >= 8 && juce::String (argv[1]) == "--popscan")
     {
-        const auto r = velvox::test::runPopScan (argv[2], juce::String (argv[3]).getIntValue() != 0, juce::String (argv[4]).getIntValue() != 0,
+        const auto r = vocalypse::test::runPopScan (argv[2], juce::String (argv[3]).getIntValue() != 0, juce::String (argv[4]).getIntValue() != 0,
                                                  juce::String (argv[5]).getDoubleValue(), juce::String (argv[6]).getDoubleValue(),
                                                  juce::String (argv[7]).getIntValue() != 0);
         std::printf ("popscan %s: %d events during silence (max %.1f dBFS), %d discontinuities\n%s\n", argv[2], r.silentEvents,
@@ -692,9 +692,9 @@ int main (int argc, char* argv[])
         return 0;
     }
 
-    // VelvoxTests --fxrender outDir [vocal.wav]: reverb / delay impulse responses and examples
+    // VocalypseTests --fxrender outDir [vocal.wav]: reverb / delay impulse responses and examples
     if (argc >= 3 && juce::String (argv[1]) == "--fxrender")
-        return velvox::test::runFxRender (juce::File (juce::String::fromUTF8 (argv[2])),
+        return vocalypse::test::runFxRender (juce::File (juce::String::fromUTF8 (argv[2])),
                                           argc >= 4 ? juce::File (juce::String::fromUTF8 (argv[3])) : juce::File());
 
     // VOCAL CHECK calibration (Tests/CheckEval.cpp); an argument ending in .txt is a list of files
@@ -713,14 +713,14 @@ int main (int argc, char* argv[])
         files.removeEmptyStrings();
         const juce::File out (juce::String::fromUTF8 (argv[2]));
         if (juce::String (argv[1]) == "--target-curve")
-            return velvox::test::runTargetCurve (out, files);
-        return juce::String (argv[1]) == "--check-template" ? velvox::test::runCheckTemplate (out, files)
-                                                            : velvox::test::runCheckEval (out, files);
+            return vocalypse::test::runTargetCurve (out, files);
+        return juce::String (argv[1]) == "--check-template" ? vocalypse::test::runCheckTemplate (out, files)
+                                                            : vocalypse::test::runCheckEval (out, files);
     }
 
     if (argc >= 6 && (juce::String (argv[1]) == "--automix" || juce::String (argv[1]) == "--bench"))
-        benchIntent = { (velvox::automix::Genre) juce::jlimit (0, velvox::automix::numGenres - 1, juce::String (argv[4]).getIntValue()),
-                        (velvox::automix::Vibe) juce::jlimit (0, velvox::automix::numVibes - 1, juce::String (argv[5]).getIntValue()) };
+        benchIntent = { (vocalypse::automix::Genre) juce::jlimit (0, vocalypse::automix::numGenres - 1, juce::String (argv[4]).getIntValue()),
+                        (vocalypse::automix::Vibe) juce::jlimit (0, vocalypse::automix::numVibes - 1, juce::String (argv[5]).getIntValue()) };
 
     if (argc >= 4 && juce::String (argv[1]) == "--thirds")
         return runThirds (juce::File (juce::String::fromUTF8 (argv[2])), juce::File (juce::String::fromUTF8 (argv[3])));
@@ -745,10 +745,10 @@ int main (int argc, char* argv[])
     // Tests use their own preferences file (tutorial state, saved layouts)
     const auto prefs = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("velvox-tests.settings");
     prefs.deleteFile();
-    velvox::ui::settings::useFileForTesting (prefs);
+    vocalypse::ui::settings::useFileForTesting (prefs);
     // Tests read German texts unless they switch (i18n::ScopedLanguage); never the machine's language
-    velvox::ui::settings::set (velvox::ui::settings::language, "de");
-    velvox::ui::settings::applyLanguage();
+    vocalypse::ui::settings::set (vocalypse::ui::settings::language, "de");
+    vocalypse::ui::settings::applyLanguage();
 
     StdoutLogger logger;
     juce::Logger::setCurrentLogger (&logger);

@@ -34,7 +34,7 @@ def main():
     styles = {"PROFIS": medians(dry, wet, "")}
     for out in sys.argv[3:]:
         p = pathlib.Path(out)
-        styles[p.name.replace("before_", "").replace("after_", "")] = medians(dry, p, "_velvox")
+        styles[p.name.replace("before_", "").replace("after_", "")] = medians(dry, p, "_vocalypse")
     print(f"{'style':16}" + "".join(f"{k:>10}" for k in KEYS))
     for name, m in styles.items():
         print(f"{name:16}" + "".join(f"{m[k]:10.1f}" for k in KEYS))

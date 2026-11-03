@@ -2,7 +2,7 @@
 
 #include "DspUtilities.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // VOCAL CHECK, the part that sits in the chain. It never changes the audio:
     // it measures sample-accurate peak / clipping statistics and hands a copy of

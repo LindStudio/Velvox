@@ -3,7 +3,7 @@
 #include "../Text/I18n.h"
 #include "../Text/ParamText.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -96,7 +96,7 @@ namespace velvox::ui
         {
             juce::String& clipboard()
             {
-                // Shared by every control of every Headliner instance in this process. Deliberately not
+                // Shared by every control of every VOCALYPSE instance in this process. Deliberately not
                 // the system clipboard: copying a value never destroys what the user copied elsewhere.
                 static juce::String text;
                 return text;

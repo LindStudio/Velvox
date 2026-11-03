@@ -5,7 +5,7 @@
 #include <vector>
 
 // ============================================================================
-//  Velvox Smart Assistant - shared types
+//  Vocalypse Smart Assistant - shared types
 //
 //  Fully local, rule-based. No network, no language model, no code execution:
 //
@@ -20,7 +20,7 @@
 //  (e.g. a better local NLP stage) without changing the others.
 // ============================================================================
 
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
     // Sound targets (one axis each; direction says up or down)
     enum class Goal

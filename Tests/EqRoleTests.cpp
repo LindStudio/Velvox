@@ -4,14 +4,14 @@
 #include "Parameters/EqBands.h"
 #include "DSP/Macros.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::test::eq;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::test::eq;
 
 class EqMacroTests final : public juce::UnitTest
 {
 public:
-    EqMacroTests() : juce::UnitTest ("Velvox EQ macros", "Velvox") {}
+    EqMacroTests() : juce::UnitTest ("Vocalypse EQ macros", "Vocalypse") {}
 
     void runTest() override
     {
@@ -170,7 +170,7 @@ namespace
 class EqAutoMixTests final : public juce::UnitTest
 {
 public:
-    EqAutoMixTests() : juce::UnitTest ("Velvox EQ auto-mix", "Velvox") {}
+    EqAutoMixTests() : juce::UnitTest ("Vocalypse EQ auto-mix", "Vocalypse") {}
 
     void runTest() override
     {

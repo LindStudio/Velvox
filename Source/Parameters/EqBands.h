@@ -11,7 +11,7 @@
 //
 // Indices: `instance` 0..3 (0 = "EQ", 1 = "EQ 2" ...), `band` 0..15 (parameter IDs count from 1:
 // band 0 = "eqBand1...").
-namespace velvox::eqbands
+namespace vocalypse::eqbands
 {
     // Reads and writes parameter values in REAL units (Hz, dB, Q; bools 0/1; choices as index) by ID
     struct Access
@@ -94,7 +94,7 @@ namespace velvox::eqbands
     };
 }
 
-namespace velvox
+namespace vocalypse
 {
     // API for Vocal Check "Anwenden" (message thread, on the processor's APVTS): finds the EQ band
     // of `role` in EQ `instance` or creates it in a free slot, and sets it to type / frequency / gain /

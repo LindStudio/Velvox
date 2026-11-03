@@ -3,7 +3,7 @@
 #include "../Text/I18n.h"
 #include "UserSettings.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -185,7 +185,7 @@ namespace velvox::ui
         return defs;
     }
 
-    SimpleView::SimpleView (VelvoxAudioProcessor& p, const SpectrumSource* spectrum)
+    SimpleView::SimpleView (VocalypseAudioProcessor& p, const SpectrumSource* spectrum)
         : proc (p), spectrumView (spectrum)
     {
         spectrumView.setInputDashed (true);
@@ -196,9 +196,9 @@ namespace velvox::ui
         addAndMakeVisible (legend);
 
         analyse.getProperties().set ("primary", true);
-        analyse.setTooltip (tr ("Headliner hört einen Abschnitt deiner Vocal während der Wiedergabe und stellt die Module ein. "
+        analyse.setTooltip (tr ("VOCALYPSE hört einen Abschnitt deiner Vocal während der Wiedergabe und stellt die Module ein. "
                                 "Der Zustand davor bleibt über Vorher / Nachher erreichbar.",
-                                "Headliner listens to a section of your vocal during playback and sets up the modules. "
+                                "VOCALYPSE listens to a section of your vocal during playback and sets up the modules. "
                                 "The state before stays available with Before / After."));
         analyse.onClick = [this] { if (onAnalyse) onAnalyse(); };
 

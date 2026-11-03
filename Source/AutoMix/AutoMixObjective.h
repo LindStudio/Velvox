@@ -2,7 +2,7 @@
 
 #include "VocalProfile.h"
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     struct RenderMetrics;
 

@@ -3,7 +3,7 @@
 #include "../PluginProcessor.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::EqBandType;
     using dsp::ModuleId;
@@ -14,11 +14,11 @@ namespace velvox::ui
     {
         namespace
         {
-            eqbands::Access access (VelvoxAudioProcessor& proc) { return eqbands::accessFor (proc.getState()); }
+            eqbands::Access access (VocalypseAudioProcessor& proc) { return eqbands::accessFor (proc.getState()); }
 
             // Runs `fn` as one undo step; a macro-only band gets its parameters first (same step)
             template <typename Fn>
-            void edit (VelvoxAudioProcessor& proc, int instance, int band, const juce::String& name, Fn&& fn)
+            void edit (VocalypseAudioProcessor& proc, int instance, int band, const juce::String& name, Fn&& fn)
             {
                 if (band < 0 || band >= dsp::maxEqBands)
                     return;
@@ -32,12 +32,12 @@ namespace velvox::ui
 
         juce::String paramId (int instance, int band, const char* field) { return eqbands::bandParamId (instance, band, field); }
 
-        dsp::EqBand parameterBand (VelvoxAudioProcessor& proc, int instance, int band)
+        dsp::EqBand parameterBand (VocalypseAudioProcessor& proc, int instance, int band)
         {
             return eqbands::readBand (access (proc), instance, band);
         }
 
-        ShownBands shownBands (VelvoxAudioProcessor& proc, int instance)
+        ShownBands shownBands (VocalypseAudioProcessor& proc, int instance)
         {
             ShownBands out;
             const auto eff = proc.readEffectiveSettings().instance (instance).eq;
@@ -54,7 +54,7 @@ namespace velvox::ui
             return out;
         }
 
-        bool materialise (VelvoxAudioProcessor& proc, int instance, int band)
+        bool materialise (VocalypseAudioProcessor& proc, int instance, int band)
         {
             if (band < 0 || band >= dsp::maxEqBands)
                 return false;
@@ -68,7 +68,7 @@ namespace velvox::ui
             return true;
         }
 
-        int addBand (VelvoxAudioProcessor& proc, int instance, float freqHz, float gainDb)
+        int addBand (VocalypseAudioProcessor& proc, int instance, float freqHz, float gainDb)
         {
             // A slot free in the parameters AND in the effective settings, so a macro band keeps its place
             const auto shown = shownBands (proc, instance);
@@ -92,14 +92,14 @@ namespace velvox::ui
             return slot;
         }
 
-        void deleteBand (VelvoxAudioProcessor& proc, int instance, int band)
+        void deleteBand (VocalypseAudioProcessor& proc, int instance, int band)
         {
             if (band < 0 || band >= dsp::maxEqBands)
                 return;
             proc.getUndo().perform (tr ("EQ-Band löschen", "Delete EQ band"), [&] { eqbands::writeBand (access (proc), instance, band, dsp::EqBand {}); });
         }
 
-        void setType (VelvoxAudioProcessor& proc, int instance, int band, EqBandType type)
+        void setType (VocalypseAudioProcessor& proc, int instance, int band, EqBandType type)
         {
             edit (proc, instance, band, tr ("EQ-Band: Typ", "EQ band: type"), [&] (const eqbands::Access& a)
             {
@@ -107,7 +107,7 @@ namespace velvox::ui
             });
         }
 
-        void setSlope (VelvoxAudioProcessor& proc, int instance, int band, int slopeIndex)
+        void setSlope (VocalypseAudioProcessor& proc, int instance, int band, int slopeIndex)
         {
             edit (proc, instance, band, tr ("EQ-Band: Steilheit", "EQ band: slope"), [&] (const eqbands::Access& a)
             {
@@ -115,7 +115,7 @@ namespace velvox::ui
             });
         }
 
-        void toggleOn (VelvoxAudioProcessor& proc, int instance, int band)
+        void toggleOn (VocalypseAudioProcessor& proc, int instance, int band)
         {
             edit (proc, instance, band, tr ("EQ-Band ein/aus", "EQ band on/off"), [&] (const eqbands::Access& a)
             {
@@ -124,7 +124,7 @@ namespace velvox::ui
             });
         }
 
-        void resetBand (VelvoxAudioProcessor& proc, int instance, int band)
+        void resetBand (VocalypseAudioProcessor& proc, int instance, int band)
         {
             edit (proc, instance, band, tr ("EQ-Band zurücksetzen", "Reset EQ band"), [&] (const eqbands::Access& a)
             {
@@ -206,7 +206,7 @@ namespace velvox::ui
 
         juce::String dbText (float db) { return (db > 0.05f ? "+" : "") + juce::String (db, 1) + " dB"; }
 
-        juce::RangedAudioParameter* paramFor (VelvoxAudioProcessor& proc, int instance, int band, const char* field)
+        juce::RangedAudioParameter* paramFor (VocalypseAudioProcessor& proc, int instance, int band, const char* field)
         {
             return dynamic_cast<juce::RangedAudioParameter*> (proc.getState().getParameter (eqedit::paramId (instance, band, field)));
         }
@@ -218,7 +218,7 @@ namespace velvox::ui
         }
     }
 
-    EqGraph::EqGraph (VelvoxAudioProcessor& p, const SpectrumSource* spectrum, int eqInstance)
+    EqGraph::EqGraph (VocalypseAudioProcessor& p, const SpectrumSource* spectrum, int eqInstance)
         : proc (p), instance (eqInstance), spectrumView (spectrum)
     {
         spectrumView.setRange (-90.0f, 0.0f);
@@ -284,7 +284,7 @@ namespace velvox::ui
         return -1;
     }
 
-    std::unique_ptr<ModuleView> createEqGraph (VelvoxAudioProcessor& p, const SpectrumSource* spectrum, int instance)
+    std::unique_ptr<ModuleView> createEqGraph (VocalypseAudioProcessor& p, const SpectrumSource* spectrum, int instance)
     {
         return std::make_unique<EqGraph> (p, spectrum, instance);
     }
@@ -1118,7 +1118,7 @@ namespace velvox::ui
     };
 
     //==========================================================================
-    EqPanel::EqPanel (VelvoxAudioProcessor& p)
+    EqPanel::EqPanel (VocalypseAudioProcessor& p)
         : DetailPanel (p, "Equalizer", help::shortDescription ((int) ModuleId::eq), pid::eqOn)
     {
         knob (pid::eqMix, "Mix");
@@ -1190,7 +1190,7 @@ namespace velvox::ui
         soloButton.setActive (selectedBand >= 0 && eq.getAuditionBand() == selectedBand);
     }
 
-    std::unique_ptr<DetailPanel> createEqPanel (VelvoxAudioProcessor& p) { return std::make_unique<EqPanel> (p); }
+    std::unique_ptr<DetailPanel> createEqPanel (VocalypseAudioProcessor& p) { return std::make_unique<EqPanel> (p); }
 
     EqGraph* EqPanel::getGraph() noexcept { return dynamic_cast<EqGraph*> (getVisual()); }
 

@@ -2,7 +2,7 @@
 #include "../Parameters/SettingsReader.h"
 #include "ReportText.h"
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     namespace
     {

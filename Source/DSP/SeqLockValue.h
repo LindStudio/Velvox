@@ -6,7 +6,7 @@
 #include <cstring>
 #include <type_traits>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Lock-free hand-over of a small, trivially copyable value (e.g. the Routing) from
     // one writer (message thread) to any number of readers, including the audio thread.
@@ -27,7 +27,7 @@ namespace velvox::dsp
 
         // Single writer: never call store() from two threads at once (no lock here - the counter
         // would get out of step and readers could accept a torn value). The processor writes only
-        // from the message thread (VelvoxAudioProcessor::isStateWriterThread, asserted there).
+        // from the message thread (VocalypseAudioProcessor::isStateWriterThread, asserted there).
         void store (const T& value) noexcept
         {
             std::array<std::uint32_t, numWords> buffer {};

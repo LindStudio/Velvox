@@ -14,7 +14,7 @@
 // The planner cuts what is clearly too much and lifts a dull top end (open loop, from the
 // analysis); the engine then corrects the broad bands with the levels of the real render
 // (`correct`), because compression, saturation and effects move the balance as well.
-namespace velvox::automix::autoeq
+namespace vocalypse::automix::autoeq
 {
     // Limits of the automatic mix in EQ 1
     inline constexpr int maxBands = 8;                 // every band it uses, the low cut included (0.8: 6 -> 8)

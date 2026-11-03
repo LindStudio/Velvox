@@ -2,6 +2,21 @@
 
 Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor 1.0 können Minor-Versionen neue Funktionen bringen; Projekt-State und Presets bleiben abwärtskompatibel.
 
+## [Unveröffentlicht] – Branch `feature/vocalypse-rebrand`: Headliner heißt jetzt VOCALYPSE (2026-11-03)
+
+- Produktname **VOCALYPSE** (Plugin-Liste, Fenstertitel, alle Texte), `VOCALYPSE.vst3`. Kopfzeile zeigt den neuen
+  Schriftzug (Metal Mania in Feuer, Jakobs Wahl „W3“); das Wellen-Icon bleibt, bis das Icon gewählt ist.
+- Auch der Arbeitstitel „Velvox“ ist aus Code, Tests, Werkzeugen und Build verschwunden (Namespace `vocalypse`,
+  Ziele `Vocalypse`, `VocalypseTests`, `VocalypseRefHost`, Umgebungsvariablen `VOCALYPSE_*`).
+- **Alte Projekte laden weiter:** Plugin-Codes `Lnda`/`Vlvx` unverändert (gleiche VST3-Kennung `e632afc1`, mit
+  pluginval gegen das installierte Headliner verglichen). Zustand `VelvoxState` und Presets `VelvoxPreset` werden
+  gelesen (neu geschrieben: `VocalypseState` / `VocalypsePreset`), Einstellungen aus `Velvox.settings` und
+  Benutzer-Presets aus `Dokumente\Lind Audio\Headliner` bzw. `\Velvox` werden einmalig übernommen.
+- Installation entfernt `Headliner.vst3` und `Velvox.vst3`, damit FL das Plugin nicht doppelt sieht.
+- Nicht umbenannt: Repo-Ordner, Daten-/Bench-Ordner (`velvox-data`, `velvox-bench`), Drive-Bundle `velvox.bundle`,
+  GitHub-Repo `LindStudio/Velvox`.
+- 40.111 Checks grün (neu: alter Zustand und altes Preset laden), pluginval 10 SUCCESS, Beenden ohne Hänger.
+
 ## [Unveröffentlicht] – Branch `feature/automix-0.8`: FL-Hänger, hörbarer Raum, unterscheidbare Stile (2026-11-03)
 
 Jakob: „FL Studio bleibt beim Schließen immer hängen wegen meinem Plugin; zwischen den Stilen ändert sich nicht viel;

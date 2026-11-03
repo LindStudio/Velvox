@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../DSP/Routing.h"
 
-namespace velvox
+namespace vocalypse
 {
     // Starting points for a single module. Applying one only touches that
     // module's parameters (everything else in the chain stays as it is) and

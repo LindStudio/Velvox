@@ -6,13 +6,13 @@
 #include "Mixing/ProposalSession.h"
 #include "Mixing/MixingEngine.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 class MixingTests final : public juce::UnitTest
 {
 public:
-    MixingTests() : juce::UnitTest ("Velvox mixing groundwork", "Velvox") {}
+    MixingTests() : juce::UnitTest ("Vocalypse mixing groundwork", "Vocalypse") {}
 
     void runTest() override
     {

@@ -2,14 +2,14 @@
 
 #include "EqTestHelpers.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::test::eq;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::test::eq;
 
 class EqModuleTests final : public juce::UnitTest
 {
 public:
-    EqModuleTests() : juce::UnitTest ("Velvox EQ module", "Velvox") {}
+    EqModuleTests() : juce::UnitTest ("Vocalypse EQ module", "Vocalypse") {}
 
     void runTest() override
     {

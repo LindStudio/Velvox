@@ -6,7 +6,7 @@
 #include "DSP/ReverbDepth.h"
 #include "ReverbMetrics.h"
 
-using namespace velvox::dsp;
+using namespace vocalypse::dsp;
 
 namespace
 {
@@ -53,7 +53,7 @@ namespace
 class ReverbQualityTests final : public juce::UnitTest
 {
 public:
-    ReverbQualityTests() : juce::UnitTest ("Headliner reverb quality", "Headliner") {}
+    ReverbQualityTests() : juce::UnitTest ("VOCALYPSE reverb quality", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -166,7 +166,7 @@ static ReverbQualityTests reverbQualityTests;
 class ReverbDepthTests final : public juce::UnitTest
 {
 public:
-    ReverbDepthTests() : juce::UnitTest ("Headliner reverb depth path", "Headliner") {}
+    ReverbDepthTests() : juce::UnitTest ("VOCALYPSE reverb depth path", "VOCALYPSE") {}
 
     void runTest() override
     {

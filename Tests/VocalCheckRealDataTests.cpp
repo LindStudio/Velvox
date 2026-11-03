@@ -1,18 +1,18 @@
 // VOCAL CHECK on real dry vocals (VocalSet v1.1 validation singers + the MYLK dry chorus).
 // The audio is never in the repository: the test logs a note and passes when the files are
 // missing. The full calibration (all 28 validation takes, precision / recall) is
-// `VelvoxTests --check-eval <outDir> <list.txt>`; this keeps a small, fast subset in the suite.
+// `VocalypseTests --check-eval <outDir> <list.txt>`; this keeps a small, fast subset in the suite.
 
 #include "TestHelpers.h"
 #include "CheckEval.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 class VocalCheckRealDataTests final : public juce::UnitTest
 {
 public:
-    VocalCheckRealDataTests() : juce::UnitTest ("Headliner Vocal Check real vocals", "Headliner") {}
+    VocalCheckRealDataTests() : juce::UnitTest ("VOCALYPSE Vocal Check real vocals", "VOCALYPSE") {}
 
     void runTest() override
     {

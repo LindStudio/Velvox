@@ -4,7 +4,7 @@
 #include "MascotView.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // First-start tour. The welcome card (1.0) asks for the interface language (Deutsch | English,
     // preselected: the computer's language) and offers: analyse the vocal (primary), a short tour,

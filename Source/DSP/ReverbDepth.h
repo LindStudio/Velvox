@@ -1,6 +1,6 @@
 #pragma once
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Reverb panel "Raumtiefe" (spec 5.12): the vocal is a dot in a room drawing; dragging it back adds
     // space. One depth value 0..1 (0 = dry-ish and in front, 1 = far back in the room) moves the three

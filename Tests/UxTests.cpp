@@ -8,8 +8,8 @@
 #include "UI/UserSettings.h"
 #include "StateKeys.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -22,9 +22,9 @@ namespace
                                  1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &c, &c, now, downPos, now, 1, dragged);
     }
 
-    VelvoxAudioProcessorEditor& asVelvox (juce::AudioProcessorEditor& e)
+    VocalypseAudioProcessorEditor& asVocalypse (juce::AudioProcessorEditor& e)
     {
-        return dynamic_cast<VelvoxAudioProcessorEditor&> (e);
+        return dynamic_cast<VocalypseAudioProcessorEditor&> (e);
     }
 
     // Moves the mouse in small steps (like a real drag) and returns the change of the value
@@ -44,7 +44,7 @@ namespace
 class UxTests final : public juce::UnitTest
 {
 public:
-    UxTests() : juce::UnitTest ("Headliner UX: help, tutorial, organisation", "Headliner") {}
+    UxTests() : juce::UnitTest ("VOCALYPSE UX: help, tutorial, organisation", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -88,7 +88,7 @@ public:
             h.proc.getAutoMix().dismissPrompt();   // the analysis popup has priority on a new instance
             {
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-                auto& tour = asVelvox (*e).getTutorial();
+                auto& tour = asVocalypse (*e).getTutorial();
                 expect (tour.isActive(), "welcome card on first start");
                 expectEquals (tour.getStep(), -1);
 
@@ -106,22 +106,22 @@ public:
             expect (ui::settings::getBool (ui::settings::tutorialDone), "skip is saved");
 
             std::unique_ptr<juce::AudioProcessorEditor> again (h.proc.createEditor());
-            expect (! asVelvox (*again).getTutorial().isActive(), "not shown again after it was skipped");
+            expect (! asVocalypse (*again).getTutorial().isActive(), "not shown again after it was skipped");
 
             // ... and it can always be started again from the help
-            asVelvox (*again).showHelp ("start");
-            expect (asVelvox (*again).getHelp().isOpen());
-            asVelvox (*again).startTutorial (false);
-            expect (asVelvox (*again).getTutorial().isActive());
-            expectEquals (asVelvox (*again).getTutorial().getStep(), 0);
-            expect (! asVelvox (*again).getHelp().isOpen(), "help closes when the tour starts");
+            asVocalypse (*again).showHelp ("start");
+            expect (asVocalypse (*again).getHelp().isOpen());
+            asVocalypse (*again).startTutorial (false);
+            expect (asVocalypse (*again).getTutorial().isActive());
+            expectEquals (asVocalypse (*again).getTutorial().getStep(), 0);
+            expect (! asVocalypse (*again).getHelp().isOpen(), "help closes when the tour starts");
         }
 
         beginTest ("Tutorial targets lie inside the window and are not empty");
         {
             Harness h;
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             const juce::Rectangle<int> canvas (0, 0, ui::baseWidth, ui::baseHeight);
             for (auto* key : { "chain", "presets", "global", "help", "chainAndModules", "body", "modes", "tabs", "macros", "analyse", "mascot" })
             {
@@ -138,13 +138,13 @@ public:
             h.proc.getAutoMix().dismissPrompt();
             {
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-                auto& tour = asVelvox (*e).getTutorial();
+                auto& tour = asVocalypse (*e).getTutorial();
                 expect (tour.isActive());
                 tour.finish (ui::TutorialOverlay::Outcome::later);
             }
             expect (! ui::settings::getBool (ui::settings::tutorialDone), "later is not 'done'");
             std::unique_ptr<juce::AudioProcessorEditor> e2 (h.proc.createEditor());
-            expect (! asVelvox (*e2).getTutorial().isActive(), "postponed for the rest of the session");
+            expect (! asVocalypse (*e2).getTutorial().isActive(), "postponed for the rest of the session");
             ui::settings::set (ui::settings::tutorialDone, true);
         }
 
@@ -153,7 +153,7 @@ public:
             Harness h;
             h.proc.getState().state.setProperty ("uiMode", "pro", nullptr);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
 
             // Every module in the chain (a fresh chain has only a few)
             for (int id = 0; id < dsp::numModules; ++id)
@@ -201,7 +201,7 @@ public:
             Harness h;
             h.proc.getState().state.setProperty ("uiMode", "beginner", nullptr);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             const auto before = h.proc.readSettings();
             expect (! ed.isAdvanced());
 

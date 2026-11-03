@@ -2,7 +2,7 @@
 #include "StyleProfiles.h"
 #include <set>
 
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
     namespace
     {

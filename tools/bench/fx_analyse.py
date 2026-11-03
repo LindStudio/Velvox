@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measures the reverb / delay renders of `VelvoxTests --fxrender <dir>`.
+"""Measures the reverb / delay renders of `VocalypseTests --fxrender <dir>`.
 
 Reverb impulse responses (ir_reverb_*.wav):
   - RT60 per octave band (125 Hz .. 8 kHz) from the Schroeder integral (T20 fit, -5..-25 dB)

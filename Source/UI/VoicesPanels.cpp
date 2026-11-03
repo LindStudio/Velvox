@@ -4,7 +4,7 @@
 #include "../Text/I18n.h"
 #include "../Text/ParamText.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
     using Field = doubleredit::Field;
@@ -26,7 +26,7 @@ namespace velvox::ui
             return instance > 0 ? dsp::instanceParamId (base, instance) : juce::String (base);
         }
 
-        juce::RangedAudioParameter* paramFor (VelvoxAudioProcessor& proc, const char* base, int instance)
+        juce::RangedAudioParameter* paramFor (VocalypseAudioProcessor& proc, const char* base, int instance)
         {
             auto& state = proc.getState();
             if (instance > 0)
@@ -36,7 +36,7 @@ namespace velvox::ui
         }
 
         float realOf (const juce::RangedAudioParameter* p) { return p != nullptr ? p->convertFrom0to1 (p->getValue()) : 0.0f; }
-        float realValue (VelvoxAudioProcessor& proc, const char* base, int instance) { return realOf (paramFor (proc, base, instance)); }
+        float realValue (VocalypseAudioProcessor& proc, const char* base, int instance) { return realOf (paramFor (proc, base, instance)); }
         float defaultOf (const juce::RangedAudioParameter* p) { return p != nullptr ? p->convertFrom0to1 (p->getDefaultValue()) : 0.0f; }
 
         void write (juce::RangedAudioParameter* p, float real)
@@ -109,21 +109,21 @@ namespace velvox::ui
     //==========================================================================
     namespace doubleredit
     {
-        int mode (VelvoxAudioProcessor& proc, int instance)
+        int mode (VocalypseAudioProcessor& proc, int instance)
         {
             return juce::jlimit (0, 2, juce::roundToInt (realValue (proc, pid::doublerVoices, instance)));
         }
 
-        int voiceCount (VelvoxAudioProcessor& proc, int instance) { return mode (proc, instance) == 2 ? 4 : 2; }
+        int voiceCount (VocalypseAudioProcessor& proc, int instance) { return mode (proc, instance) == 2 ? 4 : 2; }
 
         juce::String paramId (int instance, int v, Field f) { return idFor (baseFor (v, f), instance); }
 
-        juce::RangedAudioParameter* param (VelvoxAudioProcessor& proc, int instance, int v, Field f)
+        juce::RangedAudioParameter* param (VocalypseAudioProcessor& proc, int instance, int v, Field f)
         {
             return paramFor (proc, baseFor (v, f), instance);
         }
 
-        VoiceValues voice (VelvoxAudioProcessor& proc, int instance, int v)
+        VoiceValues voice (VocalypseAudioProcessor& proc, int instance, int v)
         {
             v = juce::jlimit (0, 3, v);
             VoiceValues out;
@@ -178,7 +178,7 @@ namespace velvox::ui
             return r == 0 ? juce::String ("C") : (r < 0 ? "L" + juce::String (-r) : "R" + juce::String (r));
         }
 
-        std::optional<float> parseValue (VelvoxAudioProcessor& proc, int instance, int v, Field f, const juce::String& text)
+        std::optional<float> parseValue (VocalypseAudioProcessor& proc, int instance, int v, Field f, const juce::String& text)
         {
             auto* p = param (proc, instance, v, f);
             if (p == nullptr)
@@ -201,7 +201,7 @@ namespace velvox::ui
             return parseValueText (t, *p);
         }
 
-        void leaveClassic (VelvoxAudioProcessor& proc, int instance)
+        void leaveClassic (VocalypseAudioProcessor& proc, int instance)
         {
             if (mode (proc, instance) != 0)
                 return;
@@ -217,7 +217,7 @@ namespace velvox::ui
                 gestures::setReal (*voices, 1.0f);
         }
 
-        Edit::Edit (VelvoxAudioProcessor& p, int k, int v, std::initializer_list<Field> fields, const juce::String& name)
+        Edit::Edit (VocalypseAudioProcessor& p, int k, int v, std::initializer_list<Field> fields, const juce::String& name)
             : proc (p), instance (k), voiceIndex (juce::jlimit (0, 3, v))
         {
             proc.getUndo().beginTransaction (name);
@@ -242,27 +242,27 @@ namespace velvox::ui
             write (param (proc, instance, voiceIndex, f), realValue);
         }
 
-        void setValue (VelvoxAudioProcessor& proc, int instance, int v, Field f, float realValue)
+        void setValue (VocalypseAudioProcessor& proc, int instance, int v, Field f, float realValue)
         {
             Edit e (proc, instance, v, { f }, stepName (v, fieldName (f)));
             e.set (f, realValue);
         }
 
-        void toggleOn (VelvoxAudioProcessor& proc, int instance, int v)
+        void toggleOn (VocalypseAudioProcessor& proc, int instance, int v)
         {
             const bool wasOn = voice (proc, instance, v).on;
             Edit e (proc, instance, v, { Field::on }, stepName (v, wasOn ? tr ("aus", "off") : tr ("an", "on")));
             e.set (Field::on, wasOn ? 0.0f : 1.0f);
         }
 
-        void resetVoice (VelvoxAudioProcessor& proc, int instance, int v)
+        void resetVoice (VocalypseAudioProcessor& proc, int instance, int v)
         {
             Edit e (proc, instance, v, { Field::on, Field::delay, Field::detune, Field::gain, Field::pan }, stepName (v, tr ("zurücksetzen", "reset")));
             for (auto f : allFields)
                 e.set (f, defaultOf (param (proc, instance, v, f)));
         }
 
-        void resetPosition (VelvoxAudioProcessor& proc, int instance, int v)
+        void resetPosition (VocalypseAudioProcessor& proc, int instance, int v)
         {
             Edit e (proc, instance, v, { Field::pan, Field::gain }, stepName (v, tr ("Position zurücksetzen", "position reset")));
             for (auto f : { Field::pan, Field::gain })
@@ -640,7 +640,7 @@ namespace velvox::ui
     };
 
     //--------------------------------------------------------------------------
-    DoublerStage::DoublerStage (VelvoxAudioProcessor& p, int k) : proc (p), instance (k)
+    DoublerStage::DoublerStage (VocalypseAudioProcessor& p, int k) : proc (p), instance (k)
     {
         for (int v = 0; v < 4; ++v)
         {
@@ -1114,7 +1114,7 @@ namespace velvox::ui
         class DoublerPanel final : public DetailPanel
         {
         public:
-            explicit DoublerPanel (VelvoxAudioProcessor& p)
+            explicit DoublerPanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "Doubler", help::shortDescription ((int) ModuleId::doubler), pid::doublerOn)
             {
                 voices = &segments (pid::doublerVoices);
@@ -1174,14 +1174,14 @@ namespace velvox::ui
         };
     }
 
-    std::unique_ptr<ModuleView> createVoicesModuleView (VelvoxAudioProcessor& p, ModuleId id, int instance)
+    std::unique_ptr<ModuleView> createVoicesModuleView (VocalypseAudioProcessor& p, ModuleId id, int instance)
     {
         if (id == ModuleId::doubler)
             return std::make_unique<DoublerStage> (p, instance);
         return nullptr;
     }
 
-    std::unique_ptr<DetailPanel> createVoicesModulePanel (VelvoxAudioProcessor& p, ModuleId id)
+    std::unique_ptr<DetailPanel> createVoicesModulePanel (VocalypseAudioProcessor& p, ModuleId id)
     {
         if (id == ModuleId::doubler)
             return std::make_unique<DoublerPanel> (p);

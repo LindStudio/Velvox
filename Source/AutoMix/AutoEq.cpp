@@ -1,7 +1,7 @@
 #include "AutoEq.h"
 #include "ReportText.h"
 
-namespace velvox::automix::autoeq
+namespace vocalypse::automix::autoeq
 {
     using dsp::EqBand;
     using dsp::EqBandType;

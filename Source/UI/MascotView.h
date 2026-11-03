@@ -3,7 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "MascotBrain.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Memphy as a comic figure (SIMPEL, bottom left). The editor feeds it once per frame; it shows the
     // picture of the mood the Brain picks, with its pop, breathing, talking bounce and hop, and cross-fades
@@ -38,7 +38,7 @@ namespace velvox::ui
         // The sticker of a mood (embedded PNG, decoded once while any MascotView exists).
         // Never keep juce::Image in static storage: JUCE 8 images hold Direct2D resources, and a static
         // releases them when the host unloads the DLL (under the Windows loader lock) - FL Studio then
-        // hung on exit (2026-11-03, HeadlinerRefHost --editor reproduces it).
+        // hung on exit (2026-11-03, VocalypseRefHost --editor reproduces it).
         static juce::Image sticker (mascot::Mood mood);
 
         struct Stickers

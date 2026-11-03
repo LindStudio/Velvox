@@ -7,7 +7,7 @@
 #include <optional>
 
 // VOCAL CHECK calibration helpers (CheckEval.cpp)
-namespace velvox::test
+namespace vocalypse::test
 {
     std::optional<automix::CapturedAudio> loadVocal (const juce::File& file, double maxSeconds = 300.0);
     // Feeds the audio through a CheckModule into a VocalAnalyzer (capture mode) and analyses it
@@ -21,7 +21,7 @@ namespace velvox::test
     automix::CapturedAudio inject (const automix::CapturedAudio& in, Injection what, unsigned seed = 1);
     // The finding that detects the injected problem (right id and frequency), or nullptr
     const dsp::Finding* detection (const dsp::AnalysisResult& r, Injection what);
-    // The take rendered through Headliner with the automatic mix (default parameters as the start)
+    // The take rendered through VOCALYPSE with the automatic mix (default parameters as the start)
     std::optional<automix::CapturedAudio> autoMixed (const automix::CapturedAudio& in);
 
     int runCheckTemplate (const juce::File& outFile, const juce::StringArray& wavs);

@@ -6,8 +6,8 @@
 #include "SyntheticVocal.h"
 #include "DSP/BreathModule.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::BreathModule;
 
 namespace
@@ -107,7 +107,7 @@ namespace
 class BreathTests final : public juce::UnitTest
 {
 public:
-    BreathTests() : juce::UnitTest ("Atem-Absenker (breath)", "Headliner") {}
+    BreathTests() : juce::UnitTest ("Atem-Absenker (breath)", "VOCALYPSE") {}
 
     void runTest() override
     {

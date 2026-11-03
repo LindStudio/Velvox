@@ -7,9 +7,9 @@
 #include "DSP/VocalAnalyzer.h"
 #include "Text/I18n.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::dsp;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::dsp;
 
 namespace
 {
@@ -59,7 +59,7 @@ namespace
 class VocalCheckTests final : public juce::UnitTest
 {
 public:
-    VocalCheckTests() : juce::UnitTest ("Headliner Vocal Check diagnoses", "Headliner") {}
+    VocalCheckTests() : juce::UnitTest ("VOCALYPSE Vocal Check diagnoses", "VOCALYPSE") {}
 
     void runTest() override
     {

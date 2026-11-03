@@ -5,7 +5,7 @@
 #include <deque>
 #include <unordered_map>
 
-namespace velvox
+namespace vocalypse
 {
     using T = ParameterSpec::Type;
 

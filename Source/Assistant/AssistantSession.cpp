@@ -2,7 +2,7 @@
 #include "AssistantPlanner.h"
 #include "../Parameters/ParameterLayout.h"
 
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
     namespace
     {

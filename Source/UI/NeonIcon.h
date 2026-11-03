@@ -2,10 +2,10 @@
 
 #include "Theme.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Glowing line-art module icon (Resources/Icons, white strokes recoloured into the module
-    // colour), as in the HEADLINER VOCAL design.
+    // colour), as in the VOCALYPSE VOCAL design.
     class NeonIcon final : public juce::Component
     {
     public:

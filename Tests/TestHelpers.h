@@ -5,7 +5,7 @@
 #include "PluginProcessor.h"
 #include "Presets/FactoryPresets.h"
 
-namespace velvox::test
+namespace vocalypse::test
 {
     constexpr double pi = 3.14159265358979323846;
 
@@ -13,8 +13,8 @@ namespace velvox::test
     {
         // The processor is large (~220 kB, the DSP chain): on the heap, like in
         // a host, so tests with several harnesses do not exhaust the stack
-        std::unique_ptr<VelvoxAudioProcessor> procHolder = std::make_unique<VelvoxAudioProcessor>();
-        VelvoxAudioProcessor& proc = *procHolder;
+        std::unique_ptr<VocalypseAudioProcessor> procHolder = std::make_unique<VocalypseAudioProcessor>();
+        VocalypseAudioProcessor& proc = *procHolder;
         double fs;
         int blockSize;
         int channels;

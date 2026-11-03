@@ -3,7 +3,7 @@
 #include "StyleProfiles.h"
 
 // Source is compiled as UTF-8 (/utf-8): the German texts below are plain literals.
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
     namespace
     {
@@ -447,7 +447,7 @@ namespace velvox::assistant
                 const float k = AssistantPlanner::factor (in.intensity);
                 if (in.direction > 0)
                 {
-                    note (Note::Kind::unavailable, de ("Gezielt „mehr Schärfe“ bietet Velvox nicht an. Für mehr Biss: „mehr Präsenz“ oder „mehr Druck“."));
+                    note (Note::Kind::unavailable, de ("Gezielt „mehr Schärfe“ bietet Vocalypse nicht an. Für mehr Biss: „mehr Präsenz“ oder „mehr Druck“."));
                     return;
                 }
                 // Typed wishes for presence / highs are never taken back by this rule
@@ -591,7 +591,7 @@ namespace velvox::assistant
                 // Honest status of the beat measurement
                 if (! ctx.sidechainConnected)
                     note (Note::Kind::warning, de ("Beat-Sidechain nicht verbunden: Die Vorschläge beruhen auf allgemeinen Regeln für Vocals, nicht auf einer Messung deines Beats. "
-                                                   "In FL Studio die Beat-Spur per Sidechain an Velvox senden."));
+                                                   "In FL Studio die Beat-Spur per Sidechain an Vocalypse senden."));
                 else if (! ctx.sidechainSignal)
                     note (Note::Kind::warning, de ("Beat-Sidechain verbunden, aber es kommt gerade kein Signal an (Beat läuft nicht?). Die Vorschläge beruhen auf allgemeinen Regeln."));
                 else

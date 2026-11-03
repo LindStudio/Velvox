@@ -2,8 +2,8 @@
 
 #include "TestHelpers.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 namespace
 {
@@ -31,7 +31,7 @@ namespace
 class OutputStageTests final : public juce::UnitTest
 {
 public:
-    OutputStageTests() : juce::UnitTest ("Velvox output stage", "Velvox") {}
+    OutputStageTests() : juce::UnitTest ("Vocalypse output stage", "Vocalypse") {}
 
     void runTest() override
     {

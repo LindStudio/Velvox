@@ -3,7 +3,7 @@
 #include "../StateKeys.h"
 #include "../Text/I18n.h"
 
-namespace velvox::check
+namespace vocalypse::check
 {
     VocalCheckController::VocalCheckController (juce::AudioProcessorValueTreeState& state, dsp::VocalAnalyzer& a, Host h)
         : apvts (state), analyzer (a), host (std::move (h)), eqResolver (std::make_unique<EqBandsResolver>())

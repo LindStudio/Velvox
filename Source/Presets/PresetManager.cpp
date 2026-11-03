@@ -2,7 +2,7 @@
 #include "FactoryPresets.h"
 #include "../ProductInfo.h"
 
-namespace velvox
+namespace vocalypse
 {
     PresetManager::PresetManager (juce::AudioProcessorValueTreeState& state, juce::File userPresetDirectory)
         : apvts (state), userDirectory (std::move (userPresetDirectory))
@@ -15,10 +15,14 @@ namespace velvox
         const auto company = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile (product::companyName);
         const auto dir = company.getChildFile (product::name).getChildFile ("Presets");
 
-        // Renamed product: take the user presets saved under the old name along (copy, never move)
-        const auto legacy = company.getChildFile (product::legacyName).getChildFile ("Presets");
-        if (! dir.isDirectory() && legacy.isDirectory())
-            legacy.copyDirectoryTo (dir);
+        // Renamed product: take the user presets saved under the newest old name along (copy, never move)
+        if (! dir.isDirectory())
+            for (auto* old : product::legacyNames)
+                if (const auto legacy = company.getChildFile (old).getChildFile ("Presets"); legacy.isDirectory())
+                {
+                    legacy.copyDirectoryTo (dir);
+                    break;
+                }
         return dir;
     }
 
@@ -188,7 +192,7 @@ namespace velvox
     }
 }
 
-namespace velvox
+namespace vocalypse
 {
     bool PresetManager::isCurrentPresetModified()
     {

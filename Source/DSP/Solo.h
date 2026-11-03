@@ -2,7 +2,7 @@
 
 #include "VocalChain.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Module solo (0.6.1, spec item 4): a monitoring state, never a parameter. While one module instance is
     // soloed, every other instance in the chain is bypassed and only the soloed one is heard.

@@ -3,7 +3,7 @@
 // ============================================================================
 //  FUTURE EXTENSION POINT - NO AI IN VERSION 0.x
 //
-//  Velvox contains no AI, no speech input and no audio analysis. This file
+//  Vocalypse contains no AI, no speech input and no audio analysis. This file
 //  only defines the contract a later "smart mixing" feature will plug into:
 //
 //    user text ("make it more aggressive")  ---\
@@ -28,7 +28,7 @@
 #include "../Presets/ParameterSnapshot.h"
 #include <functional>
 
-namespace velvox::mixing
+namespace vocalypse::mixing
 {
     struct MixingRequest
     {

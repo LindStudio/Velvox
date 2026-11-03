@@ -7,9 +7,9 @@
 #include "../DSP/VocalAnalyzer.h"
 #include "../Text/I18n.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-// VOCAL CHECK tab of Headliner 0.6 (spec 2.11 / 5.15, the user's pick "Check 1 · score + tiles"):
+// VOCAL CHECK tab of VOCALYPSE 0.6 (spec 2.11 / 5.15, the user's pick "Check 1 · score + tiles"):
 //
 //   [score ring]  ⏻ VOCAL CHECK                                   GENRE  Party | Pop | Akustik
 //                 gut · 3 Dinge kannst du noch verbessern
@@ -22,16 +22,16 @@ class VelvoxAudioProcessor;
 //   ...
 //   2 ignoriert ▸                                                    (Alle wiederherstellen)
 //
-// Everything comes from VelvoxAudioProcessor::getVocalCheck() (the check engine's controller): the
+// Everything comes from VocalypseAudioProcessor::getVocalCheck() (the check engine's controller): the
 // texts of a tile are the finding's `problem` and `fix`, "Anwenden" shows only where canApply(), its
 // tooltip is the preview of what it writes. "Anwenden" / "Alles anwenden" are one undo step each
 // (the controller writes through the global UndoHistory). Message thread only.
-namespace velvox::ui
+namespace vocalypse::ui
 {
     juce::Colour checkScoreColour (int score);              // -1 = no score
     juce::Colour checkSeverityColour (check::Severity level);
     // What a fix writes, one line per parameter ("EQ Band 1 Gain: −3.0 dB") plus "EQ einfügen" for modules it inserts
-    juce::String checkPreviewText (VelvoxAudioProcessor& proc, const check::ResolvedFix& fix);
+    juce::String checkPreviewText (VocalypseAudioProcessor& proc, const check::ResolvedFix& fix);
     // Score ring (track + arc in the score colour + number); also used by the module panel's summary
     void drawScoreRing (juce::Graphics& g, juce::Rectangle<float> area, int score, float thickness, bool withCaption);
 
@@ -110,7 +110,7 @@ namespace velvox::ui
             friend class VocalCheckView;
         };
 
-        explicit VocalCheckView (VelvoxAudioProcessor& proc);
+        explicit VocalCheckView (VocalypseAudioProcessor& proc);
         ~VocalCheckView() override;
 
         void paint (juce::Graphics&) override;
@@ -151,7 +151,7 @@ namespace velvox::ui
         void afterClick();
         juce::String listKey() const;
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         PowerButton power;
         CheckButton remeasure { i18n::tr ("Neu messen", "Measure again"), CheckButton::Style::ghost };
         VoiceTargetView targetView;
@@ -181,7 +181,7 @@ namespace velvox::ui
     class CheckSummary final : public juce::Component
     {
     public:
-        explicit CheckSummary (VelvoxAudioProcessor& proc);
+        explicit CheckSummary (VocalypseAudioProcessor& proc);
         void paint (juce::Graphics&) override;
         void resized() override;
         void refresh();
@@ -192,7 +192,7 @@ namespace velvox::ui
         CheckButton& getOpenButton() noexcept { return open; }
 
     private:
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         int score = -1;
         juce::String count;
         CheckButton open { i18n::tr ("Zum VOCAL CHECK \xe2\x86\x92", "Open VOCAL CHECK \xe2\x86\x92"), CheckButton::Style::ghost };

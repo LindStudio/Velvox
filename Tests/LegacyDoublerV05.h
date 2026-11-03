@@ -5,9 +5,9 @@
 #include "DSP/DspUtilities.h"
 #include "DSP/MixLaw.h"
 
-namespace velvox::test::legacy
+namespace vocalypse::test::legacy
 {
-    using namespace velvox::dsp;
+    using namespace vocalypse::dsp;
 
     struct LegacyDoublerSettings
     {

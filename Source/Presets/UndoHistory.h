@@ -3,7 +3,7 @@
 #include "ParameterSnapshot.h"
 #include <optional>
 
-namespace velvox
+namespace vocalypse
 {
     // One global undo history for the plugin (message thread only):
     //   - every parameter gesture (knob drag, wheel step, typed value, menu reset ...) = one step,

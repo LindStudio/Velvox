@@ -5,8 +5,8 @@
 #include "SyntheticVocal.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 namespace
 {
@@ -32,7 +32,7 @@ namespace
 class PresetTests final : public juce::UnitTest
 {
 public:
-    PresetTests() : juce::UnitTest ("Velvox presets 0.2", "Velvox") {}
+    PresetTests() : juce::UnitTest ("Vocalypse presets 0.2", "Vocalypse") {}
 
     void runTest() override
     {
@@ -115,16 +115,16 @@ public:
         {
             Harness h;
             const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                 .getChildFile ("VelvoxV1Presets_" + juce::String (juce::Random::getSystemRandom().nextInt (1000000)));
+                                 .getChildFile ("VocalypseV1Presets_" + juce::String (juce::Random::getSystemRandom().nextInt (1000000)));
             dir.createDirectory();
             // Exactly what v0.1 wrote: version 1, no routing, includes inputGain
             const juce::String xml = R"(<?xml version="1.0" encoding="UTF-8"?>
-<VelvoxPreset name="Old One" category="User" description="" version="1">
+<VocalypsePreset name="Old One" category="User" description="" version="1">
   <Param id="compThreshold" value="-33.0"/>
   <Param id="inputGain" value="12.0"/>
   <Param id="reverbOn" value="1.0"/>
   <Param id="reverbMix" value="40.0"/>
-</VelvoxPreset>)";
+</VocalypsePreset>)";
             expect (dir.getChildFile ("Old One" + PresetManager::fileExtension).replaceWithText (xml));
 
             PresetManager pm (h.proc.getState(), dir);
@@ -177,12 +177,12 @@ public:
         {
             // A preset is compared by its sound, not its level: switching presets on a well-recorded vocal
             // (about -18 LUFS, peaks near -6 dBFS) keeps the loudness. Synthetic takes always; real takes from
-            // VELVOX_LOUDNESS_VOCALS (';'-separated wav files) when set - the presets were calibrated on VocalSet.
+            // VOCALYPSE_LOUDNESS_VOCALS (';'-separated wav files) when set - the presets were calibrated on VocalSet.
             const auto lufs = [] (const juce::AudioBuffer<float>& b, int skip)
             {
                 return dsp::LoudnessMeter::integratedLufs (b.getArrayOfReadPointers(), b.getNumChannels(), b.getNumSamples(), 48000.0, skip);
             };
-            const float inputLufs = (float) juce::SystemStats::getEnvironmentVariable ("VELVOX_LOUDNESS_INPUT", "-18").getDoubleValue();
+            const float inputLufs = (float) juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_LOUDNESS_INPUT", "-18").getDoubleValue();
             const int skip = 48000 / 2;
             std::vector<std::pair<juce::String, juce::AudioBuffer<float>>> takes;
             const auto add = [&] (const juce::String& name, juce::AudioBuffer<float> b)
@@ -203,7 +203,7 @@ public:
             }
             juce::AudioFormatManager formats;
             formats.registerBasicFormats();
-            for (const auto& path : juce::StringArray::fromTokens (juce::SystemStats::getEnvironmentVariable ("VELVOX_LOUDNESS_VOCALS", {}), ";", {}))
+            for (const auto& path : juce::StringArray::fromTokens (juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_LOUDNESS_VOCALS", {}), ";", {}))
                 if (std::unique_ptr<juce::AudioFormatReader> r (formats.createReaderFor (juce::File (path.trim()))); r != nullptr)
                 {
                     const int n = (int) std::min<juce::int64> (r->lengthInSamples, (juce::int64) (r->sampleRate * 20.0));

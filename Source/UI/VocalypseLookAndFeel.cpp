@@ -1,8 +1,8 @@
-#include "VelvoxLookAndFeel.h"
+#include "VocalypseLookAndFeel.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
-    VelvoxLookAndFeel::VelvoxLookAndFeel()
+    VocalypseLookAndFeel::VocalypseLookAndFeel()
     {
         setColour (juce::ResizableWindow::backgroundColourId, colours::background);
         setColour (juce::Label::textColourId, colours::text);
@@ -42,7 +42,7 @@ namespace velvox::ui
         setColour (juce::AlertWindow::outlineColourId, colours::line);
     }
 
-    juce::Typeface::Ptr VelvoxLookAndFeel::getTypefaceForFont (const juce::Font& f)
+    juce::Typeface::Ptr VocalypseLookAndFeel::getTypefaceForFont (const juce::Font& f)
     {
         // Anything left on the default sans (labels, editors) uses Inter too
         if (f.getTypefaceName() == juce::Font::getDefaultSansSerifFontName() && fonts->regular != nullptr)
@@ -51,7 +51,7 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    // Knob of the HEADLINER VOCAL design. Units of a 100 x 100 knob (u = px per unit):
+    // Knob of the VOCALYPSE VOCAL design. Units of a 100 x 100 knob (u = px per unit):
     //   tick ring   57 ticks over 270 deg, r 40.5..47.5, width 1.3; lit up to the value
     //               in the accent colour with a glow, the rest #30343D
     //   shadow      circle r 37, 7 units down, soft
@@ -59,7 +59,7 @@ namespace velvox::ui
     //   cap         r 26, #17191D -> #2A2D34 (recessed)
     //   pointer     glowing dot r 3.4 on r 27
     // Bipolar parameters light the ticks from the centre detent towards the value.
-    void VelvoxLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float pos,
+    void VocalypseLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height, float pos,
                                               float startAngle, float endAngle, juce::Slider& slider)
     {
         const auto area = juce::Rectangle<int> (x, y, width, height).toFloat();
@@ -151,7 +151,7 @@ namespace velvox::ui
         }
     }
 
-    void VelvoxLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+    void VocalypseLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
                                               float, float, juce::Slider::SliderStyle style, juce::Slider& slider)
     {
         if (style != juce::Slider::LinearHorizontal)
@@ -195,7 +195,7 @@ namespace velvox::ui
         g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre (thumb.getCentre()));
     }
 
-    juce::Label* VelvoxLookAndFeel::createSliderTextBox (juce::Slider& slider)
+    juce::Label* VocalypseLookAndFeel::createSliderTextBox (juce::Slider& slider)
     {
         // Design: value in Roboto Mono 11.5 px, #E8EBF2 (editable on click)
         auto* l = LookAndFeel_V4::createSliderTextBox (slider);
@@ -212,7 +212,7 @@ namespace velvox::ui
 
     //==========================================================================
     // Pill toggle: status dot that lights up, text brightens
-    void VelvoxLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& b, bool highlighted, bool)
+    void VocalypseLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& b, bool highlighted, bool)
     {
         const bool on = b.getToggleState();
         auto r = b.getLocalBounds().toFloat().reduced (0.5f);
@@ -265,7 +265,7 @@ namespace velvox::ui
     }
 
     // Text buttons: ghost style. Connected edges form segmented controls.
-    void VelvoxLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& background,
+    void VocalypseLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& background,
                                                   bool highlighted, bool down)
     {
         auto r = b.getLocalBounds().toFloat().reduced (0.5f);
@@ -295,7 +295,7 @@ namespace velvox::ui
 
         if ((bool) b.getProperties().getWithDefault ("primary", false))
         {
-            // Primary action ("Get Headliner"): a solid blue -> violet pill with a glow
+            // Primary action ("Get VOCALYPSE"): a solid blue -> violet pill with a glow
             const float a = b.isEnabled() ? 1.0f : 0.35f;
             if (b.isEnabled())
             {
@@ -333,7 +333,7 @@ namespace velvox::ui
 
     // Active state of the style guide ("PUNCH"): indigo body, a blue -> violet
     // border and a faint glow around it
-    void VelvoxLookAndFeel::drawNeonFill (juce::Graphics& g, const juce::Path& shape, juce::Rectangle<float> r, float strength)
+    void VocalypseLookAndFeel::drawNeonFill (juce::Graphics& g, const juce::Path& shape, juce::Rectangle<float> r, float strength)
     {
         g.setColour (colours::blue.withAlpha (0.10f * strength));
         g.strokePath (shape, juce::PathStrokeType (5.0f));
@@ -348,7 +348,7 @@ namespace velvox::ui
         g.strokePath (shape, juce::PathStrokeType (1.3f));
     }
 
-    void VelvoxLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool highlighted, bool)
+    void VocalypseLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool highlighted, bool)
     {
         const bool on = b.getToggleState();
         if ((bool) b.getProperties().getWithDefault (segmentProperty, false))
@@ -387,13 +387,13 @@ namespace velvox::ui
         g.drawFittedText (b.getButtonText(), b.getLocalBounds().reduced (8, 0), juce::Justification::centred, 1, 0.9f);
     }
 
-    juce::Font VelvoxLookAndFeel::getTextButtonFont (juce::TextButton&, int buttonHeight)
+    juce::Font VocalypseLookAndFeel::getTextButtonFont (juce::TextButton&, int buttonHeight)
     {
         return medium (std::min (14.5f, (float) buttonHeight * 0.44f));
     }
 
     //==========================================================================
-    void VelvoxLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, bool, int, int, int, int, juce::ComboBox& box)
+    void VocalypseLookAndFeel::drawComboBox (juce::Graphics& g, int width, int height, bool, int, int, int, int, juce::ComboBox& box)
     {
         auto r = juce::Rectangle<int> (width, height).toFloat().reduced (0.5f);
         const float corner = std::min (8.0f, r.getHeight() * 0.5f);
@@ -412,42 +412,42 @@ namespace velvox::ui
         g.strokePath (arrow, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    juce::Font VelvoxLookAndFeel::getComboBoxFont (juce::ComboBox& box)
+    juce::Font VocalypseLookAndFeel::getComboBoxFont (juce::ComboBox& box)
     {
         return medium (std::min (14.0f, (float) box.getHeight() * 0.46f));
     }
 
-    void VelvoxLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
+    void VocalypseLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
     {
         label.setBounds (10, 1, box.getWidth() - 32, box.getHeight() - 2);
         label.setFont (getComboBoxFont (box));
     }
 
-    juce::Font VelvoxLookAndFeel::getPopupMenuFont()
+    juce::Font VocalypseLookAndFeel::getPopupMenuFont()
     {
         return medium (15.0f);
     }
 
-    void VelvoxLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
+    void VocalypseLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
     {
         g.fillAll (colours::raised);
         g.setColour (colours::line);
         g.drawRect (0, 0, width, height, 1);
     }
 
-    void VelvoxLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g, const juce::Rectangle<int>& area, const juce::String& name)
+    void VocalypseLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g, const juce::Rectangle<int>& area, const juce::String& name)
     {
         drawCaption (g, name, area.toFloat().reduced (14.0f, 0.0f).withTrimmedTop (4.0f),
                      juce::Justification::centredLeft, colours::textDim, 10.5f);
     }
 
-    juce::Font VelvoxLookAndFeel::getLabelFont (juce::Label& label)
+    juce::Font VocalypseLookAndFeel::getLabelFont (juce::Label& label)
     {
         return label.getFont();
     }
 
     //==========================================================================
-    void VelvoxLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height)
+    void VocalypseLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height)
     {
         const auto r = juce::Rectangle<int> (width, height).toFloat();
         g.setColour (colours::raisedHi);
@@ -463,7 +463,7 @@ namespace velvox::ui
         layout.draw (g, r.reduced (10.0f, 7.0f));
     }
 
-    juce::Rectangle<int> VelvoxLookAndFeel::getTooltipBounds (const juce::String& tipText, juce::Point<int> screenPos,
+    juce::Rectangle<int> VocalypseLookAndFeel::getTooltipBounds (const juce::String& tipText, juce::Point<int> screenPos,
                                                               juce::Rectangle<int> parentArea)
     {
         juce::AttributedString s;
@@ -476,7 +476,7 @@ namespace velvox::ui
             .constrainedWithin (parentArea);
     }
 
-    void VelvoxLookAndFeel::drawCornerResizer (juce::Graphics& g, int w, int h, bool isMouseOver, bool isMouseDragging)
+    void VocalypseLookAndFeel::drawCornerResizer (juce::Graphics& g, int w, int h, bool isMouseOver, bool isMouseDragging)
     {
         g.setColour (colours::accent.withAlpha (isMouseOver || isMouseDragging ? 0.35f : 0.12f));
         for (float i = 0.0f; i < 2.0f; i += 1.0f)

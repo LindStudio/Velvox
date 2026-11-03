@@ -20,7 +20,7 @@
 #include "Instances.h"
 #include "MixLaw.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Settings of one additional instance (instance k >= 1) of every module that has
     // repeated instances. Instance 0 lives directly in ChainSettings (the 0.1-0.3 fields).

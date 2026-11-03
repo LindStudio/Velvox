@@ -4,9 +4,9 @@
 #include "Segments.h"
 #include "../AutoMix/AutoMixController.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Details of the automatic mix (opened from Simple mode with "Details", shown in a card):
     //  A  Vocal status    analysis, material, edited modules, live input level, beat sidechain, output
@@ -17,7 +17,7 @@ namespace velvox::ui
     class AutoMixView final : public juce::Component, private juce::ChangeListener
     {
     public:
-        explicit AutoMixView (VelvoxAudioProcessor& processor);
+        explicit AutoMixView (VocalypseAudioProcessor& processor);
         ~AutoMixView() override;
 
         void paint (juce::Graphics&) override;
@@ -48,7 +48,7 @@ namespace velvox::ui
 
         class StepList;
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         automix::AutoMixController& autoMix;
 
         juce::TextButton analyse, restore;

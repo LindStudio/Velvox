@@ -3,7 +3,7 @@
 #include "AutoMixPlanner.h"
 #include "AutoMixObjective.h"
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     // Measurements of one offline render of the captured audio
     struct RenderMetrics

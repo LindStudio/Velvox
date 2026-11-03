@@ -2,12 +2,12 @@
 
 #include "Theme.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
-    class VelvoxLookAndFeel final : public juce::LookAndFeel_V4
+    class VocalypseLookAndFeel final : public juce::LookAndFeel_V4
     {
     public:
-        VelvoxLookAndFeel();
+        VocalypseLookAndFeel();
 
         // Slider properties set by Knob:
         //   hero    = large macro dial with a value-driven glow

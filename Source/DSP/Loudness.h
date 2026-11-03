@@ -2,7 +2,7 @@
 
 #include "DspUtilities.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Loudness following ITU-R BS.1770: K-weighting (high shelf + RLB high-pass)
     // and channel-summed mean square, reported in LUFS. The integration window

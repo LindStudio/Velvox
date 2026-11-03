@@ -1,9 +1,9 @@
 <#
-  Mirrors the local Velvox repository to Google Drive as a backup.
+  Mirrors the local Vocalypse repository to Google Drive as a backup.
 
   - Writes a complete git bundle (all branches + tags, full history):
       <DriveDir>\_git-backup\velvox.bundle
-    Restore with:  git clone velvox.bundle velvox
+    Restore with:  git clone velvox.bundle vocalypse
   - Copies the current working tree (tracked files only) over the Drive copy,
     so the Drive folder always shows the latest source. Nothing is deleted
     on the Drive side.

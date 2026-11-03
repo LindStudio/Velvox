@@ -3,7 +3,7 @@
 #include "../Parameters/ParameterLayout.h"
 #include "../Text/ParamText.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {

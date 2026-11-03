@@ -1,7 +1,7 @@
 #include "AnalysisOverlay.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -300,11 +300,11 @@ namespace velvox::ui
                 newStatus = tr ("Warte auf Signal am Eingang …", "Waiting for a signal at the input …");
                 const double waited = (now - viewStartMs) * 0.001;
                 if (level > -60.0f && level <= -50.0f)
-                    newWarning = tr ("Signal ist sehr leise. Headliner beginnt ab etwa -50 dBFS - Spurpegel oder Input-Gain anheben.",
-                                     "The signal is very quiet. Headliner starts at about -50 dBFS - raise the track level or input gain.");
+                    newWarning = tr ("Signal ist sehr leise. VOCALYPSE beginnt ab etwa -50 dBFS - Spurpegel oder Input-Gain anheben.",
+                                     "The signal is very quiet. VOCALYPSE starts at about -50 dBFS - raise the track level or input gain.");
                 else if (waited > 6.0 && level <= -60.0f)
-                    newWarning = tr ("Kein Signal erkannt. Läuft die Wiedergabe, und liegt Headliner auf der Spur mit deiner Vocal?",
-                                     "No signal detected. Is playback running, and is Headliner on the track with your vocal?");
+                    newWarning = tr ("Kein Signal erkannt. Läuft die Wiedergabe, und liegt VOCALYPSE auf der Spur mit deiner Vocal?",
+                                     "No signal detected. Is playback running, and is VOCALYPSE on the track with your vocal?");
                 break;
             }
 
@@ -315,12 +315,12 @@ namespace velvox::ui
                 const int missing = std::max (1, (int) std::ceil (c.targetSeconds - c.voicedSeconds - 1.0e-3f));
                 newStatus = i18n::format (tr ("Noch {0} s Gesang", "{0} s of singing to go"), { juce::String (missing) });
                 if (c.clipSamples > 0)
-                    newWarning = i18n::format (tr ("Übersteuerung im Eingang erkannt ({0} Samples). Headliner kann Verzerrung nicht entfernen - besser den Pegel senken und neu starten.",
-                                                   "Clipping detected at the input ({0} samples). Headliner can't remove distortion - better lower the level and start again."),
+                    newWarning = i18n::format (tr ("Übersteuerung im Eingang erkannt ({0} Samples). VOCALYPSE kann Verzerrung nicht entfernen - besser den Pegel senken und neu starten.",
+                                                   "Clipping detected at the input ({0} samples). VOCALYPSE can't remove distortion - better lower the level and start again."),
                                                { juce::String (c.clipSamples) });
                 else if (c.transportStopped && level < -60.0f)
-                    newWarning = i18n::format (tr ("Weiter abspielen - noch {0} s nötig. Headliner hört weiter zu, sobald der Song wieder läuft.",
-                                                   "Keep playing - {0} s still needed. Headliner keeps listening as soon as the song plays again."),
+                    newWarning = i18n::format (tr ("Weiter abspielen - noch {0} s nötig. VOCALYPSE hört weiter zu, sobald der Song wieder läuft.",
+                                                   "Keep playing - {0} s still needed. VOCALYPSE keeps listening as soon as the song plays again."),
                                                { juce::String (missing) });
                 else if (level < -60.0f && (now - viewStartMs) > 3000.0)
                     newWarning = tr ("Gerade kein Signal - Pausen werden übersprungen.", "No signal right now - gaps are skipped.");
@@ -339,8 +339,8 @@ namespace velvox::ui
                 newStatus = i18n::format (tr ("{0} Module eingestellt - {1} s Gesang analysiert.", "{0} modules set - {1} s of singing analyzed."),
                                           { juce::String ((int) r.changedModules.size()), seconds (r.voicedSeconds) });
                 if (r.conservative)
-                    newWarning = tr ("Wenig Material: Headliner hat nur vorsichtige Einstellungen verwendet.",
-                                     "Little material: Headliner used only cautious settings.");
+                    newWarning = tr ("Wenig Material: VOCALYPSE hat nur vorsichtige Einstellungen verwendet.",
+                                     "Little material: VOCALYPSE used only cautious settings.");
                 // Stays until clicked: the confirmation is not missed while listening to the DAW
                 break;
             }
@@ -363,18 +363,18 @@ namespace velvox::ui
 
     juce::String AnalysisOverlay::introText()
     {
-        return i18n::format (tr ("Spiel deinen Song ab, am besten mit der unbearbeiteten Vocal. Headliner hört {0} s Gesang zu und stellt dann jedes Modul auf deine Stimme ein.",
-                                 "Play your song, ideally with the unprocessed vocal. Headliner listens to {0} s of singing and then sets every module for your voice."),
+        return i18n::format (tr ("Spiel deinen Song ab, am besten mit der unbearbeiteten Vocal. VOCALYPSE hört {0} s Gesang zu und stellt dann jedes Modul auf deine Stimme ein.",
+                                 "Play your song, ideally with the unprocessed vocal. VOCALYPSE listens to {0} s of singing and then sets every module for your voice."),
                              { juce::String (juce::roundToInt (automix::CaptureConfig {}.targetVoicedSeconds)) });
     }
 
     juce::String AnalysisOverlay::beatHelpText()
     {
         return tr ("Dann passt der Auto Mix die Stimme an den Beat an und stellt sie über den Beat. FL Studio: Beat-Kanal im Mixer auswählen "
-                   "\xe2\x86\x92 Rechtsklick auf den Pfeil unter dem Headliner-Kanal \xe2\x86\x92 \xe2\x80\x9eSidechain to this track\xe2\x80\x9c "
+                   "\xe2\x86\x92 Rechtsklick auf den Pfeil unter dem VOCALYPSE-Kanal \xe2\x86\x92 \xe2\x80\x9eSidechain to this track\xe2\x80\x9c "
                    "\xe2\x86\x92 im Plugin-Fenster (Zahnrad) den Sidechain-Eingang wählen.",
                    "Then the auto mix fits the vocal to the beat and sets it above the beat. FL Studio: select the beat channel in the mixer "
-                   "\xe2\x86\x92 right-click the arrow below the Headliner channel \xe2\x86\x92 \"Sidechain to this track\" "
+                   "\xe2\x86\x92 right-click the arrow below the VOCALYPSE channel \xe2\x86\x92 \"Sidechain to this track\" "
                    "\xe2\x86\x92 choose the sidechain input in the plugin window (gear).");
     }
 
@@ -510,11 +510,11 @@ namespace velvox::ui
                 break;
             case View::listening:
                 title = tr ("Spiel deine Vocal ab", "Play your vocal");
-                body = tr ("Starte jetzt die Wiedergabe in deiner DAW. Headliner hört nur zu - der Klang wird erst nach der Analyse verändert.",
-                           "Start playback in your DAW now. Headliner only listens - the sound changes only after the analysis.");
+                body = tr ("Starte jetzt die Wiedergabe in deiner DAW. VOCALYPSE hört nur zu - der Klang wird erst nach der Analyse verändert.",
+                           "Start playback in your DAW now. VOCALYPSE only listens - the sound changes only after the analysis.");
                 break;
             case View::capturing:
-                title = tr ("Headliner hört zu", "Headliner is listening");
+                title = tr ("VOCALYPSE hört zu", "VOCALYPSE is listening");
                 body = tr ("Ein begrenzter Abschnitt wird erfasst; Pausen werden übersprungen. Die Erfassung stoppt automatisch, sobald genug Gesang da ist.",
                            "A limited section is captured; gaps are skipped. Capturing stops by itself as soon as there is enough singing.");
                 break;

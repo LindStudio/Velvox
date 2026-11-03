@@ -3,7 +3,7 @@
 #include "UserSettings.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {

@@ -5,9 +5,9 @@
 #include "../DSP/Instances.h"
 #include "../Presets/ParameterSnapshot.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Chain row of Advanced mode (spec 2.4): one slim tile per module instance in processing order,
     // each showing ONLY its name, then its icon, then its on/off switch (top to bottom). No knobs or
@@ -38,7 +38,7 @@ namespace velvox::ui
         bool isCompact() const noexcept { return serialW < compactLookW - 0.01f; }
         static constexpr float nameH = 24.0f, iconH = 36.0f, powerH = 24.0f;
 
-        explicit ChainView (VelvoxAudioProcessor& processor);
+        explicit ChainView (VocalypseAudioProcessor& processor);
 
         void paint (juce::Graphics&) override;
         void mouseDown (const juce::MouseEvent&) override;
@@ -82,7 +82,7 @@ namespace velvox::ui
         bool canRedo() const;
 
         // Every parameter of one instance back to its default (on/off stays): one undo step
-        static void resetInstance (VelvoxAudioProcessor& p, dsp::ModuleId id, int instance);
+        static void resetInstance (VocalypseAudioProcessor& p, dsp::ModuleId id, int instance);
         // Values a fresh instance (browser insert, reset) gets on top of the parameter defaults: (base ID, real value).
         // De-esser: Relative detection. The parameter defaults themselves stay (old projects load as before).
         static std::vector<std::pair<juce::String, float>> freshInstanceValues (dsp::ModuleId id);
@@ -167,7 +167,7 @@ namespace velvox::ui
         void drawAddCard (juce::Graphics&, juce::Rectangle<float> r) const;
         float activityOf (const Tile& t) const;
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         dsp::Routing routing;
         std::vector<Tile> tiles;
         int numSerial = 0;

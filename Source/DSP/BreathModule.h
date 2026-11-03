@@ -6,7 +6,7 @@
 #include <memory>
 #include <vector>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     struct BreathSettings
     {

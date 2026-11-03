@@ -4,7 +4,7 @@
 #include "MixLaw.h"
 #include "DynamicsFeed.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     struct SmashSettings
     {

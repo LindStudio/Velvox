@@ -3,7 +3,7 @@
 #include "../Parameters/EqBands.h"
 #include "../Text/I18n.h"
 
-namespace velvox
+namespace vocalypse
 {
     namespace
     {

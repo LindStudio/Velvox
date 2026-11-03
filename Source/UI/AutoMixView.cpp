@@ -2,7 +2,7 @@
 #include "../PluginProcessor.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -194,7 +194,7 @@ namespace velvox::ui
     };
 
     //==========================================================================
-    AutoMixView::AutoMixView (VelvoxAudioProcessor& p)
+    AutoMixView::AutoMixView (VocalypseAudioProcessor& p)
         : proc (p), autoMix (p.getAutoMix())
     {
         steps = std::make_unique<StepList>();
@@ -205,8 +205,8 @@ namespace velvox::ui
         addAndMakeVisible (stepView);
 
         analyse.getProperties().set ("primary", true);
-        analyse.setTooltip (tr ("Headliner erfasst einen Abschnitt deiner Vocal während der Wiedergabe und erstellt daraus den Mix. Der bisherige Zustand bleibt wiederherstellbar.",
-                                "Headliner captures a section of your vocal during playback and builds the mix from it. The previous state can be restored."));
+        analyse.setTooltip (tr ("VOCALYPSE erfasst einen Abschnitt deiner Vocal während der Wiedergabe und erstellt daraus den Mix. Der bisherige Zustand bleibt wiederherstellbar.",
+                                "VOCALYPSE captures a section of your vocal during playback and builds the mix from it. The previous state can be restored."));
         analyse.onClick = [this] { if (onAnalyse) onAnalyse(); };
 
         restore.setButtonText (tr ("Vorherigen Zustand wiederherstellen", "Restore previous state"));

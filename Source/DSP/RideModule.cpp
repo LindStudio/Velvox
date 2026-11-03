@@ -1,6 +1,6 @@
 #include "RideModule.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

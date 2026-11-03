@@ -8,13 +8,13 @@
 #include "DSP/SmoothModule.h"
 #include "SyntheticVocal.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
 {
-    juce::Rectangle<int> panelSize() { return VelvoxAudioProcessorEditor::panelArea().withZeroOrigin(); }
+    juce::Rectangle<int> panelSize() { return VocalypseAudioProcessorEditor::panelArea().withZeroOrigin(); }
 
     juce::String idFor (const char* base, int instance) { return dsp::instanceParamId (base, instance); }
 
@@ -70,7 +70,7 @@ namespace
 class SmoothPanelTests final : public juce::UnitTest
 {
 public:
-    SmoothPanelTests() : juce::UnitTest ("Headliner smooth panel", "Headliner") {}
+    SmoothPanelTests() : juce::UnitTest ("VOCALYPSE smooth panel", "VOCALYPSE") {}
 
     void runTest() override
     {

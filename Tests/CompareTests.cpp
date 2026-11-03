@@ -5,8 +5,8 @@
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -42,7 +42,7 @@ namespace
 class CompareTests final : public juce::UnitTest
 {
 public:
-    CompareTests() : juce::UnitTest ("Headliner compare (A/B removed)", "Headliner") {}
+    CompareTests() : juce::UnitTest ("VOCALYPSE compare (A/B removed)", "VOCALYPSE") {}
 
     void runTest() override
     {

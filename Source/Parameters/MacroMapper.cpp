@@ -1,6 +1,6 @@
 #include "MacroMapper.h"
 
-namespace velvox
+namespace vocalypse
 {
     namespace
     {

@@ -1,7 +1,7 @@
-"""Blind A/B listening kit from two folders of renders (e.g. Headliner 0.3 vs 0.4).
+"""Blind A/B listening kit from two folders of renders (e.g. VOCALYPSE 0.3 vs 0.4).
 
 Usage:
-    python make_ab_kit.py <dirA> <dirB> <outDir> [--suffix _velvox.wav] [--seed 20261024]
+    python make_ab_kit.py <dirA> <dirB> <outDir> [--suffix _vocalypse.wav] [--seed 20261024]
 
 Pairs files with the same name in both folders, matches both to the same integrated
 loudness (EBU R128 via ffmpeg, the quieter of the two, peaks kept below -1 dBTP by
@@ -30,7 +30,7 @@ def render(src, dst, gain_db):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dir_a"); ap.add_argument("dir_b"); ap.add_argument("out")
-    ap.add_argument("--suffix", default="_velvox.wav")
+    ap.add_argument("--suffix", default="_vocalypse.wav")
     ap.add_argument("--seed", type=int, default=20261024)
     args = ap.parse_args()
 

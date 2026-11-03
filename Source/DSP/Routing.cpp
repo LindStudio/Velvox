@@ -1,7 +1,7 @@
 #include "Routing.h"
 #include "Instances.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

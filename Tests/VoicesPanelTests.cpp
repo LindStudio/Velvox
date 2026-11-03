@@ -5,14 +5,14 @@
 #include "PluginEditor.h"
 #include "UI/VoicesPanels.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
-using velvox::ui::doubleredit::Field;
+using vocalypse::ui::doubleredit::Field;
 
 namespace
 {
-    juce::Rectangle<int> panelSize() { return VelvoxAudioProcessorEditor::panelArea().withZeroOrigin(); }
+    juce::Rectangle<int> panelSize() { return VocalypseAudioProcessorEditor::panelArea().withZeroOrigin(); }
 
     float real (Harness& h, const juce::String& id) { return h.proc.getState().getRawParameterValue (id)->load(); }
 
@@ -110,7 +110,7 @@ namespace
 class VoicesPanelTests final : public juce::UnitTest
 {
 public:
-    VoicesPanelTests() : juce::UnitTest ("Headliner voices panels", "Headliner") {}
+    VoicesPanelTests() : juce::UnitTest ("VOCALYPSE voices panels", "VOCALYPSE") {}
 
     void runTest() override
     {

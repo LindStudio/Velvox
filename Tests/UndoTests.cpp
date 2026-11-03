@@ -5,8 +5,8 @@
 #include "UI/ChainView.h"
 #include "UI/TopBar.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -24,7 +24,7 @@ namespace
 class UndoTests final : public juce::UnitTest
 {
 public:
-    UndoTests() : juce::UnitTest ("Headliner undo history", "Headliner") {}
+    UndoTests() : juce::UnitTest ("VOCALYPSE undo history", "VOCALYPSE") {}
 
     void runTest() override
     {

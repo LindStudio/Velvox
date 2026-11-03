@@ -4,7 +4,7 @@
 #include "SeqLockValue.h"
 #include <juce_dsp/juce_dsp.h>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     struct SmoothSettings
     {

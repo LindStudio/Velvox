@@ -1,14 +1,14 @@
 // Reference host core (tools/refhost): offline rendering through any AudioProcessor with
 // latency compensation, parameter lookup by index / ID / name, parameter setting by text
 // (with a fallback for plugins whose text parser is broken), and the single-module
-// Headliner processor used for module-vs-reference measurements.
+// VOCALYPSE processor used for module-vs-reference measurements.
 
 #include "TestHelpers.h"
 #include "RefHostCore.h"
-#include "HeadlinerModule.h"
+#include "VocalypseModule.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 namespace
 {
@@ -186,7 +186,7 @@ public:
             expectWithinAbsoluteError (fx.depth->get(), 30.0f, 0.2f);
         }
 
-        beginTest ("single-module Headliner processor: one insert, module on, transparent at neutral settings");
+        beginTest ("single-module VOCALYPSE processor: one insert, module on, transparent at neutral settings");
         {
             auto proc = refhost::makeSingleModule (dsp::ModuleId::eq, 0);
             expectEquals (proc->getRouting().size(), 1);

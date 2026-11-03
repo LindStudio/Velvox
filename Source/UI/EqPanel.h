@@ -4,11 +4,11 @@
 #include "AuditionButton.h"
 #include "../Parameters/EqBands.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
 // The 0.6 EQ panel (spec 5.1, "EQ 1", Pro-Q style): a large curve over the live spectrum with up to 16
 // user points, the selected band's values under it, Mix and "Alte EQ-Kurve – umstellen" in Mehr.
-namespace velvox::ui
+namespace vocalypse::ui
 {
     //==========================================================================
     // Band operations of the panel (message thread). Every function that changes something is ONE undo
@@ -24,24 +24,24 @@ namespace velvox::ui
         };
         using ShownBands = std::array<Shown, dsp::maxEqBands>;
 
-        ShownBands shownBands (VelvoxAudioProcessor& proc, int instance);
-        dsp::EqBand parameterBand (VelvoxAudioProcessor& proc, int instance, int band);
+        ShownBands shownBands (VocalypseAudioProcessor& proc, int instance);
+        dsp::EqBand parameterBand (VocalypseAudioProcessor& proc, int instance, int band);
         juce::String paramId (int instance, int band, const char* field);
 
         // A band a macro created only in the effective settings is written as parameters (gain = 0 dB:
         // the macro keeps adding its share, the sound does not change). No undo step of its own: call it
         // inside the step / gesture of the edit. Returns true when it wrote something.
-        bool materialise (VelvoxAudioProcessor& proc, int instance, int band);
+        bool materialise (VocalypseAudioProcessor& proc, int instance, int band);
 
         // New Bell (Q 1, on, role none) in a free slot; returns it, or -1 when all 16 are in use (no step)
-        int addBand (VelvoxAudioProcessor& proc, int instance, float freqHz, float gainDb);
+        int addBand (VocalypseAudioProcessor& proc, int instance, float freqHz, float gainDb);
         // Delete = all 7 band parameters back to their defaults (also role bands: a macro recreates its band)
-        void deleteBand (VelvoxAudioProcessor& proc, int instance, int band);
-        void setType (VelvoxAudioProcessor& proc, int instance, int band, dsp::EqBandType type);
-        void setSlope (VelvoxAudioProcessor& proc, int instance, int band, int slopeIndex);
-        void toggleOn (VelvoxAudioProcessor& proc, int instance, int band);
+        void deleteBand (VocalypseAudioProcessor& proc, int instance, int band);
+        void setType (VocalypseAudioProcessor& proc, int instance, int band, dsp::EqBandType type);
+        void setSlope (VocalypseAudioProcessor& proc, int instance, int band, int slopeIndex);
+        void toggleOn (VocalypseAudioProcessor& proc, int instance, int band);
         // Alt+click: gain and Q back to their defaults (0 dB, Q 1; cuts: 24 dB/oct)
-        void resetBand (VelvoxAudioProcessor& proc, int instance, int band);
+        void resetBand (VocalypseAudioProcessor& proc, int instance, int band);
 
         // Short names for menus, the hover card and the role tag
         juce::String typeName (int type);
@@ -61,7 +61,7 @@ namespace velvox::ui
     class EqGraph final : public ModuleView, private juce::Timer
     {
     public:
-        EqGraph (VelvoxAudioProcessor& p, const SpectrumSource* spectrum, int instance);
+        EqGraph (VocalypseAudioProcessor& p, const SpectrumSource* spectrum, int instance);
         ~EqGraph() override;
 
         void update (const LiveData&) override;
@@ -121,7 +121,7 @@ namespace velvox::ui
         void endDrag();
         float responseAt (int band, float hz) const;
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         const int instance;
         Legend legend;   // sum curve, bands, spectrum (review 2026-10-28); drawn again over the curves
         SpectrumView spectrumView;
@@ -162,7 +162,7 @@ namespace velvox::ui
         int shownAudition = -1;       // last state read from the DSP (repaints when it changes)
     };
 
-    std::unique_ptr<ModuleView> createEqGraph (VelvoxAudioProcessor& p, const SpectrumSource* spectrum, int instance);
+    std::unique_ptr<ModuleView> createEqGraph (VocalypseAudioProcessor& p, const SpectrumSource* spectrum, int instance);
 
     //==========================================================================
     // The panel: graph as the visual; main row = the selected band (On, Type, Freq, Gain, Q - Slope for
@@ -170,7 +170,7 @@ namespace velvox::ui
     class EqPanel final : public DetailPanel
     {
     public:
-        explicit EqPanel (VelvoxAudioProcessor& p);
+        explicit EqPanel (VocalypseAudioProcessor& p);
         ~EqPanel() override;
 
         void refresh() override;
@@ -207,5 +207,5 @@ namespace velvox::ui
         inline static std::array<int, 4> lastSelection { -1, -1, -1, -1 };
     };
 
-    std::unique_ptr<DetailPanel> createEqPanel (VelvoxAudioProcessor& p);
+    std::unique_ptr<DetailPanel> createEqPanel (VocalypseAudioProcessor& p);
 }

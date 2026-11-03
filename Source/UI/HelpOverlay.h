@@ -4,7 +4,7 @@
 #include "HelpContent.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Offline help: navigation on the left (general topics, then one page per
     // module), the selected page on the right. Lives inside the editor canvas

@@ -1,6 +1,6 @@
 #include "CompressorModule.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     void CompressorModule::prepare (double sampleRate, int)
     {

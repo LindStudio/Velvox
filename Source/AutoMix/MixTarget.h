@@ -10,9 +10,9 @@
 // genre and the vibe when he starts the auto mix; the vibe moves the genre's target.
 //
 // The party curve is measured on finished professional party vocals (PartyTargetCurve.h, generated
-// by `VelvoxTests --target-curve`); the other genres and all vibes are estimated offsets from it
+// by `VocalypseTests --target-curve`); the other genres and all vibes are estimated offsets from it
 // until there is data for them (marked `estimated`).
-namespace velvox::automix
+namespace vocalypse::automix
 {
     enum class Genre { party = 0, rap, pop, edm, ballad };               // persisted as the int value
     enum class Vibe { punchy = 0, aggressive, floaty, warm, natural };   // persisted as the int value

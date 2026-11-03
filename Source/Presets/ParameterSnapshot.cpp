@@ -8,7 +8,7 @@
 #include "../Parameters/EqBands.h"
 #include "../Parameters/MacroBake.h"
 
-namespace velvox
+namespace vocalypse
 {
     namespace
     {
@@ -248,7 +248,7 @@ namespace velvox
     ParameterSnapshot ParameterSnapshot::fromValueTree (const juce::ValueTree& tree)
     {
         ParameterSnapshot s;
-        if (! tree.hasType (treeType))
+        if (! tree.hasType (treeType) && ! tree.hasType (legacyTreeType))
             return s;
 
         s.name = tree.getProperty (nameAttr).toString();

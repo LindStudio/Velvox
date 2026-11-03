@@ -9,9 +9,9 @@
 #include "DSP/DeEsserModule.h"
 #include "DSP/RideModule.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::dsp;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::dsp;
 
 namespace
 {

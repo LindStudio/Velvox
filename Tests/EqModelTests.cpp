@@ -4,14 +4,14 @@
 #include "EqTestHelpers.h"
 #include "Parameters/EqBands.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::test::eq;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::test::eq;
 
 class EqParameterTests final : public juce::UnitTest
 {
 public:
-    EqParameterTests() : juce::UnitTest ("Velvox EQ parameters", "Velvox") {}
+    EqParameterTests() : juce::UnitTest ("Vocalypse EQ parameters", "Vocalypse") {}
 
     void runTest() override
     {
@@ -204,7 +204,7 @@ namespace
 class EqMigrationTests final : public juce::UnitTest
 {
 public:
-    EqMigrationTests() : juce::UnitTest ("Velvox EQ migration", "Velvox") {}
+    EqMigrationTests() : juce::UnitTest ("Vocalypse EQ migration", "Vocalypse") {}
 
     void runTest() override
     {
@@ -352,7 +352,7 @@ static EqMigrationTests eqMigrationTests;
 class EqRoleBandTests final : public juce::UnitTest
 {
 public:
-    EqRoleBandTests() : juce::UnitTest ("Velvox EQ role bands", "Velvox") {}
+    EqRoleBandTests() : juce::UnitTest ("Vocalypse EQ role bands", "Vocalypse") {}
 
     void runTest() override
     {

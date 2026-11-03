@@ -7,7 +7,7 @@
 #include "Parameters/MacroBake.h"
 #include "Text/I18n.h"
 
-using namespace velvox;
+using namespace vocalypse;
 
 namespace
 {
@@ -16,12 +16,12 @@ namespace
     const juce::Identifier abTreeType { "ABSlots" };
 }
 
-VelvoxAudioProcessor::VelvoxAudioProcessor()
+VocalypseAudioProcessor::VocalypseAudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                           .withInput ("Sidechain", juce::AudioChannelSet::stereo(), false)),
-      apvts (*this, nullptr, "VelvoxState", createParameterLayout()),
+      apvts (*this, nullptr, "VocalypseState", createParameterLayout()),
       presetManager (apvts)
 {
     cacheParameterPointers();
@@ -66,7 +66,7 @@ VelvoxAudioProcessor::VelvoxAudioProcessor()
     };
 }
 
-VelvoxAudioProcessor::~VelvoxAudioProcessor()
+VocalypseAudioProcessor::~VocalypseAudioProcessor()
 {
     analyzerTimer.stopTimer();
     cancelPendingUpdate();
@@ -77,7 +77,7 @@ VelvoxAudioProcessor::~VelvoxAudioProcessor()
 }
 
 //==============================================================================
-void VelvoxAudioProcessor::parameterChanged (const juce::String&, float)
+void VocalypseAudioProcessor::parameterChanged (const juce::String&, float)
 {
     // Changes made on the message thread (UI, presets, tests) take effect at once;
     // automation arrives on the audio thread and is handled asynchronously
@@ -91,14 +91,14 @@ void VelvoxAudioProcessor::parameterChanged (const juce::String&, float)
     triggerAsyncUpdate();
 }
 
-void VelvoxAudioProcessor::handleAsyncUpdate()
+void VocalypseAudioProcessor::handleAsyncUpdate()
 {
     macroMapper.update();   // a Simple slider / automated macro moved: write its modules
     insertEngagedInstances();
     updateHostLatency();
 }
 
-void VelvoxAudioProcessor::insertEngagedInstances()
+void VocalypseAudioProcessor::insertEngagedInstances()
 {
     auto routing = getRouting();
     const auto e = readEffectiveSettings();
@@ -132,7 +132,7 @@ void VelvoxAudioProcessor::insertEngagedInstances()
         setRouting (routing);
 }
 
-void VelvoxAudioProcessor::pumpAnalyzer()
+void VocalypseAudioProcessor::pumpAnalyzer()
 {
     if (getSampleRate() > 0.0)
         analyzer.setSampleRate (getSampleRate());
@@ -149,7 +149,7 @@ void VelvoxAudioProcessor::pumpAnalyzer()
     }
 }
 
-bool VelvoxAudioProcessor::isInstanceAudible (dsp::ModuleId id, int k) const
+bool VocalypseAudioProcessor::isInstanceAudible (dsp::ModuleId id, int k) const
 {
     using M = dsp::ModuleId;
     if (! getRouting().contains (id, k))
@@ -175,7 +175,7 @@ bool VelvoxAudioProcessor::isInstanceAudible (dsp::ModuleId id, int k) const
     return false;
 }
 
-void VelvoxAudioProcessor::refreshAnalysis()
+void VocalypseAudioProcessor::refreshAnalysis()
 {
     latestAnalysis = analyzer.analyse (vocalCheck.getGenre());
     lastAnalysisMs = juce::Time::getMillisecondCounterHiRes();
@@ -219,48 +219,48 @@ void VelvoxAudioProcessor::refreshAnalysis()
     }
 }
 
-void VelvoxAudioProcessor::updateHostLatency()
+void VocalypseAudioProcessor::updateHostLatency()
 {
     const int latency = chain.getLatencyFor (getRouting());
     if (latency != getLatencySamples())
         setLatencySamples (latency);
 }
 
-const juce::String VelvoxAudioProcessor::getName() const
+const juce::String VocalypseAudioProcessor::getName() const
 {
     return product::name;
 }
 
-void VelvoxAudioProcessor::cacheParameterPointers()
+void VocalypseAudioProcessor::cacheParameterPointers()
 {
     reader.bind ([this] (const char* id) { return apvts.getRawParameterValue (id); });
 }
 
-dsp::ChainSettings VelvoxAudioProcessor::readSettings() const noexcept
+dsp::ChainSettings VocalypseAudioProcessor::readSettings() const noexcept
 {
     auto s = reader.read (getRouting(), monoMonitor.load (std::memory_order_relaxed));
     s.mixLaws = getMixLaws();
     return s;
 }
 
-dsp::MacroValues VelvoxAudioProcessor::readMacros() const noexcept
+dsp::MacroValues VocalypseAudioProcessor::readMacros() const noexcept
 {
     return reader.readMacros();
 }
 
 //==============================================================================
-dsp::Routing VelvoxAudioProcessor::getRouting() const noexcept
+dsp::Routing VocalypseAudioProcessor::getRouting() const noexcept
 {
     return routingShared.load();
 }
 
-void VelvoxAudioProcessor::setRouting (const dsp::Routing& routing)
+void VocalypseAudioProcessor::setRouting (const dsp::Routing& routing)
 {
     // The state property is the source of truth; the listener updates the atomic
     apvts.state.setProperty (statekeys::routing, routing.toString(), nullptr);
 }
 
-bool VelvoxAudioProcessor::isStateWriterThread() noexcept
+bool VocalypseAudioProcessor::isStateWriterThread() noexcept
 {
     // Without a message manager (command-line tools) there is only one thread that writes
     auto* mm = juce::MessageManager::getInstanceWithoutCreating();
@@ -272,7 +272,7 @@ bool VelvoxAudioProcessor::isStateWriterThread() noexcept
 // would corrupt the sequence counter. Every store goes through these two functions, which run from the
 // state listener, the constructor and setStateInformation - all on the message thread in every host
 // we support. The assertion catches a host that restores state on another thread (debug builds).
-void VelvoxAudioProcessor::syncRoutingFromState()
+void VocalypseAudioProcessor::syncRoutingFromState()
 {
     jassert (isStateWriterThread());   // SeqLockValue: single writer
     const auto text = apvts.state.getProperty (statekeys::routing).toString();
@@ -285,7 +285,7 @@ void VelvoxAudioProcessor::syncRoutingFromState()
         triggerAsyncUpdate();   // latency follows the saturation / smooth / ride instances in the chain
 }
 
-void VelvoxAudioProcessor::setSolo (int code)
+void VocalypseAudioProcessor::setSolo (int code)
 {
     if (code >= 0)
     {
@@ -297,25 +297,25 @@ void VelvoxAudioProcessor::setSolo (int code)
     soloCode.store (code < 0 ? -1 : code);
 }
 
-bool VelvoxAudioProcessor::toggleSolo (int code)
+bool VocalypseAudioProcessor::toggleSolo (int code)
 {
     setSolo (isSoloed (code) ? -1 : code);
     return isSoloed (code);
 }
 
-void VelvoxAudioProcessor::syncMixLawFromState()
+void VocalypseAudioProcessor::syncMixLawFromState()
 {
     jassert (isStateWriterThread());   // SeqLockValue: single writer (see syncRoutingFromState)
     // Absent (projects from 0.5 and older) = every instance on the legacy law
     mixLawShared.store (dsp::MixLaws::fromString (apvts.state.getProperty (statekeys::mixLaw).toString()));
 }
 
-bool VelvoxAudioProcessor::usesLegacyMixLaw (dsp::ModuleId id, int instance) const noexcept
+bool VocalypseAudioProcessor::usesLegacyMixLaw (dsp::ModuleId id, int instance) const noexcept
 {
     return dsp::hasAdditiveMix (id) && getMixLaws().isLegacy (id, instance);
 }
 
-void VelvoxAudioProcessor::setLegacyMixLaw (dsp::ModuleId id, int instance, bool legacy)
+void VocalypseAudioProcessor::setLegacyMixLaw (dsp::ModuleId id, int instance, bool legacy)
 {
     auto laws = dsp::MixLaws::fromString (apvts.state.getProperty (statekeys::mixLaw).toString());
     if (laws.isLegacy (id, instance) == legacy)
@@ -325,13 +325,13 @@ void VelvoxAudioProcessor::setLegacyMixLaw (dsp::ModuleId id, int instance, bool
     apvts.state.setProperty (statekeys::mixLaw, laws.toString(), nullptr);
 }
 
-void VelvoxAudioProcessor::switchToTrueMixLaw (dsp::ModuleId id, int instance)
+void VocalypseAudioProcessor::switchToTrueMixLaw (dsp::ModuleId id, int instance)
 {
     // A user command that changes the sound: one undo step (the law is part of every snapshot)
     undoHistory.perform (i18n::tr ("Mix-Kurve umstellen", "Switch mix curve"), [&] { setLegacyMixLaw (id, instance, false); });
 }
 
-void VelvoxAudioProcessor::markFreshInstances (const dsp::Routing& before, const dsp::Routing& after)
+void VocalypseAudioProcessor::markFreshInstances (const dsp::Routing& before, const dsp::Routing& after)
 {
     // The browser adds an instance with default settings while it is off and switches it on
     // afterwards; automation, macros and undo bring an instance back while it is on. Only the
@@ -351,7 +351,7 @@ void VelvoxAudioProcessor::markFreshInstances (const dsp::Routing& before, const
     }
 }
 
-void VelvoxAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& property)
+void VocalypseAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, const juce::Identifier& property)
 {
     if (tree == apvts.state && property == statekeys::mixLaw)
         syncMixLawFromState();
@@ -365,25 +365,25 @@ void VelvoxAudioProcessor::valueTreePropertyChanged (juce::ValueTree& tree, cons
     }
 }
 
-void VelvoxAudioProcessor::valueTreeRedirected (juce::ValueTree&)
+void VocalypseAudioProcessor::valueTreeRedirected (juce::ValueTree&)
 {
     syncRoutingFromState();
     syncMixLawFromState();
 }
 
 //==============================================================================
-void VelvoxAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void VocalypseAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     chain.prepare (sampleRate, samplesPerBlock);
     audioRouting = getRouting();
     setLatencySamples (chain.getLatencyFor (audioRouting));
 }
 
-void VelvoxAudioProcessor::releaseResources()
+void VocalypseAudioProcessor::releaseResources()
 {
 }
 
-bool VelvoxAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool VocalypseAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     const auto& out = layouts.getMainOutputChannelSet();
     if (out != juce::AudioChannelSet::mono() && out != juce::AudioChannelSet::stereo())
@@ -401,12 +401,12 @@ bool VelvoxAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) c
     return true;
 }
 
-juce::AudioProcessorParameter* VelvoxAudioProcessor::getBypassParameter() const
+juce::AudioProcessorParameter* VocalypseAudioProcessor::getBypassParameter() const
 {
     return apvts.getParameter (pid::bypass);
 }
 
-void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void VocalypseAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
     const auto startTicks = juce::Time::getHighResolutionTicks();
@@ -486,7 +486,7 @@ void VelvoxAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
 // Short-term RMS of the vocal input and of the sidechain: a few multiply-adds
 // per sample, no allocation, no locks
-void VelvoxAudioProcessor::measureLevels (const juce::AudioBuffer<float>& vocal, int vocalChannels,
+void VocalypseAudioProcessor::measureLevels (const juce::AudioBuffer<float>& vocal, int vocalChannels,
                                           const juce::AudioBuffer<float>* sidechain) noexcept
 {
     const int n = vocal.getNumSamples();
@@ -518,7 +518,7 @@ void VelvoxAudioProcessor::measureLevels (const juce::AudioBuffer<float>& vocal,
     scRmsDb.store (juce::Decibels::gainToDecibels (std::sqrt (scMeanSquare), -100.0f), std::memory_order_relaxed);
 }
 
-VelvoxAudioProcessor::SidechainStatus VelvoxAudioProcessor::getSidechainStatus() const noexcept
+VocalypseAudioProcessor::SidechainStatus VocalypseAudioProcessor::getSidechainStatus() const noexcept
 {
     SidechainStatus s;
     s.connected = scConnected.load (std::memory_order_relaxed);
@@ -528,13 +528,13 @@ VelvoxAudioProcessor::SidechainStatus VelvoxAudioProcessor::getSidechainStatus()
 }
 
 //==============================================================================
-juce::AudioProcessorEditor* VelvoxAudioProcessor::createEditor()
+juce::AudioProcessorEditor* VocalypseAudioProcessor::createEditor()
 {
-    return new VelvoxAudioProcessorEditor (*this);
+    return new VocalypseAudioProcessorEditor (*this);
 }
 
 //==============================================================================
-void VelvoxAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+void VocalypseAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
 
@@ -549,13 +549,20 @@ void VelvoxAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         copyXmlToBinary (*xml, destData);
 }
 
-void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+void VocalypseAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     const auto xml = getXmlFromBinary (data, sizeInBytes);
-    if (xml == nullptr || ! xml->hasTagName (apvts.state.getType()))
+    // Projects saved before the rename to VOCALYPSE carry the old state name
+    if (xml == nullptr || ! (xml->hasTagName (apvts.state.getType()) || xml->hasTagName (product::legacyStateType)))
         return;
 
     auto tree = juce::ValueTree::fromXml (*xml);
+    if (! tree.hasType (apvts.state.getType()))
+    {
+        juce::ValueTree renamed (apvts.state.getType());
+        renamed.copyPropertiesAndChildrenFrom (tree, nullptr);
+        tree = renamed;
+    }
     eqbands::ScopedBridgeSuspend noEqBridge (apvts);   // values are restored as they were saved
     soloCode.store (-1);   // a loaded project is heard as it is (solo is a listening aid, never saved)
 
@@ -634,5 +641,5 @@ void VelvoxAudioProcessor::setStateInformation (const void* data, int sizeInByte
 //==============================================================================
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new VelvoxAudioProcessor();
+    return new VocalypseAudioProcessor();
 }

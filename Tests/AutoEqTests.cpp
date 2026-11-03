@@ -11,9 +11,9 @@
 #include "Parameters/ParameterLayout.h"
 #include "Text/I18n.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::automix;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::automix;
 
 namespace
 {
@@ -32,7 +32,7 @@ namespace
 class AutoEqTests final : public juce::UnitTest
 {
 public:
-    AutoEqTests() : juce::UnitTest ("Velvox auto EQ", "Velvox") {}
+    AutoEqTests() : juce::UnitTest ("Vocalypse auto EQ", "Vocalypse") {}
 
     void runTest() override
     {

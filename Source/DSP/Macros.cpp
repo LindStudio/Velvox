@@ -1,6 +1,6 @@
 #include "Macros.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

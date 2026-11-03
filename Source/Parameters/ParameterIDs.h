@@ -5,7 +5,7 @@
 
 #include <juce_core/juce_core.h>
 
-namespace velvox::pid
+namespace vocalypse::pid
 {
     // Global / IO
     inline constexpr const char* inputGain   = "inputGain";

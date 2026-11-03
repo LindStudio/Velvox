@@ -4,14 +4,16 @@
 // whose snapped value changes, so a switch already on the loaded side kept the host's raw value.
 
 #include "TestHelpers.h"
+#include "ProductInfo.h"
+#include "Presets/ParameterSnapshot.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 class StateRestoreTests final : public juce::UnitTest
 {
 public:
-    StateRestoreTests() : juce::UnitTest ("Velvox state restoration", "Velvox") {}
+    StateRestoreTests() : juce::UnitTest ("Vocalypse state restoration", "Vocalypse") {}
 
     void runTest() override
     {
@@ -59,6 +61,42 @@ public:
             p->setValueNotifyingHost (0.37f);   // still "off"
             h.proc.setStateInformation (saved.getData(), (int) saved.getSize());
             expectEquals (p->getValue(), 0.0f);
+        }
+
+        // Rename to VOCALYPSE (2026-11-03): projects and presets saved by Velvox / Headliner still load
+        beginTest ("A project saved before the rename (state \"VelvoxState\") loads into VOCALYPSE");
+        {
+            Harness before;
+            before.set (pid::reverbMix, 37.0f);
+            before.set (pid::compThreshold, -27.0f);
+            juce::MemoryBlock saved;
+            before.proc.getStateInformation (saved);
+            auto xml = juce::AudioProcessor::getXmlFromBinary (saved.getData(), (int) saved.getSize());
+            expect (xml != nullptr && xml->hasTagName ("VocalypseState"), "the new state name is written");
+            xml->setTagName (product::legacyStateType);   // as Headliner 0.8 wrote it
+            juce::MemoryBlock old;
+            juce::AudioProcessor::copyXmlToBinary (*xml, old);
+
+            Harness after;
+            after.proc.setStateInformation (old.getData(), (int) old.getSize());
+            expectWithinAbsoluteError (after.get (pid::reverbMix), 37.0f, 0.01f);
+            expectWithinAbsoluteError (after.get (pid::compThreshold), -27.0f, 0.01f);
+            expect (after.proc.getState().state.hasType ("VocalypseState"), "the loaded state keeps the new name");
+        }
+
+        beginTest ("A preset saved before the rename (\"VelvoxPreset\") loads");
+        {
+            Harness h;
+            h.set (pid::reverbMix, 23.0f);
+            auto tree = ParameterSnapshot::capture (h.proc.getState(), "old").toValueTree();
+            expect (tree.hasType ("VocalypsePreset"));
+            juce::ValueTree legacy (ParameterSnapshot::legacyTreeType);
+            legacy.copyPropertiesAndChildrenFrom (tree, nullptr);
+            const auto snap = ParameterSnapshot::fromValueTree (legacy);
+            expectEquals (snap.name, juce::String ("old"));
+            h.set (pid::reverbMix, 5.0f);
+            snap.applyTo (h.proc.getState());
+            expectWithinAbsoluteError (h.get (pid::reverbMix), 23.0f, 0.01f);
         }
     }
 };

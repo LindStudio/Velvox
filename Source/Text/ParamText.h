@@ -9,7 +9,7 @@
 // Each function takes the English text (from the parameter) as the fallback: English returns it
 // unchanged, German returns the translation from the table in ParamText.cpp, or the English text
 // when the table has none. Extra instances ("compThreshold_2") use the entry of the first one.
-namespace velvox::i18n
+namespace vocalypse::i18n
 {
     juce::String paramName (const juce::String& paramId, const juce::String& english);
     juce::String paramDescription (const juce::String& paramId, const juce::String& english);

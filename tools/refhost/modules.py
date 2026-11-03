@@ -1,8 +1,8 @@
-"""What the bench measures per Headliner module: matched settings for Headliner and each reference plugin,
+"""What the bench measures per VOCALYPSE module: matched settings for VOCALYPSE and each reference plugin,
 which procedures run, and the pass/fail tolerances (spec section 8 Q6).
 
-Headliner parameters are APVTS IDs in real units (see `HeadlinerRefHost --list --headliner eq`). Reference
-parameters are (name, display text) pairs in the order they are applied (see `HeadlinerRefHost --list --plugin ...`);
+VOCALYPSE parameters are APVTS IDs in real units (see `VocalypseRefHost --list --vocalypse eq`). Reference
+parameters are (name, display text) pairs in the order they are applied (see `VocalypseRefHost --list --plugin ...`);
 `setn` pairs are normalized 0..1 values for parameters without readable text.
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ class Ref:
 
 @dataclass
 class Calib:
-    """Pick the reference setting whose probe metric is closest to Headliner's (matched amount of action)."""
+    """Pick the reference setting whose probe metric is closest to VOCALYPSE's (matched amount of action)."""
     param: str
     values: list
     probe: str          # see bench.PROBES
@@ -35,7 +35,7 @@ class Calib:
 @dataclass
 class Case:
     name: str
-    headliner: dict
+    vocalypse: dict
     procedures: list
     refs: dict = field(default_factory=dict)        # ref name -> extra [(name, text)] for this case
     calibrate: dict = field(default_factory=dict)   # ref name -> Calib
@@ -93,26 +93,26 @@ _add(Module(
     refs=[Ref("Pro-Q 4", FF + "Pro-Q 4.vst3")],
     cases=[
         Case("vocal",
-             headliner={**EQ_OFF, **_band(1, 3, 100, slope=3), **_band(2, 0, 3000, 4, 1.0), **_band(3, 2, 12000, 5, 0.71)},
+             vocalypse={**EQ_OFF, **_band(1, 3, 100, slope=3), **_band(2, 0, 3000, 4, 1.0), **_band(3, 2, 12000, 5, 0.71)},
              refs={"Pro-Q 4": _pq4_band(1, True, "Low Cut", 100, slope="24 dB/oct", q=0.71)
                    + _pq4_band(2, True, "Bell", 3000, 4, 1.0) + _pq4_band(3, True, "High Shelf", 12000, 5, 0.71)},
              procedures=["eq_response", "vocal", "nulls", "cpu"],
              info={"analog": [("hpf", 100.0, 4), ("bell", 3000.0, 4.0, 1.0), ("highshelf", 12000.0, 5.0, 0.71)]}),
         Case("air",
-             headliner={**EQ_OFF, **_band(1, 0, 15000, 6, 1.5)},
+             vocalypse={**EQ_OFF, **_band(1, 0, 15000, 6, 1.5)},
              refs={"Pro-Q 4": _pq4_band(1, True, "Bell", 15000, 6, 1.5)},
              procedures=["eq_response", "eq_cramping"],
              info={"analog": [("bell", 15000.0, 6.0, 1.5)],
-                   "cramp": {"lo": {"headliner": {"eqBand1Freq": 1500}, "Pro-Q 4": [("Band 1 Frequency", "1500")]},
-                             "hi": {"headliner": {"eqBand1Freq": 15000}, "Pro-Q 4": [("Band 1 Frequency", "15000")]}}}),
+                   "cramp": {"lo": {"vocalypse": {"eqBand1Freq": 1500}, "Pro-Q 4": [("Band 1 Frequency", "1500")]},
+                             "hi": {"vocalypse": {"eqBand1Freq": 15000}, "Pro-Q 4": [("Band 1 Frequency", "15000")]}}}),
         Case("cut",
-             headliner={**EQ_OFF, **_band(1, 0, 350, -6, 2.0), **_band(2, 1, 150, -3, 0.71)},
+             vocalypse={**EQ_OFF, **_band(1, 0, 350, -6, 2.0), **_band(2, 1, 150, -3, 0.71)},
              refs={"Pro-Q 4": _pq4_band(1, True, "Bell", 350, -6, 2.0) + _pq4_band(2, True, "Low Shelf", 150, -3, 0.71)},
              procedures=["eq_response"],
              info={"analog": [("bell", 350.0, -6.0, 2.0), ("lowshelf", 150.0, -3.0, 0.71)]}),
     ],
     # Pro-Q 4 uses its own Q / slope definitions (e.g. a 24 dB/oct cut is -6 dB at the corner), so the response
-    # accuracy is judged against Headliner's own analog prototypes (absolute limits); cramping is compared to Pro-Q 4.
+    # accuracy is judged against VOCALYPSE's own analog prototypes (absolute limits); cramping is compared to Pro-Q 4.
     tolerances={"resp_max_dev_db": ("lower", 0.0, 0.5), "resp_hf_max_dev_db": ("lower", 0.0, 0.5),
                 "resp_rms_dev_db": ("lower", 0.0, 0.2), "cramp_dev_db": ("lower", 0.5), "cpu_pct": ("lower", 0.5)}))
 
@@ -127,7 +127,7 @@ _add(Module(
     key="comp", title="Compressor", mix_param="compMix",
     refs=[Ref("Pro-C 2 Vocal", FF + "Pro-C 2.vst3", params=_COMP_R),
           Ref("Pro-C 2 Clean", FF + "Pro-C 2.vst3", params=PRO_C2_BASE + [("Style", "Clean")] + _COMP_R[6:])],
-    cases=[Case("vocal", headliner=_COMP_H, procedures=["dyn_curve", "dyn_timing", "thd_lf", "vocal", "nulls", "cpu"],
+    cases=[Case("vocal", vocalypse=_COMP_H, procedures=["dyn_curve", "dyn_timing", "thd_lf", "vocal", "nulls", "cpu"],
                 info={"threshold": -24, "ratio": 4, "knee": 6, "attack": 10, "release": 120})],
     # Pro-C 2 "Vocal" is program dependent (its static ratio steepens to ~12:1), so ratio / threshold are judged against
     # the set values; THD against Pro-C 2 Vocal. Attack is judged against the set 10 ms: Pro-C 2 reads 18 ms (Vocal) and
@@ -145,11 +145,11 @@ _add(Module(
     refs=[Ref("Pro-DS", FF + "Pro-DS.vst3",
               params=[("Mode", "Single Vocal"), ("Band Processing", "Split Band"), ("Range", "6"), ("Lookahead Enabled", "Disabled"),
                       ("High-Pass Frequency", "6000"), ("Low-Pass Frequency", "20000")])],
-    cases=[Case("vocal", headliner={"deessFreq": 6500, "deessThreshold": -30, "deessRange": 6, "deessMode": 0, "deessListen": 0},
+    cases=[Case("vocal", vocalypse={"deessFreq": 6500, "deessThreshold": -30, "deessRange": 6, "deessMode": 0, "deessListen": 0},
                 procedures=["deess_vocal", "deess_inactive_null", "nulls", "cpu"],
                 calibrate={"Pro-DS": Calib("Threshold", [-60, -55, -50, -45, -40, -35, -30, -25, -20], "sib_reduction")}),
            # 0.6 option: detection relative to the full-band level (Pro-DS "Single Vocal" is relative as well)
-           Case("relative", headliner={"deessFreq": 6500, "deessThreshold": -30, "deessRange": 6, "deessMode": 0, "deessListen": 0,
+           Case("relative", vocalypse={"deessFreq": 6500, "deessThreshold": -30, "deessRange": 6, "deessMode": 0, "deessListen": 0,
                                        "deessDetection": 1},
                 procedures=["deess_vocal", "deess_inactive_null", "nulls", "cpu"],
                 calibrate={"Pro-DS": Calib("Threshold", [-60, -55, -50, -45, -40, -35, -30, -25, -20], "sib_reduction")})],
@@ -165,18 +165,18 @@ _SOOTHE_DEPTH = Calib("depth", [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10], "delta_en
 _add(Module(
     key="smooth", title="Smooth",
     refs=[Ref("soothe2", "oeksound/soothe2_x64.vst3", params=[("mode", "soft"), ("mix", "100"), ("delta", "off")])],
-    cases=[Case("vocal", headliner=_SMOOTH,
+    cases=[Case("vocal", vocalypse=_SMOOTH,
                 procedures=["resonance_vocal", "nulls", "cpu"],
                 calibrate={"soothe2": _SOOTHE_DEPTH}),
            # more settings (0.6 smooth track): lighter, more selective, hard mode - each calibrated to equal removed energy
-           Case("light", headliner=dict(_SMOOTH, smoothAmount=35), procedures=["resonance_vocal"],
+           Case("light", vocalypse=dict(_SMOOTH, smoothAmount=35), procedures=["resonance_vocal"],
                 calibrate={"soothe2": _SOOTHE_DEPTH}),
-           Case("sharp", headliner=dict(_SMOOTH, smoothSensitivity=85), procedures=["resonance_vocal"],
+           Case("sharp", vocalypse=dict(_SMOOTH, smoothSensitivity=85), procedures=["resonance_vocal"],
                 calibrate={"soothe2": _SOOTHE_DEPTH}),
-           Case("hard", headliner=dict(_SMOOTH, smoothAmount=60, smoothMode=1), refs={"soothe2": [("mode", "hard")]},
+           Case("hard", vocalypse=dict(_SMOOTH, smoothAmount=60, smoothMode=1), refs={"soothe2": [("mode", "hard")]},
                 procedures=["resonance_vocal"], calibrate={"soothe2": _SOOTHE_DEPTH})],
     # delta_db is the calibration match (soothe2 depth 0 already removes ~15 dB below the dry level on f7_row, so
-    # Headliner runs at Amount 75 to act comparably); informative only.
+    # VOCALYPSE runs at Amount 75 to act comparably); informative only.
     tolerances={"delta_db": ("info", 0.0), "pte_reduction_db": ("higher", 0.3), "ltas_reduction_db": ("higher", 0.5), "flatness_gain_db": ("higher", 0.2),
                 "transient_change_db": ("match", 0.5, 0.0), "musical_noise_db": ("lower", 0.2), "cpu_pct": ("lower", 1.0)}))
 
@@ -189,17 +189,17 @@ _add(Module(
     key="sat", title="Saturation", mix_param="satMix",
     refs=[Ref("Saturn 2", FF + "Saturn 2.vst3", params=_SAT_R)],
     cases=[
-        Case("tape", headliner={"satDrive": 12, "satCharacter": 1, "satMix": 100, "satOutput": 0},
+        Case("tape", vocalypse={"satDrive": 12, "satCharacter": 1, "satMix": 100, "satOutput": 0},
              refs={"Saturn 2": [("Band 1 Style", "Warm Tape")]},
              procedures=["sat_tones", "vocal", "nulls", "cpu"],
              calibrate={"Saturn 2": Calib("Band 1 Drive", [5, 10, 15, 20, 30, 40, 50, 65, 80, 100], "thd_1k")}),
-        Case("tube", headliner={"satDrive": 12, "satCharacter": 2, "satMix": 100, "satOutput": 0},
+        Case("tube", vocalypse={"satDrive": 12, "satCharacter": 2, "satMix": 100, "satOutput": 0},
              refs={"Saturn 2": [("Band 1 Style", "Warm Tube")]},
              procedures=["sat_tones"],
              calibrate={"Saturn 2": Calib("Band 1 Drive", [5, 10, 15, 20, 30, 40, 50, 65, 80, 100], "thd_1k")}),
         # 0.6 multiband: Low / Mid / High at 250 Hz / 4 kHz, Tape in every band, the same drive everywhere
         # (Saturn 2: 3 bands, 24 dB/oct crossovers; all band drives calibrated together on the 1 kHz THD = mid band)
-        Case("tape3band", headliner={"satDrive": 12, "satCharacter": 1, "satMix": 100, "satOutput": 0, "satMultiband": 1,
+        Case("tape3band", vocalypse={"satDrive": 12, "satCharacter": 1, "satMix": 100, "satOutput": 0, "satMultiband": 1,
                                      "satXoverLow": 250, "satXoverHigh": 4000,
                                      "satLowDrive": 12, "satMidDrive": 12, "satHighDrive": 12,
                                      "satLowChar": 1, "satMidChar": 1, "satHighChar": 1},
@@ -223,13 +223,13 @@ _GRAILLON = [("Corr. Amount", "0"), ("Wet Mix", "0"), ("Dry Mix", "-inf"), ("For
 _add(Module(
     key="pitch", title="Pitch", mix_param="pitchMix",
     refs=[Ref("Graillon 3", "Auburn Sounds Graillon 3.vst3", params=_GRAILLON)],
-    cases=[Case("up12", headliner={"pitchSemitones": 12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
+    cases=[Case("up12", vocalypse={"pitchSemitones": 12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
                 refs={"Graillon 3": [("Pitch Shift", "12")]}, procedures=["pitch_tones", "pitch_vocal", "pitch_formant", "nulls", "cpu"],
                 info={"semitones": 12}),
-           Case("down5", headliner={"pitchSemitones": -5, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
+           Case("down5", vocalypse={"pitchSemitones": -5, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
                 refs={"Graillon 3": [("Pitch Shift", "-5")]}, procedures=["pitch_tones", "pitch_vocal"],
                 info={"semitones": -5}),
-           Case("down12", headliner={"pitchSemitones": -12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
+           Case("down12", vocalypse={"pitchSemitones": -12, "pitchCents": 0, "pitchPreserveFormants": 1, "pitchFormant": 0, "pitchMix": 100},
                 refs={"Graillon 3": [("Pitch Shift", "-12")]}, procedures=["pitch_tones", "pitch_vocal", "pitch_formant"],
                 info={"semitones": -12})],
     # Graillon tracks a pure sine 36 ct flat (its tracker wants a voice), so the tone tests use absolute limits.
@@ -246,7 +246,7 @@ _DBL = [("EQLowOnOff", "Off"), ("EQHighOnOff", "Off"), ("Direct OnOff", "On"), (
 # Doubler (0.6 engine). "default" = an old project (Classic mode, the 0.2 controls); "voices2" / "voices4" = the
 # per-voice modes at Waves' own settings. voice_tracking solos every voice (others off, dry off, no wobble) and
 # measures its delay and detune; voice_splice_db = AM roughness of a solo voice at +30 ct (pitch-shifter artefacts).
-def _dbl_solo_headliner(mode, n):
+def _dbl_solo_vocalypse(mode, n):
     def f(i):
         d = {"doublerVoices": mode, "doublerDry": -60, "doublerModDepth": 0, "doublerMonoSafe": 0, "doublerMix": 100}
         d.update({f"doublerV{k}On": 1 if k == i + 1 else 0 for k in range(1, n + 1)})
@@ -286,15 +286,15 @@ _add(Module(
               params=_DBL + [("Voice1 Delay", "14"), ("Voice2 Delay", "20"), ("Voice1 Detune", "8"), ("Voice2 Detune", "-8"),
                              ("Voice1 Gain", "-6"), ("Voice2 Gain", "-6"), ("Voice1 Depth", "3"), ("Voice2 Depth", "3")]),
           Ref("Doubler4", WAVES, "Doubler4 Stereo", params=list(_DBL))],
-    cases=[Case("default", headliner={"doublerMix": 50, "doublerWidth": 80, "doublerDelay": 14, "doublerDetune": 8,
+    cases=[Case("default", vocalypse={"doublerMix": 50, "doublerWidth": 80, "doublerDelay": 14, "doublerDetune": 8,
                                       "doublerMonoSafe": 50, "doublerTone": 20000},
                 procedures=["mod_widen", "vocal_width", "nulls", "cpu"], info={"refs": ["Doubler2"]}),
-           Case("voices2", headliner=_v2h, refs={"Doubler2": _v2r}, procedures=["mod_widen", "vocal_width"] + _TRACK,
-                info={"refs": ["Doubler2"], "voices": _V2, "solo": {"Headliner": _dbl_solo_headliner(1, 2), "Doubler2": _dbl_solo_waves(2)},
-                      "splice": {"Headliner": {"doublerV1Detune": 30}, "Doubler2": [("Voice1 Detune", "30")]}}),
-           Case("voices4", headliner=_v4h, refs={"Doubler4": _v4r}, procedures=["mod_widen", "vocal_width"] + _TRACK + ["cpu"],
-                info={"refs": ["Doubler4"], "voices": _V4, "solo": {"Headliner": _dbl_solo_headliner(2, 4), "Doubler4": _dbl_solo_waves(4)},
-                      "splice": {"Headliner": {"doublerV1Detune": 30}, "Doubler4": [("Voice1 Detune", "30")]}})],
+           Case("voices2", vocalypse=_v2h, refs={"Doubler2": _v2r}, procedures=["mod_widen", "vocal_width"] + _TRACK,
+                info={"refs": ["Doubler2"], "voices": _V2, "solo": {"VOCALYPSE": _dbl_solo_vocalypse(1, 2), "Doubler2": _dbl_solo_waves(2)},
+                      "splice": {"VOCALYPSE": {"doublerV1Detune": 30}, "Doubler2": [("Voice1 Detune", "30")]}}),
+           Case("voices4", vocalypse=_v4h, refs={"Doubler4": _v4r}, procedures=["mod_widen", "vocal_width"] + _TRACK + ["cpu"],
+                info={"refs": ["Doubler4"], "voices": _V4, "solo": {"VOCALYPSE": _dbl_solo_vocalypse(2, 4), "Doubler4": _dbl_solo_waves(4)},
+                      "splice": {"VOCALYPSE": {"doublerV1Detune": 30}, "Doubler4": [("Voice1 Detune", "30")]}})],
     tolerances={"comb_depth_db": ("lower", 1.0), "am_roughness_db": ("lower", 0.5), "lr_corr": ("lower", 0.1),
                 "mono_loss_db": ("lower", 1.0), "cpu_pct": ("lower", 1.0),
                 "voice_delay_err_ms": ("lower", 0.5), "voice_detune_err_cents": ("lower", 0.0, 1.0),
@@ -305,7 +305,7 @@ _add(Module(
     refs=[Ref("Doubler4", WAVES, "Doubler4 Stereo",
               params=_DBL + [("Voice2 OnOff", "On"), ("Voice4 OnOff", "On")]
               + [(f"Voice{v} Gain", "-9") for v in range(1, 5)] + [(f"Voice{v} Depth", "4") for v in range(1, 5)])],
-    cases=[Case("default", headliner={"choirVoices": 1, "choirDetune": 10, "choirTiming": 18, "choirHumanize": 50, "choirWidth": 80,
+    cases=[Case("default", vocalypse={"choirVoices": 1, "choirDetune": 10, "choirTiming": 18, "choirHumanize": 50, "choirWidth": 80,
                                       "choirDensity": 50, "choirMix": 35},
                 procedures=["mod_widen", "vocal_width", "nulls", "cpu"])],
     # Ruling (voices track): the single 440 Hz roughness is beat-phase luck for a 4-voice choir (0.7-3.1 dB at the
@@ -326,13 +326,13 @@ _TL3 = [("Delay Sync", "Free"), ("Delay Time", "375"), ("Delay Read Mode", "Tape
 _add(Module(
     key="delay", title="Delay", mix_param="delayMix",
     refs=[Ref("Timeless 3", FF + "Timeless 3.vst3", params=_TL3, setn=[("Delay Time Pan", 0.5)])],
-    cases=[Case("plain", headliner={"delaySync": 0, "delayTime": 375, "delayFeedback": 30, "delayMix": 100, "delayLowCut": 300,
+    cases=[Case("plain", vocalypse={"delaySync": 0, "delayTime": 375, "delayFeedback": 30, "delayMix": 100, "delayLowCut": 300,
                                     "delayHighCut": 6000, "delayPingPong": 0, "delaySpread": 0, "delayDrive": 0, "delayDiffusion": 0,
                                     "delayMod": 0, "delayDuckAmount": 0},
                 procedures=["delay_ir", "dry_leak", "vocal_listen", "nulls", "cpu"],
                 info={"time_ms": 375, "feedback": 0.30}),
            # 0.6 characters for listening (drive 2x oversampled, modulation, ping-pong); timing must stay exact
-           Case("tape", headliner={"delaySync": 0, "delayTime": 375, "delayFeedback": 45, "delayMix": 100, "delayLowCut": 300,
+           Case("tape", vocalypse={"delaySync": 0, "delayTime": 375, "delayFeedback": 45, "delayMix": 100, "delayLowCut": 300,
                                    "delayHighCut": 6000, "delayPingPong": 1, "delaySpread": 0, "delayDrive": 60, "delayDiffusion": 30,
                                    "delayMod": 40, "delayDuckAmount": 0},
                 procedures=["vocal_listen", "cpu"])],
@@ -351,11 +351,11 @@ _add(Module(
     refs=[Ref("VintageVerb", "Valhalla DSP/ValhallaVintageVerb.vst3", params=_VVV),
           Ref("Pro-R 2", FF + "Pro-R 2.vst3", params=_PRR)],
     cases=[
-        Case("plate", headliner={**_REV_H, "reverbType": 1, "reverbDecay": 1.8, "reverbSize": 60, "reverbDamping": 9000},
+        Case("plate", vocalypse={**_REV_H, "reverbType": 1, "reverbDecay": 1.8, "reverbSize": 60, "reverbDamping": 9000},
              refs={"VintageVerb": [("ReverbMode", "Plate"), ("Decay", "1.8"), ("Size", "60"), ("HighShelf", "-6"), ("HighFreq", "9000")],
                    "Pro-R 2": [("Style", "Plate"), ("Space", "1.8")]},
              procedures=["reverb_ir", "dry_leak", "vocal_listen", "nulls", "cpu"], info={"decay_s": 1.8}),
-        Case("hall", headliner={**_REV_H, "reverbType": 2, "reverbDecay": 2.6, "reverbSize": 70, "reverbDamping": 6500},
+        Case("hall", vocalypse={**_REV_H, "reverbType": 2, "reverbDecay": 2.6, "reverbSize": 70, "reverbDamping": 6500},
              refs={"VintageVerb": [("ReverbMode", "Concert Hall"), ("Decay", "2.6"), ("Size", "70"), ("HighShelf", "-6"),
                                    ("HighFreq", "6500")],
                    "Pro-R 2": [("Style", "Modern"), ("Space", "2.6")]},
@@ -374,7 +374,7 @@ _add(Module(
     refs=[Ref("Pro-C 2 Punch", FF + "Pro-C 2.vst3",
               params=PRO_C2_BASE + [("Style", "Punch"), ("Threshold", "-36"), ("Ratio", "10"), ("Knee", "6"), ("Attack", "2"),
                                     ("Release", "80"), ("Mix", "35")])],
-    cases=[Case("default", headliner={"smashAmount": 50, "smashBlend": 35, "smashAttack": 2, "smashRelease": 80, "smashTone": 20,
+    cases=[Case("default", vocalypse={"smashAmount": 50, "smashBlend": 35, "smashAttack": 2, "smashRelease": 80, "smashTone": 20,
                                       "smashOutput": 0},
                 procedures=["dyn_curve", "dyn_timing", "thd_lf", "vocal", "nulls", "cpu"],
                 info={"attack": 2, "release": 80})],
@@ -390,7 +390,7 @@ _add(Module(
     key="ride", title="Level Ride",
     refs=[Ref("Vocal Rider", WAVES, "Vocal Rider Stereo",
               params=[("Target", "-18"), ("Range Max", "8"), ("Range Min", "-8"), ("Attack", "Fast"), ("Vocal Sensitivity", "0")])],
-    cases=[Case("default", headliner={"rideTarget": -18, "rideAmount": 70, "rideMaxBoost": 8, "rideMaxCut": 8, "rideResponse": 50,
+    cases=[Case("default", vocalypse={"rideTarget": -18, "rideAmount": 70, "rideMaxBoost": 8, "rideMaxCut": 8, "rideResponse": 50,
                                       "ridePhrase": 40, "rideTransient": 60, "rideSilence": -50},
                 procedures=["ride_vocal", "cpu"])],
     tolerances={"st_loudness_std_lu": ("lower", 0.3), "gain_jitter_db": ("lower", 0.05), "transient_change_db": ("match", 0.5),
@@ -401,22 +401,22 @@ _add(Module(
 # ---------------------------------------------------------------------------------------------
 _add(Module(
     key="chop", title="Stutter", refs=[],
-    cases=[Case("gate", headliner={"chopPattern": 0, "chopRate": 1, "chopDepth": 100, "chopSmooth": 3},
+    cases=[Case("gate", vocalypse={"chopPattern": 0, "chopRate": 1, "chopDepth": 100, "chopSmooth": 3},
                 procedures=["gate_tone", "vocal_listen", "nulls", "cpu"])],
     tolerances={"edge_splatter_db": ("lower", 0.0, -60.0), "gate_depth_db": ("lower", 0.0, -40.0), "cpu_pct": ("lower", 0.0, 1.0)}))
 
 _add(Module(
     key="pulse", title="Pulse", refs=[], mix_param="pulseMix",
-    cases=[Case("default", headliner={"pulseRate": 2, "pulseDepth": 100, "pulseMix": 100},
+    cases=[Case("default", vocalypse={"pulseRate": 2, "pulseDepth": 100, "pulseMix": 100},
                 procedures=["gate_tone", "vocal_listen", "nulls", "cpu"]),
            # 0.6 pump shapes (pulseShape 1 = Classic, 4 = Gate), driven by the Amount macro
-           Case("classic", headliner={"pulseRate": 2, "pulseShape": 1, "pulseDepth": 60, "pulseAmount": 100, "pulseMix": 100},
+           Case("classic", vocalypse={"pulseRate": 2, "pulseShape": 1, "pulseDepth": 60, "pulseAmount": 100, "pulseMix": 100},
                 procedures=["gate_tone", "vocal_listen", "cpu"]),
-           Case("gate16", headliner={"pulseRate": 4, "pulseShape": 4, "pulseDepth": 60, "pulseAmount": 100, "pulseMix": 100},
+           Case("gate16", vocalypse={"pulseRate": 4, "pulseShape": 4, "pulseDepth": 60, "pulseAmount": 100, "pulseMix": 100},
                 procedures=["gate_tone", "cpu"])],
     tolerances={"edge_splatter_db": ("lower", 0.0, -60.0), "gate_depth_db": ("lower", 0.0, -30.0), "cpu_pct": ("lower", 0.0, 1.0)}))
 
 _add(Module(
     key="check", title="Vocal Check", refs=[],
-    cases=[Case("null", headliner={}, procedures=["check_null", "cpu"])],
+    cases=[Case("null", vocalypse={}, procedures=["check_null", "cpu"])],
     tolerances={"null_vs_input_db": ("lower", 0.0, -120.0), "cpu_pct": ("lower", 0.0, 2.0)}))

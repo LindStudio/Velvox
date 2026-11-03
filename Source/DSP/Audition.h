@@ -9,7 +9,7 @@
 // replaced by the region the band acts on - taken from the EQ's INPUT, so the band's own gain is
 // not applied - level-matched to the input, through a short crossfade. A monitoring state: the
 // request is an atomic in the module (EqualizerModule::setAuditionBand), never a parameter.
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     enum class AuditionShape { bandPass = 0, lowPass, highPass };
 

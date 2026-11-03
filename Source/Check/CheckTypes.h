@@ -10,7 +10,7 @@
 // A finding carries an abstract FixAction: what has to change, not yet which parameter values.
 // The planner (CheckFixPlanner.h) turns it into absolute values for the current chain
 // (ResolvedFix), which the processor writes as one undo step.
-namespace velvox::check
+namespace vocalypse::check
 {
     // Findings with a lower confidence are not shown (and do not count for the score)
     inline constexpr float showThreshold = 0.5f;

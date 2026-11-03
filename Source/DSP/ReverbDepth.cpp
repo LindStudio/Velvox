@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

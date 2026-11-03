@@ -1,6 +1,6 @@
 #include "CaptureBuffer.h"
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     int CaptureBuffer::capacityFor (double sampleRate, float maxSeconds) noexcept
     {

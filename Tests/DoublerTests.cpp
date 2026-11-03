@@ -2,8 +2,8 @@
 
 #include "TestHelpers.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 namespace
 {
@@ -68,7 +68,7 @@ namespace
 class DoublerTests final : public juce::UnitTest
 {
 public:
-    DoublerTests() : juce::UnitTest ("Velvox doubler", "Velvox") {}
+    DoublerTests() : juce::UnitTest ("Vocalypse doubler", "Vocalypse") {}
 
     void runTest() override
     {
@@ -207,7 +207,7 @@ static DoublerTests doublerTests;
 class DoublerParameterTests final : public juce::UnitTest
 {
 public:
-    DoublerParameterTests() : juce::UnitTest ("Velvox doubler parameters", "Velvox") {}
+    DoublerParameterTests() : juce::UnitTest ("Vocalypse doubler parameters", "Vocalypse") {}
 
     void runTest() override
     {
@@ -310,7 +310,7 @@ static DoublerParameterTests doublerParameterTests;
 class DoublerEngineTests final : public juce::UnitTest
 {
 public:
-    DoublerEngineTests() : juce::UnitTest ("Velvox doubler engine", "Velvox") {}
+    DoublerEngineTests() : juce::UnitTest ("Vocalypse doubler engine", "Vocalypse") {}
 
     using Buffer = juce::AudioBuffer<float>;
 

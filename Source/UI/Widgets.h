@@ -5,7 +5,7 @@
 #include "../Text/I18n.h"
 #include "../DSP/EqualizerModule.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using APVTS = juce::AudioProcessorValueTreeState;
 

@@ -3,7 +3,7 @@
 #include "DspUtilities.h"
 #include "DynamicsFeed.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // One word / phrase as the "word bars" view shows it. Output-domain sample positions
     // (the running count since prepare / reset, like RideModule::samplePosition); levels are

@@ -3,7 +3,7 @@
 #include "Widgets.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Settings sheet (gear in the header, 1.0): a panel sliding in from the right over the canvas.
     // Everything here is a per-user preference (UserSettings), never part of a project:

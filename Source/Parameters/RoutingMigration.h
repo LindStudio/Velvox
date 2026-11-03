@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../DSP/VocalChain.h"
 
-namespace velvox
+namespace vocalypse
 {
     // Routing strings of 0.2 / 0.3 (and presets without a routing) contain every module.
     // From 0.4 a chain only holds what is actually used. The migration keeps the order

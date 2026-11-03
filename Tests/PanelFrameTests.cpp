@@ -8,8 +8,8 @@
 #include "UI/EqPanel.h"
 #include "UI/VoicesPanels.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -42,7 +42,7 @@ namespace
         }
     }
 
-    juce::Rectangle<int> panelSize() { return VelvoxAudioProcessorEditor::panelArea().withZeroOrigin(); }
+    juce::Rectangle<int> panelSize() { return VocalypseAudioProcessorEditor::panelArea().withZeroOrigin(); }
 
     void allModulesInChain (Harness& h)
     {
@@ -67,7 +67,7 @@ namespace
 class PanelFrameTests final : public juce::UnitTest
 {
 public:
-    PanelFrameTests() : juce::UnitTest ("Headliner panel frame", "Headliner") {}
+    PanelFrameTests() : juce::UnitTest ("VOCALYPSE panel frame", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -107,7 +107,7 @@ public:
                         // The six Pulse curve points are the handles of the curve editor in the visual
                         const bool curveHandle = pid.startsWith ("pulseX") || pid.startsWith ("pulseY");
                         // EQ: the 16 bands are reached one at a time through the graph and the selected-band row,
-                        // eqLegacyResponse through its Mehr button while it is set (both: "Headliner EQ panel");
+                        // eqLegacyResponse through its Mehr button while it is set (both: "VOCALYPSE EQ panel");
                         // the hidden 0.5 fixed bands are not shown at all (they stay registered)
                         const bool eqBand = pid.startsWith ("eqBand") || pid == "eqLegacyResponse";
                         const auto* spec = findParameterSpec (pid);

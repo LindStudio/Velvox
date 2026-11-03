@@ -4,7 +4,7 @@
 #include <array>
 #include <vector>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Oversampler of the Saturation module (0.6): 4x below 60 kHz, 2x above.
     //

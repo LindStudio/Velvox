@@ -6,7 +6,7 @@
 #include "../Presets/UndoHistory.h"
 #include <map>
 
-namespace velvox::check
+namespace vocalypse::check
 {
     using dsp::ModuleId;
 

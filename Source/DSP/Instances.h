@@ -3,7 +3,7 @@
 #include "Routing.h"
 #include <juce_core/juce_core.h>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Repeated module instances (0.4).
     //

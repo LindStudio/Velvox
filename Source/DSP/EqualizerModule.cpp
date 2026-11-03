@@ -1,6 +1,6 @@
 #include "EqualizerModule.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     int EqSettings::findRole (EqRole role) const noexcept
     {

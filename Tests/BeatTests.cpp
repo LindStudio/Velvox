@@ -11,9 +11,9 @@
 #include "Parameters/ParameterLayout.h"
 #include "Text/I18n.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::automix;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::automix;
 
 namespace
 {
@@ -82,7 +82,7 @@ namespace
 class BeatTests final : public juce::UnitTest
 {
 public:
-    BeatTests() : juce::UnitTest ("Velvox auto mix with a beat", "Velvox") {}
+    BeatTests() : juce::UnitTest ("Vocalypse auto mix with a beat", "Vocalypse") {}
 
     void runTest() override
     {

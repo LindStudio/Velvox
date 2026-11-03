@@ -2,10 +2,10 @@
 
 #include "Theme.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Module solo (0.6.1): the "S" on a chain tile and in the panel header. Solo yellow, the classic
-    // mixer colour; it only ever means "solo" in Headliner (bypass is amber, warnings red).
+    // mixer colour; it only ever means "solo" in VOCALYPSE (bypass is amber, warnings red).
     inline const juce::Colour soloColour { 0xffffd84d };
 
     // Round "S": outline (alpha = how visible it is, e.g. the tile's hover fade), filled while soloed

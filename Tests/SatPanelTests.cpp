@@ -6,8 +6,8 @@
 #include "UI/SatPanel.h"
 #include "UI/Segments.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -123,7 +123,7 @@ namespace
                 r.insertDefault (ModuleId::sat, k);
         h.proc.setRouting (r);
         auto panel = ui::createDetailPanel (h.proc, dsp::selectionCode (ModuleId::sat, instance));
-        panel->setBounds (VelvoxAudioProcessorEditor::panelArea().withZeroOrigin());
+        panel->setBounds (VocalypseAudioProcessorEditor::panelArea().withZeroOrigin());
         panel->refresh();
         return panel;
     }
@@ -132,7 +132,7 @@ namespace
 class SatPanelTests final : public juce::UnitTest
 {
 public:
-    SatPanelTests() : juce::UnitTest ("Headliner saturation panel", "Headliner") {}
+    SatPanelTests() : juce::UnitTest ("VOCALYPSE saturation panel", "VOCALYPSE") {}
 
     void runTest() override
     {

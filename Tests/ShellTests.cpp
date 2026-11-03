@@ -1,17 +1,17 @@
-// Headliner 0.6 shell (spec 2.1 - 2.4, 8 Q8): view state, header, keyboard undo, Simple mode, chain row.
+// VOCALYPSE 0.6 shell (spec 2.1 - 2.4, 8 Q8): view state, header, keyboard undo, Simple mode, chain row.
 
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
 #include "PluginEditor.h"
 #include "AutoMix/AutoMixPlanner.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
 {
-    VelvoxAudioProcessorEditor& asVelvox (juce::AudioProcessorEditor& e) { return dynamic_cast<VelvoxAudioProcessorEditor&> (e); }
+    VocalypseAudioProcessorEditor& asVocalypse (juce::AudioProcessorEditor& e) { return dynamic_cast<VocalypseAudioProcessorEditor&> (e); }
 
     std::unique_ptr<juce::AudioProcessorEditor> editorWith (Harness& h, const juce::String& uiMode, const juce::String& uiTab = {})
     {
@@ -63,7 +63,7 @@ namespace
 class ShellTests final : public juce::UnitTest
 {
 public:
-    ShellTests() : juce::UnitTest ("Headliner shell", "Headliner") {}
+    ShellTests() : juce::UnitTest ("VOCALYPSE shell", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -106,28 +106,28 @@ public:
             {
                 Harness h;
                 auto e = editorWith (h, "beginner");
-                expect (! asVelvox (*e).isAdvanced() && asVelvox (*e).getTab() == VelvoxAudioProcessorEditor::Tab::autoMix, "beginner -> Simple");
-                expect (asVelvox (*e).getSimpleView().isVisible());
+                expect (! asVocalypse (*e).isAdvanced() && asVocalypse (*e).getTab() == VocalypseAudioProcessorEditor::Tab::autoMix, "beginner -> Simple");
+                expect (asVocalypse (*e).getSimpleView().isVisible());
             }
             {
                 Harness h;
                 auto e = editorWith (h, "pro");
-                expect (asVelvox (*e).isAdvanced() && asVelvox (*e).isModulePanelShown(), "pro -> Advanced");
+                expect (asVocalypse (*e).isAdvanced() && asVocalypse (*e).isModulePanelShown(), "pro -> Advanced");
             }
             {
                 Harness h;
                 auto e = editorWith (h, "check");
-                auto& ed = asVelvox (*e);
-                expect (ed.isAdvanced() && ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "check (0.5) -> Advanced + VOCAL CHECK");
-                expect (ed.getCheckView().isVisible() && ed.getCheckView().getBounds() == VelvoxAudioProcessorEditor::bodyArea(), "check view over the body");
+                auto& ed = asVocalypse (*e);
+                expect (ed.isAdvanced() && ed.getTab() == VocalypseAudioProcessorEditor::Tab::vocalCheck, "check (0.5) -> Advanced + VOCAL CHECK");
+                expect (ed.getCheckView().isVisible() && ed.getCheckView().getBounds() == VocalypseAudioProcessorEditor::bodyArea(), "check view over the body");
                 expectEquals (h.proc.getState().state.getProperty ("uiMode").toString(), juce::String ("pro"), "stored again in the 0.6 form");
                 expectEquals (h.proc.getState().state.getProperty ("uiTab").toString(), juce::String ("check"));
             }
             {
                 Harness h;
                 auto e = editorWith (h, "beginner", "check");
-                expect (! asVelvox (*e).isAdvanced() && asVelvox (*e).getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "Simple + VOCAL CHECK");
-                expect (asVelvox (*e).getCheckView().isVisible(), "the check view in Simple mode too");
+                expect (! asVocalypse (*e).isAdvanced() && asVocalypse (*e).getTab() == VocalypseAudioProcessorEditor::Tab::vocalCheck, "Simple + VOCAL CHECK");
+                expect (asVocalypse (*e).getCheckView().isVisible(), "the check view in Simple mode too");
             }
         }
 
@@ -135,7 +135,7 @@ public:
         {
             Harness h;
             auto e = editorWith (h, "beginner");
-            auto& top = asVelvox (*e).getTopBar();
+            auto& top = asVocalypse (*e).getTopBar();
             const auto texts = buttonTexts (top);
             for (auto* t : { "SIMPEL", "ADVANCED", "AUTO MIX", "VOCAL CHECK", "Bypass", "?" })
                 expect (texts.contains (t), juce::String (t) + " in " + texts.joinIntoString ("|"));
@@ -154,7 +154,7 @@ public:
         {
             Harness h;
             auto e = editorWith (h, "pro");
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             gesture (h, pid::compRatio, 7.0f);
             expect (ed.keyPressed (juce::KeyPress ('z', juce::ModifierKeys::commandModifier, 'z')));
             expectWithinAbsoluteError (h.get (pid::compRatio), 3.0f, 1.0e-3f, "Ctrl+Z");
@@ -170,7 +170,7 @@ public:
         {
             Harness h;
             auto e = editorWith (h, "beginner");
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             auto& view = ed.getSimpleView();
             expect (! view.getBeforeButton().isVisible() && ! view.getAfterButton().isVisible(), "hidden before an analysis");
             view.getAnalyseButton().onClick();
@@ -195,11 +195,11 @@ public:
         {
             Harness h;
             auto e = editorWith (h, "pro");
-            auto& ed = asVelvox (*e);
-            const auto body = VelvoxAudioProcessorEditor::bodyArea();
+            auto& ed = asVocalypse (*e);
+            const auto body = VocalypseAudioProcessorEditor::bodyArea();
             expect (ed.getChainView().getBounds().getY() == body.getY(), "chain at the top");
             expect (ed.getMeters().isVisible() && ed.getMeters().getBounds().getBottom() < ed.getDetail()->getY(), "IN / OUT meters next to the chain");
-            expect (ed.getDetail()->getBounds() == VelvoxAudioProcessorEditor::panelArea());
+            expect (ed.getDetail()->getBounds() == VocalypseAudioProcessorEditor::panelArea());
             expectEquals (ed.getDetail()->getWidth(), body.getWidth(), "full width");
             expectEquals (ed.getDetail()->getBottom(), body.getBottom(), "down to the bottom");
         }
@@ -208,7 +208,7 @@ public:
         {
             Harness h;
             auto e = editorWith (h, "pro");
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             auto& chain = ed.getChainView();
             const int code = chain.insertModule (ModuleId::smooth, 1);
             expectEquals (chain.getSelected(), code, "new module selected");
@@ -254,7 +254,7 @@ public:
         {
             Harness h;
             auto e = editorWith (h, "pro");
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             auto& top = ed.getTopBar();
             using T = ui::TopBar;
             expectEquals (top.getTabButton (T::Tab::autoMix).getButtonText(), juce::String ("MODULE"), "Advanced: the chain is MODULE");

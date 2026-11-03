@@ -2,7 +2,7 @@
 
 #include <atomic>
 
-namespace velvox::i18n
+namespace vocalypse::i18n
 {
     namespace
     {
@@ -157,7 +157,7 @@ namespace velvox::i18n
     }
 }
 
-namespace velvox::i18n
+namespace vocalypse::i18n
 {
     juce::String upper (const juce::String& text)
     {

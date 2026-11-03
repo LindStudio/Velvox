@@ -8,7 +8,7 @@
 #include <cmath>
 #include <complex>
 
-namespace velvox::legacy::v05
+namespace vocalypse::legacy::v05
 {
     inline constexpr int maxChannels = 2;
 

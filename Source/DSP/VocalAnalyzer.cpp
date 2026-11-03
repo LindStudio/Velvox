@@ -2,7 +2,7 @@
 #include "../Check/CheckTargets.h"
 #include "../Check/CheckRules.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

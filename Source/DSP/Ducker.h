@@ -2,7 +2,7 @@
 
 #include "DspUtilities.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     struct DuckSettings
     {

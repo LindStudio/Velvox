@@ -8,13 +8,13 @@
 #include "UI/DynPanels.h"
 #include "UI/ChainView.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
 {
-    juce::Rectangle<int> panelSize() { return VelvoxAudioProcessorEditor::panelArea().withZeroOrigin(); }
+    juce::Rectangle<int> panelSize() { return VocalypseAudioProcessorEditor::panelArea().withZeroOrigin(); }
 
     juce::String idFor (const char* base, int instance) { return dsp::instanceParamId (base, instance); }
     float real (Harness& h, const juce::String& id) { return h.proc.getState().getRawParameterValue (id)->load(); }
@@ -163,7 +163,7 @@ namespace
 class DynPanelTests final : public juce::UnitTest
 {
 public:
-    DynPanelTests() : juce::UnitTest ("Headliner dynamics panels", "Headliner") {}
+    DynPanelTests() : juce::UnitTest ("VOCALYPSE dynamics panels", "VOCALYPSE") {}
 
     void runTest() override
     {

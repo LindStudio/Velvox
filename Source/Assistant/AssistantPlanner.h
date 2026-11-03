@@ -2,10 +2,10 @@
 
 #include "AssistantTypes.h"
 
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
     // Turns recognised wishes into concrete, validated parameter changes.
-    // Knows the Velvox modules and their real parameter IDs and ranges, nothing
+    // Knows the Vocalypse modules and their real parameter IDs and ranges, nothing
     // about language. Works on a copy of the current values (AssistantContext),
     // so it is a pure function and can run on any thread.
     //

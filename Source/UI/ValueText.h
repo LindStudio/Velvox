@@ -6,7 +6,7 @@
 // Shared value handling of every control (spec 2.6): typed values with units, reset, copy / paste,
 // and the right-click menu. Knob, HSlider and Segments all go through here, so every control of the
 // plugin behaves the same and every change is one gesture (= one undo step, recorded by the host).
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Parses what a user types into a value field, in REAL units of the parameter, clamped to its range.
     //   numbers with "." or ",", optional sign; suffix k (x1000); units dB, Hz / kHz, ms / s (converted

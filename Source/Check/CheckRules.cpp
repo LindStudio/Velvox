@@ -8,7 +8,7 @@
 // The finding texts are built with i18n::both (German and English packed into one string):
 // the analysis is kept by the processor and survives a language switch (the editor is rebuilt,
 // the latest analysis is not), so the view picks the language at display with i18n::show.
-namespace velvox::check
+namespace vocalypse::check
 {
     namespace
     {

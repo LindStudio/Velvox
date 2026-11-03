@@ -6,7 +6,7 @@
 #include "../Text/I18n.h"
 #include "../Text/ParamText.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -469,7 +469,7 @@ namespace velvox::ui
     };
 
     //==========================================================================
-    SatView::SatView (VelvoxAudioProcessor& p, int k) : proc (p), instance (k)
+    SatView::SatView (VocalypseAudioProcessor& p, int k) : proc (p), instance (k)
     {
         auto& s = p.getState();
         multibandId = idFor (s, pid::satMultiband, k);
@@ -980,7 +980,7 @@ namespace velvox::ui
         }
     }
 
-    std::unique_ptr<ModuleView> createSatView (VelvoxAudioProcessor& p, int instance)
+    std::unique_ptr<ModuleView> createSatView (VocalypseAudioProcessor& p, int instance)
     {
         return std::make_unique<SatView> (p, instance);
     }
@@ -1002,7 +1002,7 @@ namespace velvox::ui
         class SatPanel final : public DetailPanel
         {
         public:
-            explicit SatPanel (VelvoxAudioProcessor& p)
+            explicit SatPanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "Saturation", help::shortDescription ((int) dsp::ModuleId::sat), pid::satOn),
                   link (p.getState(), getInstance())
             {
@@ -1129,7 +1129,7 @@ namespace velvox::ui
         };
     }
 
-    std::unique_ptr<DetailPanel> createSatPanel (VelvoxAudioProcessor& p)
+    std::unique_ptr<DetailPanel> createSatPanel (VocalypseAudioProcessor& p)
     {
         return std::make_unique<SatPanel> (p);
     }

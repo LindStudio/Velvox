@@ -4,7 +4,7 @@
 #include "MixLaw.h"
 #include "VoiceSplice.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Voice layout of the Doubler (0.6). Classic: the 0.2 controls (Delay, Detune, Width) set two
     // voices as before - every project from 0.2-0.5 loads in this mode. Two / Four: the per-voice

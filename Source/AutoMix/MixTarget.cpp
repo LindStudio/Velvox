@@ -4,7 +4,7 @@
 #include "ReportText.h"
 #include "PartyTargetCurve.h"
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     float thirdCentre (int k) noexcept
     {

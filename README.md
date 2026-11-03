@@ -1,4 +1,6 @@
-# Velvox – automatischer Vocal-Mixer (Version 0.3.0, Entwicklungsstand)
+# VOCALYPSE by Lind Audio – automatischer Vocal-Mixer
+
+> **Name:** Das Plugin heißt seit 2026-11-03 **VOCALYPSE** (vorher „Headliner“, Arbeitstitel „Velvox“). Plugin-Codes `Lnda`/`Vlvx` bleiben, alte Projekte, Presets und Einstellungen laden weiter. Der Text unten stammt teils aus 0.3 und nennt noch den alten Namen; aktueller Stand: `CHANGELOG.md` und `docs/HANDOFF.md`.
 
 Velvox ist ein VST3-Plugin für Windows (JUCE 8.0.9, C++20) für EDM, Hypertechno, Hard Dance, Party- und Pop-Vocals. Es erfasst während der Wiedergabe einen begrenzten Abschnitt der Vocal, analysiert ihn, stellt die vorhandenen Module danach ein und prüft das Ergebnis, bevor es angewendet wird. Alle Module bleiben danach frei einstellbar.
 

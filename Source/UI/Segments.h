@@ -2,7 +2,7 @@
 
 #include "Widgets.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Segment group of the design (Rate 1/4 · 1/8 · 1/16 …): radio buttons on a #0D0F15 bar,
     // bound to a choice or bool parameter. Choice labels map onto the parameter's choices by

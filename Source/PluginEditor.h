@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
-#include "UI/VelvoxLookAndFeel.h"
+#include "UI/VocalypseLookAndFeel.h"
 #include "UI/TopBar.h"
 #include "UI/ChainView.h"
 #include "UI/DetailPanels.h"
@@ -28,22 +28,22 @@
 //   overlays    analysis, auto-mix details, module browser, preset list, dialogs, help, tutorial, hover info
 // View state (mode, tab, selection) is stored with the project and never affects the audio.
 //
-// HeadlinerView is the whole interface; VelvoxAudioProcessorEditor (below) is the window that
+// VocalypseView is the whole interface; VocalypseAudioProcessorEditor (below) is the window that
 // hosts it and builds a fresh one when the interface language changes (1.0), so every text,
 // including those set once in constructors, follows the new language at once.
-class HeadlinerView final : public juce::Component,
+class VocalypseView final : public juce::Component,
                             private juce::Timer,
                             private juce::ChangeListener
 {
 public:
-    using Mode = velvox::ui::TopBar::Mode;
-    using Tab = velvox::ui::TopBar::Tab;
+    using Mode = vocalypse::ui::TopBar::Mode;
+    using Tab = vocalypse::ui::TopBar::Tab;
 
     // What to show again after the view was rebuilt for a language change
     enum class Reopen { none, welcome, settings };
 
-    explicit HeadlinerView (VelvoxAudioProcessor&, Reopen reopen = Reopen::none);
-    ~HeadlinerView() override;
+    explicit VocalypseView (VocalypseAudioProcessor&, Reopen reopen = Reopen::none);
+    ~VocalypseView() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -80,20 +80,20 @@ public:
     void openModule (int moduleIdOrOutput);
 
     // For tests and the snapshot renderer
-    velvox::ui::HelpOverlay& getHelp() noexcept { return help; }
-    velvox::ui::TutorialOverlay& getTutorial() noexcept { return tutorial; }
-    velvox::ui::ChainView& getChainView() noexcept { return chainView; }
-    velvox::ui::TopBar& getTopBar() noexcept { return topBar; }
-    velvox::ui::SimpleView& getSimpleView() noexcept { return simpleView; }
-    velvox::ui::VocalCheckView& getCheckView() noexcept { return checkView; }
-    velvox::ui::AutoMixView& getAutoMixView() noexcept { return mixView; }
+    vocalypse::ui::HelpOverlay& getHelp() noexcept { return help; }
+    vocalypse::ui::TutorialOverlay& getTutorial() noexcept { return tutorial; }
+    vocalypse::ui::ChainView& getChainView() noexcept { return chainView; }
+    vocalypse::ui::TopBar& getTopBar() noexcept { return topBar; }
+    vocalypse::ui::SimpleView& getSimpleView() noexcept { return simpleView; }
+    vocalypse::ui::VocalCheckView& getCheckView() noexcept { return checkView; }
+    vocalypse::ui::AutoMixView& getAutoMixView() noexcept { return mixView; }
     bool isMixDetailsOpen() const noexcept { return detailsOverlay.isVisible(); }
-    velvox::ui::ModuleBrowser& getBrowser() noexcept { return browser; }
-    velvox::ui::PresetBrowser& getPresetBrowser() noexcept { return presetBrowser; }
-    velvox::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return analysis; }
-    velvox::ui::DetailPanel* getDetail() noexcept { return detail.get(); }
-    velvox::ui::CompactMeters& getMeters() noexcept { return meters; }
-    velvox::ui::SettingsOverlay& getSettings() noexcept { return settingsOverlay; }
+    vocalypse::ui::ModuleBrowser& getBrowser() noexcept { return browser; }
+    vocalypse::ui::PresetBrowser& getPresetBrowser() noexcept { return presetBrowser; }
+    vocalypse::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return analysis; }
+    vocalypse::ui::DetailPanel* getDetail() noexcept { return detail.get(); }
+    vocalypse::ui::CompactMeters& getMeters() noexcept { return meters; }
+    vocalypse::ui::SettingsOverlay& getSettings() noexcept { return settingsOverlay; }
 
     // Canvas layout (design units)
     static juce::Rectangle<int> bodyArea();
@@ -112,7 +112,7 @@ private:
     juce::Rectangle<int> tutorialTarget (const juce::String& key);
 
     // Design canvas: draws the atmosphere (cached) and hosts the hover info card
-    class Canvas final : public juce::Component, public velvox::ui::InfoPopupHost
+    class Canvas final : public juce::Component, public vocalypse::ui::InfoPopupHost
     {
     public:
         Canvas();
@@ -124,7 +124,7 @@ private:
 
         bool bypassed = false;  // amber frame and label while the global bypass is on
         float bypassLabelY = 70.0f;   // vertical centre of that label (set by the view, see applyView)
-        velvox::ui::InfoPopup info;
+        vocalypse::ui::InfoPopup info;
 
     private:
         juce::Image backdrop;   // coloured light behind the panels, rendered once per size
@@ -136,7 +136,7 @@ private:
     class DetailsOverlay final : public juce::Component
     {
     public:
-        explicit DetailsOverlay (velvox::ui::AutoMixView& view);
+        explicit DetailsOverlay (vocalypse::ui::AutoMixView& view);
         void paint (juce::Graphics&) override;
         void resized() override;
         void mouseDown (const juce::MouseEvent&) override;
@@ -144,35 +144,35 @@ private:
         juce::Rectangle<int> cardBounds() const;
 
     private:
-        velvox::ui::AutoMixView& view;
+        vocalypse::ui::AutoMixView& view;
         juce::TextButton close { juce::String::fromUTF8 ("\xc3\x97") };
     };
 
-    VelvoxAudioProcessor& proc;
-    juce::SharedResourcePointer<velvox::ui::EmbeddedFonts> fonts; // before anything that draws text
-    velvox::ui::VelvoxLookAndFeel lookAndFeel;
-    velvox::ui::SpectrumSource spectrum;
-    velvox::ui::LiveData live;
-    velvox::ui::LiveData panelLive;   // live data of the selected instance when it is not the first one
+    VocalypseAudioProcessor& proc;
+    juce::SharedResourcePointer<vocalypse::ui::EmbeddedFonts> fonts; // before anything that draws text
+    vocalypse::ui::VocalypseLookAndFeel lookAndFeel;
+    vocalypse::ui::SpectrumSource spectrum;
+    vocalypse::ui::LiveData live;
+    vocalypse::ui::LiveData panelLive;   // live data of the selected instance when it is not the first one
     std::vector<float> scopeL, scopeR;
 
     Canvas canvas;
-    velvox::ui::DialogOverlay dialog;
-    velvox::ui::HelpOverlay help;
-    velvox::ui::TutorialOverlay tutorial;
-    velvox::ui::SettingsOverlay settingsOverlay;
-    velvox::ui::ModuleBrowser browser;
-    velvox::ui::PresetBrowser presetBrowser;
-    velvox::ui::TopBar topBar;
-    velvox::ui::ChainView chainView;
-    velvox::ui::SimpleView simpleView;
-    velvox::ui::VocalCheckView checkView;   // the VOCAL CHECK tab (both modes)
-    velvox::ui::AutoMixView mixView;
+    vocalypse::ui::DialogOverlay dialog;
+    vocalypse::ui::HelpOverlay help;
+    vocalypse::ui::TutorialOverlay tutorial;
+    vocalypse::ui::SettingsOverlay settingsOverlay;
+    vocalypse::ui::ModuleBrowser browser;
+    vocalypse::ui::PresetBrowser presetBrowser;
+    vocalypse::ui::TopBar topBar;
+    vocalypse::ui::ChainView chainView;
+    vocalypse::ui::SimpleView simpleView;
+    vocalypse::ui::VocalCheckView checkView;   // the VOCAL CHECK tab (both modes)
+    vocalypse::ui::AutoMixView mixView;
     DetailsOverlay detailsOverlay { mixView };
-    velvox::ui::AnalysisOverlay analysis;
-    std::unique_ptr<velvox::ui::DetailPanel> detail;
+    vocalypse::ui::AnalysisOverlay analysis;
+    std::unique_ptr<vocalypse::ui::DetailPanel> detail;
 
-    velvox::ui::CompactMeters meters;
+    vocalypse::ui::CompactMeters meters;
 
     Mode mode = Mode::simple;
     Tab tab = Tab::autoMix;
@@ -180,23 +180,23 @@ private:
     int selected = 0;
     int frame = 0;
 
-    juce::TooltipWindow tooltips { this, velvox::ui::motion::hoverInfoDelayMs };
+    juce::TooltipWindow tooltips { this, vocalypse::ui::motion::hoverInfoDelayMs };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeadlinerView)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalypseView)
 };
 
 //==============================================================================
 // The plugin window: resizable at a fixed aspect ratio (size remembered per project as "uiScale"),
-// hosts one HeadlinerView and replaces it when the interface language changes.
-class VelvoxAudioProcessorEditor final : public juce::AudioProcessorEditor
+// hosts one VocalypseView and replaces it when the interface language changes.
+class VocalypseAudioProcessorEditor final : public juce::AudioProcessorEditor
 {
 public:
-    using Mode = HeadlinerView::Mode;
-    using Tab = HeadlinerView::Tab;
-    using Reopen = HeadlinerView::Reopen;
+    using Mode = VocalypseView::Mode;
+    using Tab = VocalypseView::Tab;
+    using Reopen = VocalypseView::Reopen;
 
-    explicit VelvoxAudioProcessorEditor (VelvoxAudioProcessor&);
-    ~VelvoxAudioProcessorEditor() override;
+    explicit VocalypseAudioProcessorEditor (VocalypseAudioProcessor&);
+    ~VocalypseAudioProcessorEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -205,7 +205,7 @@ public:
     // Builds a fresh view in the current language (state, view mode and selection live in the project)
     void rebuild (Reopen reopen);
 
-    HeadlinerView& getView() noexcept { return *view; }
+    VocalypseView& getView() noexcept { return *view; }
 
     // The view's interface (tests, snapshot renderer)
     void showSettings()                                 { view->showSettings(); }
@@ -222,31 +222,31 @@ public:
     bool isModulePanelShown() const noexcept            { return view->isModulePanelShown(); }
     void selectModule (int moduleIdOrOutput)            { view->selectModule (moduleIdOrOutput); }
     void openModule (int moduleIdOrOutput)              { view->openModule (moduleIdOrOutput); }
-    velvox::ui::HelpOverlay& getHelp() noexcept         { return view->getHelp(); }
-    velvox::ui::TutorialOverlay& getTutorial() noexcept { return view->getTutorial(); }
-    velvox::ui::ChainView& getChainView() noexcept      { return view->getChainView(); }
-    velvox::ui::TopBar& getTopBar() noexcept            { return view->getTopBar(); }
-    velvox::ui::SimpleView& getSimpleView() noexcept    { return view->getSimpleView(); }
-    velvox::ui::VocalCheckView& getCheckView() noexcept { return view->getCheckView(); }
-    velvox::ui::AutoMixView& getAutoMixView() noexcept  { return view->getAutoMixView(); }
+    vocalypse::ui::HelpOverlay& getHelp() noexcept         { return view->getHelp(); }
+    vocalypse::ui::TutorialOverlay& getTutorial() noexcept { return view->getTutorial(); }
+    vocalypse::ui::ChainView& getChainView() noexcept      { return view->getChainView(); }
+    vocalypse::ui::TopBar& getTopBar() noexcept            { return view->getTopBar(); }
+    vocalypse::ui::SimpleView& getSimpleView() noexcept    { return view->getSimpleView(); }
+    vocalypse::ui::VocalCheckView& getCheckView() noexcept { return view->getCheckView(); }
+    vocalypse::ui::AutoMixView& getAutoMixView() noexcept  { return view->getAutoMixView(); }
     bool isMixDetailsOpen() const noexcept              { return view->isMixDetailsOpen(); }
-    velvox::ui::ModuleBrowser& getBrowser() noexcept    { return view->getBrowser(); }
-    velvox::ui::PresetBrowser& getPresetBrowser() noexcept { return view->getPresetBrowser(); }
-    velvox::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return view->getAnalysisOverlay(); }
-    velvox::ui::DetailPanel* getDetail() noexcept       { return view->getDetail(); }
-    velvox::ui::CompactMeters& getMeters() noexcept     { return view->getMeters(); }
-    velvox::ui::SettingsOverlay& getSettings() noexcept { return view->getSettings(); }
+    vocalypse::ui::ModuleBrowser& getBrowser() noexcept    { return view->getBrowser(); }
+    vocalypse::ui::PresetBrowser& getPresetBrowser() noexcept { return view->getPresetBrowser(); }
+    vocalypse::ui::AnalysisOverlay& getAnalysisOverlay() noexcept { return view->getAnalysisOverlay(); }
+    vocalypse::ui::DetailPanel* getDetail() noexcept       { return view->getDetail(); }
+    vocalypse::ui::CompactMeters& getMeters() noexcept     { return view->getMeters(); }
+    vocalypse::ui::SettingsOverlay& getSettings() noexcept { return view->getSettings(); }
 
-    static juce::Rectangle<int> bodyArea()  { return HeadlinerView::bodyArea(); }
-    static juce::Rectangle<int> chainArea() { return HeadlinerView::chainArea(); }
-    static juce::Rectangle<int> meterArea() { return HeadlinerView::meterArea(); }
-    static juce::Rectangle<int> panelArea() { return HeadlinerView::panelArea(); }
+    static juce::Rectangle<int> bodyArea()  { return VocalypseView::bodyArea(); }
+    static juce::Rectangle<int> chainArea() { return VocalypseView::chainArea(); }
+    static juce::Rectangle<int> meterArea() { return VocalypseView::meterArea(); }
+    static juce::Rectangle<int> panelArea() { return VocalypseView::panelArea(); }
 
 private:
     void attach();
 
-    VelvoxAudioProcessor& proc;
-    std::unique_ptr<HeadlinerView> view;
+    VocalypseAudioProcessor& proc;
+    std::unique_ptr<VocalypseView> view;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VelvoxAudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalypseAudioProcessorEditor)
 };

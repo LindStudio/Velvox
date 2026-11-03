@@ -1,5 +1,5 @@
 {
-  "_comment": "Test-vocal sources for the Velvox benchmark. Audio is NEVER committed to the repository; it is downloaded into the data directory (default %USERPROFILE%/dev/velvox-data). 'approved' lists what the license allows us to do.",
+  "_comment": "Test-vocal sources for the Vocalypse benchmark. Audio is NEVER committed to the repository; it is downloaded into the data directory (default %USERPROFILE%/dev/velvox-data). 'approved' lists what the license allows us to do.",
   "sources": [
     {
       "id": "vocalset11",

@@ -1,6 +1,6 @@
 #include "ProposalSession.h"
 
-namespace velvox::mixing
+namespace vocalypse::mixing
 {
     void ProposalSession::begin (const ParameterSnapshot& proposal)
     {

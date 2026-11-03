@@ -4,7 +4,7 @@
 #include "ValueText.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
 
@@ -74,7 +74,7 @@ namespace velvox::ui
     {
         juce::String paramId (const char* base, int instance) { return dsp::instanceParamId (base, instance); }
 
-        float value (VelvoxAudioProcessor& proc, const juce::String& id)
+        float value (VocalypseAudioProcessor& proc, const juce::String& id)
         {
             auto* p = proc.getState().getParameter (id);
             return p != nullptr ? p->convertFrom0to1 (p->getValue()) : 0.0f;
@@ -84,7 +84,7 @@ namespace velvox::ui
     //==========================================================================
     // HandleGraph
 
-    HandleGraph::HandleGraph (VelvoxAudioProcessor& p, int inst, ModuleId module)
+    HandleGraph::HandleGraph (VocalypseAudioProcessor& p, int inst, ModuleId module)
         : proc (p), instance (inst), hue (moduleColour (module))
     {
     }
@@ -381,7 +381,7 @@ namespace velvox::ui
     //==========================================================================
     // COMPRESSOR graph
 
-    CompGraph::CompGraph (VelvoxAudioProcessor& p, int inst) : HandleGraph (p, inst, ModuleId::comp)
+    CompGraph::CompGraph (VocalypseAudioProcessor& p, int inst) : HandleGraph (p, inst, ModuleId::comp)
     {
         settingsKey.fill (-1.0e9f);
         parametersEdited();
@@ -753,7 +753,7 @@ namespace velvox::ui
     //==========================================================================
     // DE-ESSER graph
 
-    DeEssGraph::DeEssGraph (VelvoxAudioProcessor& p, int inst) : HandleGraph (p, inst, ModuleId::deess)
+    DeEssGraph::DeEssGraph (VocalypseAudioProcessor& p, int inst) : HandleGraph (p, inst, ModuleId::deess)
     {
         spectrum = std::make_unique<SpectrumSource> (proc.getChain().getDeEsser (instance).spectrumTap, unusedTap);
         settingsKey.fill (-1.0e9f);
@@ -1043,7 +1043,7 @@ namespace velvox::ui
     //==========================================================================
     // VOCAL SMASH stage
 
-    SmashStage::SmashStage (VelvoxAudioProcessor& p, int inst) : proc (p), instance (inst)
+    SmashStage::SmashStage (VocalypseAudioProcessor& p, int inst) : proc (p), instance (inst)
     {
         setInterceptsMouseClicks (false, false);
     }
@@ -1201,7 +1201,7 @@ namespace velvox::ui
     //==========================================================================
     // LEVEL RIDE word bars
 
-    RideBars::RideBars (VelvoxAudioProcessor& p, int inst) : HandleGraph (p, inst, ModuleId::ride)
+    RideBars::RideBars (VocalypseAudioProcessor& p, int inst) : HandleGraph (p, inst, ModuleId::ride)
     {
         parametersEdited();
     }
@@ -1394,7 +1394,7 @@ namespace velvox::ui
         class CompPanel final : public DetailPanel
         {
         public:
-            explicit CompPanel (VelvoxAudioProcessor& p)
+            explicit CompPanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "Compressor", help::shortDescription ((int) ModuleId::comp), pid::compOn)
             {
                 auto& threshold = knob (pid::compThreshold, "Threshold");
@@ -1417,7 +1417,7 @@ namespace velvox::ui
         class DeEssPanel final : public DetailPanel
         {
         public:
-            explicit DeEssPanel (VelvoxAudioProcessor& p)
+            explicit DeEssPanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "De-Esser", help::shortDescription ((int) ModuleId::deess), pid::deessOn)
             {
                 auto& mode = segments (pid::deessMode, { "Split", "Wide" });
@@ -1443,7 +1443,7 @@ namespace velvox::ui
         class SmashPanel final : public DetailPanel
         {
         public:
-            explicit SmashPanel (VelvoxAudioProcessor& p)
+            explicit SmashPanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "Vocal Smash", help::shortDescription ((int) ModuleId::smash), pid::smashOn)
             {
                 amount = &knob (pid::smashAmount, "Smash");
@@ -1486,7 +1486,7 @@ namespace velvox::ui
         class RidePanel final : public DetailPanel
         {
         public:
-            explicit RidePanel (VelvoxAudioProcessor& p)
+            explicit RidePanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "Level Ride", help::shortDescription ((int) ModuleId::ride), pid::rideOn)
             {
                 amount = &knob (pid::rideAmount, i18n::tr ("Ausgleich", "Leveling"));
@@ -1519,7 +1519,7 @@ namespace velvox::ui
         };
     }
 
-    std::unique_ptr<ModuleView> createDynView (VelvoxAudioProcessor& proc, ModuleId module, int instance)
+    std::unique_ptr<ModuleView> createDynView (VocalypseAudioProcessor& proc, ModuleId module, int instance)
     {
         switch (module)
         {
@@ -1531,7 +1531,7 @@ namespace velvox::ui
         }
     }
 
-    std::unique_ptr<DetailPanel> createDynPanel (VelvoxAudioProcessor& proc, ModuleId module)
+    std::unique_ptr<DetailPanel> createDynPanel (VocalypseAudioProcessor& proc, ModuleId module)
     {
         switch (module)
         {

@@ -4,8 +4,8 @@
 #include "UI/HelpContent.h"
 #include "Text/I18n.h"
 
-using namespace velvox;
-using namespace velvox::ui;
+using namespace vocalypse;
+using namespace vocalypse::ui;
 
 namespace
 {
@@ -45,19 +45,19 @@ namespace
     }
 }
 
-juce::Rectangle<int> HeadlinerView::bodyArea()  { return { margin, topBarH + gap, baseWidth - 2 * margin, baseHeight - topBarH - gap - margin }; }
-juce::Rectangle<int> HeadlinerView::chainArea() { return bodyArea().withHeight (chainH).withTrimmedRight (meterW + gap); }
-juce::Rectangle<int> HeadlinerView::meterArea() { return bodyArea().withHeight (chainH).withTrimmedLeft (bodyArea().getWidth() - meterW); }
-juce::Rectangle<int> HeadlinerView::panelArea() { return bodyArea().withTrimmedTop (chainH + gap); }
+juce::Rectangle<int> VocalypseView::bodyArea()  { return { margin, topBarH + gap, baseWidth - 2 * margin, baseHeight - topBarH - gap - margin }; }
+juce::Rectangle<int> VocalypseView::chainArea() { return bodyArea().withHeight (chainH).withTrimmedRight (meterW + gap); }
+juce::Rectangle<int> VocalypseView::meterArea() { return bodyArea().withHeight (chainH).withTrimmedLeft (bodyArea().getWidth() - meterW); }
+juce::Rectangle<int> VocalypseView::panelArea() { return bodyArea().withTrimmedTop (chainH + gap); }
 
 //==============================================================================
-HeadlinerView::Canvas::Canvas()
+VocalypseView::Canvas::Canvas()
 {
     addChildComponent (info);
     setOpaque (true);
 }
 
-void HeadlinerView::Canvas::paint (juce::Graphics& g)
+void VocalypseView::Canvas::paint (juce::Graphics& g)
 {
     // The atmosphere is static: rendered once per physical size and then only blitted
     const float scale = juce::jlimit (0.5f, 4.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
@@ -73,7 +73,7 @@ void HeadlinerView::Canvas::paint (juce::Graphics& g)
     g.drawImage (backdrop, juce::Rectangle<float> ((float) baseWidth, (float) baseHeight));
 }
 
-void HeadlinerView::Canvas::paintOverChildren (juce::Graphics& g)
+void VocalypseView::Canvas::paintOverChildren (juce::Graphics& g)
 {
     if (! bypassed)
         return;
@@ -95,7 +95,7 @@ void HeadlinerView::Canvas::paintOverChildren (juce::Graphics& g)
     drawCaption (g, text, pill, juce::Justification::centred, colours::bypass, 9.0f);
 }
 
-void HeadlinerView::Canvas::showInfo (juce::Component& anchor, const juce::String& title, const juce::String& value, const juce::String& text)
+void VocalypseView::Canvas::showInfo (juce::Component& anchor, const juce::String& title, const juce::String& value, const juce::String& text)
 {
     if (! settings::getBool (settings::infoCards, true))   // switched off in the settings
         return;
@@ -103,20 +103,20 @@ void HeadlinerView::Canvas::showInfo (juce::Component& anchor, const juce::Strin
     info.show (getLocalArea (&anchor, anchor.getLocalBounds()), title, value, text);
 }
 
-void HeadlinerView::Canvas::hideInfo (juce::Component& anchor)
+void VocalypseView::Canvas::hideInfo (juce::Component& anchor)
 {
     if (infoAnchor == &anchor || infoAnchor == nullptr)
         info.hide();
 }
 
-void HeadlinerView::Canvas::hideInfoIfAnchorGone()
+void VocalypseView::Canvas::hideInfoIfAnchorGone()
 {
     if (info.isVisible() && (infoAnchor == nullptr || ! infoAnchor->isShowing()))
         info.hide();
 }
 
 //==============================================================================
-HeadlinerView::DetailsOverlay::DetailsOverlay (AutoMixView& v) : view (v)
+VocalypseView::DetailsOverlay::DetailsOverlay (AutoMixView& v) : view (v)
 {
     setWantsKeyboardFocus (true);
     addAndMakeVisible (view);
@@ -126,12 +126,12 @@ HeadlinerView::DetailsOverlay::DetailsOverlay (AutoMixView& v) : view (v)
     setVisible (false);
 }
 
-juce::Rectangle<int> HeadlinerView::DetailsOverlay::cardBounds() const
+juce::Rectangle<int> VocalypseView::DetailsOverlay::cardBounds() const
 {
     return getLocalBounds().reduced (40, 34);
 }
 
-void HeadlinerView::DetailsOverlay::paint (juce::Graphics& g)
+void VocalypseView::DetailsOverlay::paint (juce::Graphics& g)
 {
     g.fillAll (colours::scrim);
     const auto card = cardBounds().toFloat();
@@ -140,20 +140,20 @@ void HeadlinerView::DetailsOverlay::paint (juce::Graphics& g)
     drawGlass (g, card, radius::panel, 0.02f);
 }
 
-void HeadlinerView::DetailsOverlay::resized()
+void VocalypseView::DetailsOverlay::resized()
 {
     auto card = cardBounds();
     close.setBounds (card.getRight() - 40, card.getY() + 10, 28, 28);
     view.setBounds (card.reduced (16, 14).withTrimmedRight (36));
 }
 
-void HeadlinerView::DetailsOverlay::mouseDown (const juce::MouseEvent& e)
+void VocalypseView::DetailsOverlay::mouseDown (const juce::MouseEvent& e)
 {
     if (! cardBounds().contains (e.getPosition()))
         setVisible (false);
 }
 
-bool HeadlinerView::DetailsOverlay::keyPressed (const juce::KeyPress& key)
+bool VocalypseView::DetailsOverlay::keyPressed (const juce::KeyPress& key)
 {
     if (key == juce::KeyPress::escapeKey)
     {
@@ -164,7 +164,7 @@ bool HeadlinerView::DetailsOverlay::keyPressed (const juce::KeyPress& key)
 }
 
 //==============================================================================
-HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
+VocalypseView::VocalypseView (VocalypseAudioProcessor& p, Reopen reopen)
     : proc (p),
       spectrum (p.getChain().meters.inputTap, p.getChain().meters.outputTap),
       scopeL ((size_t) dsp::StereoTap::capacity), scopeR ((size_t) dsp::StereoTap::capacity),
@@ -321,7 +321,7 @@ HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
     // What shows first:
     //   - after a language change: the welcome card or the settings sheet again
     //   - a capture or analysis that is still running (the window was closed meanwhile): its progress
-    //   - the very first start of Headliner (no language chosen yet): the welcome card with the language
+    //   - the very first start of VOCALYPSE (no language chosen yet): the welcome card with the language
     //   - a new, not yet analysed instance: the analysis popup (unless switched off in the settings)
     //   - the tour's welcome card until the tour was finished or declined
     using Phase = automix::AutoMixController::Phase;
@@ -341,7 +341,7 @@ HeadlinerView::HeadlinerView (VelvoxAudioProcessor& p, Reopen reopen)
     raiseOverlays();
 }
 
-HeadlinerView::~HeadlinerView()
+VocalypseView::~VocalypseView()
 {
     stopTimer();
     proc.getAutoMix().removeChangeListener (this);
@@ -354,7 +354,7 @@ HeadlinerView::~HeadlinerView()
     setLookAndFeel (nullptr);
 }
 
-void HeadlinerView::changeListenerCallback (juce::ChangeBroadcaster*)
+void VocalypseView::changeListenerCallback (juce::ChangeBroadcaster*)
 {
     // A new mix, a restored state or a compare switch: every view follows at once
     auto& autoMix = proc.getAutoMix();
@@ -363,7 +363,7 @@ void HeadlinerView::changeListenerCallback (juce::ChangeBroadcaster*)
         detail->refresh();
 }
 
-bool HeadlinerView::keyPressed (const juce::KeyPress& key)
+bool VocalypseView::keyPressed (const juce::KeyPress& key)
 {
     // Global undo (spec 8 Q8): Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z (Cmd on macOS)
     const auto mods = key.getModifiers();
@@ -380,7 +380,7 @@ bool HeadlinerView::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
-void HeadlinerView::startAnalysis()
+void VocalypseView::startAnalysis()
 {
     help.close();
     if (tutorial.isActive())
@@ -390,7 +390,7 @@ void HeadlinerView::startAnalysis()
     raiseOverlays();
 }
 
-void HeadlinerView::showMixDetails()
+void VocalypseView::showMixDetails()
 {
     help.close();
     detailsOverlay.setVisible (true);
@@ -399,7 +399,7 @@ void HeadlinerView::showMixDetails()
     detailsOverlay.grabKeyboardFocus();
 }
 
-void HeadlinerView::openModule (int id)
+void VocalypseView::openModule (int id)
 {
     selected = id;
     mode = Mode::advanced;
@@ -407,7 +407,7 @@ void HeadlinerView::openModule (int id)
     applyView (true);
 }
 
-void HeadlinerView::setMode (Mode m)
+void VocalypseView::setMode (Mode m)
 {
     if (m == mode)
         return;
@@ -415,7 +415,7 @@ void HeadlinerView::setMode (Mode m)
     applyView (true);
 }
 
-void HeadlinerView::setTab (Tab t)
+void VocalypseView::setTab (Tab t)
 {
     if (t == tab)
         return;
@@ -423,14 +423,14 @@ void HeadlinerView::setTab (Tab t)
     applyView (true);
 }
 
-void HeadlinerView::storeView()
+void VocalypseView::storeView()
 {
     auto& state = proc.getState().state;
     state.setProperty (statekeys::uiMode, mode == Mode::advanced ? "pro" : "beginner", nullptr);
     state.setProperty (statekeys::uiTab, tab == Tab::vocalCheck ? "check" : "automix", nullptr);
 }
 
-void HeadlinerView::applyView (bool animate)
+void VocalypseView::applyView (bool animate)
 {
     topBar.setMode (mode);
     topBar.setTab (tab);
@@ -467,7 +467,7 @@ void HeadlinerView::applyView (bool animate)
     canvas.repaint();
 }
 
-void HeadlinerView::select (int id)
+void VocalypseView::select (int id)
 {
     // A selection that is no longer in the chain (removed, older project): the output stage
     if (id >= 0 && ! proc.getRouting().contains (dsp::selectionModule (id), dsp::selectionInstance (id)))
@@ -485,7 +485,7 @@ void HeadlinerView::select (int id)
     }
     detail.reset();
 
-    const auto openFromPanel = [safe = juce::Component::SafePointer<HeadlinerView> (this)] (int moduleId)
+    const auto openFromPanel = [safe = juce::Component::SafePointer<VocalypseView> (this)] (int moduleId)
     {
         // After the current click has finished
         juce::MessageManager::callAsync ([safe, moduleId] { if (safe != nullptr) safe->openModule (moduleId); });
@@ -496,7 +496,7 @@ void HeadlinerView::select (int id)
     {
         detail = createDetailPanel (proc, id, &spectrum, id >= 0 && dsp::selectionInstance (id) > 0 ? &panelLive : &live);
         detail->onOpenModule = openFromPanel;
-        detail->onShowVocalCheck = [safe = juce::Component::SafePointer<HeadlinerView> (this)]
+        detail->onShowVocalCheck = [safe = juce::Component::SafePointer<VocalypseView> (this)]
         {
             juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->setTab (Tab::vocalCheck); });
         };
@@ -517,7 +517,7 @@ void HeadlinerView::select (int id)
     raiseOverlays();
 }
 
-void HeadlinerView::raiseOverlays()
+void VocalypseView::raiseOverlays()
 {
     canvas.info.toFront (false);
     for (auto* c : std::initializer_list<juce::Component*> { &detailsOverlay, &browser, &presetBrowser, &analysis, &dialog, &help, &settingsOverlay, &tutorial })
@@ -526,7 +526,7 @@ void HeadlinerView::raiseOverlays()
         analysis.toFront (true);
 }
 
-void HeadlinerView::showSettings()
+void VocalypseView::showSettings()
 {
     help.close();
     settingsOverlay.open();
@@ -534,7 +534,7 @@ void HeadlinerView::showSettings()
     settingsOverlay.grabKeyboardFocus();
 }
 
-void HeadlinerView::showWelcome()
+void VocalypseView::showWelcome()
 {
     help.close();
     settingsOverlay.close();
@@ -542,20 +542,20 @@ void HeadlinerView::showWelcome()
     raiseOverlays();
 }
 
-void HeadlinerView::showHelp (const juce::String& pageKey)
+void VocalypseView::showHelp (const juce::String& pageKey)
 {
     help.open (pageKey);
     raiseOverlays();
 }
 
-void HeadlinerView::startTutorial (bool withWelcome)
+void VocalypseView::startTutorial (bool withWelcome)
 {
     help.close();
     tutorial.start (withWelcome);
     raiseOverlays();
 }
 
-juce::Rectangle<int> HeadlinerView::tutorialTarget (const juce::String& key)
+juce::Rectangle<int> VocalypseView::tutorialTarget (const juce::String& key)
 {
     // The tour shows each step in the view it explains: SIMPLE for Memphy, the analysis and the macros,
     // ADVANCED for the chain and the module panels
@@ -582,19 +582,19 @@ juce::Rectangle<int> HeadlinerView::tutorialTarget (const juce::String& key)
     return chainArea();   // "chain", "chainAndModules"
 }
 
-void HeadlinerView::paint (juce::Graphics& g)
+void VocalypseView::paint (juce::Graphics& g)
 {
     g.fillAll (colours::background);
 }
 
-void HeadlinerView::resized()
+void VocalypseView::resized()
 {
     const float scale = (float) getWidth() / (float) baseWidth;
     canvas.setTransform (juce::AffineTransform::scale (scale));
 }
 
 // Pulls every meter exactly once per frame; all views read the shared result
-void HeadlinerView::updateLiveData()
+void VocalypseView::updateLiveData()
 {
     auto& chain = proc.getChain();
     auto& m = chain.meters;
@@ -693,7 +693,7 @@ void HeadlinerView::updateLiveData()
     spectrum.update (live.sampleRate);
 }
 
-void HeadlinerView::timerCallback()
+void VocalypseView::timerCallback()
 {
     updateLiveData();
     ++frame;
@@ -723,11 +723,11 @@ void HeadlinerView::timerCallback()
 }
 
 //==============================================================================
-VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
+VocalypseAudioProcessorEditor::VocalypseAudioProcessorEditor (VocalypseAudioProcessor& p)
     : AudioProcessorEditor (&p), proc (p)
 {
     settings::applyLanguage();
-    view = std::make_unique<HeadlinerView> (p);
+    view = std::make_unique<VocalypseView> (p);
     attach();
 
     // ---- Window: resizable, fixed aspect ratio, remembered per project ("uiScale", a scale of
@@ -755,11 +755,11 @@ VelvoxAudioProcessorEditor::VelvoxAudioProcessorEditor (VelvoxAudioProcessor& p)
     setSize (w, juce::roundToInt (w * (double) baseHeight / baseWidth));
 }
 
-VelvoxAudioProcessorEditor::~VelvoxAudioProcessorEditor() = default;
+VocalypseAudioProcessorEditor::~VocalypseAudioProcessorEditor() = default;
 
-void VelvoxAudioProcessorEditor::attach()
+void VocalypseAudioProcessorEditor::attach()
 {
-    view->onLanguageChange = [safe = juce::Component::SafePointer<VelvoxAudioProcessorEditor> (this)] (Reopen reopen)
+    view->onLanguageChange = [safe = juce::Component::SafePointer<VocalypseAudioProcessorEditor> (this)] (Reopen reopen)
     {
         // The click that changed the language is still running inside the view: rebuild afterwards
         juce::MessageManager::callAsync ([safe, reopen] { if (safe != nullptr) safe->rebuild (reopen); });
@@ -777,21 +777,21 @@ void VelvoxAudioProcessorEditor::attach()
     view->setBounds (getLocalBounds());
 }
 
-void VelvoxAudioProcessorEditor::rebuild (Reopen reopen)
+void VocalypseAudioProcessorEditor::rebuild (Reopen reopen)
 {
     if (view != nullptr)
         removeChildComponent (view.get());
     view.reset();
-    view = std::make_unique<HeadlinerView> (proc, reopen);
+    view = std::make_unique<VocalypseView> (proc, reopen);
     attach();
 }
 
-void VelvoxAudioProcessorEditor::paint (juce::Graphics& g)
+void VocalypseAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (colours::background);
 }
 
-void VelvoxAudioProcessorEditor::resized()
+void VocalypseAudioProcessorEditor::resized()
 {
     if (view != nullptr)
         view->setBounds (getLocalBounds());

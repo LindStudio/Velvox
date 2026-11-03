@@ -5,7 +5,7 @@
 #include <atomic>
 #include <cstdint>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Lock-free history of small display frames (one 64-bit word each) from one writer
     // (the audio thread) to any number of readers (the UI). The writer never waits and

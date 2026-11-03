@@ -4,7 +4,7 @@
 #include <cmath>
 #include <algorithm>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     inline constexpr int maxChannels = 2;
 

@@ -10,8 +10,8 @@
 #include "UI/HelpContent.h"
 #include "PluginEditor.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -63,7 +63,7 @@ namespace
 class UiTests final : public juce::UnitTest
 {
 public:
-    UiTests() : juce::UnitTest ("Headliner UI interaction", "Headliner") {}
+    UiTests() : juce::UnitTest ("VOCALYPSE UI interaction", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -367,7 +367,7 @@ public:
             Harness h;
             h.proc.getState().state.setProperty ("uiMode", "pro", nullptr);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
+            auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*e);
             ed.getChainView().onAddModule (1, false);
             expect (ed.getBrowser().isOpen());
             ed.getBrowser().onChoose (ModuleId::comp, 1, false);
@@ -394,7 +394,7 @@ public:
                 const int code = dsp::selectionCode (s.id, s.instance);
                 h.proc.getState().state.setProperty ("uiSelection", code, nullptr);
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-                auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
+                auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*e);
                 expect (ed.getDetail() != nullptr && ed.getChainView().getSelected() == code,
                         "panel for " + ui::ChainView::cardName (h.proc.getRouting(), s.id, s.instance));
                 if (ed.getDetail() != nullptr)

@@ -5,7 +5,7 @@
 #include <cmath>
 #include <vector>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Mono delay line (power-of-two ring) with 6-point (5th-order) Lagrange reads and a
     // correlation search for splice points. The newest sample is the one last written.

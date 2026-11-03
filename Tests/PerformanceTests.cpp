@@ -2,13 +2,13 @@
 
 #include "TestHelpers.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 class PerformanceTests final : public juce::UnitTest
 {
 public:
-    PerformanceTests() : juce::UnitTest ("Velvox performance", "Velvox") {}
+    PerformanceTests() : juce::UnitTest ("Vocalypse performance", "Vocalypse") {}
 
     void runTest() override
     {

@@ -6,7 +6,7 @@
 // Texts of the automatic mix (1.0). They are built on the analysis thread and saved with the
 // project (AutoMixController::MixReport), so every one carries both languages (i18n::both) and is
 // shown through i18n::show. Nothing here depends on the current language.
-namespace velvox::automix::txt
+namespace vocalypse::automix::txt
 {
     inline juce::String both (const char* german, const char* english)
     {

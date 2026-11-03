@@ -5,8 +5,8 @@
 // the macro values on top, stateVersion 3 (snapshots: format 2). The same code runs on the 0.6.0
 // build (where the macros are applied at run time) and on this one (baked on load), so the env-gated
 // part compares the two builds directly:
-//   VELVOX_MACRO_BASELINE_WRITE=<dir>  writes the renders (run on the 0.6.0 build)
-//   VELVOX_MACRO_BASELINE=<dir>        compares with them
+//   VOCALYPSE_MACRO_BASELINE_WRITE=<dir>  writes the renders (run on the 0.6.0 build)
+//   VOCALYPSE_MACRO_BASELINE=<dir>        compares with them
 
 #include "TestHelpers.h"
 #include "SyntheticVocal.h"
@@ -16,10 +16,10 @@
 #include "Parameters/MacroBake.h"
 #include "Parameters/MacroMapper.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
-namespace velvox::test::macrobaketest
+namespace vocalypse::test::macrobaketest
 {
     using Values = std::map<juce::String, float>;
 
@@ -227,12 +227,12 @@ namespace velvox::test::macrobaketest
     }
 }
 
-using namespace velvox::test::macrobaketest;
+using namespace vocalypse::test::macrobaketest;
 
 class MacroBakeTests final : public juce::UnitTest
 {
 public:
-    MacroBakeTests() : juce::UnitTest ("Headliner macro bake", "Velvox") {}
+    MacroBakeTests() : juce::UnitTest ("VOCALYPSE macro bake", "Vocalypse") {}
 
     void runTest() override
     {
@@ -379,8 +379,8 @@ public:
 
     void baselineAgainstOtherBuild()
     {
-        const auto writeDir = juce::SystemStats::getEnvironmentVariable ("VELVOX_MACRO_BASELINE_WRITE", {});
-        const auto readDir = juce::SystemStats::getEnvironmentVariable ("VELVOX_MACRO_BASELINE", {});
+        const auto writeDir = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_MACRO_BASELINE_WRITE", {});
+        const auto readDir = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_MACRO_BASELINE", {});
         if (writeDir.isEmpty() && readDir.isEmpty())
             return;
 

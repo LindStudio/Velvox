@@ -17,7 +17,7 @@
 //   number (3.5, 1)                                  "3,5" in German, "3.5" in English
 //
 // current() is an atomic: the analysis thread may read it, the message thread sets it.
-namespace velvox::i18n
+namespace vocalypse::i18n
 {
     enum class Language { german, english };
 

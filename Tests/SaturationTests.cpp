@@ -9,8 +9,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include <complex>
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::SaturationModule;
 using dsp::SatSettings;
 
@@ -185,7 +185,7 @@ namespace
 class SaturationTests final : public juce::UnitTest
 {
 public:
-    SaturationTests() : juce::UnitTest ("Velvox saturation 0.6", "Velvox") {}
+    SaturationTests() : juce::UnitTest ("Vocalypse saturation 0.6", "Vocalypse") {}
 
     void runTest() override
     {

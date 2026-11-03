@@ -7,11 +7,11 @@
 //   Delay   - echo map: the repeats as bars (L above / R below the centre line, height = level),
 //             the first (or any) echo dragged: x = time, y = feedback
 // The views are public so the tests can drive them like a user.
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Visual / panel for the delay; nullptr for every other module
-    std::unique_ptr<ModuleView> createTimeModuleView (VelvoxAudioProcessor& p, dsp::ModuleId id, int instance);
-    std::unique_ptr<DetailPanel> createTimeModulePanel (VelvoxAudioProcessor& p, dsp::ModuleId id);
+    std::unique_ptr<ModuleView> createTimeModuleView (VocalypseAudioProcessor& p, dsp::ModuleId id, int instance);
+    std::unique_ptr<DetailPanel> createTimeModulePanel (VocalypseAudioProcessor& p, dsp::ModuleId id);
 
     //==========================================================================
     // DELAY: echo map. Drag an echo: horizontally = time (snaps to note values while synced to a host
@@ -21,7 +21,7 @@ namespace velvox::ui
     class EchoMapView final : public ModuleView
     {
     public:
-        EchoMapView (VelvoxAudioProcessor& p, int instance);
+        EchoMapView (VocalypseAudioProcessor& p, int instance);
         ~EchoMapView() override;
 
         void update (const LiveData&) override;
@@ -63,7 +63,7 @@ namespace velvox::ui
         void resetEcho();
         juce::String readout() const;
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         const int instance;
         dsp::DelaySettings settings;
         bool on = false, synced = false, hostSynced = false;

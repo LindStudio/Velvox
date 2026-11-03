@@ -16,12 +16,12 @@
 // Applying the same finding twice therefore never doubles a cut when the module sits after
 // VOCAL CHECK. When it sits before, the controller restarts the analysis after "Anwenden" and
 // blocks a second apply on the stale measurement (VocalCheckController).
-namespace velvox
+namespace vocalypse
 {
     class UndoHistory;
 }
 
-namespace velvox::check
+namespace vocalypse::check
 {
     using ValueLookup = std::function<float (const juce::String& paramId)>;   // real units, full ids
 

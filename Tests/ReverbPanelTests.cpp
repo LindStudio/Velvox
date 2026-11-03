@@ -7,13 +7,13 @@
 #include "DSP/ReverbDepth.h"
 #include "DSP/ReverbModule.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
 {
-    juce::Rectangle<int> panelSize() { return VelvoxAudioProcessorEditor::panelArea().withZeroOrigin(); }
+    juce::Rectangle<int> panelSize() { return VocalypseAudioProcessorEditor::panelArea().withZeroOrigin(); }
 
     juce::String idFor (const char* base, int instance) { return dsp::instanceParamId (base, instance); }
 
@@ -47,7 +47,7 @@ namespace
 class ReverbPanelTests final : public juce::UnitTest
 {
 public:
-    ReverbPanelTests() : juce::UnitTest ("Headliner reverb panel", "Headliner") {}
+    ReverbPanelTests() : juce::UnitTest ("VOCALYPSE reverb panel", "VOCALYPSE") {}
 
     void runTest() override
     {

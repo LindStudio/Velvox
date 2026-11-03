@@ -3,7 +3,7 @@
 #include "Widgets.h"
 #include "../AutoMix/AutoMixController.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // The automatic-mix popup: a glass card over the plugin.
     //

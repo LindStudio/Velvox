@@ -10,7 +10,7 @@
 #include "DSP/Filters.h"
 #include <juce_core/juce_core.h>
 
-namespace velvox::test
+namespace vocalypse::test
 {
     enum class BeatKind
     {

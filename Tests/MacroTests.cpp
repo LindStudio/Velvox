@@ -8,13 +8,13 @@
 #include "Parameters/EqBands.h"
 #include <thread>
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 class MacroTests final : public juce::UnitTest
 {
 public:
-    MacroTests() : juce::UnitTest ("Velvox macros", "Velvox") {}
+    MacroTests() : juce::UnitTest ("Vocalypse macros", "Vocalypse") {}
     void moveTests();
     void simpleSetsModulesTests();
 

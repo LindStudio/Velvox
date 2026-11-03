@@ -6,7 +6,7 @@
 #include <array>
 #include <atomic>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // One band of the multiband mode
     struct SatBand

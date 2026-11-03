@@ -6,11 +6,11 @@
 #include "ValueText.h"
 #include "../DSP/Instances.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
-    // The common module panel frame of Headliner 0.6 (spec 2.4, style A "Grafik zuerst"):
+    // The common module panel frame of VOCALYPSE 0.6 (spec 2.4, style A "Grafik zuerst"):
     //
     //   header     power · S · icon · NAME n · [SEND] ·················· Presets ▾ · Mehr · ?
     //   visual     the module's live picture, as large as possible (+ meters / big controls a panel
@@ -32,7 +32,7 @@ namespace velvox::ui
     class DetailPanel : public juce::Component, public juce::SettableTooltipClient, public gestures::PanelMenuHost
     {
     public:
-        DetailPanel (VelvoxAudioProcessor& p, juce::String title, juce::String subtitle, const char* onParamId);
+        DetailPanel (VocalypseAudioProcessor& p, juce::String title, juce::String subtitle, const char* onParamId);
         ~DetailPanel() override;
 
         void paint (juce::Graphics&) override;
@@ -118,7 +118,7 @@ namespace velvox::ui
         void placeMeter (juce::Component& meter, juce::Rectangle<int> area);
 
         const LiveData* live = nullptr;
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         APVTS& apvts;
 
     private:
@@ -155,6 +155,6 @@ namespace velvox::ui
     };
 
     // Factory: the detail panel for a module or the output stage (id < 0)
-    std::unique_ptr<DetailPanel> createDetailPanel (VelvoxAudioProcessor& p, int moduleIdOrOutput,
+    std::unique_ptr<DetailPanel> createDetailPanel (VocalypseAudioProcessor& p, int moduleIdOrOutput,
                                                     const SpectrumSource* spectrum = nullptr, const LiveData* live = nullptr);
 }

@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>
 
-namespace velvox
+namespace vocalypse
 {
     // A named set of parameter values in REAL units (dB, Hz, ms, %; bools 0/1;
     // choices as index). Used by factory presets, user presets, the A/B slots
@@ -48,6 +48,7 @@ namespace velvox
         juce::ValueTree toValueTree() const;
         static ParameterSnapshot fromValueTree (const juce::ValueTree& tree);
 
-        static inline const juce::Identifier treeType { "VelvoxPreset" };
+        static inline const juce::Identifier treeType { "VocalypsePreset" };
+        static inline const juce::Identifier legacyTreeType { "VelvoxPreset" };   // presets saved before VOCALYPSE (read only)
     };
 }

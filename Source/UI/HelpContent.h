@@ -7,7 +7,7 @@
 // Offline help: every page is compiled into the plugin (no files, no web), in German and English.
 // Page text uses a tiny markup: "## " starts a heading, "- " a bullet,
 // blank lines separate paragraphs.
-namespace velvox::ui::help
+namespace vocalypse::ui::help
 {
     struct Page
     {

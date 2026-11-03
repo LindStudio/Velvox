@@ -6,8 +6,8 @@
 #include "Parameters/EqBands.h"
 #include "PluginEditor.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 using dsp::EqBandType;
 
@@ -116,7 +116,7 @@ namespace
     std::unique_ptr<ui::EqPanel> eqPanel (Harness& h, int instance)
     {
         auto p = ui::createDetailPanel (h.proc, dsp::selectionCode (ModuleId::eq, instance));
-        p->setBounds (VelvoxAudioProcessorEditor::panelArea().withZeroOrigin());
+        p->setBounds (VocalypseAudioProcessorEditor::panelArea().withZeroOrigin());
         auto* eq = dynamic_cast<ui::EqPanel*> (p.get());
         if (eq != nullptr)
             p.release();
@@ -136,7 +136,7 @@ namespace
 class EqPanelTests final : public juce::UnitTest
 {
 public:
-    EqPanelTests() : juce::UnitTest ("Headliner EQ panel", "Headliner") {}
+    EqPanelTests() : juce::UnitTest ("VOCALYPSE EQ panel", "VOCALYPSE") {}
 
     void runTest() override
     {

@@ -1,26 +1,26 @@
 // Offline verification of the DSP chain, state handling and presets.
-// Runs without a DAW: builds the real VelvoxAudioProcessor and feeds it signals.
+// Runs without a DAW: builds the real VocalypseAudioProcessor and feeds it signals.
 
 #include "TestHelpers.h"
 #include "Presets/FactoryPresets.h"
 #include "ProductInfo.h"
 
-using namespace velvox;
+using namespace vocalypse;
 
-using namespace velvox::test;
+using namespace vocalypse::test;
 
 //==============================================================================
 class ChainTests final : public juce::UnitTest
 {
 public:
-    ChainTests() : juce::UnitTest ("Velvox chain", "Velvox") {}
+    ChainTests() : juce::UnitTest ("Vocalypse chain", "Vocalypse") {}
 
     void runTest() override
     {
         beginTest ("Version: 0.7.0, one place (CMake project VERSION) feeds ProductInfo");
         {
             expectEquals (juce::String (product::versionString), juce::String ("0.7.0"));
-            expectEquals (juce::String (VELVOX_PROJECT_VERSION), juce::String (product::versionString), "CMake project VERSION");
+            expectEquals (juce::String (VOCALYPSE_PROJECT_VERSION), juce::String (product::versionString), "CMake project VERSION");
         }
 
         beginTest ("Neutral settings are a pure (latency-delayed) pass-through");
@@ -381,7 +381,7 @@ public:
 class StateTests final : public juce::UnitTest
 {
 public:
-    StateTests() : juce::UnitTest ("Velvox state & presets", "Velvox") {}
+    StateTests() : juce::UnitTest ("Vocalypse state & presets", "Vocalypse") {}
 
     void runTest() override
     {
@@ -427,7 +427,7 @@ public:
         {
             Harness h;
             const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                 .getChildFile ("VelvoxTestPresets_" + juce::String (juce::Random::getSystemRandom().nextInt (1000000)));
+                                 .getChildFile ("VocalypseTestPresets_" + juce::String (juce::Random::getSystemRandom().nextInt (1000000)));
             PresetManager pm (h.proc.getState(), dir);
 
             h.set (pid::compThreshold, -42.0f);

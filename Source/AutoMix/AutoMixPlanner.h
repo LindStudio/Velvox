@@ -8,7 +8,7 @@
 #include <map>
 #include <set>
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     // One processing step of the automatic mix, as shown to the user.
     struct Decision

@@ -4,7 +4,7 @@
 #include "MixTarget.h"
 #include <optional>
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     // How far a statement can be trusted.
     //  measured - a direct measurement with enough material (level, peaks, clipping)

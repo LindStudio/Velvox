@@ -7,7 +7,7 @@
 #include "DSP/EqDesign.h"
 #include "DSP/EqualizerModule.h"
 
-namespace velvox::test::eq
+namespace vocalypse::test::eq
 {
     using dsp::EqBand;
     using dsp::EqBandType;

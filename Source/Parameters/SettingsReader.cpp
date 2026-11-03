@@ -1,6 +1,6 @@
 #include "SettingsReader.h"
 
-namespace velvox
+namespace vocalypse
 {
     void SettingsReader::bind (const Lookup& lookup)
     {

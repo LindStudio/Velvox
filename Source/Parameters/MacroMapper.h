@@ -3,7 +3,7 @@
 #include "MacroBake.h"
 #include <array>
 
-namespace velvox
+namespace vocalypse
 {
     // 0.6.1 (feedback item 2): the Simple sliders SET the modules. The six macro parameters hold the
     // sliders' positions (0..100 %) and never reach the audio path; every change of a position is

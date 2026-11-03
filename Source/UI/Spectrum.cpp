@@ -1,6 +1,6 @@
 #include "Spectrum.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     SpectrumSource::SpectrumSource (dsp::SampleTap& inputTap, dsp::SampleTap& outputTap)
         : scratch ((size_t) dsp::SampleTap::capacity), in (inputTap), out (outputTap)

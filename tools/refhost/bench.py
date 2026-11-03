@@ -1,5 +1,5 @@
-"""Module bench: renders dry vocals and test signals through one Headliner module and its reference plugins at
-matched settings (HeadlinerRefHost), level-matches, measures (qmetrics) and reports per metric with a verdict.
+"""Module bench: renders dry vocals and test signals through one VOCALYPSE module and its reference plugins at
+matched settings (VocalypseRefHost), level-matches, measures (qmetrics) and reports per metric with a verdict.
 
     python -I tools/refhost/bench.py <module>|all [--out DIR] [--clips N] [--no-ref] [--jobs N]
 
@@ -27,9 +27,9 @@ import signals as S  # noqa: E402
 
 FS = S.FS
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-HOST = os.environ.get("REFHOST_EXE", os.path.join(REPO, "build", "HeadlinerRefHost_artefacts", "Release", "HeadlinerRefHost.exe"))
+HOST = os.environ.get("REFHOST_EXE", os.path.join(REPO, "build", "VocalypseRefHost_artefacts", "Release", "VocalypseRefHost.exe"))
 DEFAULT_OUT = r"C:\Users\jakob\dev\velvox-bench\2026-10-25\modules"
-HEADLINER = "Headliner"
+VOCALYPSE = "VOCALYPSE"
 BLOCK = 512
 PREROLL = 0.25   # seconds of silence before every input (parameter smoothing / engine switches settle, as in a DAW)
 
@@ -38,7 +38,7 @@ METRICS = {
     "resp_max_dev_db": ("lower", 0.5, "dB", "max |response - analog prototype|, 20 Hz-20 kHz"),
     "resp_rms_dev_db": ("lower", 0.2, "dB", "RMS response deviation from the analog prototype"),
     "resp_hf_max_dev_db": ("lower", 0.5, "dB", "max deviation above 10 kHz (cramping)"),
-    "resp_vs_ref_max_db": ("lower", 0.5, "dB", "max |Headliner - reference| response (Headliner row only)"),
+    "resp_vs_ref_max_db": ("lower", 0.5, "dB", "max |VOCALYPSE - reference| response (VOCALYPSE row only)"),
     "cramp_dev_db": ("lower", 0.5, "dB", "max |bell at 15 kHz - same bell at 1.5 kHz shifted x10| (cramping)"),
     "curve_dev_db": ("lower", 1.0, "dB", "max deviation of the static curve from the ideal soft-knee curve"),
     "ratio_measured": ("match", 0.5, ":1", "ratio from the top of the static curve"),
@@ -99,8 +99,8 @@ METRICS = {
     "edge_splatter_db": ("lower", 0.0, "dB", "energy above 5 kHz with a 1 kHz tone (clicks at gate edges)"),
     "gate_depth_db": ("lower", 0.0, "dB", "closed-gate level relative to open"),
     "null_vs_input_db": ("lower", 0.0, "dB", "residual output - input"),
-    "mix0_null_db": ("lower", 0.0, "dB", "residual vs dry at mix 0 (Headliner)"),
-    "off_null_db": ("lower", 0.0, "dB", "residual vs dry with the module switched off (Headliner)"),
+    "mix0_null_db": ("lower", 0.0, "dB", "residual vs dry at mix 0 (VOCALYPSE)"),
+    "off_null_db": ("lower", 0.0, "dB", "residual vs dry with the module switched off (VOCALYPSE)"),
     "cpu_pct": ("lower", 0.5, "%", "processing time per 512-sample block, share of real time"),
 }
 ABSOLUTE = {"mix0_null_db": -60.0, "off_null_db": -100.0}
@@ -177,8 +177,8 @@ class Side:
 
     def args(self, extra=None):
         a = []
-        if self.kind == "headliner":
-            a += ["--headliner", self.plugin]
+        if self.kind == "vocalypse":
+            a += ["--vocalypse", self.plugin]
             items = dict(self.params)
             items.update(extra or {})
             for k, v in items.items():
@@ -227,7 +227,7 @@ class Ctx:
     # sides for the current case
     def sides(self):
         c = self.case
-        h = Side(HEADLINER, "headliner", self.module.key, params=list(c.headliner.items()))
+        h = Side(VOCALYPSE, "vocalypse", self.module.key, params=list(c.vocalypse.items()))
         out = [h]
         if self.use_refs:
             only = c.info.get("refs")   # a case may compare against some of the module's references only
@@ -247,7 +247,7 @@ class Ctx:
         q.write_wav(path, x, FS)
         return path
 
-    def render(self, sig, x, tail=0.0, sides=None, headliner_extra=None, ref_extra=None, tag="", raw=False):
+    def render(self, sig, x, tail=0.0, sides=None, vocalypse_extra=None, ref_extra=None, tag="", raw=False):
         """Renders x through every side; returns {side: y} (failed references are recorded and left out)."""
         pre = int(PREROLL * FS)
         xp = np.concatenate([np.zeros((pre,) + np.shape(x)[1:]), x], axis=0)
@@ -257,7 +257,7 @@ class Ctx:
 
         def one(side):
             out = os.path.join(self.raw, f"{self.case.name}__{sig}{tag}__{side.name.replace(' ', '_')}.wav")
-            extra = headliner_extra if side.kind == "headliner" else (ref_extra or {}).get(side.name)
+            extra = vocalypse_extra if side.kind == "vocalypse" else (ref_extra or {}).get(side.name)
             return side, host_render(side, inp, out, tail, extra)
 
         with cf.ThreadPoolExecutor(max_workers=self.jobs) as ex:
@@ -267,13 +267,13 @@ class Ctx:
                     side, (y, info) = fu.result()
                 except RenderError as e:
                     name = str(e).split(":")[0]
-                    if name == HEADLINER:
+                    if name == VOCALYPSE:
                         raise
                     self.ref_errors[name] = str(e)
                     self.log(f"  reference failed: {e}")
                     continue
                 y = q.channels(y)[pre:]
-                if self.case.info.get("wet") == "subtract_dry" and side.kind == "headliner" and not headliner_extra and not raw:
+                if self.case.info.get("wet") == "subtract_dry" and side.kind == "vocalypse" and not vocalypse_extra and not raw:
                     xx = stereo(x)
                     y = y.copy()
                     y[:len(xx)] -= xx[:len(y)]
@@ -290,10 +290,10 @@ class Ctx:
             better, tol = over[0], over[1]
             if len(over) > 2:
                 absolute = over[2]
-        h = safe(values.get(HEADLINER))
-        refs = {k: safe(v) for k, v in values.items() if k != HEADLINER}
+        h = safe(values.get(VOCALYPSE))
+        refs = {k: safe(v) for k, v in values.items() if k != VOCALYPSE}
         primary = next((refs[r.name] for r in self.module.refs if r.name in refs and refs[r.name] is not None), None)
-        rec = {"metric": name, "case": self.case.name, "headliner": h, "refs": refs, "better": better, "tol": tol,
+        rec = {"metric": name, "case": self.case.name, "vocalypse": h, "refs": refs, "better": better, "tol": tol,
                "absolute": absolute, "unit": unit, "desc": desc, "note": note,
                "gap": None if (h is None or primary is None) else h - primary,
                "verdict": verdict(h, primary, better, tol, absolute)}
@@ -348,7 +348,7 @@ def calibrate(ctx: Ctx, case: M.Case):
         x = S.sine(FS, 1000, -12, 2.0) if cal.probe == "thd_1k" else S.load_clip(ctx.clips[0])
         hside = ctx.sides()[0]
         h = ctx.render("calib", x, sides=[hside])
-        target = probe_value(cal.probe, x, h[HEADLINER])
+        target = probe_value(cal.probe, x, h[VOCALYPSE])
         base = list(ref.params) + list(case.refs.get(ref_name, []))
         tried = {}
 
@@ -389,7 +389,7 @@ def calibrate(ctx: Ctx, case: M.Case):
             best = f"{best:g}"
         if best is not None:
             ctx.calibrated.setdefault(case.name, {})[ref_name] = (cal.param, str(best))
-            ctx.log(f"  calibrated {ref_name}: {cal.param}={best} ({cal.probe}: ref {best_v:.2f} vs Headliner {target:.2f})")
+            ctx.log(f"  calibrated {ref_name}: {cal.param}={best} ({cal.probe}: ref {best_v:.2f} vs VOCALYPSE {target:.2f})")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -410,7 +410,7 @@ def proc_eq_response(ctx, case):
         ctx.metric({"max_db": "resp_max_dev_db", "rms_db": "resp_rms_dev_db", "hf_max_db": "resp_hf_max_dev_db"}[key], vals)
     for r in ctx.module.refs:
         if r.name in resp:
-            ctx.metric("resp_vs_ref_max_db", {HEADLINER: q.response_deviation(f, resp[r.name], resp[HEADLINER])["max_db"]},
+            ctx.metric("resp_vs_ref_max_db", {VOCALYPSE: q.response_deviation(f, resp[r.name], resp[VOCALYPSE])["max_db"]},
                        note=f"vs {r.name}")
 
 
@@ -419,8 +419,8 @@ def proc_eq_cramping(ctx, case):
     shape; at 15 kHz it must look the same (shifted by x10 in frequency)."""
     x = S.white_noise(FS, 8.0, -24.0)
     cr = case.info["cramp"]
-    lo = ctx.render("noise", x, headliner_extra=cr["lo"]["headliner"], ref_extra={k: v for k, v in cr["lo"].items()}, tag="_lo")
-    hi = ctx.render("noise", x, headliner_extra=cr["hi"]["headliner"], ref_extra={k: v for k, v in cr["hi"].items()}, tag="_hi")
+    lo = ctx.render("noise", x, vocalypse_extra=cr["lo"]["vocalypse"], ref_extra={k: v for k, v in cr["lo"].items()}, tag="_lo")
+    hi = ctx.render("noise", x, vocalypse_extra=cr["hi"]["vocalypse"], ref_extra={k: v for k, v in cr["hi"].items()}, tag="_hi")
     f_hi = np.geomspace(4000, 20000, 120)
     vals = {}
     for n in hi:
@@ -558,8 +558,8 @@ def proc_deess_vocal(ctx, case):
 
 def proc_deess_inactive_null(ctx, case):
     x = S.load_clip(ctx.clips[0])
-    ys = ctx.render("inactive", x, sides=ctx.sides()[:1], headliner_extra={"deessThreshold": 0})
-    ctx.metric("inactive_null_db", {HEADLINER: q.null_db(ys[HEADLINER][:len(x)], stereo(x))})
+    ys = ctx.render("inactive", x, sides=ctx.sides()[:1], vocalypse_extra={"deessThreshold": 0})
+    ctx.metric("inactive_null_db", {VOCALYPSE: q.null_db(ys[VOCALYPSE][:len(x)], stereo(x))})
 
 
 def proc_resonance_vocal(ctx, case):
@@ -734,10 +734,10 @@ def proc_voice_tracking(ctx, case):
     solo = case.info["solo"]
     derr, cerr, jit = [], [], []
     for i, (d_set, c_set) in enumerate(case.info["voices"]):
-        h_extra = solo[HEADLINER](i)
-        r_extra = {n: f(i) for n, f in solo.items() if n != HEADLINER}
-        yn = ctx.render(f"noise_v{i + 1}", xn, headliner_extra=h_extra, ref_extra=r_extra, tag="_solo")
-        yt = ctx.render(f"sine440_v{i + 1}", xt, headliner_extra=h_extra, ref_extra=r_extra, tag="_solo")
+        h_extra = solo[VOCALYPSE](i)
+        r_extra = {n: f(i) for n, f in solo.items() if n != VOCALYPSE}
+        yn = ctx.render(f"noise_v{i + 1}", xn, vocalypse_extra=h_extra, ref_extra=r_extra, tag="_solo")
+        yt = ctx.render(f"sine440_v{i + 1}", xt, vocalypse_extra=h_extra, ref_extra=r_extra, tag="_solo")
         dd, cc, jj = {}, {}, {}
         for n in yn:
             if n not in yt:
@@ -754,9 +754,9 @@ def proc_voice_tracking(ctx, case):
 def proc_voice_splice(ctx, case):
     xt = S.sine(FS, 440, -12, 6.0)
     solo, sp = case.info["solo"], case.info["splice"]
-    h_extra = dict(solo[HEADLINER](0), **sp[HEADLINER])
-    r_extra = {n: f(0) + sp.get(n, []) for n, f in solo.items() if n != HEADLINER}
-    ys = ctx.render("sine440_splice", xt, headliner_extra=h_extra, ref_extra=r_extra, tag="_solo")
+    h_extra = dict(solo[VOCALYPSE](0), **sp[VOCALYPSE])
+    r_extra = {n: f(0) + sp.get(n, []) for n, f in solo.items() if n != VOCALYPSE}
+    ys = ctx.render("sine440_splice", xt, vocalypse_extra=h_extra, ref_extra=r_extra, tag="_solo")
     ctx.metric("voice_splice_db", {n: _am_roughness(y) for n, y in ys.items()}, note="+30 ct")
 
 
@@ -814,7 +814,7 @@ def proc_delay_ir(ctx, case):
 def proc_dry_leak(ctx, case):
     # short burst; at 100 % wet the output during the burst (before any echo / predelay) must be silent
     x = S.bursts(FS, 1.0, 1.0, 0.010, -12.0)
-    ys = ctx.render("burst", x, tail=0.5, raw=True)   # Headliner raw output (no dry subtraction)
+    ys = ctx.render("burst", x, tail=0.5, raw=True)   # VOCALYPSE raw output (no dry subtraction)
     leak = {}
     for n, y in ys.items():
         m = q.channels(y)
@@ -891,7 +891,7 @@ def proc_gate_tone(ctx, case):
 def proc_check_null(ctx, case):
     x = S.load_clip(ctx.clips[0])
     ys = ctx.render(ctx.clips[0].name, x, sides=ctx.sides()[:1])
-    ctx.metric("null_vs_input_db", {HEADLINER: q.null_db(ys[HEADLINER][:len(x)], stereo(x))})
+    ctx.metric("null_vs_input_db", {VOCALYPSE: q.null_db(ys[VOCALYPSE][:len(x)], stereo(x))})
 
 
 def proc_nulls(ctx, case):
@@ -901,12 +901,12 @@ def proc_nulls(ctx, case):
     on_param = {"eq": "eqOn", "comp": "compOn", "deess": "deessOn", "sat": "satOn", "doubler": "doublerOn", "pitch": "pitchOn",
                 "delay": "delayOn", "reverb": "reverbOn", "chop": "chopOn", "pulse": "pulseOn", "smash": "smashOn",
                 "choir": "choirOn", "smooth": "smoothOn", "check": "checkOn", "ride": "rideOn"}[from_key]
-    lat = ctx.latency.get(HEADLINER, 0)
+    lat = ctx.latency.get(VOCALYPSE, 0)
     if ctx.module.mix_param:
-        y = ctx.render("mix0", x, sides=h, headliner_extra={ctx.module.mix_param: 0}, tag="_mix0")[HEADLINER]
-        ctx.metric("mix0_null_db", {HEADLINER: q.null_db(y[:len(x)], stereo(x))}, note=f"latency {lat}")
-    y = ctx.render("off", x, sides=h, headliner_extra={on_param: 0}, tag="_off")[HEADLINER]
-    ctx.metric("off_null_db", {HEADLINER: q.null_db(y[:len(x)], stereo(x))})
+        y = ctx.render("mix0", x, sides=h, vocalypse_extra={ctx.module.mix_param: 0}, tag="_mix0")[VOCALYPSE]
+        ctx.metric("mix0_null_db", {VOCALYPSE: q.null_db(y[:len(x)], stereo(x))}, note=f"latency {lat}")
+    y = ctx.render("off", x, sides=h, vocalypse_extra={on_param: 0}, tag="_off")[VOCALYPSE]
+    ctx.metric("off_null_db", {VOCALYPSE: q.null_db(y[:len(x)], stereo(x))})
 
 
 def proc_cpu(ctx, case):
@@ -983,7 +983,7 @@ def markdown(res):
     if res["calibrated"]:
         lines += ["Calibrated: " + "; ".join(f"{c}: " + ", ".join(f"{r} {kv}" for r, kv in d.items())
                                               for c, d in res["calibrated"].items()), ""]
-    head = "| case | metric | Headliner | " + " | ".join(refs) + " | gap | tolerance | verdict |"
+    head = "| case | metric | VOCALYPSE | " + " | ".join(refs) + " | gap | tolerance | verdict |"
     lines += [head, "|" + "---|" * (len(refs) + 6)]
     for m in res["metrics"]:
         tol = ("≤" if m["better"] == "lower" else "≥" if m["better"] == "higher" else "±")
@@ -996,7 +996,7 @@ def markdown(res):
         name = f"{m['metric']} ({m['unit']})" if m["unit"] else m["metric"]
         if m["note"]:
             name += f" – {m['note']}"
-        row = [m["case"], name, fmt(m["headliner"])] + [fmt(m["refs"].get(r)) for r in refs] + \
+        row = [m["case"], name, fmt(m["vocalypse"])] + [fmt(m["refs"].get(r)) for r in refs] + \
               [fmt(m["gap"]), tolstr, m["verdict"]]
         lines.append("| " + " | ".join(row) + " |")
     return "\n".join(lines) + "\n"
@@ -1025,7 +1025,7 @@ def main(argv=None):
     ap.add_argument("module", help="module key (" + ", ".join(M.MODULES) + ") or 'all'")
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--clips", type=int, default=len(S.CLIPS), help="use the first N clips")
-    ap.add_argument("--no-ref", action="store_true", help="Headliner only (quick re-measure)")
+    ap.add_argument("--no-ref", action="store_true", help="VOCALYPSE only (quick re-measure)")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--update-doc", action="store_true",
                     help="replace this module's table in docs/QUALITY_BASELINE.md (between its BEGIN/END markers)")
@@ -1035,7 +1035,7 @@ def main(argv=None):
     except AttributeError:
         pass
     if not os.path.exists(HOST):
-        sys.exit(f"HeadlinerRefHost not found at {HOST} (build target HeadlinerRefHost or set REFHOST_EXE)")
+        sys.exit(f"VocalypseRefHost not found at {HOST} (build target VocalypseRefHost or set REFHOST_EXE)")
     keys = list(M.MODULES) if a.module == "all" else [a.module]
     summary = []
     for k in keys:

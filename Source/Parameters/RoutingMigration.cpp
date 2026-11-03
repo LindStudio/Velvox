@@ -1,7 +1,7 @@
 #include "RoutingMigration.h"
 #include "SettingsReader.h"
 
-namespace velvox
+namespace vocalypse
 {
     bool isLegacyRoutingString (const juce::String& text)
     {

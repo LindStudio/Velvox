@@ -13,9 +13,9 @@
 #include "StateKeys.h"
 #include "Text/I18n.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::dsp;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::dsp;
 
 namespace
 {
@@ -90,7 +90,7 @@ namespace
 class CheckPanelTests final : public juce::UnitTest
 {
 public:
-    CheckPanelTests() : juce::UnitTest ("Headliner Vocal Check view", "Headliner") {}
+    CheckPanelTests() : juce::UnitTest ("VOCALYPSE Vocal Check view", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -464,7 +464,7 @@ public:
         }
     }
 
-    static VelvoxAudioProcessorEditor& asVelvox (juce::AudioProcessorEditor& e) { return dynamic_cast<VelvoxAudioProcessorEditor&> (e); }
+    static VocalypseAudioProcessorEditor& asVocalypse (juce::AudioProcessorEditor& e) { return dynamic_cast<VocalypseAudioProcessorEditor&> (e); }
 
     void shell()
     {
@@ -477,13 +477,13 @@ public:
                 h.proc.getState().state.setProperty (statekeys::uiMode, mode, nullptr);
                 h.proc.getState().state.setProperty (statekeys::uiTab, "check", nullptr);
                 std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-                auto& ed = asVelvox (*e);
-                expect (ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck);
+                auto& ed = asVocalypse (*e);
+                expect (ed.getTab() == VocalypseAudioProcessorEditor::Tab::vocalCheck);
                 expect (ed.getCheckView().isVisible(), juce::String ("check view visible in ") + mode);
                 expect (ed.getDetail() == nullptr, "no module panel on the tab");
                 expect (! ed.getSimpleView().isVisible() && ! ed.getChainView().isVisible());
-                expect (ed.getCheckView().getBounds() == VelvoxAudioProcessorEditor::bodyArea(), ed.getCheckView().getBounds().toString());
-                ed.setTab (VelvoxAudioProcessorEditor::Tab::autoMix);
+                expect (ed.getCheckView().getBounds() == VocalypseAudioProcessorEditor::bodyArea(), ed.getCheckView().getBounds().toString());
+                ed.setTab (VocalypseAudioProcessorEditor::Tab::autoMix);
                 expect (! ed.getCheckView().isVisible(), "hidden on AUTO MIX");
             }
         }
@@ -497,7 +497,7 @@ public:
             h.proc.getState().state.setProperty (statekeys::uiMode, "beginner", nullptr);
             h.proc.getState().state.setProperty (statekeys::uiTab, "automix", nullptr);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             auto& simple = ed.getSimpleView();
             auto& vc = h.proc.getVocalCheck();
 
@@ -538,12 +538,12 @@ public:
             {
                 click (simple.getTipShowButton());
                 runLoop (30);
-                expect (ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "Zeig mir opens the tab");
+                expect (ed.getTab() == VocalypseAudioProcessorEditor::Tab::vocalCheck, "Zeig mir opens the tab");
             }
-            ed.setTab (VelvoxAudioProcessorEditor::Tab::autoMix);
+            ed.setTab (VocalypseAudioProcessorEditor::Tab::autoMix);
             click (chip);
             runLoop (30);
-            expect (ed.getTab() == VelvoxAudioProcessorEditor::Tab::vocalCheck, "the badge opens the tab");
+            expect (ed.getTab() == VocalypseAudioProcessorEditor::Tab::vocalCheck, "the badge opens the tab");
         }
 
         beginTest ("Shell: Ctrl+Z after a tile's Anwenden undoes the whole fix");
@@ -552,7 +552,7 @@ public:
             analysedTake (h);
             h.proc.getState().state.setProperty (statekeys::uiTab, "check", nullptr);
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = asVelvox (*e);
+            auto& ed = asVocalypse (*e);
             auto& view = ed.getCheckView();
             view.setAnimationsEnabled (false);
             view.refreshNow();

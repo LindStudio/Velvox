@@ -5,7 +5,7 @@
 #include <array>
 #include <cstdint>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // How a module instance applies its Mix (0.6, spec Q1).
     //  legacy:     the law of 0.1-0.5. Delay / Reverb inserts, Doubler and Smash ADD their wet

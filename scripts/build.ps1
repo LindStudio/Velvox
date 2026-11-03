@@ -1,10 +1,10 @@
 <#
-  Configures and builds Headliner (CMake target "Velvox") (VST3 + Standalone + test runner) and runs the tests.
+  Configures and builds VOCALYPSE (CMake target "Vocalypse") (VST3 + Standalone + test runner) and runs the tests.
 
   Usage (PowerShell):
     .\scripts\build.ps1                       # Release build + tests
     .\scripts\build.ps1 -Config Debug
-    .\scripts\build.ps1 -JuceDir D:\libs\JUCE -BuildDir D:\builds\velvox
+    .\scripts\build.ps1 -JuceDir D:\libs\JUCE -BuildDir D:\builds\vocalypse
 
   The build directory defaults to a local folder OUTSIDE this (Google-Drive-synced)
   project folder, so the cloud sync never touches thousands of build files.
@@ -47,10 +47,10 @@ if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 & $cmake --build $BuildDir --config $Config --parallel
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
-$vst3 = Join-Path $BuildDir "Velvox_artefacts\$Config\VST3\Headliner.vst3"
+$vst3 = Join-Path $BuildDir "Vocalypse_artefacts\$Config\VST3\VOCALYPSE.vst3"
 Write-Host "`nVST3 bundle: $vst3"
 
 if (-not $SkipTests) {
-    & (Join-Path $BuildDir "VelvoxTests_artefacts\$Config\VelvoxTests.exe")
+    & (Join-Path $BuildDir "VocalypseTests_artefacts\$Config\VocalypseTests.exe")
     if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
 }

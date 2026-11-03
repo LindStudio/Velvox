@@ -15,9 +15,9 @@
 #include "Parameters/EqBands.h"
 #include "Text/I18n.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::dsp;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::dsp;
 
 namespace
 {
@@ -99,7 +99,7 @@ namespace
 class VocalCheckFixTests final : public juce::UnitTest
 {
 public:
-    VocalCheckFixTests() : juce::UnitTest ("Headliner Vocal Check 0.6", "Headliner") {}
+    VocalCheckFixTests() : juce::UnitTest ("VOCALYPSE Vocal Check 0.6", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -312,7 +312,7 @@ public:
             expectEquals (t.lowMid.lo, -7.0f);
             expectEquals (t.lowMid.hi, 0.0f);
             // 2026-10-29: the windows calibrated on finished professional vocals (AutoEq.h)
-            using namespace velvox::automix;
+            using namespace vocalypse::automix;
             expectEquals (t.top.lo, autoeq::topWindow.lo);
             expectEquals (t.top.hi, autoeq::topWindow.hi);
             expectEquals (t.air.lo, autoeq::airWindow.lo);
@@ -856,7 +856,7 @@ public:
         {
             std::vector<float> values;
             juce::String routing;
-            static FullState of (VelvoxAudioProcessor& p)
+            static FullState of (VocalypseAudioProcessor& p)
             {
                 FullState s;
                 for (auto* param : p.getParameters())

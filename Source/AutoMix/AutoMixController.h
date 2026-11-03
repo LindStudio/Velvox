@@ -5,7 +5,7 @@
 #include "../Presets/ParameterSnapshot.h"
 #include <optional>
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     // What the UI shows about the last automatic mix (persisted with the project)
     struct MixReport

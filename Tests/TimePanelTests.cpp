@@ -7,8 +7,8 @@
 #include "UI/ChainView.h"
 #include "UI/HelpContent.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -79,7 +79,7 @@ namespace
 class TimePanelTests final : public juce::UnitTest
 {
 public:
-    TimePanelTests() : juce::UnitTest ("Headliner time panels", "Headliner") {}
+    TimePanelTests() : juce::UnitTest ("VOCALYPSE time panels", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -307,7 +307,7 @@ private:
         {
             Harness h;
             auto panel = ui::createDetailPanel (h.proc, (int) ModuleId::delay);
-            panel->setBounds (VelvoxAudioProcessorEditor::panelArea().withZeroOrigin());
+            panel->setBounds (VocalypseAudioProcessorEditor::panelArea().withZeroOrigin());
             expect (dynamic_cast<ui::EchoMapView*> (panel->getChildren().getFirst()) != nullptr
                         || findIn<ui::Knob> (*panel, pid::delayTime) != nullptr, "panel built");
             bool hasMap = false;

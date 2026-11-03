@@ -1,7 +1,7 @@
 #include "DeEsserModule.h"
 #include "CompressorModule.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

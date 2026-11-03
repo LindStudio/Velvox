@@ -4,7 +4,7 @@
 #include "../Parameters/EqBands.h"
 #include "ReportText.h"
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     namespace
     {
@@ -98,7 +98,7 @@ namespace velvox::automix
     {
     public:
         Worker (CapturedAudio a, std::map<juce::String, float> values, MixIntent mixIntent)
-            : juce::Thread ("Headliner auto mix"), audio (std::move (a)), current (std::move (values)), intent (mixIntent) {}
+            : juce::Thread ("VOCALYPSE auto mix"), audio (std::move (a)), current (std::move (values)), intent (mixIntent) {}
 
         ~Worker() override { stopThread (10000); }
 
@@ -314,7 +314,7 @@ namespace velvox::automix
         apvts.state.setProperty (statekeys::routing, result.plan.routing.toString(), nullptr);
         if (onApplying) onApplying (false, true);
 
-        mixSnapshot = ParameterSnapshot::capture (apvts, "Headliner Auto-Mix");
+        mixSnapshot = ParameterSnapshot::capture (apvts, "VOCALYPSE Auto-Mix");
 
         // Report for the UI (only what was really set up)
         MixReport r;

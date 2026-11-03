@@ -6,8 +6,8 @@
 #include "SyntheticVocal.h"
 #include "DSP/DenoiseModule.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::DenoiseModule;
 
 namespace
@@ -85,7 +85,7 @@ namespace
 class DenoiseTests final : public juce::UnitTest
 {
 public:
-    DenoiseTests() : juce::UnitTest ("Raumrauschen (denoise)", "Headliner") {}
+    DenoiseTests() : juce::UnitTest ("Raumrauschen (denoise)", "VOCALYPSE") {}
 
     void runTest() override
     {

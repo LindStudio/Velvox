@@ -2,7 +2,7 @@
 #include "AutoMixEngine.h"
 #include "AutoEq.h"
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     namespace
     {

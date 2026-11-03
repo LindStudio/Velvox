@@ -6,7 +6,7 @@
 #include "AutoMix/MixTarget.h"
 #include <functional>
 
-namespace velvox::test
+namespace vocalypse::test
 {
     inline automix::VocalProfile onTarget (automix::VocalProfile base, const automix::MixTarget& t, const std::function<float (float)>& delta)
     {

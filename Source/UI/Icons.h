@@ -2,7 +2,7 @@
 
 #include "Theme.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Small line icon per module (and the output stage for id < 0), drawn into
     // `r` with a 1.5 px stroke - same visual language as the rest of the UI.

@@ -5,7 +5,7 @@
 #include "../DSP/Routing.h"
 #include <optional>
 
-namespace velvox
+namespace vocalypse
 {
     // Machine-readable description of one parameter. This table is the single
     // source of truth for the APVTS layout, preset validation and (later) for a

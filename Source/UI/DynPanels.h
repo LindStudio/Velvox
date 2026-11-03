@@ -5,7 +5,7 @@
 #include "../DSP/DynamicsFeed.h"
 #include "../DSP/RideModule.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
 // The 0.6 dynamics panels on the common frame (spec 5.2, 5.3, 5.5, 5.7):
 //   Compressor  "Comp 1 · Pro-C-Stil"       scrolling input / output / gain reduction + draggable transfer curve
@@ -13,14 +13,14 @@ class VelvoxAudioProcessor;
 //   Vocal Smash "Smash 1 · Riesen-Regler"   big SMASH control, gain-reduction column, Blend / Tone / Output
 //   Level Ride  "Ride 2 · Wörter-Balken"    bars per word (before grey, after cyan), draggable target line, big Ausgleich
 // Every visual drains its module's lock-free UI feed (DSP/DynamicsFeed.h, RideModule::segments) on the message thread.
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace dynedit
     {
         // The parameter ID of `base` for an instance ("compThreshold" -> "compThreshold_2")
         juce::String paramId (const char* base, int instance);
         // Current value in real units (0 when the parameter does not exist)
-        float value (VelvoxAudioProcessor& proc, const juce::String& id);
+        float value (VocalypseAudioProcessor& proc, const juce::String& id);
     }
 
     //==========================================================================
@@ -32,7 +32,7 @@ namespace velvox::ui
     class HandleGraph : public ModuleView
     {
     public:
-        HandleGraph (VelvoxAudioProcessor& proc, int instance, dsp::ModuleId module);
+        HandleGraph (VocalypseAudioProcessor& proc, int instance, dsp::ModuleId module);
         ~HandleGraph() override;
 
         void mouseMove (const juce::MouseEvent&) override;
@@ -88,7 +88,7 @@ namespace velvox::ui
         void writeParam (const juce::String& id, float realValue);   // inside the open gesture
         void stepParam (const juce::String& id, float realValue);    // one complete gesture, clamped to the range
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         const int instance;
         const juce::Colour hue;
 
@@ -117,7 +117,7 @@ namespace velvox::ui
     class CompGraph final : public HandleGraph
     {
     public:
-        CompGraph (VelvoxAudioProcessor& proc, int instance);
+        CompGraph (VocalypseAudioProcessor& proc, int instance);
 
         static constexpr int maxFrames = 1024;          // 5 ms frames: about 5 s
         static constexpr int framesShown = 800;         // 4 s across the level display
@@ -182,7 +182,7 @@ namespace velvox::ui
     class DeEssGraph final : public HandleGraph
     {
     public:
-        DeEssGraph (VelvoxAudioProcessor& proc, int instance);
+        DeEssGraph (VocalypseAudioProcessor& proc, int instance);
 
         static constexpr float topDb = 0.0f, bottomDb = -90.0f;   // spectrum axis
         static constexpr float reductionScaleDb = 24.0f;          // the reduction bar: 0 .. 24 dB over reductionDepth of the plot
@@ -248,7 +248,7 @@ namespace velvox::ui
     class SmashStage final : public ModuleView
     {
     public:
-        SmashStage (VelvoxAudioProcessor& proc, int instance);
+        SmashStage (VocalypseAudioProcessor& proc, int instance);
 
         static constexpr int maxFrames = 1024, framesShown = 800;
         static constexpr float scaleDb = 24.0f;
@@ -269,7 +269,7 @@ namespace velvox::ui
     private:
         void rebuild();
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         const int instance;
         bool on = true;
         std::array<float, maxFrames> grFrames {};
@@ -291,7 +291,7 @@ namespace velvox::ui
     class RideBars final : public HandleGraph
     {
     public:
-        RideBars (VelvoxAudioProcessor& proc, int instance);
+        RideBars (VocalypseAudioProcessor& proc, int instance);
 
         static constexpr int maxSegments = 128;
         static constexpr double secondsShown = 8.0;
@@ -350,6 +350,6 @@ namespace velvox::ui
     };
 
     //==========================================================================
-    std::unique_ptr<ModuleView> createDynView (VelvoxAudioProcessor& proc, dsp::ModuleId module, int instance);
-    std::unique_ptr<DetailPanel> createDynPanel (VelvoxAudioProcessor& proc, dsp::ModuleId module);
+    std::unique_ptr<ModuleView> createDynView (VocalypseAudioProcessor& proc, dsp::ModuleId module, int instance);
+    std::unique_ptr<DetailPanel> createDynPanel (VocalypseAudioProcessor& proc, dsp::ModuleId module);
 }

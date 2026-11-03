@@ -6,8 +6,8 @@
 // Per-user preferences that belong to the person, not to a project:
 // whether the first-start tutorial was finished, and a personal default
 // module layout. Stored in the user's application-data folder
-// (Velvox/Velvox.settings). Message thread only, never touched by audio.
-namespace velvox::ui::settings
+// (Vocalypse/Vocalypse.settings). Message thread only, never touched by audio.
+namespace vocalypse::ui::settings
 {
     inline constexpr const char* tutorialDone  = "tutorialDone";   // bool
     inline constexpr const char* myLayoutOrder = "myLayoutOrder";  // dsp::Routing string

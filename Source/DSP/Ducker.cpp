@@ -1,6 +1,6 @@
 #include "Ducker.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     void Ducker::prepare (double sampleRate)
     {

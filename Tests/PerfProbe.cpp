@@ -1,4 +1,4 @@
-// Diagnostic (run with: VelvoxTests --test "perf probe"): does anything a test leaves
+// Diagnostic (run with: VocalypseTests --test "perf probe"): does anything a test leaves
 // behind slow down later processing in the same process? Measures the worst-case chain,
 // runs one suspect action, measures again.
 
@@ -6,8 +6,8 @@
 #include "DSP/ReverbModule.h"
 #include "DSP/DelayModule.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 namespace
 {

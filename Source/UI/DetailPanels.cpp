@@ -19,7 +19,7 @@
 #include "../Text/I18n.h"
 #include "../Text/ParamText.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
 
@@ -142,7 +142,7 @@ namespace velvox::ui
     };
 
     //==========================================================================
-    DetailPanel::DetailPanel (VelvoxAudioProcessor& p, juce::String t, juce::String s, const char* onId)
+    DetailPanel::DetailPanel (VocalypseAudioProcessor& p, juce::String t, juce::String s, const char* onId)
         : proc (p), apvts (p.getState()), title (std::move (t)), subtitle (std::move (s)), instance (constructionInstance)
     {
         if (onId != nullptr)
@@ -715,7 +715,7 @@ namespace velvox::ui
         class OutputPanel final : public DetailPanel
         {
         public:
-            explicit OutputPanel (VelvoxAudioProcessor& p)
+            explicit OutputPanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "Output", help::shortDescription (-1), nullptr)
             {
                 // Labels by position (Off, Bypass match, Auto gain)
@@ -808,7 +808,7 @@ namespace velvox::ui
 
     }
 
-    std::unique_ptr<DetailPanel> createDetailPanel (VelvoxAudioProcessor& p, int id, const SpectrumSource* spectrum, const LiveData* live)
+    std::unique_ptr<DetailPanel> createDetailPanel (VocalypseAudioProcessor& p, int id, const SpectrumSource* spectrum, const LiveData* live)
     {
         std::unique_ptr<DetailPanel> panel;
         DetailPanel::constructionInstance = id < 0 ? 0 : dsp::selectionInstance (id);

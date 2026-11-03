@@ -6,7 +6,7 @@
 // chain where VOCAL CHECK listens. The "party" ranges are the windows of the auto-mix
 // objective (AutoMix/AutoMixObjective.cpp: calibrated on real vocals and the blind listening
 // tests); the other genres widen them where those styles keep more dynamics or less top.
-namespace velvox::check
+namespace vocalypse::check
 {
     enum class Genre { party = 0, pop, acoustic };   // persisted as the int value
 
@@ -55,7 +55,7 @@ namespace velvox::check
     // Long-term spectrum of a natural dry voice on the analyzer's 1/12-octave grid from 40 Hz
     // (VocalAnalyzer::numBands values, dB, 1/3-octave smoothed, median-normalised over
     // 150 Hz - 8 kHz). Two classes: low voices and high voices (lowest notes above 250 Hz).
-    // Generated from VocalSet train singers by `VelvoxTests --check-template` (VoiceTemplate.h).
+    // Generated from VocalSet train singers by `VocalypseTests --check-template` (VoiceTemplate.h).
     const std::vector<float>& voiceTemplate (bool highVoice);
     // Spread (standard deviation, dB) of the template voices per band
     const std::vector<float>& voiceTemplateSpread (bool highVoice);

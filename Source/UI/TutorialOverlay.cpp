@@ -1,6 +1,6 @@
 #include "TutorialOverlay.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -37,8 +37,8 @@ namespace velvox::ui
               t ("Memphy ist dein Assistent. Er stellt sich kurz vor – hör ihm zu oder klick einfach auf Weiter.",
                  "Memphy is your assistant. He introduces himself - listen, or just click Next.") },
             { "analyse", t ("Vocal analysieren", "Analyze vocal"),
-              t ("Spiel deine Vocal in der DAW ab und klick auf „Vocal analysieren“: Headliner hört einen Abschnitt an und stellt die Module ein. Die Wiedergabe läuft dabei einfach weiter.",
-                 "Play your vocal in the DAW and click \"Analyze vocal\": Headliner listens to a section and sets up the modules. Playback simply keeps running.") },
+              t ("Spiel deine Vocal in der DAW ab und klick auf „Vocal analysieren“: VOCALYPSE hört einen Abschnitt an und stellt die Module ein. Die Wiedergabe läuft dabei einfach weiter.",
+                 "Play your vocal in the DAW and click \"Analyze vocal\": VOCALYPSE listens to a section and sets up the modules. Playback simply keeps running.") },
             { "analyse", t ("Vorher / Nachher", "Before / After"),
               t ("Nach der Analyse vergleicht Vorher / Nachher den Mix mit dem Zustand davor. Details zeigt, was eingestellt wurde und warum.",
                  "After the analysis, Before / After compares the mix with the state before. Details shows what was set up and why.") },
@@ -118,8 +118,8 @@ namespace velvox::ui
         };
         skipButton.onClick = [this] { finish (Outcome::skipped); };
 
-        analyseButton.setTooltip (tr ("Spiel die Vocal in der DAW ab - Headliner hört zu und stellt die Module ein",
-                                      "Play the vocal in your DAW - Headliner listens and sets up the modules"));
+        analyseButton.setTooltip (tr ("Spiel die Vocal in der DAW ab - VOCALYPSE hört zu und stellt die Module ein",
+                                      "Play the vocal in your DAW - VOCALYPSE listens and sets up the modules"));
         startButton.setTooltip (tr ("Ein kurzer Rundgang durch die Oberfläche",
                                     "A short tour of the interface"));
         pluginButton.setTooltip (tr ("Schließen - die Tour startest du jederzeit in den Einstellungen oder der Hilfe",
@@ -327,10 +327,10 @@ namespace velvox::ui
 
             // Text above the language buttons; a divider between language and the start options
             const auto language = germanButton.getBounds().toFloat();
-            layoutBody (i18n::tr ("Headliner mischt deine Vocal: Spiel sie ab, Headliner hört zu und stellt die Module ein. "
+            layoutBody (i18n::tr ("VOCALYPSE mischt deine Vocal: Spiel sie ab, VOCALYPSE hört zu und stellt die Module ein. "
                                   "Danach ist alles frei einstellbar.\n\n"
                                   "Wähle deine Sprache - du kannst sie jederzeit in den Einstellungen ändern.",
-                                  "Headliner mixes your vocal: play it, Headliner listens and sets up the modules. "
+                                  "VOCALYPSE mixes your vocal: play it, VOCALYPSE listens and sets up the modules. "
                                   "Everything stays adjustable afterwards.\n\n"
                                   "Choose your language - you can change it any time in the settings."),
                         r.getWidth(), typesize::lead).draw (g, r.withBottom (language.getY() - (float) space::m));

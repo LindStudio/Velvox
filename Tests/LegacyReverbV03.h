@@ -1,14 +1,14 @@
 #pragma once
 
 // The reverb of version 0.3 (8-line FDN, Room / Plate), kept ONLY as a baseline for
-// before/after measurements (VelvoxTests --fxrender). Never used by the plugin.
+// before/after measurements (VocalypseTests --fxrender). Never used by the plugin.
 
 #include "DSP/ReverbModule.h"
 
 
-namespace velvox::legacy
+namespace vocalypse::legacy
 {
-    using namespace velvox::dsp;
+    using namespace vocalypse::dsp;
     
     // Algorithmic reverb: pre-delay -> input low cut -> 4 series all-pass
     // diffusers -> 8 line feedback delay network (orthogonal Hadamard mixing,
@@ -87,9 +87,9 @@ namespace velvox::legacy
 }
 
 
-namespace velvox::legacy
+namespace vocalypse::legacy
 {
-    using namespace velvox::dsp;
+    using namespace vocalypse::dsp;
     namespace v03detail
     {
         constexpr float twoPi = 6.28318530718f;

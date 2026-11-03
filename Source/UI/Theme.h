@@ -4,16 +4,16 @@
 #include "../DSP/Routing.h"
 #include "../Text/I18n.h"
 
-// Visual tokens (v0.5 "headliner" identity, see docs/STYLEGUIDE.md).
+// Visual tokens (v0.5 "vocalypse" identity, see docs/STYLEGUIDE.md).
 // Deep navy canvas, matte cards with a thin slate border, and one light source:
 // the neon spectrum cyan -> blue -> violet -> pink. Every module owns a hue on
 // that spectrum (its icon, power light and dial ring glow in it). Red is
 // reserved for real problems (clipping, phase cancellation).
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace colours
     {
-        // HEADLINER VOCAL design system (docs/design/HEADLINER_DESIGN_HANDOFF.md)
+        // VOCALYPSE VOCAL design system (docs/design/VOCALYPSE_DESIGN_HANDOFF.md)
         inline const juce::Colour windowBg   { 0xff05060a };   // plugin background
         inline const juce::Colour panelInset { 0xff040509 };   // visualizer boxes (border borderInset, radius 8)
         inline const juce::Colour borderInset { 0xff13161e };
@@ -268,7 +268,7 @@ namespace velvox::ui
     // Small captions (semibold, light tracking)
     juce::Font caps (float height);
 
-    // HEADLINER brand artwork (transparent PNGs, cached by juce::ImageCache)
+    // VOCALYPSE brand artwork (transparent PNGs, cached by juce::ImageCache)
     enum class Brand { icon, wordmark, logo };
     juce::Image brandImage (Brand which);
     // Draws the artwork fitted into `area` (keeps the aspect ratio)

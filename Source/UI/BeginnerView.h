@@ -3,9 +3,9 @@
 #include "Widgets.h"
 #include "Spectrum.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Beginner mode: a large live spectrum, six macros (their plain-language
     // descriptions appear on hover), and live hints about level, clipping, mono compatibility
@@ -13,7 +13,7 @@ namespace velvox::ui
     class BeginnerView final : public juce::Component
     {
     public:
-        explicit BeginnerView (VelvoxAudioProcessor& processor);
+        explicit BeginnerView (VocalypseAudioProcessor& processor);
 
         void paint (juce::Graphics&) override;
         void resized() override;

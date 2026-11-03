@@ -1,7 +1,7 @@
 #include "CheckTargets.h"
 #include "VoiceTemplate.h"
 
-namespace velvox::check
+namespace vocalypse::check
 {
     CheckTargets CheckTargets::make (Genre genre, bool highVoice, bool spoken)
     {

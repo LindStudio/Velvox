@@ -7,7 +7,7 @@
 // solo, a second click ends it; pressing longer than holdMs plays it only while held. A monitoring
 // state: the button never touches a parameter or the undo history - its owner sends the request to
 // the DSP (an atomic) and shows the DSP's state with setActive().
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Headphones stroked into `r` (band + two cups); filled cups while active
     inline void drawHeadphones (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour c, bool active, float thickness = 1.5f)

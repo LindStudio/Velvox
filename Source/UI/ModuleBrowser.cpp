@@ -4,7 +4,7 @@
 #include "Icons.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
 
@@ -102,7 +102,7 @@ namespace velvox::ui
         return i18n::tr (german, english);
     }
 
-    ModuleBrowser::ModuleBrowser (VelvoxAudioProcessor& p) : proc (p)
+    ModuleBrowser::ModuleBrowser (VocalypseAudioProcessor& p) : proc (p)
     {
         setWantsKeyboardFocus (true);
         search = std::make_unique<SearchField> (*this);

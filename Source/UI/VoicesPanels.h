@@ -4,18 +4,18 @@
 #include "DetailPanels.h"
 #include "../DSP/DoublerModule.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
 // The voice panel of 0.6 (spec 5.8) on the common frame (Choir was removed in 0.7):
 //   Doubler - "like Waves Doubler": voice mode Classic / 2 / 4, a stage strip with every voice as a dot
 //             (x = pan, y = gain, draggable; live wobble from the engine) and one compact row of value
 //             fields per voice (on, delay, detune, gain, pan)
 // The views are public so the tests can drive them like a user.
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Visual / panel for the doubler; nullptr for every other module
-    std::unique_ptr<ModuleView> createVoicesModuleView (VelvoxAudioProcessor& p, dsp::ModuleId id, int instance);
-    std::unique_ptr<DetailPanel> createVoicesModulePanel (VelvoxAudioProcessor& p, dsp::ModuleId id);
+    std::unique_ptr<ModuleView> createVoicesModuleView (VocalypseAudioProcessor& p, dsp::ModuleId id, int instance);
+    std::unique_ptr<DetailPanel> createVoicesModulePanel (VocalypseAudioProcessor& p, dsp::ModuleId id);
 
     //==========================================================================
     // Doubler voice edits (message thread). `instance` 0..1, `voice` 0..3. Every complete operation is ONE
@@ -34,40 +34,40 @@ namespace velvox::ui
             float delayMs = 14.0f, detuneCents = 0.0f, gainDb = 0.0f, panPercent = 0.0f;
         };
 
-        int mode (VelvoxAudioProcessor&, int instance);         // 0 Classic, 1 "2", 2 "4"
-        int voiceCount (VelvoxAudioProcessor&, int instance);   // voices of the mode: 2 or 4
-        VoiceValues voice (VelvoxAudioProcessor&, int instance, int voice);   // Classic: the linked values
+        int mode (VocalypseAudioProcessor&, int instance);         // 0 Classic, 1 "2", 2 "4"
+        int voiceCount (VocalypseAudioProcessor&, int instance);   // voices of the mode: 2 or 4
+        VoiceValues voice (VocalypseAudioProcessor&, int instance, int voice);   // Classic: the linked values
         float value (const VoiceValues&, Field) noexcept;
         juce::String paramId (int instance, int voice, Field);
-        juce::RangedAudioParameter* param (VelvoxAudioProcessor&, int instance, int voice, Field);
+        juce::RangedAudioParameter* param (VocalypseAudioProcessor&, int instance, int voice, Field);
         juce::String valueText (Field, float value);              // "14.0 ms", "+5.0 ct", "-3.0 dB", "L50" / "C" / "R100"
         // A typed value in real units (units accepted; pan also "L50" / "C" / "R30"); nullopt = no value
-        std::optional<float> parseValue (VelvoxAudioProcessor&, int instance, int voice, Field, const juce::String& text);
+        std::optional<float> parseValue (VocalypseAudioProcessor&, int instance, int voice, Field, const juce::String& text);
 
         // Copies the Classic voices into V1 / V2 and switches to "2" (call inside a transaction)
-        void leaveClassic (VelvoxAudioProcessor&, int instance);
+        void leaveClassic (VocalypseAudioProcessor&, int instance);
 
         // An edit of one voice: begin once (transaction + host gestures on `fields`, Classic -> 2),
         // set as often as needed, end with the destructor (= one undo step)
         class Edit
         {
         public:
-            Edit (VelvoxAudioProcessor&, int instance, int voice, std::initializer_list<Field> fields, const juce::String& name);
+            Edit (VocalypseAudioProcessor&, int instance, int voice, std::initializer_list<Field> fields, const juce::String& name);
             ~Edit();
             void set (Field, float realValue);
 
         private:
-            VelvoxAudioProcessor& proc;
+            VocalypseAudioProcessor& proc;
             const int instance, voiceIndex;
             std::vector<juce::RangedAudioParameter*> gestures;
             JUCE_DECLARE_NON_COPYABLE (Edit)
         };
 
         // Complete operations
-        void setValue (VelvoxAudioProcessor&, int instance, int voice, Field, float realValue);
-        void toggleOn (VelvoxAudioProcessor&, int instance, int voice);
-        void resetVoice (VelvoxAudioProcessor&, int instance, int voice);      // all five values
-        void resetPosition (VelvoxAudioProcessor&, int instance, int voice);   // pan + gain
+        void setValue (VocalypseAudioProcessor&, int instance, int voice, Field, float realValue);
+        void toggleOn (VocalypseAudioProcessor&, int instance, int voice);
+        void resetVoice (VocalypseAudioProcessor&, int instance, int voice);      // all five values
+        void resetPosition (VocalypseAudioProcessor&, int instance, int voice);   // pan + gain
     }
 
     //==========================================================================
@@ -79,7 +79,7 @@ namespace velvox::ui
     class DoublerStage final : public ModuleView
     {
     public:
-        DoublerStage (VelvoxAudioProcessor& p, int instance);
+        DoublerStage (VocalypseAudioProcessor& p, int instance);
         ~DoublerStage() override;
 
         static constexpr float wheelCents = 1.0f;   // detune per wheel notch (Shift / Ctrl: 1/10)
@@ -123,7 +123,7 @@ namespace velvox::ui
         void layoutRows();
         void endDrag();
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         const int instance;
         std::array<std::unique_ptr<Handle>, 4> handles;
         std::array<std::unique_ptr<Row>, 4> rows;

@@ -3,12 +3,12 @@
 #include "HelpContent.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
     using i18n::tr;
 
-    ReductionHistoryView::ReductionHistoryView (VelvoxAudioProcessor& p, ModuleId id) : proc (p), module (id)
+    ReductionHistoryView::ReductionHistoryView (VocalypseAudioProcessor& p, ModuleId id) : proc (p), module (id)
     {
         setTooltip (module == ModuleId::denoise ? tr ("Wie stark das Raumrauschen gerade abgesenkt wird", "How much the room noise is lowered right now")
                                                 : tr ("Wie stark gerade ein Atmer abgesenkt wird", "How much a breath is lowered right now"));
@@ -64,7 +64,7 @@ namespace velvox::ui
         class CleanupPanel final : public DetailPanel
         {
         public:
-            CleanupPanel (VelvoxAudioProcessor& p, ModuleId id)
+            CleanupPanel (VocalypseAudioProcessor& p, ModuleId id)
                 : DetailPanel (p, dsp::moduleDisplayName (id), help::shortDescription ((int) id),
                                id == ModuleId::denoise ? pid::denoiseOn : pid::breathOn)
             {
@@ -92,14 +92,14 @@ namespace velvox::ui
         };
     }
 
-    std::unique_ptr<ModuleView> createCleanupView (VelvoxAudioProcessor& p, ModuleId id)
+    std::unique_ptr<ModuleView> createCleanupView (VocalypseAudioProcessor& p, ModuleId id)
     {
         if (id == ModuleId::denoise || id == ModuleId::breath)
             return std::make_unique<ReductionHistoryView> (p, id);
         return nullptr;
     }
 
-    std::unique_ptr<DetailPanel> createCleanupPanel (VelvoxAudioProcessor& p, ModuleId id)
+    std::unique_ptr<DetailPanel> createCleanupPanel (VocalypseAudioProcessor& p, ModuleId id)
     {
         if (id == ModuleId::denoise || id == ModuleId::breath)
             return std::make_unique<CleanupPanel> (p, id);

@@ -6,8 +6,8 @@
 #include "AutoMix/VocalProfile.h"
 #include "AutoMix/AutoMixPlanner.h"
 
-using namespace velvox;
-using namespace velvox::automix;
+using namespace vocalypse;
+using namespace vocalypse::automix;
 
 namespace
 {
@@ -38,7 +38,7 @@ namespace
 class MixTargetTests final : public juce::UnitTest
 {
 public:
-    MixTargetTests() : juce::UnitTest ("Headliner mix target", "Velvox") {}
+    MixTargetTests() : juce::UnitTest ("VOCALYPSE mix target", "Vocalypse") {}
 
     void runTest() override
     {

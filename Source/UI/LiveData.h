@@ -2,7 +2,7 @@
 
 #include "../DSP/VocalChain.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Everything the animated views need, gathered once per frame by the editor
     // (meters are pulled exactly once, then shared by every view).

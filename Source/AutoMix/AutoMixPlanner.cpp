@@ -7,7 +7,7 @@
 #include "AutoMixObjective.h"
 #include "ReportText.h"
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     using M = dsp::ModuleId;
 
@@ -280,8 +280,8 @@ namespace velvox::automix
         plan.set (pid::stereoWidth, 100.0f);
 
         if (plan.conservative)
-            plan.notes.push_back (both ("Es wurde wenig Gesang erfasst - Headliner verwendet deshalb nur vorsichtige Einstellungen.",
-                                        "Little singing was captured - so Headliner uses only cautious settings."));
+            plan.notes.push_back (both ("Es wurde wenig Gesang erfasst - VOCALYPSE verwendet deshalb nur vorsichtige Einstellungen.",
+                                        "Little singing was captured - so VOCALYPSE uses only cautious settings."));
 
         // ================= EQ: clean-up, not colour =================
         plan.set (pid::eqOn, 1.0f);

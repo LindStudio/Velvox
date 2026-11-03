@@ -4,7 +4,7 @@
 #include <cstring>
 #include <unordered_map>
 
-namespace velvox::i18n
+namespace vocalypse::i18n
 {
     namespace
     {

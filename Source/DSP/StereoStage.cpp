@@ -1,6 +1,6 @@
 #include "StereoStage.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     void StereoStage::prepare (double sampleRate, int)
     {

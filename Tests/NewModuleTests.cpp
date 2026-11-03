@@ -14,9 +14,9 @@
 #include "DSP/RideModule.h"
 #include "DSP/VocalAnalyzer.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::dsp;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::dsp;
 
 namespace
 {
@@ -182,7 +182,7 @@ namespace
 class NewModuleTests final : public juce::UnitTest
 {
 public:
-    NewModuleTests() : juce::UnitTest ("Velvox 0.3 modules", "Velvox") {}
+    NewModuleTests() : juce::UnitTest ("Vocalypse 0.3 modules", "Vocalypse") {}
 
     void runTest() override
     {
@@ -439,11 +439,11 @@ public:
 
         beginTest ("SMOOTH: on a voice it removes the resonance, not broadband (no dulling)");
         {
-            velvox::test::VocalSpec spec;
+            vocalypse::test::VocalSpec spec;
             spec.seconds = 8.0;
             spec.resonanceHz = 3200.0f;
             spec.resonanceDb = 10.0f;
-            const auto voice = velvox::test::makeVocal (spec);
+            const auto voice = vocalypse::test::makeVocal (spec);
             juce::AudioBuffer<float> in (2, voice.numSamples());
             for (int c = 0; c < 2; ++c)
                 in.copyFrom (c, 0, voice.vocal[0].data(), voice.numSamples());
@@ -922,7 +922,7 @@ public:
             h.set (pid::smoothWGain[3], -7.0f);
             h.set (pid::smoothWFreq[3], 3300.0f);
             h.set (instanceParamId (pid::smoothWGain[1], 1).toRawUTF8(), 5.0f);
-            velvox::SettingsReader reader;
+            vocalypse::SettingsReader reader;
             reader.bind ([&] (const char* id) { return h.proc.getState().getRawParameterValue (id); });
             const auto s = reader.read (Routing::defaults(), false);
             expectWithinAbsoluteError (s.smooth.weightGain[3], -7.0f, 1.0e-3f);

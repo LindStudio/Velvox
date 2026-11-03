@@ -4,9 +4,9 @@
 #include "../Assistant/AssistantTypes.h"
 #include "../Assistant/AssistantSession.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // The Assistant page: describe the sound in words, review the proposed
     // parameter changes, apply the selected ones, undo.
@@ -18,7 +18,7 @@ namespace velvox::ui
     class AssistantView final : public juce::Component
     {
     public:
-        explicit AssistantView (VelvoxAudioProcessor& processor);
+        explicit AssistantView (VocalypseAudioProcessor& processor);
         ~AssistantView() override;
 
         void paint (juce::Graphics&) override;
@@ -63,7 +63,7 @@ namespace velvox::ui
         void updateButtons();
         void rebuildList();
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         assistant::AssistantSession session;
         assistant::Plan plan;
         juce::String planText;   // the text the plan was made from

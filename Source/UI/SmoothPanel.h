@@ -3,13 +3,13 @@
 #include "DetailPanels.h"
 #include "../DSP/SmoothModule.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
 // The 0.6 Smooth panel (spec 5.4, "Smooth 1 · soothe-Stil"): the live input spectrum with what is removed
 // right now in pink, the weighting curve with its six draggable points over it, the low / high limits as
 // shaded regions with draggable edges. Main row: Depth, Sharpness, Speed (attack + release linked), Delta;
 // Mehr: Attack, Release, Mode, Output, Low, High.
-namespace velvox::ui
+namespace vocalypse::ui
 {
     //==========================================================================
     // Smooth operations (message thread). `instance` 0..1. Every complete operation is ONE undo step.
@@ -22,21 +22,21 @@ namespace velvox::ui
 
         // ---- Speed: a UI link of Attack and Release (SmoothModule::speedToTimes, no parameter of its own)
         // Shown value: the mean of where Attack and Release sit on the link (0 = slow, 1 = fast)
-        float speed (VelvoxAudioProcessor& proc, int instance);
+        float speed (VocalypseAudioProcessor& proc, int instance);
         // A drag: begin once (attack, release), write as often as needed, end once (= one step)
-        void beginSpeedGesture (VelvoxAudioProcessor& proc, int instance);
-        void writeSpeed (VelvoxAudioProcessor& proc, int instance, float speed01);   // both onto the link
-        void endSpeedGesture (VelvoxAudioProcessor& proc, int instance);
-        void setSpeed (VelvoxAudioProcessor& proc, int instance, float speed01);     // complete gesture
-        void resetSpeed (VelvoxAudioProcessor& proc, int instance);                   // attack / release defaults
+        void beginSpeedGesture (VocalypseAudioProcessor& proc, int instance);
+        void writeSpeed (VocalypseAudioProcessor& proc, int instance, float speed01);   // both onto the link
+        void endSpeedGesture (VocalypseAudioProcessor& proc, int instance);
+        void setSpeed (VocalypseAudioProcessor& proc, int instance, float speed01);     // complete gesture
+        void resetSpeed (VocalypseAudioProcessor& proc, int instance);                   // attack / release defaults
 
         // ---- Weighting points and limits
-        void resetPoint (VelvoxAudioProcessor& proc, int instance, int point);   // freq + gain to their defaults
-        void flattenAll (VelvoxAudioProcessor& proc, int instance);              // every point's gain to 0 dB
-        void resetParameter (VelvoxAudioProcessor& proc, const juce::String& id);  // one parameter to its default
+        void resetPoint (VocalypseAudioProcessor& proc, int instance, int point);   // freq + gain to their defaults
+        void flattenAll (VocalypseAudioProcessor& proc, int instance);              // every point's gain to 0 dB
+        void resetParameter (VocalypseAudioProcessor& proc, const juce::String& id);  // one parameter to its default
 
         // The parameters as the module's settings (weighting curve for drawing: SmoothModule::weightingDbAt)
-        dsp::SmoothSettings settings (VelvoxAudioProcessor& proc, int instance);
+        dsp::SmoothSettings settings (VocalypseAudioProcessor& proc, int instance);
     }
 
     //==========================================================================
@@ -46,7 +46,7 @@ namespace velvox::ui
     class SpeedKnob final : public Knob
     {
     public:
-        SpeedKnob (VelvoxAudioProcessor& proc, int instance, juce::Colour hue);
+        SpeedKnob (VocalypseAudioProcessor& proc, int instance, juce::Colour hue);
         ~SpeedKnob() override;
 
         void sync();                         // shows the current Attack / Release (never writes)
@@ -63,7 +63,7 @@ namespace velvox::ui
     private:
         void show (float speed01);
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         const int instance;
         bool inGesture = false, syncing = false, ignoreDrag = false;
     };
@@ -76,7 +76,7 @@ namespace velvox::ui
     class SmoothGraph final : public ModuleView
     {
     public:
-        SmoothGraph (VelvoxAudioProcessor& proc, int instance);
+        SmoothGraph (VocalypseAudioProcessor& proc, int instance);
         ~SmoothGraph() override;
 
         static constexpr float rangeDb = 12.0f;            // weighting axis +-12 dB (the parameter range)
@@ -142,7 +142,7 @@ namespace velvox::ui
         void addPanelItems (juce::PopupMenu& m);
         void showEdgeValueEditor (Edge e);
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         const int instance;
 
         dsp::SmoothSettings s;
@@ -176,6 +176,6 @@ namespace velvox::ui
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SmoothGraph)
     };
 
-    std::unique_ptr<ModuleView> createSmoothGraph (VelvoxAudioProcessor& proc, int instance);
-    std::unique_ptr<DetailPanel> createSmoothPanel (VelvoxAudioProcessor& proc);
+    std::unique_ptr<ModuleView> createSmoothGraph (VocalypseAudioProcessor& proc, int instance);
+    std::unique_ptr<DetailPanel> createSmoothPanel (VocalypseAudioProcessor& proc);
 }

@@ -107,24 +107,24 @@ class VoiceTracking(unittest.TestCase):
         refs = {c.name: c.info.get("refs") for c in m.cases}
         self.assertEqual(refs["voices2"], ["Doubler2"])
         self.assertEqual(refs["voices4"], ["Doubler4"])
-        h = m.cases[2].headliner
+        h = m.cases[2].vocalypse
         self.assertEqual(h["doublerVoices"], 2)
         self.assertEqual(h["doublerV4Delay"], 33)
-        solo = m.cases[2].info["solo"]["Headliner"](2)
+        solo = m.cases[2].info["solo"]["VOCALYPSE"](2)
         self.assertEqual((solo["doublerV3On"], solo["doublerV1On"], solo["doublerDry"]), (1, 0, -60))
 
 
 class MissingReference(unittest.TestCase):
-    @unittest.skipUnless(os.path.exists(bench.HOST), "HeadlinerRefHost not built")
+    @unittest.skipUnless(os.path.exists(bench.HOST), "VocalypseRefHost not built")
     def test_bench_missing_reference(self):
         spec = modules.Module(
             key="check", title="Vocal Check",
             refs=[modules.Ref("Nope", "Does/Not/Exist.vst3")],
-            cases=[modules.Case("null", headliner={}, procedures=["check_null"])])
+            cases=[modules.Case("null", vocalypse={}, procedures=["check_null"])])
         with tempfile.TemporaryDirectory() as d:
             res = bench.run_module(spec, d, clips=signals.CLIPS[:1])
         self.assertIn("Nope", res["ref_errors"])
-        self.assertTrue(any(m["metric"] == "null_vs_input_db" and m["headliner"] < -100 for m in res["metrics"]))
+        self.assertTrue(any(m["metric"] == "null_vs_input_db" and m["vocalypse"] < -100 for m in res["metrics"]))
 
 
 if __name__ == "__main__":

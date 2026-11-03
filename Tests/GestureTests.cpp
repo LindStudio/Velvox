@@ -8,8 +8,8 @@
 #include "UI/Segments.h"
 #include "UI/ValueText.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 namespace
 {
@@ -58,7 +58,7 @@ namespace
 class GestureTests final : public juce::UnitTest
 {
 public:
-    GestureTests() : juce::UnitTest ("Headliner control gestures", "Headliner") {}
+    GestureTests() : juce::UnitTest ("VOCALYPSE control gestures", "VOCALYPSE") {}
 
     void runTest() override
     {

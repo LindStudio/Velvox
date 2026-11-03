@@ -2,7 +2,7 @@
 #include "../StateKeys.h"
 #include <optional>
 
-namespace velvox
+namespace vocalypse
 {
     namespace
     {

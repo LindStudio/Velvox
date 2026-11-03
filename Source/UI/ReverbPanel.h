@@ -3,13 +3,13 @@
 #include "DetailPanels.h"
 #include "../DSP/ReverbDepth.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
 // The 0.6 Reverb panel (spec 5.12, "Reverb 3 · Raumtiefe"): a room drawn in perspective with the vocal as a
 // glowing dot. Dragging the dot back adds space - Mix, Pre-Delay and Size move together along the curated
 // path of dsp::reverbDepthPath; manual edits of the three move the dot (dsp::reverbDepthFromSettings).
 // Main row: Room (dropdown), Size, Decay, Mix (SEND while a send); everything else in Mehr.
-namespace velvox::ui
+namespace vocalypse::ui
 {
     //==========================================================================
     // Depth operations (message thread). `instance` 0..1. Each complete operation is ONE undo step
@@ -17,18 +17,18 @@ namespace velvox::ui
     namespace reverbedit
     {
         // The depth the current Mix / Pre-Delay / Size stand for (0 = in front, 1 = far back)
-        float depth (VelvoxAudioProcessor& proc, int instance);
+        float depth (VocalypseAudioProcessor& proc, int instance);
         // The path point of the instance's current room type
-        dsp::ReverbDepthPoint pointFor (VelvoxAudioProcessor& proc, int instance, float depth);
+        dsp::ReverbDepthPoint pointFor (VocalypseAudioProcessor& proc, int instance, float depth);
 
         // A drag: begin once, write as often as needed, end once (= one step)
-        void beginDepthGesture (VelvoxAudioProcessor& proc, int instance);
-        void writeDepth (VelvoxAudioProcessor& proc, int instance, float depth);
-        void endDepthGesture (VelvoxAudioProcessor& proc, int instance);
+        void beginDepthGesture (VocalypseAudioProcessor& proc, int instance);
+        void writeDepth (VocalypseAudioProcessor& proc, int instance, float depth);
+        void endDepthGesture (VocalypseAudioProcessor& proc, int instance);
 
         // Complete gestures
-        void setDepth (VelvoxAudioProcessor& proc, int instance, float depth);
-        void resetDepth (VelvoxAudioProcessor& proc, int instance);   // the three parameters' defaults
+        void setDepth (VocalypseAudioProcessor& proc, int instance, float depth);
+        void resetDepth (VocalypseAudioProcessor& proc, int instance);   // the three parameters' defaults
     }
 
     //==========================================================================
@@ -41,7 +41,7 @@ namespace velvox::ui
     class ReverbRoom final : public ModuleView
     {
     public:
-        ReverbRoom (VelvoxAudioProcessor& proc, int instance);
+        ReverbRoom (VocalypseAudioProcessor& proc, int instance);
         ~ReverbRoom() override;
 
         static constexpr float pixelsPerDepth = 260.0f;   // drag distance for the whole path
@@ -86,7 +86,7 @@ namespace velvox::ui
         float currentPointerY (const juce::MouseEvent&) const;
         void stepDepth (float delta);
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         const int instance;
         std::unique_ptr<DotHandle> handle;
 
@@ -122,6 +122,6 @@ namespace velvox::ui
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ReverbRoom)
     };
 
-    std::unique_ptr<ModuleView> createReverbRoom (VelvoxAudioProcessor& proc, int instance);
-    std::unique_ptr<DetailPanel> createReverbPanel (VelvoxAudioProcessor& proc);
+    std::unique_ptr<ModuleView> createReverbRoom (VocalypseAudioProcessor& proc, int instance);
+    std::unique_ptr<DetailPanel> createReverbPanel (VocalypseAudioProcessor& proc);
 }

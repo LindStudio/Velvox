@@ -2,7 +2,7 @@
 
 #include "ParameterSnapshot.h"
 
-namespace velvox
+namespace vocalypse
 {
     // Built-in starting points. All values are original settings written for
     // this product; none are copied from third-party products.

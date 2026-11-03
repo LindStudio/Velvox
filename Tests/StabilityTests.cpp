@@ -5,13 +5,13 @@
 #include "TestHelpers.h"
 #include "PopScan.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 class StabilityTests final : public juce::UnitTest
 {
 public:
-    StabilityTests() : juce::UnitTest ("Velvox audio stability", "Velvox") {}
+    StabilityTests() : juce::UnitTest ("Vocalypse audio stability", "Vocalypse") {}
 
     void runTest() override
     {

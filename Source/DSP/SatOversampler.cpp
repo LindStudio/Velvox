@@ -2,7 +2,7 @@
 #include <cmath>
 #include <complex>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

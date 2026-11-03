@@ -7,7 +7,7 @@
 #include "../DSP/Solo.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
 
@@ -111,7 +111,7 @@ namespace velvox::ui
         return instance > 0 || r.countOf (id) > 1 ? name + " " + juce::String (instance + 1) : name;
     }
 
-    ChainView::ChainView (VelvoxAudioProcessor& p) : proc (p)
+    ChainView::ChainView (VocalypseAudioProcessor& p) : proc (p)
     {
         routing = proc.getRouting();
     }
@@ -1223,7 +1223,7 @@ namespace velvox::ui
         repaint();
     }
 
-    void ChainView::resetInstance (VelvoxAudioProcessor& p, ModuleId id, int instance)
+    void ChainView::resetInstance (VocalypseAudioProcessor& p, ModuleId id, int instance)
     {
         auto& apvts = p.getState();
         const auto onBase = juce::String (onParamFor (id));

@@ -3,7 +3,7 @@
 #include "HelpContent.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
 
@@ -11,12 +11,12 @@ namespace velvox::ui
     {
         using i18n::tr;
 
-        juce::RangedAudioParameter* param (VelvoxAudioProcessor& proc, const juce::String& id)
+        juce::RangedAudioParameter* param (VocalypseAudioProcessor& proc, const juce::String& id)
         {
             return proc.getState().getParameter (id);
         }
 
-        float realValue (VelvoxAudioProcessor& proc, const juce::String& id)
+        float realValue (VocalypseAudioProcessor& proc, const juce::String& id)
         {
             auto* p = param (proc, id);
             return p != nullptr ? p->convertFrom0to1 (p->getValue()) : 0.0f;
@@ -45,7 +45,7 @@ namespace velvox::ui
         juce::String weightFreqId (int instance, int point) { return paramId (pid::smoothWFreq[juce::jlimit (0, 5, point)], instance); }
         juce::String weightGainId (int instance, int point) { return paramId (pid::smoothWGain[juce::jlimit (0, 5, point)], instance); }
 
-        float speed (VelvoxAudioProcessor& proc, int instance)
+        float speed (VocalypseAudioProcessor& proc, int instance)
         {
             const auto slow = dsp::SmoothModule::speedToTimes (0.0f), fast = dsp::SmoothModule::speedToTimes (1.0f);
             const float a = linkPosition (realValue (proc, paramId (pid::smoothAttack, instance)), slow.first, fast.first);
@@ -53,21 +53,21 @@ namespace velvox::ui
             return juce::jlimit (0.0f, 1.0f, 0.5f * (a + r));
         }
 
-        void beginSpeedGesture (VelvoxAudioProcessor& proc, int instance)
+        void beginSpeedGesture (VocalypseAudioProcessor& proc, int instance)
         {
             for (auto* id : { pid::smoothAttack, pid::smoothRelease })
                 if (auto* p = param (proc, paramId (id, instance)))
                     p->beginChangeGesture();
         }
 
-        void writeSpeed (VelvoxAudioProcessor& proc, int instance, float speed01)
+        void writeSpeed (VocalypseAudioProcessor& proc, int instance, float speed01)
         {
             const auto [attack, release] = dsp::SmoothModule::speedToTimes (juce::jlimit (0.0f, 1.0f, speed01));
             writeReal (param (proc, paramId (pid::smoothAttack, instance)), attack);
             writeReal (param (proc, paramId (pid::smoothRelease, instance)), release);
         }
 
-        void endSpeedGesture (VelvoxAudioProcessor& proc, int instance)
+        void endSpeedGesture (VocalypseAudioProcessor& proc, int instance)
         {
             // Reverse order: the outermost gesture (attack) ends last and records the step
             for (auto* id : { pid::smoothRelease, pid::smoothAttack })
@@ -75,14 +75,14 @@ namespace velvox::ui
                     p->endChangeGesture();
         }
 
-        void setSpeed (VelvoxAudioProcessor& proc, int instance, float speed01)
+        void setSpeed (VocalypseAudioProcessor& proc, int instance, float speed01)
         {
             beginSpeedGesture (proc, instance);
             writeSpeed (proc, instance, speed01);
             endSpeedGesture (proc, instance);
         }
 
-        void resetSpeed (VelvoxAudioProcessor& proc, int instance)
+        void resetSpeed (VocalypseAudioProcessor& proc, int instance)
         {
             beginSpeedGesture (proc, instance);
             for (auto* id : { pid::smoothAttack, pid::smoothRelease })
@@ -91,7 +91,7 @@ namespace velvox::ui
             endSpeedGesture (proc, instance);
         }
 
-        void resetPoint (VelvoxAudioProcessor& proc, int instance, int point)
+        void resetPoint (VocalypseAudioProcessor& proc, int instance, int point)
         {
             auto* f = param (proc, weightFreqId (instance, point));
             auto* g = param (proc, weightGainId (instance, point));
@@ -105,7 +105,7 @@ namespace velvox::ui
             f->endChangeGesture();
         }
 
-        void flattenAll (VelvoxAudioProcessor& proc, int instance)
+        void flattenAll (VocalypseAudioProcessor& proc, int instance)
         {
             std::array<juce::RangedAudioParameter*, dsp::SmoothSettings::numWeights> gains {};
             for (int i = 0; i < dsp::SmoothSettings::numWeights; ++i)
@@ -120,13 +120,13 @@ namespace velvox::ui
                     (*it)->endChangeGesture();
         }
 
-        void resetParameter (VelvoxAudioProcessor& proc, const juce::String& id)
+        void resetParameter (VocalypseAudioProcessor& proc, const juce::String& id)
         {
             if (auto* p = param (proc, id))
                 gestures::resetToDefault (*p);
         }
 
-        dsp::SmoothSettings settings (VelvoxAudioProcessor& proc, int instance)
+        dsp::SmoothSettings settings (VocalypseAudioProcessor& proc, int instance)
         {
             const auto v = [&] (const char* id) { return realValue (proc, paramId (id, instance)); };
             dsp::SmoothSettings s;
@@ -150,7 +150,7 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    SpeedKnob::SpeedKnob (VelvoxAudioProcessor& p, int inst, juce::Colour hue)
+    SpeedKnob::SpeedKnob (VocalypseAudioProcessor& p, int inst, juce::Colour hue)
         : Knob (i18n::tr ("Tempo", "Speed"), hue), proc (p), instance (inst)
     {
         slider.setRange (0.0, 1.0, 0.0);
@@ -316,7 +316,7 @@ namespace velvox::ui
         bool fineMods (const juce::ModifierKeys& m) { return m.isShiftDown() || m.isCtrlDown() || m.isCommandDown(); }
     }
 
-    SmoothGraph::SmoothGraph (VelvoxAudioProcessor& p, int inst) : proc (p), instance (inst)
+    SmoothGraph::SmoothGraph (VocalypseAudioProcessor& p, int inst) : proc (p), instance (inst)
     {
         const float ratio = SpectrumSource::maxHz / SpectrumSource::minHz;
         for (int i = 0; i < numColumns; ++i)
@@ -340,7 +340,7 @@ namespace velvox::ui
         endDrag();
     }
 
-    std::unique_ptr<ModuleView> createSmoothGraph (VelvoxAudioProcessor& proc, int instance)
+    std::unique_ptr<ModuleView> createSmoothGraph (VocalypseAudioProcessor& proc, int instance)
     {
         return std::make_unique<SmoothGraph> (proc, instance);
     }
@@ -1095,7 +1095,7 @@ namespace velvox::ui
         class SmoothPanel final : public DetailPanel
         {
         public:
-            explicit SmoothPanel (VelvoxAudioProcessor& p)
+            explicit SmoothPanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "Smooth", help::shortDescription ((int) ModuleId::smooth), pid::smoothOn)
             {
                 auto& mode = segments (pid::smoothMode);
@@ -1124,7 +1124,7 @@ namespace velvox::ui
         };
     }
 
-    std::unique_ptr<DetailPanel> createSmoothPanel (VelvoxAudioProcessor& proc)
+    std::unique_ptr<DetailPanel> createSmoothPanel (VocalypseAudioProcessor& proc)
     {
         return std::make_unique<SmoothPanel> (proc);
     }

@@ -2,7 +2,7 @@
 #include "UserSettings.h"
 #include "../ProductInfo.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using i18n::tr;
 

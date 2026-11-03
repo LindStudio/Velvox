@@ -9,7 +9,7 @@
 // VOCAL CHECK for the UI (message thread): the visible findings, the score, "Anwenden" /
 // "Alles anwenden" (one undo step each), "Ignorieren" / restore (persisted with the project)
 // and the genre the targets are taken from.
-namespace velvox::check
+namespace vocalypse::check
 {
     class VocalCheckController
     {

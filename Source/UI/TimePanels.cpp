@@ -4,7 +4,7 @@
 #include "../Text/I18n.h"
 #include "../Text/ParamText.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
 
@@ -38,7 +38,7 @@ namespace velvox::ui
     //==========================================================================
     // DELAY: echo map
 
-    EchoMapView::EchoMapView (VelvoxAudioProcessor& p, int k) : proc (p), instance (k)
+    EchoMapView::EchoMapView (VocalypseAudioProcessor& p, int k) : proc (p), instance (k)
     {
         tempoSource = [this] { return proc.getChain().getDisplayTempo(); };
         info = std::make_unique<HoverInfo> (*this, [] { return juce::String ("Echo"); },
@@ -436,7 +436,7 @@ namespace velvox::ui
         class DelayPanel final : public DetailPanel
         {
         public:
-            explicit DelayPanel (VelvoxAudioProcessor& p)
+            explicit DelayPanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "Delay", help::shortDescription ((int) ModuleId::delay), pid::delayOn)
             {
                 division = &segments (pid::delayDivision, { "1/4", "1/8D", "1/8", "1/16" }, true);
@@ -503,7 +503,7 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    std::unique_ptr<ModuleView> createTimeModuleView (VelvoxAudioProcessor& p, ModuleId id, int instance)
+    std::unique_ptr<ModuleView> createTimeModuleView (VocalypseAudioProcessor& p, ModuleId id, int instance)
     {
         switch (id)
         {
@@ -513,7 +513,7 @@ namespace velvox::ui
         return nullptr;
     }
 
-    std::unique_ptr<DetailPanel> createTimeModulePanel (VelvoxAudioProcessor& p, ModuleId id)
+    std::unique_ptr<DetailPanel> createTimeModulePanel (VocalypseAudioProcessor& p, ModuleId id)
     {
         switch (id)
         {

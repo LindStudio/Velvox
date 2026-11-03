@@ -11,9 +11,9 @@
 #include "Parameters/ParameterLayout.h"
 #include "UI/UserSettings.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::assistant;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::assistant;
 
 namespace
 {
@@ -67,7 +67,7 @@ namespace
 class AssistantTests final : public juce::UnitTest
 {
 public:
-    AssistantTests() : juce::UnitTest ("Velvox Smart Assistant", "Velvox") {}
+    AssistantTests() : juce::UnitTest ("Vocalypse Smart Assistant", "Vocalypse") {}
 
     // Every proposed value exists, is finite, inside its range and on its raster
     void expectValid (const Plan& plan, const juce::String& context)
@@ -515,7 +515,7 @@ public:
         {
             Harness h;
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
+            auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*e);
             const auto before = AssistantSession::readValues (h.proc.getState());
 
             ed.getTopBar().getAssistantButton().triggerClick();
@@ -534,7 +534,7 @@ public:
             // Remembered with the project
             ed.setAssistantOpen (true);
             std::unique_ptr<juce::AudioProcessorEditor> again (h.proc.createEditor());
-            expect (dynamic_cast<VelvoxAudioProcessorEditor&> (*again).isAssistantOpen());
+            expect (dynamic_cast<VocalypseAudioProcessorEditor&> (*again).isAssistantOpen());
         }
     }
 };

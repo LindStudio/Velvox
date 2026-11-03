@@ -3,9 +3,9 @@
 #include "Widgets.h"
 #include "../DSP/Instances.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // Module browser of 0.6 (spec 2.7): a popup over the editor with a search field and a grid of module
     // cards grouped by category - Clean-up, Dynamics, Colour, Width / Voices, Space, Analysis.
@@ -21,7 +21,7 @@ namespace velvox::ui
         static Category categoryOf (dsp::ModuleId id) noexcept;
         static juce::String categoryName (Category c);
 
-        explicit ModuleBrowser (VelvoxAudioProcessor& p);
+        explicit ModuleBrowser (VocalypseAudioProcessor& p);
         ~ModuleBrowser() override;
 
         // Opens for an insert position (serial index) - `atEnd` when added behind the chain
@@ -61,7 +61,7 @@ namespace velvox::ui
         juce::Rectangle<int> panelBounds() const;
         int freeInstances (dsp::ModuleId id) const;
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         std::unique_ptr<SearchField> search;
         int insertIndex = 0;
         bool atEnd = true;

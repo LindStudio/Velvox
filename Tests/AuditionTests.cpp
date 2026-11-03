@@ -14,9 +14,9 @@
 #include "UI/AuditionButton.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::test::eq;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::test::eq;
 using dsp::EqualizerModule;
 
 namespace
@@ -110,7 +110,7 @@ namespace
 class AuditionEqTests final : public juce::UnitTest
 {
 public:
-    AuditionEqTests() : juce::UnitTest ("Velvox audition: EQ band solo", "Velvox") {}
+    AuditionEqTests() : juce::UnitTest ("Vocalypse audition: EQ band solo", "Vocalypse") {}
 
     void runTest() override
     {
@@ -383,7 +383,7 @@ namespace
 class AuditionSatTests final : public juce::UnitTest
 {
 public:
-    AuditionSatTests() : juce::UnitTest ("Velvox audition: Saturation band solo", "Velvox") {}
+    AuditionSatTests() : juce::UnitTest ("Vocalypse audition: Saturation band solo", "Vocalypse") {}
 
     void runTest() override
     {
@@ -508,7 +508,7 @@ namespace
         h.proc.setRouting (r);
         h.proc.getUndo().clear();
         auto p = ui::createDetailPanel (h.proc, dsp::selectionCode (dsp::ModuleId::eq, instance));
-        p->setBounds (VelvoxAudioProcessorEditor::panelArea().withZeroOrigin());
+        p->setBounds (VocalypseAudioProcessorEditor::panelArea().withZeroOrigin());
         auto* eq = dynamic_cast<ui::EqPanel*> (p.get());
         if (eq != nullptr)
             p.release();
@@ -528,7 +528,7 @@ namespace
 class AuditionUiTests final : public juce::UnitTest
 {
 public:
-    AuditionUiTests() : juce::UnitTest ("Headliner audition panels", "Headliner") {}
+    AuditionUiTests() : juce::UnitTest ("VOCALYPSE audition panels", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -847,26 +847,26 @@ public:
 static AuditionUiTests auditionUiTests;
 
 //==============================================================================
-// Listen renders of dry vocals (only with VELVOX_AUDITION_RENDER=<out dir>; inputs from
-// VELVOX_AUDITION_INPUTS=<dir> or the bench's EQ inputs): EQ / Saturation normal, each solo, and a
+// Listen renders of dry vocals (only with VOCALYPSE_AUDITION_RENDER=<out dir>; inputs from
+// VOCALYPSE_AUDITION_INPUTS=<dir> or the bench's EQ inputs): EQ / Saturation normal, each solo, and a
 // render that switches the solo every second. Writes WAVs and summary.txt (levels, clicks).
 class AuditionRenders final : public juce::UnitTest
 {
 public:
-    AuditionRenders() : juce::UnitTest ("Velvox audition renders (env VELVOX_AUDITION_RENDER)", "Velvox") {}
+    AuditionRenders() : juce::UnitTest ("Vocalypse audition renders (env VOCALYPSE_AUDITION_RENDER)", "Vocalypse") {}
 
     void runTest() override
     {
         beginTest ("Renders");
-        const auto outPath = juce::SystemStats::getEnvironmentVariable ("VELVOX_AUDITION_RENDER", {});
+        const auto outPath = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_AUDITION_RENDER", {});
         if (outPath.isEmpty())
         {
-            logMessage ("skipped (VELVOX_AUDITION_RENDER not set)");
+            logMessage ("skipped (VOCALYPSE_AUDITION_RENDER not set)");
             return;
         }
         const juce::File out (outPath);
         out.createDirectory();
-        const juce::File inputs (juce::SystemStats::getEnvironmentVariable ("VELVOX_AUDITION_INPUTS",
+        const juce::File inputs (juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_AUDITION_INPUTS",
                                                                             "C:\\Users\\jakob\\dev\\velvox-bench\\2026-10-25\\modules\\eq\\_inputs"));
         juce::String summary = "file | render | rms dBFS | peak dBFS | vs dry dB | switch click ratio (<= 1: none)\n";
 

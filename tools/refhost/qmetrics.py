@@ -1,4 +1,4 @@
-"""Quality metrics for Headliner modules vs. reference plugins (Headliner 0.6, spec section 6).
+"""Quality metrics for VOCALYPSE modules vs. reference plugins (VOCALYPSE 0.6, spec section 6).
 
 All functions take float arrays shaped (n,) or (n, channels) and the sample rate. Stereo signals are
 reduced to mono where a metric is defined on one signal (mean of the channels) unless noted.

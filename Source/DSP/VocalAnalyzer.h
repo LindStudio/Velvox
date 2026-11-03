@@ -9,7 +9,7 @@
 #include "../Check/CheckTypes.h"
 #include "../Check/CheckTargets.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // One diagnosis. Only produced when the measurement supports it:
     //  - certainty `sure`     = likely problem (a strict threshold was passed)
@@ -24,7 +24,7 @@ namespace velvox::dsp
         Certainty certainty = Certainty::possible;
         juce::String title;          // the issue
         juce::String detail;         // evidence: what was measured
-        juce::String advice;         // suggested correction, naming the Headliner module
+        juce::String advice;         // suggested correction, naming the VOCALYPSE module
         std::optional<ModuleId> module;
         float severity = 0.0f;       // for sorting (larger = more important)
         juce::String why;            // why it matters musically
@@ -37,7 +37,7 @@ namespace velvox::dsp
         check::Severity level = check::Severity::low;
         juce::String problem;        // "Mulm um 300 Hz (+4 dB)"
         juce::String fix;            // "→ EQ −3 dB bei 300 Hz"
-        check::FixAction action;     // empty = nothing Headliner can apply
+        check::FixAction action;     // empty = nothing VOCALYPSE can apply
         float freqHz = 0.0f;         // where the problem sits (0 = not frequency specific)
 
         // Filled in by the processor from the chain around VOCAL CHECK

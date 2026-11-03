@@ -1,6 +1,6 @@
 #include "DenoiseModule.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

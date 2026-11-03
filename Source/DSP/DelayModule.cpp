@@ -1,7 +1,7 @@
 #include "DelayModule.h"
 #include "../Parameters/ParameterLayout.h"
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

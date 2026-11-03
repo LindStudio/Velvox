@@ -4,7 +4,7 @@
 #include "CheckTypes.h"
 #include <functional>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     struct AnalysisResult;
     struct Finding;
@@ -16,7 +16,7 @@ namespace velvox::dsp
 // rule's threshold, rising to 0.95 when the measurement lies `span` beyond it, scaled down
 // when little voice was analysed. Only findings with confidence >= showThreshold are kept
 // (the others are counted in hiddenFindings). Pure functions, any thread.
-namespace velvox::check
+namespace vocalypse::check
 {
     CheckTargets targetsFor (const dsp::AnalysisResult& r, Genre genre);
 

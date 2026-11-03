@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace velvox::dsp::eqdesign
+namespace vocalypse::dsp::eqdesign
 {
     namespace
     {

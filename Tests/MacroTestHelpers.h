@@ -5,7 +5,7 @@
 
 #include "DSP/Macros.h"
 
-namespace velvox::test
+namespace vocalypse::test
 {
     // "" when equal (within `tol`), otherwise the name of the first differing field
     inline juce::String macroFieldDifference (const dsp::ChainSettings& a, const dsp::ChainSettings& b, float tol = 0.0f)

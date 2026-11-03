@@ -1,6 +1,7 @@
 #include "UserSettings.h"
+#include "../ProductInfo.h"
 
-namespace velvox::ui::settings
+namespace vocalypse::ui::settings
 {
     namespace
     {
@@ -12,11 +13,36 @@ namespace velvox::ui::settings
 
         // Opened per access: settings are read at editor start and written on a
         // few explicit actions only. Nothing outlives the message manager.
-        std::unique_ptr<juce::PropertiesFile> open()
+        juce::PropertiesFile::Options optionsFor (const juce::String& name)
         {
             juce::PropertiesFile::Options o;
-            o.applicationName = "Velvox";
-            o.folderName = "Velvox";
+            o.applicationName = name;
+            o.folderName = name;
+            o.filenameSuffix = ".settings";
+            o.osxLibrarySubFolder = "Application Support";
+            o.storageFormat = juce::PropertiesFile::storeAsXML;
+            return o;
+        }
+
+        // Renamed product: the settings file of the old name is copied once (tutorial seen, language, layouts)
+        void migrateOnce()
+        {
+            const auto now = optionsFor (vocalypse::product::name).getDefaultFile();
+            const auto old = optionsFor (vocalypse::product::legacySettingsName).getDefaultFile();
+            if (! now.existsAsFile() && old.existsAsFile())
+            {
+                now.getParentDirectory().createDirectory();
+                old.copyFileTo (now);
+            }
+        }
+
+        std::unique_ptr<juce::PropertiesFile> open()
+        {
+            if (overrideFile() == juce::File())
+                migrateOnce();
+            juce::PropertiesFile::Options o;
+            o.applicationName = vocalypse::product::name;
+            o.folderName = vocalypse::product::name;
             o.filenameSuffix = ".settings";
             o.osxLibrarySubFolder = "Application Support";
             o.storageFormat = juce::PropertiesFile::storeAsXML;

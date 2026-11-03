@@ -1,7 +1,7 @@
 """0.8: how far mixed vocals are from the party target curve (third octaves, like the auto mix's objective).
 
-    VelvoxTests --thirds <renders-dir> <thirds.csv>      (once per run to compare)
-    python tools/bench/target_distance.py <thirds.csv> [<thirds.csv> ...] [--only _velvox]
+    VocalypseTests --thirds <renders-dir> <thirds.csv>      (once per run to compare)
+    python tools/bench/target_distance.py <thirds.csv> [<thirds.csv> ...] [--only _vocalypse]
 
 Per file: the RMS of the residual (deviation outside the target's spread) over the thirds the EQ works on
 (160 Hz - and 1.3 x the lowest sung note - to 12.9 kHz). Prints the median per csv.

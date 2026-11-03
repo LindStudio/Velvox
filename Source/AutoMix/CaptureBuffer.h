@@ -5,7 +5,7 @@
 #include <thread>
 #include <vector>
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     // Audio handed from the capture buffer to the analysis (a plain copy)
     struct CapturedAudio

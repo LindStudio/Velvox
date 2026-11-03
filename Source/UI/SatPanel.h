@@ -3,7 +3,7 @@
 #include "DetailPanels.h"
 #include "AuditionButton.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // "Link" of the Saturation bands (satLink, panel behaviour - the DSP never reads it): while Link is
     // on and the user edits one band's Drive (any control: a gesture is open on it), the other two
@@ -54,7 +54,7 @@ namespace velvox::ui
     class SatView final : public ModuleView
     {
     public:
-        SatView (VelvoxAudioProcessor& p, int instance);
+        SatView (VocalypseAudioProcessor& p, int instance);
         ~SatView() override;
 
         void update (const LiveData&) override;
@@ -107,7 +107,7 @@ namespace velvox::ui
         int shownCharacter (int band) const noexcept;
         float shownDrive (int band) const noexcept;
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         const int instance;
         juce::String multibandId, xoverIds[2], onIds[3], driveIds[3], charIds[3], singleDriveId, singleCharId, enabledId;
         std::array<std::unique_ptr<Crossover>, 2> crossovers;
@@ -134,11 +134,11 @@ namespace velvox::ui
         float thdPercent = 0.0f;
     };
 
-    std::unique_ptr<ModuleView> createSatView (VelvoxAudioProcessor& p, int instance);
+    std::unique_ptr<ModuleView> createSatView (VocalypseAudioProcessor& p, int instance);
 
     // The Saturation panel (spec 5.6 "Sat 2" + Low / Mid / High): main row = character tiles of the selected
     // band, Multiband, Link; the big Drive of the selected band beside the strip; Mehr: Mix, Output and the
     // two crossovers. Multiband off: the single-band character and drive. Instance from
     // DetailPanel::constructionInstance (createDetailPanel sets it).
-    std::unique_ptr<DetailPanel> createSatPanel (VelvoxAudioProcessor& p);
+    std::unique_ptr<DetailPanel> createSatPanel (VocalypseAudioProcessor& p);
 }

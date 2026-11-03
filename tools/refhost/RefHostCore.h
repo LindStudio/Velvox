@@ -1,7 +1,7 @@
 #pragma once
 
 // Reference host core: offline rendering through any juce::AudioProcessor (a hosted VST3 or the
-// in-process Headliner processor) and parameter access by index / ID / name / text.
+// in-process VOCALYPSE processor) and parameter access by index / ID / name / text.
 // Nothing here is used by the plugin. Tested in Tests/RefHostTests.cpp.
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -9,7 +9,7 @@
 #include <limits>
 #include <optional>
 
-namespace velvox::refhost
+namespace vocalypse::refhost
 {
     struct RenderStats
     {

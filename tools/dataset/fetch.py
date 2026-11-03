@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Headliner benchmark dataset manager.
+"""VOCALYPSE benchmark dataset manager.
 
 Downloads the approved test-vocal sources listed in sources.json into a local data
 directory (never into the repository), verifies them, extracts them and records the
@@ -9,7 +9,7 @@ provenance of every file.
     python tools/dataset/fetch.py --source vocalset11
     python tools/dataset/fetch.py --list
 
-Data directory: --data, else %HEADLINER_DATA%, else %USERPROFILE%/dev/velvox-data
+Data directory: --data, else %VOCALYPSE_DATA%, else %USERPROFILE%/dev/velvox-data
 Layout:
     downloads/<file>            original archives, never modified
     sources/<id>/...            extracted originals (read-only use)
@@ -40,7 +40,7 @@ CHUNK = 1 << 20
 def data_dir(arg):
     if arg:
         return pathlib.Path(arg)
-    env = os.environ.get("HEADLINER_DATA")
+    env = os.environ.get("VOCALYPSE_DATA")
     if env:
         return pathlib.Path(env)
     return pathlib.Path(os.path.expanduser("~")) / "dev" / "velvox-data"
@@ -69,7 +69,7 @@ def download(url, target, expected_bytes, root, retries=5):
         have = target.stat().st_size if target.exists() else 0
         if expected_bytes and have == expected_bytes:
             return True
-        req = urllib.request.Request(url, headers={"User-Agent": "Headliner-dataset-manager/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "VOCALYPSE-dataset-manager/1.0"})
         if have:
             req.add_header("Range", f"bytes={have}-")
         try:

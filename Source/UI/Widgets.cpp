@@ -1,12 +1,12 @@
 #include "Widgets.h"
-#include "VelvoxLookAndFeel.h"
+#include "VocalypseLookAndFeel.h"
 #include "Spectrum.h"
 #include "../Parameters/ParameterLayout.h"
 #include "ValueText.h"
 #include "../Text/I18n.h"
 #include "../Text/ParamText.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -273,20 +273,20 @@ namespace velvox::ui
             description = i18n::paramDescription (paramId, spec->description);
 
         shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
-        slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
+        slider.getProperties().set (VocalypseLookAndFeel::animPosProperty, shownPos.current);
     }
 
     Knob::Knob (const juce::String& label, juce::Colour accent)
     {
         setUp (label, accent);
         shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
-        slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
+        slider.getProperties().set (VocalypseLookAndFeel::animPosProperty, shownPos.current);
     }
 
     void Knob::snapToValue()
     {
         shownPos.snap ((float) slider.valueToProportionOfLength (slider.getValue()));
-        slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
+        slider.getProperties().set (VocalypseLookAndFeel::animPosProperty, shownPos.current);
         slider.repaint();
     }
 
@@ -315,7 +315,7 @@ namespace velvox::ui
     void Knob::setHero (bool isHero)
     {
         hero = isHero;
-        slider.getProperties().set (VelvoxLookAndFeel::heroProperty, isHero);
+        slider.getProperties().set (VocalypseLookAndFeel::heroProperty, isHero);
         if (isHero)
             maxDial = dialsize::macro;
         applyLabelStyle();
@@ -340,7 +340,7 @@ namespace velvox::ui
         name.setJustificationType (juce::Justification::centred);
         name.setColour (juce::Label::textColourId, colours::knobName);
         name.setInterceptsMouseClicks (false, false);
-        slider.getProperties().set (VelvoxLookAndFeel::strongProperty, hero || prominence == Prominence::primary);
+        slider.getProperties().set (VocalypseLookAndFeel::strongProperty, hero || prominence == Prominence::primary);
         slider.sendLookAndFeelChange();
     }
 
@@ -386,8 +386,8 @@ namespace velvox::ui
 
         if (moved)
         {
-            slider.getProperties().set (VelvoxLookAndFeel::animPosProperty, shownPos.current);
-            slider.getProperties().set (VelvoxLookAndFeel::hoverProperty, hover.current);
+            slider.getProperties().set (VocalypseLookAndFeel::animPosProperty, shownPos.current);
+            slider.getProperties().set (VocalypseLookAndFeel::hoverProperty, hover.current);
             slider.repaint();
         }
         if (info != nullptr)

@@ -7,7 +7,7 @@
 // into the module parameters (Parameters/MacroMapper.h). This file is the parameter side of that:
 // writing the macro-moved ChainSettings fields back as parameter values, keeping the dry of additive
 // inserts where the 0.6.0 macros kept it, and baking the 0.2 - 0.6.0 offset layer into old projects.
-namespace velvox::macrobake
+namespace vocalypse::macrobake
 {
     // Instance-1 parameters a macro can change (EQ 1 bands included), in real units via `access`
     const juce::StringArray& touchedParamIds();

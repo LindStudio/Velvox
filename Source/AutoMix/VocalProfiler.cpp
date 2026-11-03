@@ -6,7 +6,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include <map>
 
-namespace velvox::automix
+namespace vocalypse::automix
 {
     namespace
     {
@@ -935,8 +935,8 @@ namespace velvox::automix
 
         if (p.clipRuns > 0)
             add ("clipping", C::measured, both ("Übersteuerung im Eingang", "Clipping at the input"),
-                 both ("{0} Stelle(n) mit Samples auf Vollaussteuerung. Headliner kann Verzerrung nicht rückgängig machen - Aufnahme- oder Spurpegel senken.",
-                       "{0} spot(s) with samples at full scale. Headliner can't undo distortion - lower the recording or track level.",
+                 both ("{0} Stelle(n) mit Samples auf Vollaussteuerung. VOCALYPSE kann Verzerrung nicht rückgängig machen - Aufnahme- oder Spurpegel senken.",
+                       "{0} spot(s) with samples at full scale. VOCALYPSE can't undo distortion - lower the recording or track level.",
                        { juce::String (p.clipRuns) }), 100.0f);
         else if (p.peakDb > -0.5f)
             add ("hotInput", C::measured, both ("Sehr hoher Eingangspegel", "Very high input level"),

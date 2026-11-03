@@ -1,6 +1,6 @@
 #pragma once
 
-// Reproduction tool for clicks / pops (VelvoxTests --popscan ...).
+// Reproduction tool for clicks / pops (VocalypseTests --popscan ...).
 //
 // Runs the real processor in (approximately) real time with FL-Studio-like
 // conditions: variable host block sizes, a playhead that reports a stopped
@@ -14,7 +14,7 @@
 #include "PluginEditor.h"
 #include "SyntheticVocal.h"
 
-namespace velvox::test
+namespace vocalypse::test
 {
     struct ScanPlayHead final : juce::AudioPlayHead
     {
@@ -41,10 +41,10 @@ namespace velvox::test
     // signal: "silence", "floor" (-80 dBFS noise), "tone" (-18 dBFS 440 Hz), "vocal"
     inline PopScanResult runPopScan (const juce::String& signal, bool automix, bool withEditor, double seconds,
                                      double fs, bool realTime, unsigned seed = 7,
-                                     juce::String overrides = juce::SystemStats::getEnvironmentVariable ("VELVOX_POPSCAN_SET", {}))
+                                     juce::String overrides = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_POPSCAN_SET", {}))
     {
         PopScanResult res;
-        auto proc = std::make_unique<VelvoxAudioProcessor>();
+        auto proc = std::make_unique<VocalypseAudioProcessor>();
         ScanPlayHead head;
         proc->setPlayHead (&head);
         proc->setRateAndBufferSizeDetails (fs, 1024);
@@ -62,7 +62,7 @@ namespace velvox::test
             am.applyResult (r);
         }
 
-        // Bisecting: VELVOX_POPSCAN_SET="reverbOn=0,delayOn=0" overrides parameters after the mix
+        // Bisecting: VOCALYPSE_POPSCAN_SET="reverbOn=0,delayOn=0" overrides parameters after the mix
         {
             juce::StringArray pairs;
             pairs.addTokens (overrides, ",", {});
@@ -134,8 +134,8 @@ namespace velvox::test
             blockSizes.push_back (n);
             head.ppq += 0.0;   // transport stopped: position does not move
 
-            // Detector self-check: VELVOX_POPSCAN_INJECT=1 adds a single-sample 0.02 spike at t = 30 s
-            static const bool inject = juce::SystemStats::getEnvironmentVariable ("VELVOX_POPSCAN_INJECT", {}) == "1";
+            // Detector self-check: VOCALYPSE_POPSCAN_INJECT=1 adds a single-sample 0.02 spike at t = 30 s
+            static const bool inject = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_POPSCAN_INJECT", {}) == "1";
             const int at = (int) (30.0 * fs);
             if (inject && at >= pos && at < pos + n)
                 for (int ch = 0; ch < 2; ++ch)
@@ -224,8 +224,8 @@ namespace velvox::test
             lastEvent = s;
         }
 
-        // VELVOX_POPSCAN_DUMP=<seconds>: print output and input (also 300 ms earlier) around that time
-        if (const auto dump = juce::SystemStats::getEnvironmentVariable ("VELVOX_POPSCAN_DUMP", {}); dump.isNotEmpty())
+        // VOCALYPSE_POPSCAN_DUMP=<seconds>: print output and input (also 300 ms earlier) around that time
+        if (const auto dump = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_POPSCAN_DUMP", {}); dump.isNotEmpty())
         {
             const int c = (int) (dump.getDoubleValue() * fs);
             const int echo = (int) (0.3 * fs);
@@ -249,8 +249,8 @@ namespace velvox::test
                 const double ratio = us / (n * 1.0e6 / fs);
                 if (n >= 64 && ratio > worstRatio) { worstRatio = ratio; worstAt = blockTimes[i].first; worstN = n; worstUs = us; }
             }
-            // VELVOX_POPSCAN_SLOW=<ratio>: list every callback above that share of its budget (periodic spikes?)
-            if (const auto slow = juce::SystemStats::getEnvironmentVariable ("VELVOX_POPSCAN_SLOW", {}); slow.isNotEmpty())
+            // VOCALYPSE_POPSCAN_SLOW=<ratio>: list every callback above that share of its budget (periodic spikes?)
+            if (const auto slow = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_POPSCAN_SLOW", {}); slow.isNotEmpty())
                 for (size_t i = 0; i < blockTimes.size(); ++i)
                 {
                     const double ratio = blockTimes[i].second / (blockSizes[i] * 1.0e6 / fs);

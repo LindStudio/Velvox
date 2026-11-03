@@ -7,9 +7,9 @@
 #include "UserSettings.h"
 
 // Source is compiled as UTF-8 (/utf-8): German texts are plain literals.
-namespace velvox::ui
+namespace vocalypse::ui
 {
-    using namespace velvox::assistant;
+    using namespace vocalypse::assistant;
 
     namespace
     {
@@ -319,7 +319,7 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    AssistantView::AssistantView (VelvoxAudioProcessor& p)
+    AssistantView::AssistantView (VocalypseAudioProcessor& p)
         : proc (p), session (p.getState())
     {
         input.setMultiLine (true, true);
@@ -354,7 +354,7 @@ namespace velvox::ui
             addAndMakeVisible (b);
 
         autoApply.setButtonText (de ("Sofort anwenden"));
-        autoApply.setTooltip (de ("An: Velvox setzt erkannte Wünsche direkt nach der Analyse um (Rückgängig bleibt möglich). Aus: erst prüfen, dann anwenden."));
+        autoApply.setTooltip (de ("An: Vocalypse setzt erkannte Wünsche direkt nach der Analyse um (Rückgängig bleibt möglich). Aus: erst prüfen, dann anwenden."));
         autoApply.setToggleState (settings::getBool (settings::assistantAutoApply, true), juce::dontSendNotification);
         autoApply.onClick = [this]
         {
@@ -645,7 +645,7 @@ namespace velvox::ui
         g.drawText ("Assistant", titleRow, juce::Justification::bottomLeft, false);
         g.setColour (colours::textDim);
         g.setFont (font (typesize::body));
-        g.drawFittedText (de ("Beschreibe deinen Wunschklang - Velvox schlägt passende Einstellungen vor. Komplett lokal, ohne Internet."),
+        g.drawFittedText (de ("Beschreibe deinen Wunschklang - Vocalypse schlägt passende Einstellungen vor. Komplett lokal, ohne Internet."),
                           header.withTrimmedRight (330), juce::Justification::centredLeft, 1, 0.9f);
 
         // Beat sidechain status

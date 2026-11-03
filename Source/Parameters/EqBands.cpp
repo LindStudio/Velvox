@@ -3,7 +3,7 @@
 #include "../DSP/Instances.h"
 #include <mutex>
 
-namespace velvox::eqbands
+namespace vocalypse::eqbands
 {
     namespace
     {
@@ -314,7 +314,7 @@ namespace velvox::eqbands
     }
 }
 
-namespace velvox
+namespace vocalypse
 {
     int findOrCreateEqBand (juce::AudioProcessorValueTreeState& apvts, dsp::EqRole role, dsp::EqBandType type,
                             float freqHz, float gainDb, float q, int instance)

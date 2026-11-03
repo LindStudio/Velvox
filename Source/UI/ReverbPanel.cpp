@@ -3,13 +3,13 @@
 #include "HelpContent.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
 
     namespace
     {
-        juce::RangedAudioParameter* param (VelvoxAudioProcessor& proc, const char* base, int instance)
+        juce::RangedAudioParameter* param (VocalypseAudioProcessor& proc, const char* base, int instance)
         {
             auto& state = proc.getState();
             if (instance > 0)
@@ -18,7 +18,7 @@ namespace velvox::ui
             return state.getParameter (base);
         }
 
-        float realValue (VelvoxAudioProcessor& proc, const char* base, int instance)
+        float realValue (VocalypseAudioProcessor& proc, const char* base, int instance)
         {
             auto* p = param (proc, base, instance);
             return p != nullptr ? p->convertFrom0to1 (p->getValue()) : 0.0f;
@@ -31,26 +31,26 @@ namespace velvox::ui
     //==========================================================================
     namespace reverbedit
     {
-        float depth (VelvoxAudioProcessor& proc, int instance)
+        float depth (VocalypseAudioProcessor& proc, int instance)
         {
             return dsp::reverbDepthFromSettings (juce::roundToInt (realValue (proc, pid::reverbType, instance)),
                                                  realValue (proc, pid::reverbMix, instance), realValue (proc, pid::reverbPreDelay, instance),
                                                  realValue (proc, pid::reverbSize, instance));
         }
 
-        dsp::ReverbDepthPoint pointFor (VelvoxAudioProcessor& proc, int instance, float d)
+        dsp::ReverbDepthPoint pointFor (VocalypseAudioProcessor& proc, int instance, float d)
         {
             return dsp::reverbDepthPath (juce::roundToInt (realValue (proc, pid::reverbType, instance)), d);
         }
 
-        void beginDepthGesture (VelvoxAudioProcessor& proc, int instance)
+        void beginDepthGesture (VocalypseAudioProcessor& proc, int instance)
         {
             for (auto* id : depthParams)
                 if (auto* p = param (proc, id, instance))
                     p->beginChangeGesture();
         }
 
-        void writeDepth (VelvoxAudioProcessor& proc, int instance, float d)
+        void writeDepth (VocalypseAudioProcessor& proc, int instance, float d)
         {
             const auto point = pointFor (proc, instance, d);
             const float values[3] { point.mixPercent, point.preDelayMs, point.sizePercent };
@@ -63,21 +63,21 @@ namespace velvox::ui
                 }
         }
 
-        void endDepthGesture (VelvoxAudioProcessor& proc, int instance)
+        void endDepthGesture (VocalypseAudioProcessor& proc, int instance)
         {
             for (auto* id : depthParams)
                 if (auto* p = param (proc, id, instance))
                     p->endChangeGesture();
         }
 
-        void setDepth (VelvoxAudioProcessor& proc, int instance, float d)
+        void setDepth (VocalypseAudioProcessor& proc, int instance, float d)
         {
             beginDepthGesture (proc, instance);
             writeDepth (proc, instance, d);
             endDepthGesture (proc, instance);
         }
 
-        void resetDepth (VelvoxAudioProcessor& proc, int instance)
+        void resetDepth (VocalypseAudioProcessor& proc, int instance)
         {
             beginDepthGesture (proc, instance);
             for (auto* id : depthParams)
@@ -137,7 +137,7 @@ namespace velvox::ui
         std::unique_ptr<HoverInfo> info;
     };
 
-    ReverbRoom::ReverbRoom (VelvoxAudioProcessor& p, int inst) : proc (p), instance (inst)
+    ReverbRoom::ReverbRoom (VocalypseAudioProcessor& p, int inst) : proc (p), instance (inst)
     {
         handle = std::make_unique<DotHandle> (*this);
         addAndMakeVisible (*handle);
@@ -551,7 +551,7 @@ namespace velvox::ui
         stepDepth (notches * wheelStep * (fine ? 0.1f : 1.0f));
     }
 
-    std::unique_ptr<ModuleView> createReverbRoom (VelvoxAudioProcessor& proc, int instance)
+    std::unique_ptr<ModuleView> createReverbRoom (VocalypseAudioProcessor& proc, int instance)
     {
         return std::make_unique<ReverbRoom> (proc, instance);
     }
@@ -563,7 +563,7 @@ namespace velvox::ui
         class ReverbPanel final : public DetailPanel
         {
         public:
-            explicit ReverbPanel (VelvoxAudioProcessor& p)
+            explicit ReverbPanel (VocalypseAudioProcessor& p)
                 : DetailPanel (p, "Reverb", help::shortDescription ((int) ModuleId::reverb), pid::reverbOn)
             {
                 auto& type = choice (pid::reverbType, {});
@@ -619,7 +619,7 @@ namespace velvox::ui
         };
     }
 
-    std::unique_ptr<DetailPanel> createReverbPanel (VelvoxAudioProcessor& proc)
+    std::unique_ptr<DetailPanel> createReverbPanel (VocalypseAudioProcessor& proc)
     {
         return std::make_unique<ReverbPanel> (proc);
     }

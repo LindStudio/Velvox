@@ -1,7 +1,7 @@
 #include "ReverbModule.h"
 #include <complex>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     namespace
     {

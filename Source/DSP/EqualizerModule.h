@@ -5,7 +5,7 @@
 #include "Audition.h"
 #include <atomic>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     struct EqSettings
     {

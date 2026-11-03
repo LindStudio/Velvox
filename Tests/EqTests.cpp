@@ -3,9 +3,9 @@
 
 #include "EqTestHelpers.h"
 
-using namespace velvox;
-using namespace velvox::test;
-using namespace velvox::test::eq;
+using namespace vocalypse;
+using namespace vocalypse::test;
+using namespace vocalypse::test::eq;
 
 namespace
 {
@@ -33,7 +33,7 @@ namespace
 class EqDesignTests final : public juce::UnitTest
 {
 public:
-    EqDesignTests() : juce::UnitTest ("Velvox EQ designs", "Velvox") {}
+    EqDesignTests() : juce::UnitTest ("Vocalypse EQ designs", "Vocalypse") {}
 
     void runTest() override
     {

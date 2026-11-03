@@ -6,7 +6,7 @@
 
 // The finding texts (problem, fix, detail, why) hold both languages (i18n::both, see
 // CheckRules.cpp): they are shown with i18n::show.
-namespace velvox::ui
+namespace vocalypse::ui
 {
     using dsp::ModuleId;
     using i18n::tr;
@@ -46,7 +46,7 @@ namespace velvox::ui
         return checkColour();
     }
 
-    juce::String checkPreviewText (VelvoxAudioProcessor& proc, const check::ResolvedFix& fix)
+    juce::String checkPreviewText (VocalypseAudioProcessor& proc, const check::ResolvedFix& fix)
     {
         juce::StringArray lines;
         if (fix.routing.has_value())
@@ -128,7 +128,7 @@ namespace velvox::ui
         {
             case Style::filled:
             {
-                // The normal text button of the design (VelvoxLookAndFeel::drawButtonBackground): a faint
+                // The normal text button of the design (VocalypseLookAndFeel::drawButtonBackground): a faint
                 // white fill and the panel line, brighter text than the ghost buttons. No colour fill, no
                 // glow: the findings stay the loudest part of the view.
                 g.setColour (! enabled ? colours::control
@@ -486,7 +486,7 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    VocalCheckView::VocalCheckView (VelvoxAudioProcessor& p)
+    VocalCheckView::VocalCheckView (VocalypseAudioProcessor& p)
         : proc (p),
           power (p.getState(), pid::checkOn, checkColour()),
           list (std::make_unique<List> (*this))
@@ -876,7 +876,7 @@ namespace velvox::ui
     }
 
     //==========================================================================
-    CheckSummary::CheckSummary (VelvoxAudioProcessor& p) : proc (p)
+    CheckSummary::CheckSummary (VocalypseAudioProcessor& p) : proc (p)
     {
         addAndMakeVisible (open);
         open.setTooltip (tr ("Befunde, Ignorieren und Anwenden im Tab VOCAL CHECK", "Findings, Ignore and Apply in the VOCAL CHECK tab"));

@@ -3,7 +3,7 @@
 #include "ParameterSnapshot.h"
 #include "UndoHistory.h"
 
-namespace velvox
+namespace vocalypse
 {
     // Factory presets (compiled in) + user presets (XML files on disk).
     // All methods must be called on the message thread.

@@ -1,6 +1,6 @@
 #include "HelpOverlay.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -245,8 +245,8 @@ namespace velvox::ui
         g.drawText (i18n::tr ("Hilfe", "Help"), header.removeFromTop (headerH / 2 + 8).withTrimmedTop (14), juce::Justification::bottomLeft, false);
         g.setColour (colours::textDim);
         g.setFont (font (typesize::body));
-        g.drawText (i18n::tr ("So funktioniert Headliner, jedes Modul erklärt. Komplett offline.",
-                              "How Headliner works, every module explained. Works completely offline."), header.withTrimmedBottom (12),
+        g.drawText (i18n::tr ("So funktioniert VOCALYPSE, jedes Modul erklärt. Komplett offline.",
+                              "How VOCALYPSE works, every module explained. Works completely offline."), header.withTrimmedBottom (12),
                     juce::Justification::centredLeft, true);
 
         // Hairlines: under the header and between navigation and page

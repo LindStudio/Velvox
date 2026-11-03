@@ -1,8 +1,8 @@
 #include "MascotView.h"
-#include "VelvoxBinaryData.h"
+#include "VocalypseBinaryData.h"
 #include "../Text/I18n.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -84,7 +84,7 @@ namespace velvox::ui
         for (int i = 0; i < mascot::numMoods; ++i)
         {
             int size = 0;
-            if (const char* data = VelvoxBinaryData::getNamedResource (resourceNames[i], size))
+            if (const char* data = VocalypseBinaryData::getNamedResource (resourceNames[i], size))
                 images[(size_t) i] = juce::ImageFileFormat::loadFrom (data, (size_t) size);
         }
     }

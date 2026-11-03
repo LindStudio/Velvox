@@ -8,8 +8,8 @@
 #include "StateKeys.h"
 #include "DSP/MixLaw.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -215,7 +215,7 @@ namespace
 class MixLawTests final : public juce::UnitTest
 {
 public:
-    MixLawTests() : juce::UnitTest ("Velvox mix law", "Velvox") {}
+    MixLawTests() : juce::UnitTest ("Vocalypse mix law", "Vocalypse") {}
 
     void runTest() override
     {
@@ -350,7 +350,7 @@ public:
             const auto outFresh = renderReloaded (fresh, in);
             expectEquals (maxAbsDiff (outFresh, renderReloaded (old, in)), 0.0f, "identical sound");
 
-            if (const auto ref = juce::SystemStats::getEnvironmentVariable ("VELVOX_MIXLAW_BASELINE", {}); ref.isNotEmpty())
+            if (const auto ref = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_MIXLAW_BASELINE", {}); ref.isNotEmpty())
             {
                 const auto base = juce::File (ref).getChildFile ("automix.txt").loadFileAsString().replace ("\r\n", "\n");
                 expectEquals (d, base, "same mix as the 0.5 build");
@@ -516,7 +516,7 @@ public:
 
             const auto in = fixedSignal (h);
             const auto legacyOut = renderReloaded (h, in);
-            if (const auto ref = juce::SystemStats::getEnvironmentVariable ("VELVOX_MIXLAW_BASELINE", {}); ref.isNotEmpty())
+            if (const auto ref = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_MIXLAW_BASELINE", {}); ref.isNotEmpty())
             {
                 juce::MemoryBlock raw;
                 juce::File (ref).getChildFile ("state05.raw").loadFileAsData (raw);
@@ -822,10 +822,10 @@ public:
         }
     }
 
-    // One-off tools for the 0.5 baseline (run with VELVOX_MIXLAW_DUMP=<dir>)
+    // One-off tools for the 0.5 baseline (run with VOCALYPSE_MIXLAW_DUMP=<dir>)
     void baselineTools()
     {
-        const auto dumpDir = juce::SystemStats::getEnvironmentVariable ("VELVOX_MIXLAW_DUMP", {});
+        const auto dumpDir = juce::SystemStats::getEnvironmentVariable ("VOCALYPSE_MIXLAW_DUMP", {});
         if (dumpDir.isEmpty())
             return;
 

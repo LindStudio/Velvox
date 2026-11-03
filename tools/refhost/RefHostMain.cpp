@@ -1,14 +1,14 @@
-// HeadlinerRefHost: renders a WAV offline through an installed VST3 (incl. WaveShell sub-plugins)
-// or through one Headliner module, with latency compensation, and writes the result plus a JSON
+// VocalypseRefHost: renders a WAV offline through an installed VST3 (incl. WaveShell sub-plugins)
+// or through one VOCALYPSE module, with latency compensation, and writes the result plus a JSON
 // sidecar (latency, CPU per block, parameter values read back). Used by tools/refhost/bench.py.
 //
-//   HeadlinerRefHost --subs   --plugin <file.vst3>
-//   HeadlinerRefHost --list   --plugin <file.vst3> [--sub <name>] [--set k=v ...] [--filter text]
-//   HeadlinerRefHost --list   --headliner <moduleKey> [--filter text]
-//   HeadlinerRefHost --render --plugin <file.vst3> [--sub <name>] --in a.wav --out b.wav
+//   VocalypseRefHost --subs   --plugin <file.vst3>
+//   VocalypseRefHost --list   --plugin <file.vst3> [--sub <name>] [--set k=v ...] [--filter text]
+//   VocalypseRefHost --list   --vocalypse <moduleKey> [--filter text]
+//   VocalypseRefHost --render --plugin <file.vst3> [--sub <name>] --in a.wav --out b.wav
 //                             [--set key=text]... [--setn key=0..1]... [--tail sec] [--block n] [--bpm x]
-//   HeadlinerRefHost --render --headliner <moduleKey> [--instance k] --in a.wav --out b.wav [--set id=value]...
-//   HeadlinerRefHost --editor --plugin <file.vst3> [--tail sec]   opens the editor like a DAW, closes it, unloads
+//   VocalypseRefHost --render --vocalypse <moduleKey> [--instance k] --in a.wav --out b.wav [--set id=value]...
+//   VocalypseRefHost --editor --plugin <file.vst3> [--tail sec]   opens the editor like a DAW, closes it, unloads
 //                             the plugin and exits (the host-shutdown check: a hang here is a hang when FL closes)
 //
 // key = parameter index, ID or name (unique prefix allowed). Exit codes: 0 ok, 1 usage / IO,
@@ -18,16 +18,16 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_events/juce_events.h>
 #include "RefHostCore.h"
-#include "HeadlinerModule.h"
+#include "VocalypseModule.h"
 #include <cstdio>
 
-using namespace velvox;
+using namespace vocalypse;
 
 namespace
 {
     struct Args
     {
-        juce::String mode, plugin, sub, headliner, in, out, filter;
+        juce::String mode, plugin, sub, vocalypse, in, out, filter;
         int instance = 0, block = 512;
         double tail = 0.0, bpm = 120.0;
         juce::StringArray sets, setns;
@@ -42,7 +42,7 @@ namespace
             if (k == "--subs" || k == "--list" || k == "--render" || k == "--editor") a.mode = k.substring (2);
             else if (k == "--plugin")    a.plugin = next();
             else if (k == "--sub")       a.sub = next();
-            else if (k == "--headliner") a.headliner = next();
+            else if (k == "--vocalypse") a.vocalypse = next();
             else if (k == "--instance")  a.instance = next().getIntValue();
             else if (k == "--in")        a.in = next();
             else if (k == "--out")       a.out = next();
@@ -117,19 +117,19 @@ namespace
         return inst;
     }
 
-    std::unique_ptr<juce::AudioProcessor> makeHeadliner (const Args& a, juce::String& error)
+    std::unique_ptr<juce::AudioProcessor> makeVocalypse (const Args& a, juce::String& error)
     {
-        const auto id = dsp::moduleFromKey (a.headliner);
+        const auto id = dsp::moduleFromKey (a.vocalypse);
         if (! id)
         {
-            error = "unknown Headliner module key '" + a.headliner + "'";
+            error = "unknown VOCALYPSE module key '" + a.vocalypse + "'";
             return nullptr;
         }
         return refhost::makeSingleModule (*id, a.instance);
     }
 
-    // Headliner: plain numbers are real-unit values (choices: index); otherwise the text path
-    bool setOne (juce::AudioProcessor& proc, const juce::String& assignment, bool normalized, bool headliner, juce::String& error)
+    // VOCALYPSE: plain numbers are real-unit values (choices: index); otherwise the text path
+    bool setOne (juce::AudioProcessor& proc, const juce::String& assignment, bool normalized, bool vocalypse, juce::String& error)
     {
         const int eq = assignment.indexOfChar ('=');
         if (eq <= 0)
@@ -150,7 +150,7 @@ namespace
             p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, value.getFloatValue()));
             return true;
         }
-        if (headliner && value.containsOnly ("0123456789.-+eE") && value.containsAnyOf ("0123456789"))
+        if (vocalypse && value.containsOnly ("0123456789.-+eE") && value.containsAnyOf ("0123456789"))
             if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (p))
             {
                 r->setValueNotifyingHost (r->convertTo0to1 (value.getFloatValue()));
@@ -165,7 +165,7 @@ namespace
         return true;
     }
 
-    bool applySettings (juce::AudioProcessor& proc, const Args& a, bool headliner, juce::var& readback)
+    bool applySettings (juce::AudioProcessor& proc, const Args& a, bool vocalypse, juce::var& readback)
     {
         auto* obj = new juce::DynamicObject();
         readback = juce::var (obj);
@@ -173,7 +173,7 @@ namespace
             for (auto& s : pass == 0 ? a.sets : a.setns)
             {
                 juce::String err;
-                if (! setOne (proc, s, pass == 1, headliner, err))
+                if (! setOne (proc, s, pass == 1, vocalypse, err))
                 {
                     std::fprintf (stderr, "error: %s\n", err.toRawUTF8());
                     return false;
@@ -226,7 +226,7 @@ namespace
             return types.isEmpty() ? 2 : 0;
         }
 
-        const bool headliner = a.headliner.isNotEmpty();
+        const bool vocalypse = a.vocalypse.isNotEmpty();
         double fs = 48000.0;
         juce::AudioBuffer<float> in;
         if (a.mode == "render")
@@ -240,14 +240,14 @@ namespace
 
         juce::String error;
         std::unique_ptr<juce::AudioProcessor> proc;
-        if (headliner)
-            proc = makeHeadliner (a, error);
+        if (vocalypse)
+            proc = makeVocalypse (a, error);
         else
             proc = loadPlugin (a, fs, a.block, error);
         if (proc == nullptr)
         {
             std::fprintf (stderr, "error: %s\n", error.toRawUTF8());
-            return headliner ? 1 : 2;
+            return vocalypse ? 1 : 2;
         }
 
         if (a.mode == "editor")
@@ -273,7 +273,7 @@ namespace
         }
 
         juce::var readback;
-        if (! applySettings (*proc, a, headliner, readback))
+        if (! applySettings (*proc, a, vocalypse, readback))
             return 3;
 
         if (a.mode == "list")
@@ -305,7 +305,7 @@ namespace
 
         auto* info = new juce::DynamicObject();
         info->setProperty ("processor", proc->getName());
-        info->setProperty ("source", headliner ? "headliner:" + a.headliner : a.plugin + (a.sub.isNotEmpty() ? " / " + a.sub : ""));
+        info->setProperty ("source", vocalypse ? "vocalypse:" + a.vocalypse : a.plugin + (a.sub.isNotEmpty() ? " / " + a.sub : ""));
         info->setProperty ("sampleRate", fs);
         info->setProperty ("block", a.block);
         info->setProperty ("latency", st.latency);

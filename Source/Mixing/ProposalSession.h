@@ -2,7 +2,7 @@
 
 #include "../Presets/ParameterSnapshot.h"
 
-namespace velvox::mixing
+namespace vocalypse::mixing
 {
     // Compare-and-confirm workflow for a proposed setting (a preset today, a
     // suggestion from a future mixing assistant later):

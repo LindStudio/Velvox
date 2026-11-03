@@ -6,7 +6,7 @@
 #include <atomic>
 #include <vector>
 
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     // Combines a module's on/off switch and dry/wet amount into one smoothed
     // crossfade, so toggling a module or moving its Mix never clicks.

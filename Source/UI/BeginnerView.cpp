@@ -2,7 +2,7 @@
 #include "../PluginProcessor.h"
 #include "HelpContent.h"
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     namespace
     {
@@ -13,7 +13,7 @@ namespace velvox::ui
         constexpr int hintRowH = 26;
     }
 
-    BeginnerView::BeginnerView (VelvoxAudioProcessor& p)
+    BeginnerView::BeginnerView (VocalypseAudioProcessor& p)
     {
         struct Def { const char* id; const char* name; const char* text; };
         const Def defs[6] {
@@ -160,7 +160,7 @@ namespace velvox::ui
     }
 }
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     juce::Rectangle<int> BeginnerView::focusRow() const
     {

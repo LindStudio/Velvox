@@ -1,6 +1,6 @@
 #pragma once
 
-// The in-process Headliner processor reduced to one module: the routing holds only that
+// The in-process VOCALYPSE processor reduced to one module: the routing holds only that
 // instance (as an insert), the module is switched on and the global safety clip is off, so a
 // render measures the module alone. A fresh processor uses the 0.6 true dry/wet mix law (MixLaws::allTrue). Parameters are then set by their APVTS IDs in real units.
 
@@ -10,7 +10,7 @@
 #include "DSP/Routing.h"
 #include <memory>
 
-namespace velvox::refhost
+namespace vocalypse::refhost
 {
     inline const char* moduleOnParam (dsp::ModuleId id) noexcept
     {
@@ -32,15 +32,15 @@ namespace velvox::refhost
         return pid::eqOn;
     }
 
-    inline void setRaw (VelvoxAudioProcessor& proc, const juce::String& id, float value)
+    inline void setRaw (VocalypseAudioProcessor& proc, const juce::String& id, float value)
     {
         if (auto* p = proc.getState().getParameter (id))
             p->setValueNotifyingHost (p->convertTo0to1 (value));
     }
 
-    inline std::unique_ptr<VelvoxAudioProcessor> makeSingleModule (dsp::ModuleId id, int instance)
+    inline std::unique_ptr<VocalypseAudioProcessor> makeSingleModule (dsp::ModuleId id, int instance)
     {
-        auto proc = std::make_unique<VelvoxAudioProcessor>();
+        auto proc = std::make_unique<VocalypseAudioProcessor>();
         dsp::Routing r;
         r.insertAt (0, id, instance, true);
         proc->setRouting (r);

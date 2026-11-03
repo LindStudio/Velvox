@@ -2,7 +2,7 @@
 
 #include "AssistantTypes.h"
 
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
     // Local, rule-based interpretation of free text (German first, common
     // English phrases too). Pure function of the text: no state, no I/O, no

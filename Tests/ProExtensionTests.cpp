@@ -3,8 +3,8 @@
 
 #include "TestHelpers.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 namespace
 {
@@ -34,7 +34,7 @@ namespace
 class ProExtensionTests final : public juce::UnitTest
 {
 public:
-    ProExtensionTests() : juce::UnitTest ("Velvox pro extensions", "Velvox") {}
+    ProExtensionTests() : juce::UnitTest ("Vocalypse pro extensions", "Vocalypse") {}
 
     void runTest() override
     {

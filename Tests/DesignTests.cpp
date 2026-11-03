@@ -1,4 +1,4 @@
-// Design system of Headliner (0.5 identity, 0.6 shell): tokens, module identity (colour + neon icon),
+// Design system of VOCALYPSE (0.5 identity, 0.6 shell): tokens, module identity (colour + neon icon),
 // controls, layout of the views.
 
 #include <set>
@@ -18,8 +18,8 @@
 #include "Text/I18n.h"
 #include "Text/ParamText.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 using dsp::ModuleId;
 
 namespace
@@ -52,13 +52,13 @@ namespace
     }
 
     // Module panel size in the editor (Advanced mode)
-    juce::Rectangle<int> panelSize() { return VelvoxAudioProcessorEditor::panelArea().withZeroOrigin(); }
+    juce::Rectangle<int> panelSize() { return VocalypseAudioProcessorEditor::panelArea().withZeroOrigin(); }
 }
 
 class DesignTests final : public juce::UnitTest
 {
 public:
-    DesignTests() : juce::UnitTest ("Headliner design", "Headliner") {}
+    DesignTests() : juce::UnitTest ("VOCALYPSE design", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -294,7 +294,7 @@ public:
             Harness h;
             h.proc.getAutoMix().dismissPrompt();
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
+            auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*e);
             auto& top = ed.getTopBar();
             expectEquals (top.getHeight(), 44, "header 44");
 
@@ -456,7 +456,7 @@ public:
             expect (found[(int) ModuleId::smooth].segments.contains ("smoothMode") && found[(int) ModuleId::smooth].toggles.contains ("smoothDelta"), "SMOOTH character + delta");
             expect (found[(int) ModuleId::smash].knobs.contains ("smashAmount"), "VOCAL SMASH big knob");
 
-            // EQ (0.6): the bands live in the graph and the selected-band row ("Headliner EQ panel"); with no band only Mix
+            // EQ (0.6): the bands live in the graph and the selected-band row ("VOCALYPSE EQ panel"); with no band only Mix
             // (Mehr); the hidden 0.5 fixed bands are never shown
             expect (found[(int) ModuleId::eq].knobs.contains ("eqMix"), "EQ Mix");
             for (auto* legacy : { "hpfSlope", "lowType", "highType", "hpfOn", "lpfOn", "hpfFreq", "midGain" })
@@ -487,7 +487,7 @@ public:
         {
             Harness h;
             ui::SimpleView view (h.proc, nullptr);
-            view.setBounds (VelvoxAudioProcessorEditor::bodyArea().withZeroOrigin());
+            view.setBounds (VocalypseAudioProcessorEditor::bodyArea().withZeroOrigin());
             juce::StringArray ids;
             for (auto& s : view.getMacroSliders())
                 ids.add (s->getParamId());
@@ -525,8 +525,8 @@ public:
             Harness h;
             h.proc.getAutoMix().dismissPrompt();
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
-            ed.setMode (VelvoxAudioProcessorEditor::Mode::simple);
+            auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*e);
+            ed.setMode (VocalypseAudioProcessorEditor::Mode::simple);
             ed.getSimpleView().getDetailsButton().triggerClick();
             for (int i = 0; i < 100 && ! ed.isMixDetailsOpen(); ++i)
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
@@ -580,7 +580,7 @@ public:
             i18n::ScopedLanguage en (i18n::Language::english);
 
             const auto* start = ui::help::find ("start");
-            expect (start != nullptr && start->title == "Welcome to Headliner");
+            expect (start != nullptr && start->title == "Welcome to VOCALYPSE");
             expect (start != nullptr && start->body.contains ("SIMPLE") && start->body.contains ("ADVANCED")
                     && start->body.contains ("VOCAL CHECK") && start->body.contains ("\"Analyze vocal\""),
                     "English start page explains the modes and the tabs with the English UI words");
@@ -723,11 +723,11 @@ public:
             h2.proc.getState().state.setProperty ("uiMode", "pro", nullptr);
             {
                 std::unique_ptr<juce::AudioProcessorEditor> e (h2.proc.createEditor());
-                auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
+                auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*e);
                 for (int id = -1; id < dsp::numModules; ++id)
                     if (id < 0 || h2.proc.getRouting().contains ((ModuleId) id))
                         ed.selectModule (id);
-                ed.setMode (VelvoxAudioProcessorEditor::Mode::simple);
+                ed.setMode (VocalypseAudioProcessorEditor::Mode::simple);
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
             }
             for (auto& [id, v] : values)

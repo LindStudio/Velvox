@@ -12,7 +12,7 @@
 //    the cut) so the poles always sit at the lower of the two corner frequencies.
 //  - legacy: the RBJ bilinear designs of 0.5. Used only by states migrated from 0.5 (eqLegacyResponse),
 //    which therefore sound bit-identical to the old fixed-band EQ.
-namespace velvox::dsp
+namespace vocalypse::dsp
 {
     inline constexpr int maxEqBands = 16;
 

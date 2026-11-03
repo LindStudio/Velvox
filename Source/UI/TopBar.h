@@ -2,9 +2,9 @@
 
 #include "Widgets.h"
 
-class VelvoxAudioProcessor;
+class VocalypseAudioProcessor;
 
-namespace velvox::ui
+namespace vocalypse::ui
 {
     // In-editor modal card (no separate OS window - safer inside DAW hosts)
     class DialogOverlay final : public juce::Component
@@ -33,7 +33,7 @@ namespace velvox::ui
         std::function<void (const juce::String&)> callback;
     };
 
-    // Header of Headliner 0.6 (height 44), left to right:
+    // Header of VOCALYPSE 0.6 (height 44), left to right:
     //   logo · preset selector ‹ name ▾ › · ↶ ↷ · SIMPEL | ADVANCED · tabs AUTO MIX | VOCAL CHECK · … · Bypass · ?
     // The mode decides how the AUTO MIX tab looks (Simple: spectrum + six macros; Advanced: chain +
     // module panel); VOCAL CHECK shows the check panel in both modes.
@@ -44,7 +44,7 @@ namespace velvox::ui
         enum class Mode { simple, advanced };
         enum class Tab { autoMix, vocalCheck };
 
-        TopBar (VelvoxAudioProcessor& processor, DialogOverlay& dialog);
+        TopBar (VocalypseAudioProcessor& processor, DialogOverlay& dialog);
         ~TopBar() override;
 
         void paint (juce::Graphics&) override;
@@ -89,7 +89,7 @@ namespace velvox::ui
     private:
         void showPresetMenu();
 
-        VelvoxAudioProcessor& proc;
+        VocalypseAudioProcessor& proc;
         DialogOverlay& dialog;
 
         juce::TextButton presetButton, prev { juce::String::fromUTF8 ("\xe2\x80\xb9") }, next { juce::String::fromUTF8 ("\xe2\x80\xba") };

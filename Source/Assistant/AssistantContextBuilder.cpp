@@ -2,9 +2,9 @@
 #include "AssistantSession.h"
 #include "../PluginProcessor.h"
 
-namespace velvox::assistant
+namespace vocalypse::assistant
 {
-    AssistantContext buildContext (VelvoxAudioProcessor& p)
+    AssistantContext buildContext (VocalypseAudioProcessor& p)
     {
         AssistantContext c;
         c.values = AssistantSession::readValues (p.getState());

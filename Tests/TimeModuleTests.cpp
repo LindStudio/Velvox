@@ -6,8 +6,8 @@
 #include "DSP/DelayModule.h"
 #include <thread>
 
-using namespace velvox;
-using namespace velvox::dsp;
+using namespace vocalypse;
+using namespace vocalypse::dsp;
 
 namespace
 {
@@ -146,7 +146,7 @@ namespace
 class TimeModuleTests final : public juce::UnitTest
 {
 public:
-    TimeModuleTests() : juce::UnitTest ("Velvox time modules", "Velvox") {}
+    TimeModuleTests() : juce::UnitTest ("Vocalypse time modules", "Vocalypse") {}
 
     void runTest() override
     {

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """What a mix did to a dry vocal: spectrum, dynamics, audible space (reverb / delay tails), width.
 
-    python tools/bench/pair_metrics.py <dry dir> <processed dir> [--suffix _velvox] [--csv out.csv]
+    python tools/bench/pair_metrics.py <dry dir> <processed dir> [--suffix _vocalypse] [--csv out.csv]
 
 Pairs <dry>/<name>.wav with <processed>/<name><suffix>.wav (or renders/<name><suffix>.wav). Built for the
-SONOVOX dry / producer-wet pairs (2026-11-03) and for Headliner bench renders, so both are measured alike:
+SONOVOX dry / producer-wet pairs (2026-11-03) and for VOCALYPSE bench renders, so both are measured alike:
   - eq_*      third-octave change (processed minus dry, both relative to their 300 Hz - 2 kHz core), dB
   - lra_*     spread of the 400 ms loudness over the sung parts (p95 - p10), dB  (dynamics)
   - crest_*   median peak-to-RMS in 400 ms windows over the sung parts, dB

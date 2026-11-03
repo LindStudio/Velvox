@@ -7,8 +7,8 @@
 #include "UI/UserSettings.h"
 #include "Text/I18n.h"
 
-using namespace velvox;
-using namespace velvox::test;
+using namespace vocalypse;
+using namespace vocalypse::test;
 
 namespace
 {
@@ -52,7 +52,7 @@ namespace
 class PresetBrowserTests final : public juce::UnitTest
 {
 public:
-    PresetBrowserTests() : juce::UnitTest ("Headliner preset list", "Headliner") {}
+    PresetBrowserTests() : juce::UnitTest ("VOCALYPSE preset list", "VOCALYPSE") {}
 
     void runTest() override
     {
@@ -63,7 +63,7 @@ public:
             Harness h;
             h.proc.getAutoMix().dismissPrompt();
             std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
-            auto& ed = dynamic_cast<VelvoxAudioProcessorEditor&> (*e);
+            auto& ed = dynamic_cast<VocalypseAudioProcessorEditor&> (*e);
             auto& top = ed.getTopBar();
             expect (top.getPrevButton().getX() < top.getPresetButton().getX() && top.getPresetButton().getRight() < top.getNextButton().getRight(),
                     "‹ name ›");
