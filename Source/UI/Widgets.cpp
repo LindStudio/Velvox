@@ -460,11 +460,21 @@ namespace vocalypse::ui
         slider.setBounds (r);
     }
 
+    void HSlider::setFromAutoMix (bool b)
+    {
+        if (b == fromAutoMix)
+            return;
+        fromAutoMix = b;
+        slider.getProperties().set ("fire", b);
+        slider.repaint();
+        repaint();
+    }
+
     void HSlider::paint (juce::Graphics& g)
     {
         // Macro colour dot + name in capitals (design label style)
         const auto dot = juce::Rectangle<float> (6.0f, 6.0f).withCentre ({ (float) nameArea.getX() + 4.0f, (float) nameArea.getCentreY() });
-        g.setColour (accent);
+        g.setColour (fromAutoMix ? colours::fire : accent);
         g.fillEllipse (dot);
         g.setColour (colours::textSoft);
         g.setFont (semiBold (10.0f, 0.12f));

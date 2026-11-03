@@ -195,7 +195,7 @@ namespace vocalypse::ui
                            { tr ("bearbeitet", "processed"), colours::blue.interpolatedWith (colours::teal, 0.4f), LegendItem::Style::fill } });
         addAndMakeVisible (legend);
 
-        analyse.getProperties().set ("primary", true);
+        analyse.getProperties().set ("fire", true);   // the auto mix's action in the fire of the logo
         analyse.setTooltip (tr ("VOCALYPSE hört einen Abschnitt deiner Vocal während der Wiedergabe und stellt die Module ein. "
                                 "Der Zustand davor bleibt über Vorher / Nachher erreichbar.",
                                 "VOCALYPSE listens to a section of your vocal during playback and sets up the modules. "
@@ -207,6 +207,9 @@ namespace vocalypse::ui
             b->getProperties().set ("segment", true);
             b->setColour (juce::TextButton::buttonOnColourId, colours::cyan);
         }
+        // Nachher = the auto mix: fire (Jakob 2026-11-03)
+        after.setColour (juce::TextButton::buttonOnColourId, colours::fire);
+        after.setColour (juce::TextButton::textColourOnId, colours::fireTop);
         before.setButtonText (tr ("Vorher", "Before"));
         after.setButtonText (tr ("Nachher", "After"));
         before.setTooltip (tr ("Die Einstellungen vor der Analyse (echter Parameterwechsel)", "The settings before the analysis (a real parameter switch)"));
@@ -339,6 +342,7 @@ namespace vocalypse::ui
     {
         spectrumView.refresh();
         meters.setLevels (live.inputDb.ago (0), live.outputDb.ago (0), live.inputLufs.ago (0), live.outputLufs.ago (0), live.clipped);
+        updateFaderColours();
         if (before.isVisible() && (before.getToggleState() != proc.getAutoMix().isShowingPrevious()
                                    || fair.getToggleState() != (proc.getState().getRawParameterValue (pid::levelMatchMode)->load() > 0.5f)))
             updateCompare();
@@ -366,6 +370,31 @@ namespace vocalypse::ui
             wasBusy = in.autoMixBusy;
             repaint (statusRow);
         }
+    }
+
+    void SimpleView::updateFaderColours()
+    {
+        bool changed = false;
+        for (auto& s : macros)
+        {
+            bool fire = false;
+            if (const auto mixValue = proc.getAutoMix().autoMixValueOf (s->getParamId()))
+                if (auto* p = proc.getState().getParameter (s->getParamId()))
+                {
+                    // the same value within a hair of the fader's range (the host rounds normalised values)
+                    const auto range = p->getNormalisableRange();
+                    const float now = p->convertFrom0to1 (p->getValue());
+                    fire = std::abs (now - *mixValue) <= 0.002f * (range.end - range.start);
+                }
+            if (fire != s->isFromAutoMix())
+            {
+                s->setFromAutoMix (fire);
+                changed = true;
+            }
+        }
+        if (changed)
+            for (auto& a : noteAreas)
+                repaint (a);
     }
 
     juce::StringArray SimpleView::getMacroGroupTitles() const
@@ -412,7 +441,9 @@ namespace vocalypse::ui
         g.setFont (font (11.0f));
         for (int i = 0; i < (int) noteAreas.size(); ++i)
         {
-            g.setColour (colours::textFaint);
+            // The line under a fader glows while the fader still holds what the auto mix set
+            const bool fire = i < (int) macros.size() && macros[(size_t) i]->isFromAutoMix();
+            g.setColour (fire ? colours::fire.interpolatedWith (colours::fireTop, 0.25f) : colours::textFaint);
             g.drawText (getMacroNote (i), noteAreas[(size_t) i], juce::Justification::centredLeft, true);
         }
 
@@ -436,7 +467,7 @@ namespace vocalypse::ui
             const auto phase = proc.getAutoMix().getPhase();
             const bool busy = phase == Phase::listening || phase == Phase::capturing || phase == Phase::analysing;
             const bool mixed = proc.getAutoMix().hasMix();
-            const auto dot = busy ? colours::cyan : mixed ? colours::ok : colours::textFaint;
+            const auto dot = busy ? colours::cyan : mixed ? colours::fire : colours::textFaint;
             const auto title = busy ? tr ("Analysiere", "Analyzing") : mixed ? tr ("Auto Mix aktiv", "Auto mix active")
                                                                             : tr ("Auto Mix bereit", "Auto mix ready");
             const auto sub = busy ? tr ("Stimme wird gemessen", "measuring your voice")

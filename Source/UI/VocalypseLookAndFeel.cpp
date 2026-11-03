@@ -162,7 +162,9 @@ namespace vocalypse::ui
 
         const auto area = juce::Rectangle<int> (x, y, width, height).toFloat();
         const bool enabled = slider.isEnabled();
-        const auto accent = slider.findColour (juce::Slider::trackColourId);
+        // "fire": the fader holds the value the auto mix set (SIMPEL, Jakob 2026-11-03)
+        const bool fire = (bool) slider.getProperties().getWithDefault ("fire", false);
+        const auto accent = fire ? colours::fire : slider.findColour (juce::Slider::trackColourId);
         const bool hover = slider.isMouseOverOrDragging() && enabled;
         const float cy = area.getCentreY();
         const auto track = juce::Rectangle<float> (area.getX(), cy - 2.0f, area.getWidth(), 4.0f);
@@ -180,7 +182,10 @@ namespace vocalypse::ui
             const auto lit = juce::Rectangle<float> (x0, track.getY(), x1 - x0, track.getHeight());
             g.setColour (accent.withAlpha (hover ? 0.32f : 0.22f));
             g.fillRoundedRectangle (lit.expanded (0.0f, 2.0f), 3.0f);
-            g.setColour (accent);
+            if (fire)
+                g.setGradientFill (fireGradient (lit));
+            else
+                g.setColour (accent);
             g.fillRoundedRectangle (lit, 2.0f);
         }
 
@@ -293,6 +298,23 @@ namespace vocalypse::ui
             return;
         }
 
+        if ((bool) b.getProperties().getWithDefault ("fire", false))
+        {
+            // The auto mix's own action ("Vocal analysieren"): the fire of the logo with a warm glow
+            const float a = b.isEnabled() ? 1.0f : 0.35f;
+            if (b.isEnabled())
+            {
+                g.setColour (colours::fire.withAlpha (highlighted ? 0.30f : 0.18f));
+                g.fillRoundedRectangle (r.expanded (2.5f), corner + 2.5f);
+            }
+            g.setGradientFill (fireGradient (r, true, a));
+            g.fillPath (shape);
+            g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha ((down ? 0.0f : (highlighted ? 0.28f : 0.16f)) * a), r.getX(), r.getY(),
+                                                     juce::Colours::white.withAlpha (0.0f), r.getX(), r.getCentreY(), false));
+            g.fillPath (shape);
+            return;
+        }
+
         if ((bool) b.getProperties().getWithDefault ("primary", false))
         {
             // Primary action ("Get VOCALYPSE"): a solid blue -> violet pill with a glow
@@ -380,6 +402,8 @@ namespace vocalypse::ui
             c = colours::text.withAlpha (0.9f);
         if ((bool) b.getProperties().getWithDefault ("primary", false))
             c = colours::text;
+        if ((bool) b.getProperties().getWithDefault ("fire", false))
+            c = colours::fireInk;   // dark ink: white has too little contrast on the gold end
         if (! b.isEnabled())
             c = colours::textFaint;
         g.setColour (c);

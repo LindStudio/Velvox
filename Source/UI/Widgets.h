@@ -175,12 +175,18 @@ namespace vocalypse::ui
         // Processed value marker (macros), like Knob::effectiveValue
         std::function<float()> effectiveValue;
 
+        // SIMPEL (Jakob 2026-11-03): fire while the fader holds the value the auto mix set, its own colour
+        // once the user moved it
+        void setFromAutoMix (bool fromAutoMix);
+        bool isFromAutoMix() const noexcept { return fromAutoMix; }
+
         FineSlider slider;
 
     private:
         std::unique_ptr<APVTS::SliderAttachment> attachment;
         juce::String paramId, label, description;
         juce::Colour accent;
+        bool fromAutoMix = false;
         juce::Rectangle<int> nameArea;
         std::unique_ptr<HoverInfo> info;
         juce::VBlankAttachment vblank { this, [this] { if (info != nullptr) info->refresh(); } };

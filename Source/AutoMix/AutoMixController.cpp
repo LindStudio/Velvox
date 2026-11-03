@@ -12,6 +12,10 @@ namespace vocalypse::automix
         const juce::Identifier reportType { "Report" };
         const juce::Identifier previousType { "Previous" };
         const juce::Identifier mixType { "Mix" };
+        const juce::Identifier autoFadersType { "AutoFaders" };
+        // The SIMPEL faders (SimpleView::macroDefs)
+        const char* const fadersOfSimple[] { pid::macroPresence, pid::macroWarmth, pid::macroSpace, pid::macroWidth,
+                                             pid::macroAggression, pid::outputGain };
         const juce::Identifier stepType { "Step" }, findingType { "Finding" }, noteType { "Note" }, adjustType { "Adjust" };
     }
 
@@ -315,6 +319,10 @@ namespace vocalypse::automix
         if (onApplying) onApplying (false, true);
 
         mixSnapshot = ParameterSnapshot::capture (apvts, "VOCALYPSE Auto-Mix");
+        autoFaders.clear();
+        for (auto* id : fadersOfSimple)
+            if (const auto it = mixSnapshot.values.find (id); it != mixSnapshot.values.end())
+                autoFaders[id] = it->second;
 
         // Report for the UI (only what was really set up)
         MixReport r;
@@ -379,6 +387,15 @@ namespace vocalypse::automix
         return nachher;
     }
 
+    std::optional<float> AutoMixController::autoMixValueOf (const juce::String& paramId) const
+    {
+        if (! hasMix() || showingPrevious)
+            return std::nullopt;
+        if (const auto it = autoFaders.find (paramId); it != autoFaders.end())
+            return it->second;
+        return std::nullopt;
+    }
+
     void AutoMixController::restorePrevious()
     {
         if (! hasPreviousSnapshot)
@@ -390,6 +407,7 @@ namespace vocalypse::automix
         showingPrevious = false;
         report = {};
         mixSnapshot = {};
+        autoFaders.clear();
         setPhase (Phase::idle);
         sendChangeMessage();
     }
@@ -420,6 +438,10 @@ namespace vocalypse::automix
             mix.appendChild (mixSnapshot.toValueTree(), nullptr);
             t.appendChild (mix, nullptr);
             t.setProperty ("showingPrevious", showingPrevious, nullptr);
+            juce::ValueTree faders (autoFadersType);
+            for (const auto& [id, value] : autoFaders)
+                faders.setProperty (id, value, nullptr);
+            t.appendChild (faders, nullptr);
         }
         pluginState.appendChild (t, nullptr);
     }
@@ -434,6 +456,7 @@ namespace vocalypse::automix
         intent = {};
         previousSnapshot = {};
         mixSnapshot = {};
+        autoFaders.clear();
         hasPreviousSnapshot = showingPrevious = false;
         error.clear();
 
@@ -460,6 +483,10 @@ namespace vocalypse::automix
         if (auto mix = t.getChildWithName (mixType); mix.isValid() && mix.getNumChildren() > 0)
         {
             mixSnapshot = ParameterSnapshot::fromValueTree (mix.getChild (0));
+            // Projects from before 2026-11-03 have no record: their faders show their own colours
+            const auto faders = t.getChildWithName (autoFadersType);
+            for (int i = 0; i < faders.getNumProperties(); ++i)
+                autoFaders[faders.getPropertyName (i).toString()] = (float) faders.getProperty (faders.getPropertyName (i));
             // The project was saved while auditioning the previous state: come back on the mix
             if ((bool) t.getProperty ("showingPrevious", false))
                 mixSnapshot.applyTo (apvts, true);

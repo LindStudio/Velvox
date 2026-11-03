@@ -75,6 +75,10 @@ namespace vocalypse::ui
         // a click opens the VOCAL CHECK tab
         juce::TextButton& getScoreBadge() noexcept { return *scoreBadge; }
 
+        // Fire while a fader holds the value the auto mix set, its own colour once moved (Jakob 2026-11-03);
+        // every frame from refresh()
+        void updateFaderColours();
+
         struct MacroDef { const char* paramId; const char* label; juce::uint32 colour; };
         static const std::vector<MacroDef>& macroDefs();
 

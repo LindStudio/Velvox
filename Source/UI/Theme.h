@@ -52,6 +52,14 @@ namespace vocalypse::ui
         inline const juce::Colour violet     { 0xffa855f7 };
         inline const juce::Colour pink       { 0xfff472b6 };
 
+        // VOCALYPSE fire (logo and Memphy, Jakob 2026-11-03): means "the auto mix did this" - the analyse button,
+        // its status, Nachher, the faders while they hold the auto mix's value. Never meters or warnings
+        // (red / orange reads as overload there).
+        inline const juce::Colour fireTop    { 0xffffd23a };
+        inline const juce::Colour fire       { 0xffff7a12 };
+        inline const juce::Colour fireEnd    { 0xfff0265a };
+        inline const juce::Colour fireInk    { 0xff2a0610 };   // text on fire
+
         // Interaction accent: selection, knob pointers, active states
         inline const juce::Colour cyan       { 0xff22d3ff };
     }
@@ -274,6 +282,17 @@ namespace vocalypse::ui
     // Draws the artwork fitted into `area` (keeps the aspect ratio)
     void drawBrand (juce::Graphics& g, Brand which, juce::Rectangle<float> area,
                     juce::RectanglePlacement placement = juce::RectanglePlacement::centred, float alpha = 1.0f);
+
+    //==========================================================================
+    // The fire of the logo as a fill: gold -> orange -> pink, across (horizontal) or down a rectangle
+    inline juce::ColourGradient fireGradient (juce::Rectangle<float> r, bool horizontal = true, float alpha = 1.0f)
+    {
+        juce::ColourGradient grad (colours::fireTop.withAlpha (alpha), r.getX(), r.getY(),
+                                   colours::fireEnd.withAlpha (alpha), horizontal ? r.getRight() : r.getX(),
+                                   horizontal ? r.getY() : r.getBottom(), false);
+        grad.addColour (0.5, colours::fire.withAlpha (alpha));
+        return grad;
+    }
 
     //==========================================================================
     // Soft radial light - the one decorative gesture of the design

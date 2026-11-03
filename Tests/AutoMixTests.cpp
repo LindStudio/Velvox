@@ -1485,6 +1485,54 @@ public:
                     expect (! t.contains (word), "report mentions " + juce::String (word) + ": " + t);
         }
 
+        // Jakob 2026-11-03: the SIMPEL faders are fire while they hold what the auto mix set; a fader the user
+        // moves gets its own colour back (and fire again when it is back on the mix's value, e.g. by undo)
+        beginTest ("Editor: SIMPEL faders are fire with the auto mix's value, their own colour once moved");
+        {
+            Harness h;
+            h.proc.getAutoMix().dismissPrompt();
+            std::unique_ptr<juce::AudioProcessorEditor> e (h.proc.createEditor());
+            auto& view = asVocalypse (*e).getSimpleView();
+            const auto fireCount = [&view]
+            {
+                view.updateFaderColours();
+                int n = 0;
+                for (auto& s : view.getMacroSliders())
+                    n += s->isFromAutoMix() ? 1 : 0;
+                return n;
+            };
+            expectEquals (fireCount(), 0, "no mix, no fire");
+
+            VocalSpec s; s.seconds = 14.0;
+            h.proc.getAutoMix().applyResult (h.proc.getAutoMix().runSynchronously (makeVocal (s)));
+            expectEquals (fireCount(), 6, "after the mix every fader holds its value");
+
+            auto& presence = *view.getMacroSliders()[0];
+            const float mixValue = h.get (pid::macroPresence);
+            h.set (pid::macroPresence, mixValue > 0.0f ? mixValue - 20.0f : mixValue + 20.0f);
+            expectEquals (fireCount(), 5, "the moved fader leaves the fire");
+            expect (! presence.isFromAutoMix(), "Presence has its own colour");
+            h.set (pid::macroPresence, mixValue);
+            expect (fireCount() == 6 && presence.isFromAutoMix(), "back on the mix's value (undo): fire again");
+
+            h.proc.getAutoMix().showPrevious (true);
+            expectEquals (fireCount(), 0, "Vorher plays: no fire");
+            h.proc.getAutoMix().showPrevious (false);
+            expectEquals (fireCount(), 6, "Nachher: fire again");
+
+            // Saved with the project
+            h.set (pid::macroWidth, h.get (pid::macroWidth) + 10.0f);
+            juce::MemoryBlock saved;
+            h.proc.getStateInformation (saved);
+            Harness loaded;
+            loaded.proc.setStateInformation (saved.getData(), (int) saved.getSize());
+            int fromMix = 0;
+            for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroSpace, pid::macroWidth, pid::macroAggression, pid::outputGain })
+                if (const auto v = loaded.proc.getAutoMix().autoMixValueOf (id); v && std::abs (*v - loaded.get (id)) < 0.01f)
+                    ++fromMix;
+            expectEquals (fromMix, 5, "after loading: the moved Width is not the mix's value, the other five are");
+        }
+
         beginTest ("Editor: the overview lists exactly the applied steps; a step opens its module");
         {
             Harness h;

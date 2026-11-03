@@ -146,9 +146,13 @@ namespace vocalypse::ui
                 {
                     const float w = std::min (r.getWidth() - 10.0f, (float) juce::GlyphArrangement::getStringWidthInt (f, getButtonText()) + 8.0f);
                     const auto line = juce::Rectangle<float> (w, 2.0f).withCentre ({ r.getCentreX(), r.getBottom() - 4.0f });
-                    g.setColour (accent.withAlpha (0.35f));
+                    const bool fire = (bool) getProperties().getWithDefault ("fire", false);
+                    g.setColour ((fire ? colours::fire : accent).withAlpha (0.35f));
                     g.fillRoundedRectangle (line.expanded (1.5f), 2.0f);
-                    g.setColour (accent);
+                    if (fire)
+                        g.setGradientFill (fireGradient (line));
+                    else
+                        g.setColour (accent);
                     g.fillRoundedRectangle (line, 1.0f);
                 }
             }
@@ -324,6 +328,8 @@ namespace vocalypse::ui
         modeButtons[1]->setToggleState (m == Mode::advanced, juce::dontSendNotification);
         // The first tab names what it shows: the macros (AUTO MIX) in Simple, the module chain in Advanced
         tabs[0]->setButtonText (m == Mode::simple ? juce::String ("AUTO MIX") : i18n::tr ("MODULE", "MODULES"));
+        tabs[0]->getProperties().set ("fire", m == Mode::simple);   // AUTO MIX underlines in fire
+        tabs[0]->repaint();
         tabs[0]->setTooltip (m == Mode::simple ? i18n::tr ("Auto Mix: Spektrum, „Vocal analysieren“ und die Makros",
                                                                  "Auto Mix: spectrum, \"Analyze vocal\" and the macros")
                                                : i18n::tr ("Module: die Kette mit dem Panel des gewählten Moduls (Auto Mix: Modus Simpel)",

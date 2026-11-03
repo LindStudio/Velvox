@@ -133,15 +133,15 @@ namespace vocalypse::ui
 
     void MascotView::paintFrame (juce::Graphics& g, juce::Rectangle<float> f) const
     {
-        // "Plugin-Violett" (Jakob 2026-10-28): violet panel, pink speed lines from behind him, ink rim,
-        // hard cyan offset shadow - the plugin's accent colours in comic form
+        // Fire (Jakob 2026-11-03, was "Plugin-Violett" 2026-10-28): orange panel, gold speed lines from behind
+        // him, ink rim, hard pink offset shadow - the colours of the logo in comic form
         const float u = f.getWidth() / 128.0f;   // the design was made at 128 px frame width
         const float rim = std::max (2.0f, 3.5f * u);
-        g.setColour (juce::Colour (0xff00d1ff));
+        g.setColour (juce::Colour (0xfff0265a));
         g.fillRect (f.translated (5.0f * u, 5.0f * u));
 
         const auto centre = juce::Point<float> (f.getCentreX(), f.getY() + f.getHeight() * 0.55f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffa78bfa), centre, juce::Colour (0xff5b2fd6),
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffff9a2e), centre, juce::Colour (0xffc0163e),
                                                  { f.getRight(), f.getBottom() }, true));
         g.fillRect (f);
 
@@ -159,10 +159,10 @@ namespace vocalypse::ui
                 lines.lineTo (centre + juce::Point<float> (std::sin (a1), -std::cos (a1)) * reach);
                 lines.closeSubPath();
             }
-            g.setColour (juce::Colour (0xd9f472b6));
+            g.setColour (juce::Colour (0xd9ffd23a));
             g.fillPath (lines);
             // A calm middle, so the speed lines start around him
-            g.setGradientFill (juce::ColourGradient (juce::Colour (0xffa78bfa), centre, juce::Colour (0x00a78bfa),
+            g.setGradientFill (juce::ColourGradient (juce::Colour (0xffff9a2e), centre, juce::Colour (0x00ff9a2e),
                                                      centre.translated (f.getWidth() * 0.28f, 0.0f), true));
             g.fillRect (f);
         }

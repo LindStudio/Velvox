@@ -93,6 +93,11 @@ namespace vocalypse::automix
         // A hidden snapshot of the state before the mix (0.6: A/B is gone); Vorher / Nachher
         bool isShowingPrevious() const noexcept { return showingPrevious; }
 
+        // The value the last auto mix itself set on a SIMPEL fader (the macros and Vocal Level), in real units;
+        // nothing without a mix, while "Vorher" plays, or for another parameter. Saved with the project.
+        // (mixSnapshot can't tell: it takes the user's tweaks when Vorher / Nachher is switched.)
+        std::optional<float> autoMixValueOf (const juce::String& paramId) const;
+
         // Called around every multi-parameter change made here: (starting, asUndoStep).
         // asUndoStep = false for the Vorher / Nachher switch (listening, not editing).
         std::function<void (bool starting, bool asUndoStep)> onApplying;
@@ -135,6 +140,7 @@ namespace vocalypse::automix
 
         MixReport report;
         ParameterSnapshot previousSnapshot, mixSnapshot;
+        std::map<juce::String, float> autoFaders;   // see autoMixValueOf
         bool hasPreviousSnapshot = false, showingPrevious = false;
         juce::String promptState { "pending" };
         MixIntent intent;

@@ -12,6 +12,12 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
   pluginval gegen das installierte Headliner verglichen). Zustand `VelvoxState` und Presets `VelvoxPreset` werden
   gelesen (neu geschrieben: `VocalypseState` / `VocalypsePreset`), Einstellungen aus `Velvox.settings` und
   Benutzer-Presets aus `Dokumente\Lind Audio\Headliner` bzw. `\Velvox` werden einmalig übernommen.
+- **Feuer-Akzente** (Jakob, Mockups B/C): Feuer (Gold → Orange → Pink aus dem Logo) heißt „das hat der Auto Mix
+  gemacht“. Die SIMPEL-Regler sind Feuer, solange sie den Wert des Auto Mix halten; verschiebst du einen, bekommt er
+  seine eigene Farbe zurück (Strg+Z zurück auf den Mix-Wert → wieder Feuer, bei „Vorher“ alle in ihren Farben).
+  Die Zeile „Auto Mix: …“ darunter folgt. Dazu in Feuer: „Vocal analysieren“, Status-Punkt, „Nachher“, die Linie
+  unter AUTO MIX und Memphys Comic-Rahmen. Pegelanzeigen und Warnungen bleiben kühl. Die Auto-Mix-Werte der Regler
+  werden mit dem Projekt gespeichert (`AutoFaders`; ältere Projekte zeigen die eigenen Farben).
 - Installation entfernt `Headliner.vst3` und `Velvox.vst3`, damit FL das Plugin nicht doppelt sieht.
 - Nicht umbenannt: Repo-Ordner, Daten-/Bench-Ordner (`velvox-data`, `velvox-bench`), Drive-Bundle `velvox.bundle`,
   GitHub-Repo `LindStudio/Velvox`.
