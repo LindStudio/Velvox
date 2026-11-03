@@ -1,5 +1,27 @@
 # HEADLINER – Übergabe für die nächste Session
 
+## STAND 2026-11-03 SPÄT (Haupt-PC) – HIER WEITERMACHEN: Rebranding VOCALYPSE + Website
+Branch **`feature/vocalypse-rebrand`** (von `feature/automix-0.8`), Commit `5ecb55e`. Details: CHANGELOG oben.
+- **Name:** Headliner und Velvox gibt es nicht mehr → **VOCALYPSE** (Jakob). Code: Namespace `vocalypse`, Ziele
+  `Vocalypse`/`VocalypseTests`/`VocalypseRefHost`, Build-Ordner `build/Vocalypse_artefacts`, Env `VOCALYPSE_*`.
+  Plugin-Codes `Lnda`/`Vlvx` NIE ändern (VST3-Kennung `e632afc1`, alte Projekte). Alte Kennungen werden gelesen:
+  `product::legacyStateType` (`VelvoxState`), `ParameterSnapshot::legacyTreeType` (`VelvoxPreset`),
+  `legacySettingsName` (`Velvox.settings`), `legacyNames` (Preset-Ordner Headliner/Velvox).
+- Nicht umbenannt (bewusst): Repo-Ordner `dev\velvox`, `velvox-data`, `velvox-bench`, Drive-Bundle `velvox.bundle`,
+  GitHub `LindStudio/Velvox` → Jakob fragen.
+- **Logo:** Jakob wählte Schriftzug **W3** (Metal Mania, Feuerverlauf, ohne Hörner/Schwanz). Dateien:
+  Drive `VOCALYPSE_Logo\Schriftzug` (SVG + PNG), Icons-Vorschläge `VOCALYPSE_Logo\Icon_Vorschlaege` (N01–N12,
+  Jakob: „Icon schauen wir später“; die erste Runde I1–I15 mochte er nicht). Generatoren lagen im Scratchpad
+  (wm_build.py / icon_build.py) – bei Bedarf neu schreiben: fontTools-Outline von Metal Mania + resvg.
+  Im Plugin: Kopfzeile zeigt W3 (`Resources/Images/VocalypseWordmark.png`), Wellen-Icon bleibt Platzhalter.
+- **Website** (`%USERPROFILE%\dev\lind-audio-web`, Commit `5bbde28`, Drive-Bundle + Kopie `Website\` aktualisiert):
+  Bühnen-Design, Umschalter Roh/VOCALYPSE mit Memphy, 5 Stile, Newsletter statt Kaufen (Jakobs TODO), Impressum
+  (aus lind-studio.com, angepasst), Datenschutz. Vorschau: https://claude.ai/artifact/VRK5xLn9XWcaRfQLsx6zFt
+  Offen: Newsletter-Dienst (`NEWSLETTER_ACTION` in site.js, Double-Opt-in), Platzhalter in datenschutz.html,
+  Jakob klärt Gewerbeumfang (Software-Verkauf) und ob „Lind Audio“ im Impressum so passt; Hosting/Domain.
+- 40.111 Checks grün, pluginval 10 SUCCESS, Beenden ohne Hänger. **NICHT installiert** (UAC abgebrochen),
+  nicht gepusht. Bekannt: SIMPEL-Regler SPACE steht bei 42 % Hall am Anschlag (Anzeige reverbMix/0,3).
+
 ## STAND 2026-11-03 ABEND (Haupt-PC) – HIER WEITERMACHEN: FL-Hänger behoben, Raum + Stile kalibriert
 Branch **`feature/automix-0.8`**, Commits `005f611` (FL-Hänger) und `b2eb8e5` (Auto Mix). Details: CHANGELOG oben.
 - Jakobs Punkte: FL hing beim Schließen · Stile kaum verschieden · Hall/Delay unhörbar · klingt nicht professionell.
