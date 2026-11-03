@@ -1,5 +1,26 @@
 # HEADLINER – Übergabe für die nächste Session
 
+## STAND 2026-11-03 ABEND (Haupt-PC) – HIER WEITERMACHEN: FL-Hänger behoben, Raum + Stile kalibriert
+Branch **`feature/automix-0.8`**, Commits `005f611` (FL-Hänger) und `b2eb8e5` (Auto Mix). Details: CHANGELOG oben.
+- Jakobs Punkte: FL hing beim Schließen · Stile kaum verschieden · Hall/Delay unhörbar · klingt nicht professionell.
+- **FL-Hänger:** `static juce::Image` (Memphy-Sticker) → Direct2D-Freigabe beim DLL-Entladen. Prüf-Werkzeug:
+  `HeadlinerRefHost --editor --plugin <vst3> [--tail s]` (Hänger = Prozess endet nie; vorher 3/3, jetzt 4 s).
+  Regel: **nie** `juce::Image`/Grafik-Ressourcen in `static`-Variablen.
+- **SONOVOX-Daten** (Jakob, Drive `Testvocals\Sonovox-Free-Demo-Vocal-Dataset`, nur Evaluation, nicht weitergeben):
+  entpackt nach `%USERPROFILE%\dev\velvox-data\sonovox` (F01–M50). 11 Lead-Paare trocken/fertig:
+  `python tools/bench/sonovox_pairs.py <sonovox> <out>` → `velvox-bench\2026-11-03\sonovox\{dry,wet,dry_short,wet_short}`.
+  Messen: `tools/bench/pair_metrics.py <dry> <proc> [--suffix _velvox]`, Stile: `tools/bench/style_compare.py <dry> <wet> <bench-dirs…>`.
+- Profis (Median): ab 2 kHz +4…5 dB, Phrasen-Spanne −4 dB, Fahnen −25/−29/−41 dB, Seite −20 dB. Auto Mix vorher: EQ und
+  Dynamik ok, Fahnen 10–12 dB zu leise, Stile 0,7–2,7 dB auseinander. Jetzt (r3): Druckvoll −26/−31/−41, Stile 1,5–8 dB.
+- Voller Lauf **40.104 grün**, pluginval 10 **SUCCESS**. **NICHT installiert** (UAC abgebrochen; FL war zu),
+  nicht gepusht. Hör-Kit für Jakob: `%USERPROFILE%\dev\velvox-bench\2026-11-03\HOERTEST_stile\` (4 Takes × Original,
+  Profi, alt, 5 neue Stile, alle −18 LUFS).
+- Offen / nächste Schritte: EQ-Stilanhebungen kommen erst zu ~1/3 an (Aggressiv Präsenz, Floaty Luft) – Grenzen in
+  `AutoEq.cpp limitsOf` (Rauschen/Zischen) und Kandidaten-Objective misst mit Hall; Rap · Aggressiv erreicht sein
+  Dynamik-Ziel (1–3,5 dB) nicht ganz (4,6); SIMPEL-Regler SPACE steht bei 42 % Hall am Anschlag (Anzeige /0,3);
+  Floaty und Ballade · Warm liegen beim Raum gleich (unterscheiden sich in Klang/Sättigung); Zielkurve mit SONOVOX-Wet
+  per `--target-curve` neu rechnen (Maß des Plugins verwenden, nicht pair_metrics).
+
 ## STAND 2026-11-03 NACHT (Haupt-PC) – HIER WEITERMACHEN: Auto Mix 0.8 fertig, Jakob muss hören
 Branch **`feature/automix-0.8`** (von `feature/modules-0.7`). Spec `docs/superpowers/specs/2026-11-02-automix-08-tailored-design.md`,
 Plan `docs/superpowers/plans/2026-11-02-automix-08-tailored.md`, Entscheidungen („Ruling“) im Ledger
