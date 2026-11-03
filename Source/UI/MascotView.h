@@ -35,8 +35,17 @@ namespace velvox::ui
         void playBow() { brain.playBow(); repaint(); }
         void stopScene() { brain.stopScene(); repaint(); }
 
-        // The sticker of a mood (embedded PNG, decoded once)
+        // The sticker of a mood (embedded PNG, decoded once while any MascotView exists).
+        // Never keep juce::Image in static storage: JUCE 8 images hold Direct2D resources, and a static
+        // releases them when the host unloads the DLL (under the Windows loader lock) - FL Studio then
+        // hung on exit (2026-11-03, HeadlinerRefHost --editor reproduces it).
         static juce::Image sticker (mascot::Mood mood);
+
+        struct Stickers
+        {
+            Stickers();
+            std::array<juce::Image, mascot::numMoods> images;
+        };
 
     private:
         juce::Rectangle<float> stickerArea() const;   // the sticker image at rest, in local coordinates
@@ -45,6 +54,7 @@ namespace velvox::ui
         void paintBlink (juce::Graphics&, const juce::Image& picture, mascot::Mood, float amount, const juce::AffineTransform& toView) const;
         juce::AffineTransform motion() const;          // pop, breathing, bounce, hop around his feet
 
+        juce::SharedResourcePointer<Stickers> stickers;   // shared by all views, released with the last one
         mascot::Brain brain;
         juce::Rectangle<float> standArea;
     };

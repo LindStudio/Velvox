@@ -8,6 +8,8 @@
 //   HeadlinerRefHost --render --plugin <file.vst3> [--sub <name>] --in a.wav --out b.wav
 //                             [--set key=text]... [--setn key=0..1]... [--tail sec] [--block n] [--bpm x]
 //   HeadlinerRefHost --render --headliner <moduleKey> [--instance k] --in a.wav --out b.wav [--set id=value]...
+//   HeadlinerRefHost --editor --plugin <file.vst3> [--tail sec]   opens the editor like a DAW, closes it, unloads
+//                             the plugin and exits (the host-shutdown check: a hang here is a hang when FL closes)
 //
 // key = parameter index, ID or name (unique prefix allowed). Exit codes: 0 ok, 1 usage / IO,
 // 2 plugin not loadable, 3 parameter not found or not settable.
@@ -37,7 +39,7 @@ namespace
         {
             const juce::String k = juce::String::fromUTF8 (argv[i]);
             auto next = [&] () -> juce::String { return i + 1 < argc ? juce::String::fromUTF8 (argv[++i]) : juce::String(); };
-            if (k == "--subs" || k == "--list" || k == "--render") a.mode = k.substring (2);
+            if (k == "--subs" || k == "--list" || k == "--render" || k == "--editor") a.mode = k.substring (2);
             else if (k == "--plugin")    a.plugin = next();
             else if (k == "--sub")       a.sub = next();
             else if (k == "--headliner") a.headliner = next();
@@ -248,6 +250,28 @@ namespace
             return headliner ? 1 : 2;
         }
 
+        if (a.mode == "editor")
+        {
+            proc->prepareToPlay (fs, a.block);
+            {
+                std::unique_ptr<juce::AudioProcessorEditor> ed (proc->createEditorIfNeeded());
+                if (ed == nullptr)
+                {
+                    std::fprintf (stderr, "error: no editor\n");
+                    return 4;
+                }
+                ed->setVisible (true);
+                ed->addToDesktop (juce::ComponentPeer::windowHasTitleBar);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil ((int) std::lround (juce::jmax (1.0, a.tail) * 1000.0));
+            }
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+            proc->releaseResources();
+            proc.reset();
+            std::printf ("editor opened and closed\n");
+            std::fflush (stdout);
+            return 0;
+        }
+
         juce::var readback;
         if (! applySettings (*proc, a, headliner, readback))
             return 3;
@@ -305,6 +329,8 @@ int main (int argc, char* argv[])
         return 1;
     }
     const int rc = run (a);
-    juce::DeletedAtShutdown::deleteAll();
+    juce::DeletedAtShutdown::deleteAll();   // unloads the hosted VST3 module (its static objects die here)
+    std::printf ("shutdown done\n");
+    std::fflush (stdout);
     return rc;
 }

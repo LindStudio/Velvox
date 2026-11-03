@@ -79,20 +79,21 @@ namespace velvox::ui
         }
     }
 
+    MascotView::Stickers::Stickers()
+    {
+        for (int i = 0; i < mascot::numMoods; ++i)
+        {
+            int size = 0;
+            if (const char* data = VelvoxBinaryData::getNamedResource (resourceNames[i], size))
+                images[(size_t) i] = juce::ImageFileFormat::loadFrom (data, (size_t) size);
+        }
+    }
+
     juce::Image MascotView::sticker (mascot::Mood mood)
     {
-        static const auto images = []
-        {
-            std::array<juce::Image, mascot::numMoods> out;
-            for (int i = 0; i < mascot::numMoods; ++i)
-            {
-                int size = 0;
-                if (const char* data = VelvoxBinaryData::getNamedResource (resourceNames[i], size))
-                    out[(size_t) i] = juce::ImageCache::getFromMemory (data, size);
-            }
-            return out;
-        }();
-        return images[(size_t) mood];
+        // Cheap while a view holds the set; otherwise decodes once for this call and lets it go again
+        const juce::SharedResourcePointer<Stickers> set;
+        return set->images[(size_t) mood];
     }
 
     MascotView::MascotView()
