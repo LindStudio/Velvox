@@ -1,6 +1,9 @@
 #include "AutoMixObjective.h"
 #include "AutoMixEngine.h"
 #include "AutoEq.h"
+#include "AutoMixPlanner.h"
+#include "../DSP/Instances.h"
+#include "../Parameters/EqBands.h"
 
 namespace vocalypse::automix
 {
@@ -40,6 +43,42 @@ namespace vocalypse::automix
         if (! p.beatPresent)
             return BeatDensity::none;
         return p.beatGapShare < 0.15f ? BeatDensity::dense : (p.beatGapShare > 0.3f ? BeatDensity::sparse : BeatDensity::medium);
+    }
+
+    float planComplexity (const MixPlan& plan, float medianCompressionDb)
+    {
+        using M = dsp::ModuleId;
+        const std::pair<M, const char*> switches[] {
+            { M::eq, pid::eqOn }, { M::ride, pid::rideOn }, { M::comp, pid::compOn }, { M::smash, pid::smashOn },
+            { M::deess, pid::deessOn }, { M::smooth, pid::smoothOn }, { M::sat, pid::satOn }, { M::doubler, pid::doublerOn },
+            { M::delay, pid::delayOn }, { M::reverb, pid::reverbOn }, { M::denoise, pid::denoiseOn }, { M::breath, pid::breathOn }
+        };
+        float modules = 0.0f, eqGain = 0.0f;
+        auto values = plan.values;
+        const auto access = eqbands::accessFor (values, nullptr);
+        for (const auto& slot : plan.routing)
+        {
+            for (const auto& [module, id] : switches)
+            {
+                if (module != slot.id || plan.get (dsp::instanceParamId (id, slot.instance)) <= 0.5f)
+                    continue;
+                modules += 1.0f;
+                if (module == M::eq)
+                    for (int b = 0; b < dsp::maxEqBands; ++b)
+                        if (const auto band = eqbands::readBand (access, slot.instance, b); band.on)
+                            eqGain += std::abs (band.gain);
+            }
+        }
+        const bool comp = plan.routing.contains (M::comp) && plan.on (pid::compOn);
+        return 0.3f * modules + 0.05f * eqGain + 0.1f * (comp ? std::max (0.0f, medianCompressionDb) : 0.0f);
+    }
+
+    float variantMargin (float baseScore) noexcept { return std::max (0.5f, 0.08f * baseScore); }
+
+    bool variantEarnsChange (float incumbentScore, float incumbentComplexity, float variantScore, float variantComplexity,
+                             float baseScore) noexcept
+    {
+        return incumbentScore - variantScore >= variantMargin (baseScore) + variantComplexity - incumbentComplexity - 1.0e-6f;
     }
 
     ObjectiveBreakdown evaluate (const RenderMetrics& m, const RenderMetrics& original, const VocalProfile& profile,
@@ -153,8 +192,8 @@ namespace vocalypse::automix
         b.artifacts = 0.3f * window (peakGrowth, -100.0f, 3.0f, 2.0f)
                     + 0.25f * window (peakAtTarget, -100.0f, -1.0f, 2.0f);
 
-        // ---- Leaving the base plan has to be worth it
-        b.change = isBasePlan ? 0.0f : 0.25f;
+        // ---- Leaving the base plan has to be worth it: that is the margin of variantEarnsChange (U4), not a cost here
+        (void) isBasePlan;
         return b;
     }
 }

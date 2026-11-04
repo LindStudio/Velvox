@@ -769,6 +769,13 @@ namespace vocalypse::automix
         // ---- Verify the whole chain and adjust where the measurement is reliable
         auto& plan = r.plan;
         RenderMetrics m;
+        // U4: the corrections run in the fixed order below, each kind at most once (a kind that has been
+        // applied is not touched again by a later round). The one exception is the de-esser strength: a bounded
+        // convergence loop (3 dB per round toward the measured S / vowel target, 4 rounds at most) stays iterative.
+        // The tone correction waits until the de-esser has stopped changing in a round (or the last round), so
+        // it runs once on a render that already includes the final de-esser.
+        enum Kind { kDeessAdd = 2, kAir = 4, kTone = 8, kSmooth = 16, kLowCut = 32, kDoubler = 64 };
+        int appliedKinds = 0;
         for (int round = 0; round < 4; ++round)
         {
             if (stop())
@@ -805,7 +812,7 @@ namespace vocalypse::automix
 
             // The chain itself (compression, presence, saturation) can lift S sounds:
             // then a gentle de-esser is set up even if the recording did not need one
-            if (! plan.on (pid::deessOn) && m.sibilanceValid
+            if (! (appliedKinds & kDeessAdd) && ! plan.on (pid::deessOn) && m.sibilanceValid
                 && m.sibilanceVsVowelDb > std::max (-8.0f, r.original.sibilanceVsVowelDb + 2.0f))
             {
                 AutoMixPlanner::configureDeEsser (plan, r.profile, 0.0f, 4.0f);   // the profile is at the working level already
@@ -815,8 +822,10 @@ namespace vocalypse::automix
                                                   "After the chain the S sounds stood out {0} more than in the original - gently evened out.",
                                                   { db (m.sibilanceVsVowelDb - r.original.sibilanceVsVowelDb) }), true });
                 r.adjustments.push_back (both ("De-Esser ergänzt (die Kette hob die S-Laute an).", "De-Esser added (the chain lifted the S sounds)."));
-                changed = true;
+                changed = true; appliedKinds |= kDeessAdd;
             }
+
+            const bool deessMoved = changed;   // only the de-esser blocks above can have set it in this round
 
             // Brightness: the chain must not make an already bright voice brighter (a vibe that asks for more
             // highs, e.g. Floaty, moves the limit by its own lift - otherwise this undid the style, 2026-11-03)
@@ -833,7 +842,7 @@ namespace vocalypse::automix
                     }
                 return n > 0 ? std::max (0.0f, sum / (float) n) : 0.0f;
             }();
-            if (auto air = roleBand (plan, current, dsp::EqRole::air); m.topDb > r.original.topDb + 5.0f + styleTopDb && air.has_value() && air->on && air->gain > 0.0f)
+            if (auto air = roleBand (plan, current, dsp::EqRole::air); ! (appliedKinds & kAir) && m.topDb > r.original.topDb + 5.0f + styleTopDb && air.has_value() && air->on && air->gain > 0.0f)
             {
                 const auto before = *air;
                 air->gain = std::max (0.0f, air->gain - 1.5f);
@@ -841,14 +850,14 @@ namespace vocalypse::automix
                 updateEqDecision (plan, dsp::EqRole::air, before, *air, both ("Höhenanhebung verringert: die Kette hob die Höhen schon an.",
                                                                               "High boost reduced: the chain already lifted the highs."));
                 r.adjustments.push_back (both ("Höhenanhebung verringert (Kette wurde zu hell).", "High boost reduced (the chain got too bright)."));
-                changed = true;
+                changed = true; appliedKinds |= kAir;
                 airAdjusted = true;
             }
 
             // Tone (0.8): the auto-mix bands follow the third octaves of the real render onto the target
-            // curve - compression, saturation, the de-esser and effects move the balance as well (every round:
-            // a de-esser strengthened in a later round darkens the top again)
-            if (plan.on (pid::eqOn) && plan.routing.contains (dsp::ModuleId::eq))
+            // curve - compression, saturation, the de-esser and effects move the balance as well. Once, after
+            // the de-esser loop has settled (a de-esser strengthened in a later round would darken the top again)
+            if (! (appliedKinds & kTone) && (! deessMoved || round == 3) && plan.on (pid::eqOn) && plan.routing.contains (dsp::ModuleId::eq))
             {
                 auto state = autoEqState (plan, current, r.profile);
                 state.context.target = &mixTarget;
@@ -864,32 +873,32 @@ namespace vocalypse::automix
                         continue;
                     updateEqDecision (plan, c.role, before.has_value() ? *before : dsp::EqBand {}, c.band, c.reason);
                     r.adjustments.push_back (both ("Klang nachgeregelt: {0}.", "Tone readjusted: {0}.", { c.title }));
-                    changed = true;
+                    changed = true; appliedKinds |= kTone;
                 }
             }
             // ... and must not dull it either
-            if (m.topDb < r.original.topDb - 5.0f && plan.on (pid::smoothOn) && plan.get (pid::smoothAmount) > 20.0f)
+            if (! (appliedKinds & kSmooth) && m.topDb < r.original.topDb - 5.0f && plan.on (pid::smoothOn) && plan.get (pid::smoothAmount) > 20.0f)
             {
                 plan.set (pid::smoothAmount, plan.get (pid::smoothAmount) - 10.0f);
                 r.adjustments.push_back (both ("Resonanzkontrolle verringert (Höhen gingen verloren).", "Resonance control reduced (highs were lost)."));
-                changed = true;
+                changed = true; appliedKinds |= kSmooth;
             }
 
             // Low end: keep the body of the voice
-            if (auto lowCut = roleBand (plan, current, dsp::EqRole::lowCut); m.bodyDb < r.original.bodyDb - 6.0f && lowCut.has_value() && lowCut->freq > 65.0f)
+            if (auto lowCut = roleBand (plan, current, dsp::EqRole::lowCut); ! (appliedKinds & kLowCut) && m.bodyDb < r.original.bodyDb - 6.0f && lowCut.has_value() && lowCut->freq > 65.0f)
             {
                 lowCut->freq *= 0.85f;
                 setRoleBand (plan, current, 0, dsp::EqRole::lowCut, *lowCut, false);
                 r.adjustments.push_back (both ("Low Cut gesenkt (zu viel Körper ging verloren).", "Low Cut lowered (too much body was lost)."));
-                changed = true;
+                changed = true; appliedKinds |= kLowCut;
             }
 
             // Mono compatibility of the result
-            if (m.monoLossDb < -1.5f && plan.on (pid::doublerOn))
+            if (! (appliedKinds & kDoubler) && m.monoLossDb < -1.5f && plan.on (pid::doublerOn))
             {
                 plan.set (pid::doublerMix, plan.get (pid::doublerMix) * 0.6f);
                 r.adjustments.push_back (both ("Doubler reduziert (Pegelverlust in Mono).", "Doubler reduced (level loss in mono)."));
-                changed = true;
+                changed = true; appliedKinds |= kDoubler;
             }
 
             if (! changed)
@@ -916,6 +925,7 @@ namespace vocalypse::automix
                 c.metrics = renderChecked (audio, current, cand, r.profile);
                 c.routing = cand.routing;
                 c.score = evaluate (c.metrics, r.original, r.profile, target, isBase, cand.on (pid::reverbOn) || cand.on (pid::delayOn), mixTarget);
+                c.complexity = planComplexity (cand, c.metrics.compGrMedianDb);   // median GR measured on the candidate's render
                 ++r.iterations;
                 return c;
             };
@@ -930,13 +940,23 @@ namespace vocalypse::automix
                 r.candidates.push_back (score (variants[i].first, variants[i].second, i == 0));
             }
 
-            // The two best single changes together (when both beat the base plan and touch
-            // different decisions)
+            // U4 (stable choice): a variant is taken only when it beats the base plan by the margin
+            // max (0.5, 8 % of the base score) plus its extra complexity; ties (within 1e-6) keep the earlier
+            // candidate. The two best single changes together need the same margin over the better single one.
+            const float baseScore = r.candidates[0].score.total();
+            const auto adjusted = [&] (size_t i) { return r.candidates[i].score.total() + r.candidates[i].complexity; };
             std::vector<size_t> order;
             for (size_t i = 1; i < r.candidates.size(); ++i)
-                if (r.candidates[i].score.total() < r.candidates[0].score.total())
+                if (variantEarnsChange (baseScore, r.candidates[0].complexity, r.candidates[i].score.total(), r.candidates[i].complexity, baseScore))
                     order.push_back (i);
-            std::sort (order.begin(), order.end(), [&] (size_t a, size_t b) { return r.candidates[a].score.total() < r.candidates[b].score.total(); });
+            std::stable_sort (order.begin(), order.end(), [&] (size_t a, size_t b) { return adjusted (a) < adjusted (b) - 1.0e-6f; });
+            // the best candidate that did not earn the change (for the log)
+            size_t runnerUp = 0;
+            for (size_t i = 1; i < r.candidates.size(); ++i)
+                if (std::find (order.begin(), order.end(), i) == order.end() && (runnerUp == 0 || adjusted (i) < adjusted (runnerUp) - 1.0e-6f))
+                    runnerUp = i;
+            size_t best = order.empty() ? 0 : order[0];
+            size_t rejectedCombo = 0;
             if (order.size() >= 2 && ! stop())
             {
                 MixPlan combined = variants[order[0]].second;
@@ -950,19 +970,24 @@ namespace vocalypse::automix
                 const auto name = variants[order[0]].first + " + " + variants[order[1]].first;
                 variants.push_back ({ name, combined });
                 r.candidates.push_back (score (name, combined, false));
+                const size_t ci = r.candidates.size() - 1;
+                if (variantEarnsChange (r.candidates[order[0]].score.total(), r.candidates[order[0]].complexity,
+                                        r.candidates[ci].score.total(), r.candidates[ci].complexity, baseScore))
+                    best = ci;
+                else
+                    rejectedCombo = ci;
             }
-
-            size_t best = 0;
-            for (size_t i = 1; i < r.candidates.size(); ++i)
-                if (r.candidates[i].score.total() < r.candidates[best].score.total())
-                    best = i;
             r.chosenCandidate = (int) best;
+            const auto baseValues = plan.values;
             if (best != 0)
-            {
-                const auto baseValues = plan.values;
                 plan = variants[best].second;
-                // decision log: the chosen candidate's name on every module it changed
-                for (const auto& [id, v] : plan.values)
+            // decision log: base score, variant score, margin required, complexity delta and why the variant was
+            // taken or rejected, on every module the candidate changed
+            const auto logCandidate = [&] (size_t i, bool taken)
+            {
+                const float margin = variantMargin (baseScore);
+                const float complexityDelta = r.candidates[i].complexity - r.candidates[0].complexity;
+                for (const auto& [id, v] : variants[i].second.values)
                 {
                     const auto it = baseValues.find (id);
                     if (it != baseValues.end() && std::abs (it->second - v) < 1.0e-4f)
@@ -972,11 +997,27 @@ namespace vocalypse::automix
                     if (module.has_value())
                         for (auto& l : plan.log)
                             if (! l.globalStage && l.module == *module && l.instance == 0)
-                                setMeasured (l.result, "candidate: " + variants[best].first, (float) best, "");
+                            {
+                                setMeasured (l.result, "candidate: " + variants[i].first, (float) i, "");
+                                setMeasured (l.result, "variantBaseScore", baseScore, "");
+                                setMeasured (l.result, "variantScore", r.candidates[i].score.total(), "");
+                                setMeasured (l.result, "variantMarginRequired", margin, "");
+                                setMeasured (l.result, "variantComplexityDelta", complexityDelta, "");
+                                // 1 = taken: base - variant reached margin + complexity delta; 0 = rejected, it did not
+                                setMeasured (l.result, "variantTaken", taken ? 1.0f : 0.0f, "");
+                            }
                 }
+            };
+            if (rejectedCombo != 0)
+                logCandidate (rejectedCombo, false);   // before the taken one: shared modules end up with the taken entry
+            if (best != 0)
+            {
+                logCandidate (best, true);
                 syncDecisions (plan, variants[best].first, r.candidates[0].score, r.candidates[best].score, current);
                 r.adjustments.push_back (both ("Variante gewählt: ", "Variant chosen: ") + variants[best].first);
             }
+            else if (runnerUp != 0)
+                logCandidate (runnerUp, false);   // the best variant that did not earn the change
         }
 
         // ---- Output level: match the target loudness, then keep peaks below -1 dBFS. With a beat on the

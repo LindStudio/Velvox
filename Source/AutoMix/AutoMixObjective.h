@@ -5,6 +5,7 @@
 namespace vocalypse::automix
 {
     struct RenderMetrics;
+    struct MixPlan;
 
     // The objective the automatic mix minimises when it compares candidate chains
     // (docs/AUTOMIX_OBJECTIVE.md). Every term is a penalty (0 = inside the target window),
@@ -21,7 +22,7 @@ namespace vocalypse::automix
     //             (spoken: drier, sustained melodic: more room)
     //   artifacts clipping runs, peak-to-loudness growth over the original (> 1.5 dB),
     //             and mildly the headroom: peak above -1 dBFS at the target loudness
-    //   change    a small fixed cost for leaving the base plan - variants must earn it
+    //   change    (U4: 0 - leaving the base plan is paid for by the margin of variantEarnsChange)
     //
     // Loudness is never rewarded: every candidate is compared at the same target loudness.
     struct ObjectiveBreakdown
@@ -40,6 +41,17 @@ namespace vocalypse::automix
     // (gap share < 0.15), sparse = clear gaps (> 0.3). The space window moves with it.
     enum class BeatDensity { none, dense, medium, sparse };
     BeatDensity beatDensityOf (const VocalProfile& p) noexcept;
+
+    // ---- Stable variant choice (plan 2026-11-04-automix-konsistenz, U4) ----
+    // Complexity of a chain, from the plan's values: 0.3 per switched-on module instance (in the routing),
+    // 0.05 per dB of the summed EQ gain magnitude (active bands of every EQ instance in the chain) and 0.1 per
+    // dB of the median compression `medianCompressionDb` (the gain reduction measured on the render).
+    float planComplexity (const MixPlan& plan, float medianCompressionDb);
+    // What a variant has to beat the incumbent by: max (0.5, 8 % of the base plan's score)
+    float variantMargin (float baseScore) noexcept;
+    // incumbent - variant >= variantMargin (base) + complexity (variant) - complexity (incumbent)
+    bool variantEarnsChange (float incumbentScore, float incumbentComplexity, float variantScore, float variantComplexity,
+                             float baseScore) noexcept;
 
     // `effectsPlanned`: the plan adds reverb or delay (then a too dry result also costs)
     // 0.8: `target` = the genre / vibe target (tonal: third octaves against its curve; dynamics,

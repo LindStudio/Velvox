@@ -41,6 +41,7 @@ namespace vocalypse::automix
     {
         juce::String name;                 // what differs from the base plan (German, for the report)
         ObjectiveBreakdown score;
+        float complexity = 0.0f;           // planComplexity of the candidate (U4: part of the variant margin)
         RenderMetrics metrics;
         dsp::Routing routing;
     };
