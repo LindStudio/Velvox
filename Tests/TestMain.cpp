@@ -9,6 +9,7 @@
 #include "SyntheticVocal.h"
 #include "PopScan.h"
 #include "FxLab.h"
+#include "ConsistencyHarness.h"
 
 struct StdoutLogger final : juce::Logger
 {
@@ -98,21 +99,18 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
     juce::AudioBuffer<float> file (channels, total);
     reader->read (&file, 0, total, 0, true, channels > 1);
 
-    // 1) Bounded capture, block by block (512) - the same code path as in the plugin
-    CaptureBuffer capture;
-    capture.arm (reader->sampleRate, channels, CaptureConfig {});
-    for (int start = 0; start < total && capture.getState() != CaptureBuffer::State::complete; start += 512)
-    {
-        const int n = std::min (512, total - start);
-        std::array<const float*, 2> p { file.getReadPointer (0, start), file.getReadPointer (channels - 1, start) };
-        capture.push (p.data(), channels, nullptr, 0, n, true);
-    }
-    if (capture.getState() != CaptureBuffer::State::complete && ! capture.finishNow())
+    // 1) Bounded capture, block by block (512) - the same code path as in the plugin (shared with the consistency harness)
+    CapturedAudio whole;
+    whole.sampleRate = reader->sampleRate;
+    whole.channels = channels;
+    for (int ch = 0; ch < channels; ++ch)
+        whole.vocal.emplace_back (file.getReadPointer (ch), file.getReadPointer (ch) + total);
+    CapturedAudio captured;
+    if (! vocalypse::test::captureLikePlugin (whole, 0.0, captured))
     {
         std::printf ("Not enough signal in %s\n", input.getFileName().toRawUTF8());
         return 1;
     }
-    const auto captured = capture.copyOut();
 
     // 2) Analysis, plan, verification
     std::map<juce::String, float> current;
@@ -135,11 +133,6 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
             finalValues[kv.upToFirstOccurrenceOf ("=", false, false).trim()] = kv.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
 
     // 3) Render the whole file with the result
-    CapturedAudio whole;
-    whole.sampleRate = reader->sampleRate;
-    whole.channels = channels;
-    for (int ch = 0; ch < channels; ++ch)
-        whole.vocal.emplace_back (file.getReadPointer (ch), file.getReadPointer (ch) + total);
     CapturedAudio rendered;
     const auto wholeIn = AutoMixEngine::measure (whole);
     const auto wholeOut = AutoMixEngine::render (whole, current, finalValues, r.plan.routing, &rendered);
@@ -716,6 +709,24 @@ int main (int argc, char* argv[])
             return vocalypse::test::runTargetCurve (out, files);
         return juce::String (argv[1]) == "--check-template" ? vocalypse::test::runCheckTemplate (out, files)
                                                             : vocalypse::test::runCheckEval (out, files);
+    }
+
+    // Auto mix consistency (Tests/ConsistencyHarness.cpp):
+    //   VocalypseTests --consistency <takes.txt|dir> <outDir> [genre vibe] [--repeats N]
+    if (argc >= 4 && juce::String (argv[1]) == "--consistency")
+    {
+        vocalypse::automix::MixIntent intent;
+        int repeats = 10;
+        std::vector<int> numbers;
+        for (int i = 4; i < argc; ++i)
+            if (juce::String (argv[i]) == "--repeats" && i + 1 < argc)
+                repeats = juce::String (argv[++i]).getIntValue();
+            else
+                numbers.push_back (juce::String (argv[i]).getIntValue());
+        if (numbers.size() >= 2)
+            intent = { (vocalypse::automix::Genre) juce::jlimit (0, vocalypse::automix::numGenres - 1, numbers[0]),
+                       (vocalypse::automix::Vibe) juce::jlimit (0, vocalypse::automix::numVibes - 1, numbers[1]) };
+        return vocalypse::test::runConsistency (juce::File (juce::String::fromUTF8 (argv[2])), juce::File (juce::String::fromUTF8 (argv[3])), intent, repeats);
     }
 
     if (argc >= 6 && (juce::String (argv[1]) == "--automix" || juce::String (argv[1]) == "--bench"))

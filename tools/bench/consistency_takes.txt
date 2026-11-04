@@ -1,0 +1,9 @@
+# Fixed takes of the auto mix consistency baseline (VocalypseTests --consistency). %USERPROFILE% is expanded.
+%USERPROFILE%\dev\velvox-bench\2026-10-29\train\dry\jakob_rec1.wav
+%USERPROFILE%\dev\velvox-bench\2026-10-29\train\dry\jakob_rec2.wav
+%USERPROFILE%\dev\velvox-bench\2026-10-29\train\dry\jakob_vergleich.wav
+%USERPROFILE%\dev\velvox-bench\2026-10-29\train\dry\splice_mylk_dry.wav
+%USERPROFILE%\dev\velvox-bench\2026-10-29\train\dry\vs_f1_caro_straight.wav
+%USERPROFILE%\dev\velvox-bench\2026-10-29\train\dry\vs_f3_row_spoken.wav
+%USERPROFILE%\dev\velvox-bench\2026-10-29\train\dry\vs_m1_row_spoken.wav
+%USERPROFILE%\dev\velvox-bench\2026-10-29\train\dry\vs_m3_caro_vibrato.wav
