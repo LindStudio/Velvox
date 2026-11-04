@@ -139,7 +139,7 @@ namespace vocalypse::automix
     }
 
     //==========================================================================
-    VocalProfile VocalProfiler::analyse (const CapturedAudio& audio, float minVoicedSeconds, const std::function<bool()>& shouldStop)
+    VocalProfile VocalProfiler::analyse (const CapturedAudio& audio, float minVoicedSeconds, const std::function<bool()>& shouldStop, float scaleDb)
     {
         VocalProfile p;
         p.sampleRate = audio.sampleRate;
@@ -185,6 +185,10 @@ namespace vocalypse::automix
             p.loudnessRangeValid = true;
         }
 
+        // Clipping and the peak describe the capture before the working-level scaling: full scale is
+        // 0 dB there, and `scaleDb` dB further down in `audio`
+        const float fullScale = juce::Decibels::decibelsToGain (scaleDb);
+        const float clipLevel = 0.999f * fullScale;
         float peak = 0.0f;
         for (auto* c : chans)
         {
@@ -193,7 +197,7 @@ namespace vocalypse::automix
             {
                 const float a = std::abs (c[i]);
                 peak = std::max (peak, a);
-                if (a >= 0.999f)
+                if (a >= clipLevel)
                 {
                     if (++run == 3)
                         ++p.clipRuns;
@@ -204,7 +208,7 @@ namespace vocalypse::automix
                 }
             }
         }
-        p.peakDb = juce::Decibels::gainToDecibels (peak, -100.0f);
+        p.peakDb = peak > 0.0f ? juce::Decibels::gainToDecibels (peak) - scaleDb : -100.0f;
 
         // 50 ms blocks of the mid signal: voice level distribution and noise floor
         const int block = std::max (64, (int) std::lround (0.05 * fs));
@@ -867,7 +871,6 @@ namespace vocalypse::automix
                 const float vocalSpanLufs = integratedLufs (vocalSpan, spanLength, fs);
                 if (vocalSpanLufs > -70.0f)
                     p.vocalOverBeatLu = vocalSpanLufs - p.beatLufs;
-
                 std::vector<float> span (beatBlockDb.begin() + firstBlock, beatBlockDb.begin() + lastBlock + 1);
                 const float loud = percentile (span, 0.9f);
                 int gaps = 0;
@@ -922,6 +925,8 @@ namespace vocalypse::automix
                     p.maskingHint = autoeq::maskingOf (p).presenceDb > autoeq::unmaskFromDb;
                 }
             }
+            if (p.beatLufs > -99.0f)
+                p.beatLufs -= scaleDb;   // the engine scales the beat with the vocal: report the beat as captured
         }
 
         // ======================================================================
@@ -942,10 +947,10 @@ namespace vocalypse::automix
             add ("hotInput", C::measured, both ("Sehr hoher Eingangspegel", "Very high input level"),
                  both ("Spitzenpegel {0}FS - kaum Reserve.", "Peak level {0}FS - hardly any headroom.", { db (p.peakDb) }), 50.0f);
 
-        if (p.enoughMaterial && p.voiceRmsDb < -40.0f)
+        if (p.enoughMaterial && p.voiceRmsDb - scaleDb < -40.0f)
             add ("quiet", C::measured, both ("Sehr leises Signal", "Very quiet signal"),
                  both ("Mittlerer Stimmpegel {0}FS. Input-Gain oder Spurpegel anheben.", "Average voice level {0}FS. Raise the input gain or track level.",
-                       { db (p.voiceRmsDb) }), 40.0f);
+                       { db (p.voiceRmsDb - scaleDb) }), 40.0f);
 
         if (! p.enoughMaterial)
             return p;

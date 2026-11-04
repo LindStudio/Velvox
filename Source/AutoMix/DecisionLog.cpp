@@ -84,8 +84,9 @@ namespace vocalypse::automix
             l.parameters.clear();
             if (l.globalStage)
             {
-                if (auto it = values.find (pid::outputGain); it != values.end())
-                    l.parameters.push_back ({ pid::outputGain, it->second, "dB" });
+                const char* id = l.instance == 1 ? pid::inputGain : pid::outputGain;
+                if (auto it = values.find (id); it != values.end())
+                    l.parameters.push_back ({ id, it->second, "dB" });
                 continue;
             }
             for (auto& [id, value] : values)

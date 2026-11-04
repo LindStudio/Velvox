@@ -88,13 +88,16 @@ public:
             expect (! compare (fingerprint (a), fingerprint (b), Check::exact, 0.0f, tol).pass);
         }
 
-        beginTest ("Gain shift: 2 dB threshold shift passes at shift 2, the gain compensation is checked");
+        beginTest ("Gain shift: the compensation is checked, the thresholds stay put");
         {
             auto a = basePlan(), b = basePlan();
-            b.set (pid::compThreshold, -20.0f);
             b.set (pid::inputGain, -2.0f);
             b.set (pid::outputGain, 3.0f);
             expect (compare (fingerprint (a), fingerprint (b), Check::gainShift, 2.0f, tol).pass);
+
+            auto g = b;
+            g.set (pid::compThreshold, -20.0f);                             // a threshold that follows the shift is no longer allowed
+            expect (! compare (fingerprint (a), fingerprint (g), Check::gainShift, 2.0f, tol).pass);
 
             auto c = b;
             c.set (pid::inputGain, -1.0f);                                  // compensation missing
@@ -255,9 +258,20 @@ public:
             for (auto& [id, v] : scrambledValues (4))
                 if (sessionParameters().count (id) == 0 && h.proc.getState().getParameter (id) != nullptr)
                     h.set (id.toRawUTF8(), v);
+            // The five session parameters (nothing the auto mix decides): set to non-default values, they survive the run
+            const std::map<juce::String, float> session { { pid::bypass, 1.0f }, { pid::levelMatchWindow, 2.0f }, { pid::levelMatchRange, 7.0f },
+                                                          { pid::checkOn, 0.0f }, { pid::checkMode, 1.0f } };
+            expectEquals ((int) session.size(), (int) sessionParameters().size());
+            for (auto& [id, v] : session)
+            {
+                expect (sessionParameters().count (id) == 1, id);
+                h.set (id.toRawUTF8(), v);
+            }
             const auto r = c.runSynchronously (vocal);
             expect (r.ok, r.error);
             c.applyResult (r);
+            for (auto& [id, v] : session)
+                expectEquals (h.get (id.toRawUTF8()), v, "session parameter after applyResult: " + id);
 
             const auto sliders = sliderPositions (r.plan.values);   // the SIMPLE faders show what the mix did (positions only)
             int checked = 0;
@@ -273,7 +287,7 @@ public:
                 ++checked;
             }
             expect (checked > 400, "parameters compared: " + juce::String (checked));
-            expectEquals (h.get (pid::inputGain), 0.0f, "input gain is part of the mix");
+            expectWithinAbsoluteError (h.get (pid::inputGain), r.plan.get (pid::inputGain), 1.0e-3f, "input gain is part of the mix");
 
             for (auto id : { dsp::ModuleId::eq, dsp::ModuleId::ride, dsp::ModuleId::comp, dsp::ModuleId::smash, dsp::ModuleId::deess, dsp::ModuleId::smooth,
                              dsp::ModuleId::sat, dsp::ModuleId::doubler, dsp::ModuleId::delay, dsp::ModuleId::reverb, dsp::ModuleId::denoise, dsp::ModuleId::breath })
@@ -299,6 +313,177 @@ public:
                 expect (again.plan.values == first.plan.values, "values after preset " + juce::String (preset));
                 expect (again.plan.routing.toString() == first.plan.routing.toString(), "routing after preset " + juce::String (preset));
             }
+        }
+
+        // ---- Task 4 (U3): the auto mix analyses and plans at a fixed working level
+        // The reference take scaled by `shiftDb` exactly (as the harness does: makeVocal's own normalisation would
+        // change the waveform a little with the level)
+        const auto mixShifted = [&vocal] (float shiftDb)
+        {
+            auto shifted = vocal;
+            const float g = juce::Decibels::decibelsToGain (shiftDb);
+            for (auto& ch : shifted.vocal)
+                for (auto& x : ch)
+                    x *= g;
+            // straight into the engine: the capture's own start / stop thresholds are absolute levels (not what is tested here)
+            return AutoMixEngine::run (shifted, defaultValues(), {}, {}, MixIntent {});
+        };
+        const auto mixAtLevel = [] (float levelDb, float clipGain = 0.0f)
+        {
+            VocalSpec s;
+            s.seconds = 14.0;
+            s.levelDb = levelDb;
+            s.clipGain = clipGain;
+            return AutoMixEngine::run (makeVocal (s), defaultValues(), {}, {}, MixIntent {});
+        };
+        // The synthetic take peaks 1.4 dB under full scale and sits at -18.7 LUFS: the reference is 2.5 dB lower, so +-2 dB
+        // stays a legal recording (under full scale) and inside the output stage's -24 .. -14 LUFS range
+        constexpr float referenceDb = -2.5f;
+        const auto reference = mixShifted (referenceDb);
+        expect (reference.ok, reference.error);
+
+        beginTest ("Level shifts of +-0.5 / 1 / 2 dB: the gain check passes, nothing else moves (no rounding flip)");
+        for (float shift : { -2.0f, -1.0f, -0.5f, 0.5f, 1.0f, 2.0f })
+        {
+            const auto r = mixShifted (referenceDb + shift);
+            expect (r.ok, r.error);
+            const auto d = compare (fingerprint (reference.plan), fingerprint (r.plan), Check::gainShift, shift, tol);
+            expect (d.pass, "shift " + juce::String (shift) + ": " + juce::StringArray (d.overTolerance.data(), (int) d.overTolerance.size()).joinIntoString ("; "));
+            expect (d.flips.empty(), "shift " + juce::String (shift) + " flips a module");
+            expectWithinAbsoluteError (r.plan.get (pid::inputGain), reference.plan.get (pid::inputGain) - shift, 0.05f, "inputGain, shift " + juce::String (shift));
+
+            // Every value but the two gains is the same (within float noise of the scaled copy): not even a rounded one flips
+            int moved = 0;
+            for (auto& [id, v] : reference.plan.values)
+            {
+                if (id == pid::inputGain || id == pid::outputGain)
+                    continue;
+                const auto it = r.plan.values.find (id);
+                if (it == r.plan.values.end() || std::abs (it->second - v) > 1.0e-3f * std::max (1.0f, std::abs (v)))
+                {
+                    ++moved;
+                    logMessage ("shift " + juce::String (shift) + ": " + id + " " + juce::String (v) + " -> " + (it == r.plan.values.end() ? juce::String ("-") : juce::String (it->second)));
+                }
+            }
+            expectEquals (moved, 0, "values moved by a shift of " + juce::String (shift) + " dB");
+            expect (r.plan.routing.toString() == reference.plan.routing.toString(), "routing, shift " + juce::String (shift));
+        }
+
+        beginTest ("A quiet take (12 dB under the reference) gets 12 dB more input gain; the output gain takes it back");
+        {
+            const auto r = mixShifted (referenceDb - 12.0f);
+            expect (r.ok, r.error);
+            expectWithinAbsoluteError (r.plan.get (pid::inputGain), reference.plan.get (pid::inputGain) + 12.0f, 0.05f);
+            expect (r.plan.get (pid::inputGain) < 24.0f, "unclamped");
+            // everything but the two gains stays; the output gain of such a quiet take is not "original + shift": the output
+            // stage aims at the loudness of the take, kept within -24 .. -14 LUFS (an absolute target, by design)
+            for (auto& [id, v] : reference.plan.values)
+                if (id != pid::inputGain && id != pid::outputGain && r.plan.values.count (id) == 1)
+                    expect (std::abs (r.plan.values.at (id) - v) <= 1.0e-3f * std::max (1.0f, std::abs (v)), id + ": " + juce::String (v) + " -> " + juce::String (r.plan.values.at (id)));
+            logMessage ("quiet take: inputGain " + juce::String (reference.plan.get (pid::inputGain), 2) + " -> " + juce::String (r.plan.get (pid::inputGain), 2)
+                        + ", outputGain " + juce::String (reference.plan.get (pid::outputGain), 2) + " -> " + juce::String (r.plan.get (pid::outputGain), 2));
+        }
+
+        beginTest ("A take that needs more than +24 dB is clamped to +24 dB, and the decision log says so");
+        {
+            const auto r = mixShifted (referenceDb - 24.0f);
+            if (r.ok)
+            {
+                expectEquals (r.plan.get (pid::inputGain), 24.0f);
+                int inputStages = 0;
+                for (auto& l : r.plan.log)
+                    if (l.globalStage && l.instance == 1)
+                    {
+                        ++inputStages;
+                        expectEquals (l.problem, juce::String ("level"));
+                        expect (l.parameters.size() == 1 && l.parameters[0].key == pid::inputGain && l.parameters[0].value == 24.0f);
+                        float wanted = 0.0f, clamped = 0.0f;
+                        for (auto& m : l.measurements)
+                            if (m.key == "wantedGain")
+                                wanted = m.value;
+                        for (auto& m : l.result)
+                            if (m.key == "clamped")
+                                clamped = m.value;
+                        expect (wanted > 24.0f, "wanted gain " + juce::String (wanted));
+                        expectEquals (clamped, 1.0f);
+                    }
+                expectEquals (inputStages, 1);
+                expect (! r.plan.notes.empty());
+            }
+            else
+                expect (false, "a take 24 dB under the reference should still mix (" + r.error + ")");
+        }
+
+        beginTest ("The decision log carries the input stage: working level, measured level, the gain");
+        {
+            int inputStages = 0, outputStages = 0;
+            for (auto& l : reference.plan.log)
+                if (l.globalStage)
+                    (l.instance == 1 ? inputStages : outputStages)++;
+            expectEquals (inputStages, 1);
+            expectEquals (outputStages, 1);
+            for (auto& l : reference.plan.log)
+                if (l.globalStage && l.instance == 1)
+                {
+                    expect (l.parameters.size() == 1 && l.parameters[0].key == pid::inputGain);
+                    float voice = 0.0f, working = 0.0f;
+                    for (auto& m : l.measurements)
+                    {
+                        if (m.key == "voiceRms")      voice = m.value;
+                        if (m.key == "workingLevel")  working = m.value;
+                    }
+                    expectEquals (working, workingLevelDb);
+                    expectWithinAbsoluteError (voice + reference.plan.get (pid::inputGain), workingLevelDb, 1.0e-3f);
+                }
+        }
+
+        beginTest ("A clipped take still reports its clipping (the profile looks at the unscaled audio)");
+        {
+            const auto r = mixAtLevel (-18.0f, 6.0f);
+            expect (r.ok, r.error);
+            expect (r.profile.clipRuns > 0, "clipRuns " + juce::String (r.profile.clipRuns));
+            expect (r.profile.peakDb > -0.1f, "peak " + juce::String (r.profile.peakDb));
+            expect (r.profile.hasIssue ("clipping"));
+            expect (r.original.clipRuns > 0);
+            expect (r.profile.distortionLikely);
+            expect (r.plan.get (pid::inputGain) < -1.0f, "a loud, clipped take is brought down: " + juce::String (r.plan.get (pid::inputGain)));
+        }
+
+        beginTest ("VocalProfiler::analyse with scaleDb: peak, clipping and hot input refer to the audio before the scaling");
+        {
+            VocalSpec s;
+            s.seconds = 14.0;
+            s.clipGain = 6.0f;
+            auto raw = makeVocal (s);
+            const auto direct = VocalProfiler::analyse (raw);
+            auto scaled = raw;
+            const float gain = juce::Decibels::decibelsToGain (-9.0f);
+            for (auto& ch : scaled.vocal)
+                for (auto& x : ch)
+                    x *= gain;
+            const auto viaScale = VocalProfiler::analyse (scaled, 5.0f, {}, -9.0f);
+            expect (direct.clipRuns > 0);
+            expectEquals (viaScale.clipRuns, direct.clipRuns);
+            expectWithinAbsoluteError (viaScale.peakDb, direct.peakDb, 1.0e-3f);
+            expect (viaScale.hasIssue ("clipping") == direct.hasIssue ("clipping"));
+            expect (VocalProfiler::analyse (scaled).clipRuns == 0, "unscaled the clipping would be invisible");
+
+            // a hot, unclipped take at -0.2 dBFS peak
+            VocalSpec hot;
+            hot.seconds = 14.0;
+            auto hotAudio = makeVocal (hot);
+            float peak = 0.0f;
+            for (auto x : hotAudio.vocal[0])
+                peak = std::max (peak, std::abs (x));
+            const float up = juce::Decibels::decibelsToGain (-0.2f) / peak;
+            for (auto& x : hotAudio.vocal[0])
+                x *= up;
+            auto hotScaled = hotAudio;
+            for (auto& x : hotScaled.vocal[0])
+                x *= gain;
+            expect (VocalProfiler::analyse (hotAudio).hasIssue ("hotInput"));
+            expect (VocalProfiler::analyse (hotScaled, 5.0f, {}, -9.0f).hasIssue ("hotInput"));
+            expect (! VocalProfiler::analyse (hotScaled).hasIssue ("hotInput"));
         }
     }
 };

@@ -281,8 +281,10 @@ namespace vocalypse::automix
             l.skipReason = active ? juce::String() : skip;
         };
 
-        // Levels as the modules see them: the input gain is applied before the chain
-        const float inGain = cur (pid::inputGain);
+        // Levels as the modules see them. The engine analyses a copy of the capture scaled to the working level and
+        // sets the input gain to that scaling, so the profile already is what the chain receives: no input gain
+        // is added here, and every level below is relative to the working level (plan 2026-11-04, U3)
+        constexpr float inGain = 0.0f;
         const float voice = p.voiceRmsDb + inGain;              // median voiced RMS (dBFS)
         const bool noisy = p.snrValid && p.snrDb < 28.0f;
         const bool harsh = p.hasIssue ("harsh");

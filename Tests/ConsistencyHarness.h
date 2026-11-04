@@ -35,8 +35,7 @@ namespace vocalypse::test
         float inputGainDb = 0.05f;        // inputGain = original - shift +- this
         float outputGainDb = 0.3f;        // outputGain = original + shift +- this
         float relative = 0.02f;           // every other value: within this share ...
-        float absolute = 0.1f;            // ... or this many units
-        float levelParamSlackDb = 0.3f;   // compThreshold / deessThreshold may follow the shift (|change| <= shift + this)
+        float absolute = 0.1f;            // ... or this many units (the thresholds too: the plan is made at the working level)
 
         // perturbation (noise -70 dBFS, start offsets 3 / 6 s): a flip only at low intensity, and
         float eqBandGainDb = 1.5f;        // EQ role band gain

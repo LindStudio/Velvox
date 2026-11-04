@@ -21,7 +21,7 @@ namespace vocalypse::automix
     {
         dsp::ModuleId module = dsp::ModuleId::eq;
         int instance = 0;
-        bool globalStage = false;             // input / output gain entries (no module)
+        bool globalStage = false;             // input / output gain entries (no module): instance 0 = output, 1 = input
         bool active = false;
         juce::String problem;                 // stable key ("sibilance", "phraseSpread", ...) or "" when none
         std::vector<Measured> measurements;   // what was measured for this decision

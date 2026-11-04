@@ -5,6 +5,11 @@
 
 namespace vocalypse::automix
 {
+    // The level the auto mix analyses and plans at (dBFS, median voiced 50 ms RMS). The capture is measured, a copy
+    // is scaled to this level, and every level-derived decision is made on that copy - so +-2 dB of recording level
+    // cannot flip a decision (plan 2026-11-04-automix-konsistenz, U3). The plan's inputGain is the scaling.
+    inline constexpr float workingLevelDb = -18.0f;
+
     // Measurements of one offline render of the captured audio
     struct RenderMetrics
     {
@@ -46,7 +51,7 @@ namespace vocalypse::automix
         juce::String error;
         VocalProfile profile;
         MixPlan plan;
-        RenderMetrics original;            // the input as captured (incl. input gain)
+        RenderMetrics original;            // the input as captured (loudness, peak, clipping as recorded; the rest at the working level)
         RenderMetrics processed;           // the final plan
         int iterations = 0;
         std::vector<juce::String> adjustments;   // what the verification changed
@@ -74,7 +79,14 @@ namespace vocalypse::automix
                                      const std::map<juce::String, float>& values, const dsp::Routing& routing,
                                      CapturedAudio* output = nullptr);
 
-        static RenderMetrics measure (const CapturedAudio& audio);
+        // `scaleDb`: `audio` is the capture scaled by this gain; lufs, peak and clipping describe the capture
+        static RenderMetrics measure (const CapturedAudio& audio, float scaleDb = 0.0f);
+
+        // The input gain that brings the capture to workingLevelDb: working level minus the median RMS of the voiced
+        // 50 ms blocks (mid signal; a block counts as voiced from 35 dB under the loud blocks - relative only, so
+        // a quiet take is measured like a loud one), limited to the input gain's range. Deterministic; 0 without
+        // any voiced block. `wantedDb` (optional) receives the value before the limit.
+        static float workingGainDb (const CapturedAudio& audio, float* wantedDb = nullptr);
 
         // 0.8 (spec: "Kompressor gezielt"): renders compressor settings around the plan's (threshold -4 .. +4 dB,
         // ratio 1.8 / 2.5 / 3.5 / 5, greedy, at most `maxRenders`) and keeps the one whose phrase spread and crest

@@ -222,7 +222,7 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         };
         for (auto& l : r.plan.log)
         {
-            rep << "  " << (l.globalStage ? juce::String ("Output") : juce::String (vocalypse::dsp::moduleDisplayName (l.module)) + (l.instance > 0 ? " " + juce::String (l.instance + 1) : juce::String()))
+            rep << "  " << (l.globalStage ? juce::String (l.instance == 1 ? "Input" : "Output") : juce::String (vocalypse::dsp::moduleDisplayName (l.module)) + (l.instance > 0 ? " " + juce::String (l.instance + 1) : juce::String()))
                 << ": " << (l.active ? "active" : "skipped") << ", problem " << (l.problem.isEmpty() ? juce::String ("-") : l.problem)
                 << ", need " << juce::String (l.need, 2) << ", intensity " << juce::String (l.intensity, 2) << "\n"
                 << "      measured:   " << list (l.measurements) << "\n"

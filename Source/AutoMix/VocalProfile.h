@@ -165,8 +165,11 @@ namespace vocalypse::automix
 
         // Pure function of the audio; safe on any thread. `minVoicedSeconds`
         // decides `enoughMaterial`. Optional cancellation: return true to stop.
+        // `scaleDb`: `audio` is the capture multiplied by this gain (the auto mix analyses at a fixed working
+        // level). Clipping, the peak and the level issues (hot input, quiet) still describe the unscaled
+        // capture; everything else is measured on `audio` as it is.
         static VocalProfile analyse (const CapturedAudio& audio, float minVoicedSeconds = 5.0f,
-                                     const std::function<bool()>& shouldStop = {});
+                                     const std::function<bool()>& shouldStop = {}, float scaleDb = 0.0f);
 
         // Gated integrated loudness (ITU-R BS.1770-4) of a multichannel signal
         static float integratedLufs (const std::vector<const float*>& channels, int numSamples, double sampleRate);

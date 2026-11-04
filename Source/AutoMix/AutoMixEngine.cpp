@@ -60,21 +60,23 @@ namespace vocalypse::automix
         }
 
         // Fills spectral / level metrics from the audio itself
-        void measureInto (RenderMetrics& m, const CapturedAudio& a)
+        // `scaleDb`: `a` is the capture scaled by this gain - loudness, peak and clipping are reported as captured
+        void measureInto (RenderMetrics& m, const CapturedAudio& a, float scaleDb = 0.0f)
         {
             const int n = a.numSamples();
             if (n <= 0)
                 return;
             m.valid = true;
-            m.lufs = VocalProfiler::integratedLufs (pointers (a), n, a.sampleRate);
+            const float lufsOfA = VocalProfiler::integratedLufs (pointers (a), n, a.sampleRate);
+            m.lufs = lufsOfA - scaleDb;
 
             float peak = 0.0f;
             for (auto& c : a.vocal)
                 for (float x : c)
                     peak = std::max (peak, std::abs (x));
-            m.peakDb = juce::Decibels::gainToDecibels (peak, -100.0f);
+            m.peakDb = juce::Decibels::gainToDecibels (peak, -100.0f) - scaleDb;
 
-            const auto prof = VocalProfiler::analyse (a, 0.0f);
+            const auto prof = VocalProfiler::analyse (a, 0.0f, {}, scaleDb);
             m.topDb = prof.topDb;
             m.presenceDb = prof.presenceDb;
             m.bodyDb = prof.bodyDb;
@@ -139,16 +141,58 @@ namespace vocalypse::automix
                 for (int i = 0; i < n; ++i)
                     monoSum[(size_t) i] = 0.5f * (L[i] + R[i]);
                 const std::vector<const float*> mono { monoSum.data(), monoSum.data() };
-                m.monoLossDb = VocalProfiler::integratedLufs (mono, n, a.sampleRate) - m.lufs;
+                m.monoLossDb = VocalProfiler::integratedLufs (mono, n, a.sampleRate) - lufsOfA;
             }
         }
     }
 
-    RenderMetrics AutoMixEngine::measure (const CapturedAudio& audio)
+    RenderMetrics AutoMixEngine::measure (const CapturedAudio& audio, float scaleDb)
     {
         RenderMetrics m;
-        measureInto (m, audio);
+        measureInto (m, audio, scaleDb);
         return m;
+    }
+
+    float AutoMixEngine::workingGainDb (const CapturedAudio& audio, float* wantedDb)
+    {
+        if (wantedDb != nullptr)
+            *wantedDb = 0.0f;
+        const int n = audio.numSamples();
+        if (n <= 0 || audio.channels < 1 || audio.sampleRate <= 0.0)
+            return 0.0f;
+
+        // 50 ms blocks of the mid signal (like the profiler's level distribution)
+        const int block = std::max (64, (int) std::lround (0.05 * audio.sampleRate));
+        const auto& L = audio.vocal[0];
+        const auto& R = audio.channels > 1 ? audio.vocal[1] : audio.vocal[0];
+        std::vector<float> blockDb;
+        for (int start = 0; start + block <= n; start += block)
+        {
+            double s = 0.0;
+            for (int i = start; i < start + block; ++i)
+            {
+                const double mid = 0.5 * ((double) L[(size_t) i] + (double) R[(size_t) i]);
+                s += mid * mid;
+            }
+            blockDb.push_back ((float) (10.0 * std::log10 (std::max (1.0e-20, s / block))));
+        }
+        if (blockDb.empty())
+            return 0.0f;
+
+        // Voiced: within 35 dB of the loud blocks (relative only - an absolute floor would make the set of voiced
+        // blocks, and so the median, depend on the recording level), and not digital silence
+        const float gate = std::max (-90.0f, percentile (blockDb, 0.95f) - 35.0f);
+        std::vector<float> voiced;
+        for (float b : blockDb)
+            if (b > gate)
+                voiced.push_back (b);
+        if (voiced.empty())
+            return 0.0f;
+
+        const float wanted = workingLevelDb - percentile (voiced, 0.5f);
+        if (wantedDb != nullptr)
+            *wantedDb = wanted;
+        return juce::jlimit (-24.0f, 24.0f, wanted);
     }
 
     RenderMetrics AutoMixEngine::renderChecked (const CapturedAudio& audio, const std::map<juce::String, float>& current,
@@ -206,7 +250,8 @@ namespace vocalypse::automix
             for (int ch = 0; ch < channels; ++ch)
                 for (int i = 0; i < len; ++i)
                     sum += (double) audio.vocal[(size_t) ch][(size_t) (start + i)] * audio.vocal[(size_t) ch][(size_t) (start + i)];
-            blockDb.push_back ((float) (10.0 * std::log10 (std::max (1.0e-20, sum / ((double) len * channels)))));
+            // at the level the chain sees (after the input gain), so the -50 dB floor below does not depend on the recording level
+            blockDb.push_back ((float) (10.0 * std::log10 (std::max (1.0e-20, sum / ((double) len * channels)))) + s.inputGainDb);
         }
         const float gate = std::max (-50.0f, percentile (blockDb, 0.95f) - 30.0f);
 
@@ -660,8 +705,22 @@ namespace vocalypse::automix
         // The stage text is shown later on the message thread: both languages
         const auto report = [&progress] (float f, const char* german, const char* english) { if (progress) progress (f, both (german, english)); };
 
+        // Level independence: measure the capture, scale a copy to the working level, analyse and plan on the copy.
+        // The plan's input gain is that scaling, so the renders below take the ORIGINAL capture and the chain applies it.
+        float wantedGainDb = 0.0f;
+        const float gainDb = workingGainDb (audio, &wantedGainDb);
+        CapturedAudio scaled;
+        {
+            const float g = juce::Decibels::decibelsToGain (gainDb);
+            scaled = audio;
+            for (auto* part : { &scaled.vocal, &scaled.beat })   // the beat scales with the voice: their relation stays as captured
+                for (auto& ch : *part)
+                    for (auto& x : ch)
+                        x *= g;
+        }
+
         report (0.05f, "Aufnahme wird analysiert", "Analyzing the recording");
-        r.profile = VocalProfiler::analyse (audio, 5.0f, shouldStop);
+        r.profile = VocalProfiler::analyse (scaled, 5.0f, shouldStop, gainDb);
         if (stop())
         {
             r.error = both ("Abgebrochen.", "Canceled.");
@@ -676,7 +735,30 @@ namespace vocalypse::automix
 
         report (0.3f, "Mix wird geplant", "Planning the mix");
         r.plan = AutoMixPlanner::plan (r.profile, current, intent);
-        r.original = measure (audio);
+        r.plan.set (pid::inputGain, gainDb);
+        {
+            // The input stage in the decision log (entry 1 of the global stages; the output stage is entry 0)
+            ModuleLog in;
+            in.globalStage = true;
+            in.instance = 1;
+            in.active = true;
+            in.problem = "level";
+            in.need = 1.0f;
+            in.intensity = std::abs (gainDb) / 24.0f;
+            in.measurements.push_back ({ "voiceRms", workingLevelDb - wantedGainDb, "dBFS" });
+            in.measurements.push_back ({ "workingLevel", workingLevelDb, "dBFS" });
+            in.measurements.push_back ({ "wantedGain", wantedGainDb, "dB" });
+            r.plan.log.insert (r.plan.log.begin(), std::move (in));
+            fillParameters (r.plan.log, r.plan.values);
+            if (std::abs (wantedGainDb - gainDb) > 1.0e-4f)
+            {
+                setMeasured (r.plan.log.front().result, "clamped", 1.0f, "");
+                r.plan.notes.push_back (both ("Die Aufnahme ist sehr {0}: Der Eingangspegel reicht mit {1} nicht bis zum Arbeitspegel ({2}).",
+                                              "The recording is very {0}: the input gain of {1} does not reach the working level ({2}).",
+                                              { wantedGainDb > 0.0f ? both ("leise", "quiet") : both ("laut", "loud"), db (gainDb), num (workingLevelDb, 0) + " dBFS" }));
+            }
+        }
+        r.original = measure (scaled, gainDb);
         r.original.sibilanceVsVowelDb = r.profile.sibilanceVsVowelDb;
         r.original.sibilanceValid = r.profile.sibilanceValid;
 
@@ -726,7 +808,7 @@ namespace vocalypse::automix
             if (! plan.on (pid::deessOn) && m.sibilanceValid
                 && m.sibilanceVsVowelDb > std::max (-8.0f, r.original.sibilanceVsVowelDb + 2.0f))
             {
-                AutoMixPlanner::configureDeEsser (plan, r.profile, plan.get (pid::inputGain), 4.0f);
+                AutoMixPlanner::configureDeEsser (plan, r.profile, 0.0f, 4.0f);   // the profile is at the working level already
                 plan.decisions.push_back ({ dsp::ModuleId::deess, false,
                                             both ("De-Esser ab {0} Hz, max. 4 dB", "De-Esser from {0} Hz, max. 4 dB", { juce::String (juce::roundToInt (plan.get (pid::deessFreq))) }),
                                             both ("Nach der Kette standen die S-Laute {0} stärker hervor als im Original - dezent ausgeglichen.",
@@ -820,7 +902,11 @@ namespace vocalypse::automix
 
         // ---- Candidate search: interacting decisions, each rendered and scored at the same
         //      target loudness (AutoMixObjective). A variant must beat the base plan.
-        const float target = targetLufs (r.original.lufs);
+        // The variants are rendered with the plan's input gain, i.e. at the working level: they are scored against the
+        // target of the take at that level. (The target's range limit, -24 .. -14 LUFS, applied to the loudness as
+        // captured would make the score depend on the recording level.) The output stage below aims at the target of
+        // the take as captured.
+        const float target = targetLufs (r.original.lufs + gainDb);
         {
             auto variants = candidatesFor (plan, r.profile, current, mixTarget);
             const auto score = [&] (const juce::String& name, const MixPlan& cand, bool isBase)
@@ -897,7 +983,7 @@ namespace vocalypse::automix
         //      sidechain (Jakob 2026-10-28) the voice sits leadOverBeatLu above the beat instead: the
         //      original raised by what it lacks against the beat (measured where the beat plays)
         const bool toBeat = r.profile.beatPresent;
-        const float outputTarget = toBeat ? r.original.lufs + (autoeq::leadOverBeatLu - r.profile.vocalOverBeatLu) : target;
+        const float outputTarget = toBeat ? r.original.lufs + (autoeq::leadOverBeatLu - r.profile.vocalOverBeatLu) : targetLufs (r.original.lufs);
         report (0.85f, "Pegel wird angepasst", "Adjusting the level");
         m = renderChecked (audio, current, plan, r.profile);
         ++r.iterations;
@@ -968,7 +1054,7 @@ namespace vocalypse::automix
             }
         }
         for (auto& l : plan.log)
-            if (l.globalStage)
+            if (l.globalStage && l.instance == 0)   // the output stage
             {
                 setMeasured (l.result, "lufs", m.lufs, "LUFS");
                 setMeasured (l.result, "peak", m.peakDb, "dBFS");
