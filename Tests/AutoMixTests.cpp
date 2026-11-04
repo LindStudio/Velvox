@@ -911,7 +911,7 @@ public:
             const auto base = evaluate (m, original, profile, -18.0f, true, false);
             const auto variant = evaluate (m, original, profile, -18.0f, false, false);
             expect (base.total() < 0.01f, "a balanced render costs nothing: " + base.describe());
-            expect (variant.total() > base.total(), "the same result is not worth a change");
+            expect (variant.total() >= base.total(), "the same result is not better (the change cost is the variant margin now)");
 
             auto squashed = m;
             squashed.crestDb = 4.0f;
@@ -984,6 +984,51 @@ public:
 
             RenderMetrics invalid;
             expect (evaluate (invalid, original, profile, -18.0f, true, false).total() > 1000.0f, "a failed render never wins");
+        }
+
+        beginTest ("Variant choice: margin max (0.5, 8 %) plus complexity, ties keep the earlier candidate");
+        {
+            expectWithinAbsoluteError (variantMargin (10.0f), 0.8f, 1.0e-6f);
+            expectWithinAbsoluteError (variantMargin (2.0f), 0.5f, 1.0e-6f);
+            expect (! variantEarnsChange (10.0f, 0.0f, 9.7f, 0.0f, 10.0f), "0.3 better than a base of 10 is not taken");
+            expect (variantEarnsChange (10.0f, 0.0f, 8.5f, 0.0f, 10.0f), "1.5 better is taken");
+            expect (variantEarnsChange (10.0f, 0.0f, 9.0f, 0.0f, 10.0f), "1.0 better without extra complexity is taken");
+            expect (! variantEarnsChange (10.0f, 0.0f, 9.0f, 0.3f, 10.0f), "a variant with one more module needs 0.3 more");
+            expect (variantEarnsChange (10.0f, 0.0f, 8.6f, 0.3f, 10.0f), "... and is taken with 1.4");
+            expect (variantEarnsChange (10.0f, 0.5f, 9.4f, 0.0f, 10.0f), "a simpler variant earns the difference");
+
+            const auto plan0 = AutoMixPlanner::plan (profileFor ([] { VocalSpec s; s.seconds = 12.0; return s; }()), defaults());
+            const float c0 = planComplexity (plan0, 0.0f);
+            // one more switched-on module instance: +0.3
+            const std::pair<const char*, dsp::ModuleId> offers[] { { pid::satOn, dsp::ModuleId::sat }, { pid::doublerOn, dsp::ModuleId::doubler },
+                                                                    { pid::smashOn, dsp::ModuleId::smash }, { pid::smoothOn, dsp::ModuleId::smooth },
+                                                                    { pid::deessOn, dsp::ModuleId::deess }, { pid::reverbOn, dsp::ModuleId::reverb } };
+            bool found = false;
+            for (const auto& [id, mod] : offers)
+            {
+                auto changed = plan0;
+                const bool wasOn = plan0.on (id) && plan0.routing.contains (mod);
+                changed.set (id, wasOn ? 0.0f : 1.0f);
+                if (! changed.routing.contains (mod))
+                    changed.routing.insertAt (changed.routing.size(), mod, 0);
+                expectWithinAbsoluteError (planComplexity (changed, 0.0f) - c0, wasOn ? -0.3f : 0.3f, 1.0e-4f);
+                found = true;
+            }
+            expect (found);
+            expectWithinAbsoluteError (planComplexity (plan0, 4.0f) - c0, plan0.on (pid::compOn) ? 0.4f : 0.0f, 1.0e-4f);
+
+            // 0.05 per dB of EQ gain magnitude
+            auto plan2 = plan0;
+            const auto access = eqbands::accessFor (plan2.values, nullptr);
+            const float before = planComplexity (plan2, 0.0f);
+            const int band = eqbands::findFreeBand (access, 0);
+            expect (band >= 0);
+            if (band >= 0)
+            {
+                eqbands::writeBand (access, 0, band, eqBand (dsp::EqBandType::bell, 3000.0f, 4.0f, 1.0f));
+                plan2.set (pid::eqOn, 1.0f);
+                expectWithinAbsoluteError (planComplexity (plan2, 0.0f) - before, 0.2f, 1.0e-4f);
+            }
         }
 
         beginTest ("Optimizer: a bright take gets a softer-highs variant, a dark one never");
@@ -1074,8 +1119,11 @@ public:
                 if (! r.candidates.empty())
                 {
                     const auto& chosen = r.candidates[(size_t) r.chosenCandidate];
-                    for (auto& c : r.candidates)
-                        expect (chosen.score.total() <= c.score.total() + 1.0e-4f, "chosen is the best: " + c.name);
+                    // U4: the chosen candidate is the base plan or beats it by the margin - never merely the lowest number
+                    expect (chosen.score.total() <= r.candidates[0].score.total() + 1.0e-4f, "chosen is not worse than the base plan");
+                    if (r.chosenCandidate > 0)
+                        expect (r.candidates[0].score.total() - chosen.score.total() >= variantMargin (r.candidates[0].score.total()) - 1.0e-3f
+                                    + chosen.complexity - r.candidates[0].complexity, "the chosen variant earned the margin");
                     expect (r.plan.routing.isValid());
                     if (r.chosenCandidate > 0)
                         expect (std::any_of (r.adjustments.begin(), r.adjustments.end(), [&] (auto& a) { return a.contains (chosen.name); }),
