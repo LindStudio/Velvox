@@ -65,7 +65,10 @@ namespace vocalypse::automix::autoeq
     {
         const VocalProfile* profile = nullptr;
         std::vector<dsp::EqBand> fixed;   // bands that stay (user / Vocal Check bands, the planned low cut)
-        bool conservative = false, noisy = false, sibilant = false, harsh = false;
+        bool conservative = false;
+        // 0 .. 1 weights (Task 7, continuous decisions): 0 = not the case, 1 = clearly the case. A bool still works
+        // (false = 0, true = 1); the planner fills them with noisyWeight / sibilantWeight / harshWeight.
+        float noisy = 0.0f, sibilant = 0.0f, harsh = 0.0f;
         int budget = maxBands - 1;        // bands available besides the low cut
         const MixTarget* target = nullptr;            // 0.8: the target curve (nullptr = party / punchy)
         std::array<float, numThirds> unmaskDb {};     // 0.8: target lift per third where the beat covers the voice
@@ -79,6 +82,13 @@ namespace vocalypse::automix::autoeq
     // none on a resonance, none on the low end of a high voice, none of 2-5 kHz on a harsh take).
     // Deterministic, within `budget`.
     std::vector<Move> planCurveMoves (const Context& context);
+
+    // Soft weights (0 .. 1) of the profile's properties that limit the EQ; they start at the edge of the
+    // matching profile issue and reach 1 where that issue is "likely", so nothing flips at one number
+    float noisyWeight (const VocalProfile& profile) noexcept;      // SNR 28 dB (0) .. 24 dB (1)
+    float sibilantWeight (const VocalProfile& profile) noexcept;   // S sounds -5 dB (0) .. -2 dB (1) against the vowels
+    float harshWeight (const VocalProfile& profile) noexcept;      // 2-5 kHz -2 dB (0) .. +1 dB (1), not on a dull take
+    float dullWeight (const VocalProfile& profile) noexcept;       // above 2 kHz -16 dB (0) .. -20 dB (1)
 
     // What a broad move at `hz` does, by region (German / English): "Dröhnen" (cut 150-450 Hz),
     // "Pappig" (450-900), "Nasal" (900-1600), "Härte" (cut 2.5-5 kHz), "Körper" (lift below 300 Hz),

@@ -751,10 +751,13 @@ namespace vocalypse::automix
                     }
                 return n > 0 ? std::max (0.0f, sum / (float) n) : 0.0f;
             }();
-            if (auto air = roleBand (plan, current, dsp::EqRole::air); m.topDb > r.original.topDb + 5.0f + styleTopDb && air.has_value() && air->on && air->gain > 0.0f)
+            // (Task 7: the reduction grows with how far the chain overshoots - 0 at +4 dB, the full 1.5 dB at +6 dB -
+            // instead of 1.5 dB at once past +5 dB)
+            const float airOvershoot = soft (m.topDb - (r.original.topDb + styleTopDb), 4.0f, 6.0f);
+            if (auto air = roleBand (plan, current, dsp::EqRole::air); 1.5f * airOvershoot >= 0.25f && air.has_value() && air->on && air->gain > 0.0f)
             {
                 const auto before = *air;
-                air->gain = std::max (0.0f, air->gain - 1.5f);
+                air->gain = std::max (0.0f, air->gain - 1.5f * airOvershoot);
                 setRoleBand (plan, current, 0, dsp::EqRole::air, *air, false);
                 updateEqDecision (plan, dsp::EqRole::air, before, *air, both ("Höhenanhebung verringert: die Kette hob die Höhen schon an.",
                                                                               "High boost reduced: the chain already lifted the highs."));
@@ -772,7 +775,8 @@ namespace vocalypse::automix
                 state.context.target = &mixTarget;
                 state.context.unmaskDb = autoeq::unmaskOf (r.profile, plan.conservative);
                 // S sounds still too strong after the chain: no more lift up there than on a sibilant take
-                state.context.sibilant = state.context.sibilant || (m.sibilanceValid && m.sibilanceVsVowelDb > mixTarget.sibilanceMax);
+                if (m.sibilanceValid)   // Task 7: a weight, 0 at the target maximum, 1 two dB above
+                    state.context.sibilant = std::max (state.context.sibilant, soft (m.sibilanceVsVowelDb, mixTarget.sibilanceMax, mixTarget.sibilanceMax + 2.0f));
                 for (const auto& c : autoeq::correctCurve (m.thirdsDb, state.context, state.owned))
                 {
                     if (c.role == dsp::EqRole::air && airAdjusted)
@@ -794,9 +798,11 @@ namespace vocalypse::automix
             }
 
             // Low end: keep the body of the voice
-            if (auto lowCut = roleBand (plan, current, dsp::EqRole::lowCut); m.bodyDb < r.original.bodyDb - 6.0f && lowCut.has_value() && lowCut->freq > 65.0f)
+            // (Task 7: lowered in proportion to the body lost - nothing at 5 dB, the full 15 % from 7 dB; never below 65 Hz)
+            const float bodyLost = soft (r.original.bodyDb - m.bodyDb, 5.0f, 7.0f);
+            if (auto lowCut = roleBand (plan, current, dsp::EqRole::lowCut); bodyLost > 0.05f && lowCut.has_value() && lowCut->freq > 65.0f)
             {
-                lowCut->freq *= 0.85f;
+                lowCut->freq = std::max (std::min (lowCut->freq, 65.0f), lowCut->freq * blend (bodyLost, 1.0f, 0.85f));
                 setRoleBand (plan, current, 0, dsp::EqRole::lowCut, *lowCut, false);
                 r.adjustments.push_back (both ("Low Cut gesenkt (zu viel Körper ging verloren).", "Low Cut lowered (too much body was lost)."));
                 changed = true;

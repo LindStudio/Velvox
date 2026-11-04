@@ -318,9 +318,13 @@ public:
             const auto party = targetFor (Genre::party, Vibe::punchy);
             auto p = onTarget (profileWith (BeatKind::presenceHeavy), party, [] (float) { return 0.0f; });
             p.issues.push_back ({ "harsh", "Betonte obere Mitten", "", Confidence::likely, 10.0f });
+            p.presenceDb = 1.5f;   // Task 7: the EQ reads a soft weight of the measurement (2-5 kHz above the core), not the issue
+            p.topDb = -8.0f;
             const auto plan = AutoMixPlanner::plan (p, defaults());
             auto sharpNoBeat = onTarget (VocalProfiler::analyse (vocal), party, [] (float) { return 0.0f; });
             sharpNoBeat.issues.push_back ({ "harsh", "Betonte obere Mitten", "", Confidence::likely, 10.0f });
+            sharpNoBeat.presenceDb = 1.5f;
+            sharpNoBeat.topDb = -8.0f;
             const float hz = autoeq::maskingOf (p).hz;
             expect (eqAt (plan, hz) <= eqAt (AutoMixPlanner::plan (sharpNoBeat, defaults()), hz) + 0.25f, "no lift on a sharp voice");
             expect (hasNote (plan, "already sharp there"));
