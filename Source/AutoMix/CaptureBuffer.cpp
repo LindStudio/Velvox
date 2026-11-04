@@ -4,10 +4,19 @@ namespace vocalypse::automix
 {
     int CaptureBuffer::capacityFor (double sampleRate, float maxSeconds) noexcept
     {
-        // Above 96 kHz the duration shrinks so the memory stays bounded (~37 MB max)
+        // Bounded memory: at most 120 s at 48 kHz (5.76 M samples per channel), shorter at higher rates
+        constexpr double maxSamples = 120.0 * 48000.0;
         const double rate = std::max (8000.0, sampleRate);
-        const double seconds = juce::jlimit (4.0, 60.0, (double) maxSeconds) * std::min (1.0, 96000.0 / rate);
+        const double seconds = std::min (juce::jlimit (4.0, 120.0, (double) maxSeconds), maxSamples / rate);
         return (int) (rate * seconds);
+    }
+
+    size_t CaptureBuffer::memoryBytes() const noexcept
+    {
+        size_t bytes = beatBuf.capacity() * sizeof (float) + ppqBuf.capacity() * sizeof (double);
+        for (auto& b : vocalBuf)
+            bytes += b.capacity() * sizeof (float);
+        return bytes;
     }
 
     void CaptureBuffer::waitForWriter() const noexcept
@@ -29,13 +38,20 @@ namespace vocalypse::automix
         const int needed = capacityFor (fs, cfg.maxSeconds);
         if (needed != capacity)
         {
-            for (auto* set : { &vocalBuf, &beatBuf })
-                for (auto& b : *set)
-                {
-                    b.assign ((size_t) needed, 0.0f);
-                    b.shrink_to_fit();
-                }
+            for (auto& b : vocalBuf)
+            {
+                b.assign ((size_t) needed, 0.0f);
+                b.shrink_to_fit();
+            }
+            beatBuf.assign ((size_t) needed, 0.0f);
+            beatBuf.shrink_to_fit();
+            ppqBuf.assign ((size_t) (needed / CapturedAudio::ppqBlock + 2), -1.0);
+            ppqBuf.shrink_to_fit();
             capacity = needed;
+        }
+        else
+        {
+            std::fill (ppqBuf.begin(), ppqBuf.end(), -1.0);
         }
 
         // A short buffer (very high sample rates) still has to be completable
@@ -52,8 +68,11 @@ namespace vocalypse::automix
         beatPresent.store (false);
         lastBpm.store (0.0);
         beatStored.store (false);
+        ppqStored.store (false);
         early.store (false);
         sawPlaying = false;
+        runningMaxDb = -200.0f;
+        ppqSeen = false;
 
         state.store ((int) State::waiting);
     }
@@ -75,7 +94,7 @@ namespace vocalypse::automix
     }
 
     void CaptureBuffer::push (const float* const* vocal, int vocalChannels, const float* const* beat, int beatChannels,
-                              int numSamples, bool hostPlaying, double bpm) noexcept
+                              int numSamples, bool hostPlaying, double bpm, double ppq) noexcept
     {
         if (numSamples <= 0 || vocalChannels <= 0)
             return;
@@ -110,25 +129,24 @@ namespace vocalypse::automix
         else if (sawPlaying && s == State::capturing)
             stopped.store (true, std::memory_order_relaxed);
 
-        State current = s;
-        if (current == State::waiting)
-        {
-            if (rmsDb < cfg.startThresholdDb)
-            {
-                writing.store (false);
-                return;
-            }
-            int expected = (int) State::waiting;
-            state.compare_exchange_strong (expected, (int) State::capturing);
-            current = State::capturing;
-        }
-
-        // Digital silence (stopped transport, muted track) is not stored
-        if (juce::Decibels::gainToDecibels (blockPeak, -200.0f) < cfg.silenceDb)
+        // Digital silence neither starts the capture nor is stored while the transport is stopped. While the host
+        // plays, silence is part of the song and is stored, so the stored audio keeps its timeline and the capture does
+        // not depend on where it began. The floor is far below any recording, so a level shift of the same audio
+        // cannot change what is captured.
+        const bool silent = juce::Decibels::gainToDecibels (blockPeak, -200.0f) < cfg.silenceDb;
+        if (silent && (s == State::waiting || ! hostPlaying))
         {
             writing.store (false);
             return;
         }
+
+        if (s == State::waiting)
+        {
+            int expected = (int) State::waiting;
+            state.compare_exchange_strong (expected, (int) State::capturing);
+        }
+
+        runningMaxDb = std::max (runningMaxDb, rmsDb);
 
         const int pos = written.load (std::memory_order_relaxed);
         const int n = std::min (numSamples, capacity - pos);
@@ -150,17 +168,18 @@ namespace vocalypse::automix
 
             if (beat != nullptr && beatChannels > 0)
             {
+                // The beat is stored as one mid channel (it is only analysed, never heard)
                 float beatPeak = 0.0f;
-                for (int ch = 0; ch < 2; ++ch)
+                float* dst = beatBuf.data() + pos;
+                const int bc = std::min (beatChannels, 2);
+                for (int i = 0; i < n; ++i)
                 {
-                    const float* src = beat[std::min (ch, beatChannels - 1)];
-                    float* dst = beatBuf[(size_t) ch].data() + pos;
-                    for (int i = 0; i < n; ++i)
-                    {
-                        const float x = std::isfinite (src[i]) ? src[i] : 0.0f;
-                        dst[i] = x;
-                        beatPeak = std::max (beatPeak, std::abs (x));
-                    }
+                    float x = 0.0f;
+                    for (int ch = 0; ch < bc; ++ch)
+                        x += std::isfinite (beat[ch][i]) ? beat[ch][i] : 0.0f;
+                    x /= (float) bc;
+                    dst[i] = x;
+                    beatPeak = std::max (beatPeak, std::abs (x));
                 }
                 beatStored.store (true, std::memory_order_relaxed);
                 if (beatPeak > 0.003f)
@@ -169,12 +188,22 @@ namespace vocalypse::automix
             else if (beatStored.load (std::memory_order_relaxed))
             {
                 // Sidechain disappeared mid-capture: keep the timelines aligned
-                for (auto& b : beatBuf)
-                    std::fill (b.begin() + pos, b.begin() + pos + n, 0.0f);
+                std::fill (beatBuf.begin() + pos, beatBuf.begin() + pos + n, 0.0f);
+            }
+
+            // Song position of the 512-sample blocks that start in this block
+            const double tempo = bpm > 0.0 ? bpm : lastBpm.load (std::memory_order_relaxed);
+            if (ppq >= 0.0 && tempo > 0.0)
+            {
+                const double perSample = tempo / 60.0 / fs;
+                constexpr int pb = CapturedAudio::ppqBlock;
+                for (int c = (pos + pb - 1) / pb; c * pb < pos + n && (size_t) c < ppqBuf.size(); ++c)
+                    ppqBuf[(size_t) c] = ppq + (double) (c * pb - pos) * perSample;
+                ppqStored.store (true, std::memory_order_relaxed);
             }
 
             clips.fetch_add (clipCount, std::memory_order_relaxed);
-            if (rmsDb >= cfg.startThresholdDb)
+            if (rmsDb >= std::max (cfg.voiceFloorDb, runningMaxDb - cfg.voiceRangeDb))
                 voicedSamples.fetch_add (n, std::memory_order_relaxed);
             if (blockPeak > peak.load (std::memory_order_relaxed))
                 peak.store (blockPeak, std::memory_order_relaxed);
@@ -222,8 +251,12 @@ namespace vocalypse::automix
         for (int ch = 0; ch < channels; ++ch)
             a.vocal.emplace_back (vocalBuf[(size_t) ch].begin(), vocalBuf[(size_t) ch].begin() + n);
         if (beatStored.load() && beatPresent.load())
-            for (int ch = 0; ch < 2; ++ch)
-                a.beat.emplace_back (beatBuf[(size_t) ch].begin(), beatBuf[(size_t) ch].begin() + n);
+            a.beat.emplace_back (beatBuf.begin(), beatBuf.begin() + n);
+        if (ppqStored.load())
+        {
+            const size_t blocks = (size_t) ((n + CapturedAudio::ppqBlock - 1) / CapturedAudio::ppqBlock);
+            a.blockPpq.assign (ppqBuf.begin(), ppqBuf.begin() + (long) std::min (blocks, ppqBuf.size()));
+        }
         return a;
     }
 }

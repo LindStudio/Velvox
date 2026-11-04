@@ -120,6 +120,10 @@ namespace
             if ((start / h.blockSize) % 32 == 0)
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (1);
         }
+        // The capture listens for up to 60 s of voice: a shorter vocal ends with "analyse what is there" (the user, or
+        // the host stopping)
+        if (am.getPhase() == AutoMixController::Phase::capturing || am.getPhase() == AutoMixController::Phase::listening)
+            am.analyseNow();
         const auto until = juce::Time::getMillisecondCounterHiRes() + timeoutSeconds * 1000.0;
         while (juce::Time::getMillisecondCounterHiRes() < until)
         {
@@ -213,7 +217,7 @@ public:
             for (double fs : { 44100.0, 48000.0, 96000.0, 192000.0 })
             {
                 const int cap = CaptureBuffer::capacityFor (fs, 24.0f);
-                expect (cap <= (int) (96000.0 * 24.0) + 1, "bounded at " + juce::String (fs));
+                expect (cap <= 120 * 48000, "bounded at " + juce::String (fs));   // memory: at most 120 s at 48 kHz per channel
                 expect (cap >= (int) (fs * 11.9), "at least ~12 s at " + juce::String (fs));
             }
         }
@@ -762,11 +766,11 @@ public:
         beginTest ("Dynamics: no fixed compressor");
         {
             std::set<std::pair<int, int>> settings;
-            for (auto spec : { [] { VocalSpec s; s.seconds = 12.0; return s; }(),
-                               [] { VocalSpec s; s.seconds = 12.0; s.phraseRangeDb = 14.0f; return s; }(),
-                               [] { VocalSpec s; s.seconds = 12.0; s.phraseRangeDb = 2.0f; s.syllableSeconds = 0.15; return s; }(),
-                               [] { VocalSpec s; s.seconds = 12.0; s.compress = 0.6f; s.f0 = 140.0f; return s; }(),
-                               [] { VocalSpec s; s.seconds = 12.0; s.consonantDb = 12.0f; s.phraseRangeDb = 10.0f; s.f0 = 300.0f; return s; }() })
+            for (auto spec : { [] { VocalSpec s; s.seconds = 24.0; return s; }(),
+                               [] { VocalSpec s; s.seconds = 24.0; s.phraseRangeDb = 14.0f; return s; }(),
+                               [] { VocalSpec s; s.seconds = 24.0; s.phraseRangeDb = 2.0f; s.syllableSeconds = 0.15; return s; }(),
+                               [] { VocalSpec s; s.seconds = 24.0; s.compress = 0.6f; s.f0 = 140.0f; return s; }(),
+                               [] { VocalSpec s; s.seconds = 24.0; s.consonantDb = 12.0f; s.phraseRangeDb = 10.0f; s.f0 = 300.0f; return s; }() })
             {
                 const auto r = AutoMixEngine::run (makeVocal (spec), defaults());
                 expect (r.ok, r.error);
@@ -1335,7 +1339,7 @@ public:
                 // 0.8: genre and vibe are asked at the start (Party / Druckvoll preselected)
                 expect (ov.getGenreChip (Genre::party).getToggleState() && ov.getVibeChip (Vibe::punchy).getToggleState(), "default choice");
                 const auto body = ui::AnalysisOverlay::introText();
-                expect (body.contains ("14 s"), "the listening time: " + body);
+                expect (body.contains ("bis zu 2 Minuten"), "the listening time: " + body);
                 click (ov.getSecondaryButton());   // "Später"
                 expect (! ov.isOpen());
             }
@@ -1721,7 +1725,7 @@ public:
                 auto& ov = asVocalypse (*e).getAnalysisOverlay();
                 expect (ov.isOpen() && ov.getView() == ui::AnalysisOverlay::View::intro);
                 expectEquals (ov.getPrimaryButton().getButtonText(), juce::String ("Start auto mix"));
-                expect (ui::AnalysisOverlay::introText().contains ("14 s"), "English intro");
+                expect (ui::AnalysisOverlay::introText().contains ("up to 2 minutes"), "English intro");
                 expectEquals (ov.getGenreChip (Genre::ballad).getButtonText(), juce::String ("Ballad / Acoustic"));
                 expectEquals (ov.getVibeChip (Vibe::natural).getButtonText(), juce::String ("Clear & natural"));
                 expectEquals (ov.getSecondaryButton().getButtonText(), juce::String ("Later"));

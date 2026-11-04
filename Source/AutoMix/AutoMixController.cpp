@@ -1,4 +1,5 @@
 #include "AutoMixController.h"
+#include "AnalysisStore.h"
 #include "../Parameters/ParameterLayout.h"
 #include "../StateKeys.h"
 #include "../Parameters/EqBands.h"
@@ -115,6 +116,8 @@ namespace vocalypse::automix
                                              const juce::SpinLock::ScopedLockType l (stageLock);
                                              stageText = stage;
                                          }, intent);
+            if (r.ok)
+                AnalysisStore::write (r, audio);   // the analysis is kept as JSON (newest 50)
             result = std::move (r);
             finished.store (true);
         }
@@ -242,8 +245,14 @@ namespace vocalypse::automix
         {
             const auto st = capture.getState();
             if (st == CaptureBuffer::State::capturing)
+            {
                 setPhase (Phase::capturing);
-            if (st == CaptureBuffer::State::complete)
+                // The transport stopped: the vocal has been played, analyse what is there once it is enough
+                const auto progress = capture.getProgress();
+                if (progress.transportStopped && progress.enough())
+                    capture.finishNow();
+            }
+            if (capture.getState() == CaptureBuffer::State::complete)
                 startWorker (capture.copyOut());
             sendChangeMessage();   // progress
             return;

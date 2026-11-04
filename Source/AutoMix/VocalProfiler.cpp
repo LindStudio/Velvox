@@ -929,6 +929,12 @@ namespace vocalypse::automix
                 p.beatLufs -= scaleDb;   // the engine scales the beat with the vocal: report the beat as captured
         }
 
+        buildIssues (p, scaleDb);
+        return p;
+    }
+
+    void VocalProfiler::buildIssues (VocalProfile& p, float scaleDb)
+    {
         // ======================================================================
         // Issues (report texts in both languages). Measurements are reported as such; heuristics
         // carry their confidence. Thresholds are deliberately conservative.
@@ -953,7 +959,7 @@ namespace vocalypse::automix
                        { db (p.voiceRmsDb - scaleDb) }), 40.0f);
 
         if (! p.enoughMaterial)
-            return p;
+            return;
 
         if (p.snrValid && p.snrDb < 30.0f)
             add ("noise", p.snrDb < 22.0f ? C::likely : C::possible, both ("Hörbares Hintergrundrauschen", "Audible background noise"),
@@ -1024,7 +1030,6 @@ namespace vocalypse::automix
                 return a.confidence > b.confidence;
             return a.severity > b.severity;
         });
-        return p;
     }
 
     std::optional<float> VocalProfiler::sibilanceAt (const CapturedAudio& audio, const VocalProfile& ref)
