@@ -1,5 +1,7 @@
 # Auto Mix 0.9 – Phased Engine Implementation Plan
 
+> **AUSGESETZT (2026-11-04):** Jakob: erst Reproduzierbarkeit und Stabilität, keine neuen Module. Gültig ist `2026-11-04-automix-konsistenz.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the one-shot auto-mix planner with a phased engine (Clean → Control → Shape → Enhance → Space → Output) in which every one of the 19 stages detects a measured problem, configures itself from its severity and the style, proves a measurable benefit on a render, and otherwise stays off – plus the four missing DSP pieces (Expander/Gate, Dynamic EQ, Multiband compressor, compressor character FET/Opto) and their panels.

@@ -1,5 +1,7 @@
 # Auto Mix 0.9 – Engine in Phasen (Design)
 
+> **AUSGESETZT (2026-11-04):** Jakob: erst Reproduzierbarkeit und Stabilität, keine neuen Module. Gültig ist `2026-11-04-automix-konsistenz.md`.
+
 Stand 2026-11-04. Grundlage: Jakobs Konzept „VOCALYPSE – Auto-Mixing Engine, Mixing Philosophy & Processing
 Architecture“ (im Chat eingefügt, 19 Schritte in 4 Phasen + 12 Regeln) und seine Antworten vom selben Tag.
 
