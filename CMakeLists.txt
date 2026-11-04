@@ -104,6 +104,7 @@ set(VOCALYPSE_SOURCES
     Source/AutoMix/AutoMixObjective.cpp
     Source/AutoMix/AutoMixController.cpp
     Source/AutoMix/MixTarget.cpp
+    Source/AutoMix/DecisionLog.cpp
     Source/UI/UserSettings.cpp
     Source/UI/HelpContent.cpp
     Source/UI/HelpOverlay.cpp
@@ -202,7 +203,7 @@ target_link_libraries(Vocalypse
 # ---------------------------------------------------------------------------
 if(VOCALYPSE_BUILD_TESTS)
     juce_add_console_app(VocalypseTests PRODUCT_NAME "VocalypseTests")
-    target_sources(VocalypseTests PRIVATE ${VOCALYPSE_SOURCES} Tests/TestMain.cpp Tests/VocalypseTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/MacroBakeTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/MixTargetTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/VocalCheckRealDataTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/SaturationTests.cpp Tests/ReverbQualityTests.cpp Tests/EqPanelTests.cpp Tests/ReverbPanelTests.cpp Tests/CheckPanelTests.cpp Tests/SmoothPanelTests.cpp Tests/DynamicsQualityTests.cpp Tests/StateRestoreTests.cpp Tests/LicenseTests.cpp Tests/ConsistencyHarness.cpp Tests/ConsistencyTests.cpp)
+    target_sources(VocalypseTests PRIVATE ${VOCALYPSE_SOURCES} Tests/TestMain.cpp Tests/VocalypseTests.cpp Tests/RoutingTests.cpp Tests/OutputStageTests.cpp Tests/DoublerTests.cpp Tests/DuckingTests.cpp Tests/ProExtensionTests.cpp Tests/MacroTests.cpp Tests/MacroBakeTests.cpp Tests/UiTests.cpp Tests/PresetTests.cpp Tests/MixingTests.cpp Tests/PerformanceTests.cpp Tests/NewModuleTests.cpp Tests/UxTests.cpp Tests/AutoMixTests.cpp Tests/MixTargetTests.cpp Tests/StabilityTests.cpp Tests/FxQualityTests.cpp Tests/CompareTests.cpp Tests/VocalCheckTests.cpp Tests/VocalCheckFixTests.cpp Tests/CheckEval.cpp Tests/VocalCheckRealDataTests.cpp Tests/PerfProbe.cpp Tests/DesignTests.cpp Tests/UndoTests.cpp Tests/GestureTests.cpp Tests/ShellTests.cpp Tests/MixLawTests.cpp Tests/PanelFrameTests.cpp Tests/PresetBrowserTests.cpp Tests/EqModelTests.cpp Tests/EqModuleTests.cpp Tests/EqRoleTests.cpp Tests/EqTests.cpp Tests/SaturationTests.cpp Tests/ReverbQualityTests.cpp Tests/EqPanelTests.cpp Tests/ReverbPanelTests.cpp Tests/CheckPanelTests.cpp Tests/SmoothPanelTests.cpp Tests/DynamicsQualityTests.cpp Tests/StateRestoreTests.cpp Tests/LicenseTests.cpp Tests/ConsistencyHarness.cpp Tests/ConsistencyTests.cpp Tests/SoftDecisionTests.cpp)
     target_include_directories(VocalypseTests PRIVATE Source ${VOCALYPSE_THIRD_PARTY_INCLUDES})
     if(MSVC)
         target_compile_options(VocalypseTests PRIVATE /bigobj /utf-8)

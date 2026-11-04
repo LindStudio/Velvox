@@ -211,6 +211,27 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         rep << "  note: " << vocalypse::i18n::show (n) << "\n";
     for (auto& a : r.adjustments)
         rep << "  verify: " << vocalypse::i18n::show (a) << "\n";
+    rep << "\nMODULE LOG\n";
+    {
+        const auto list = [] (const std::vector<vocalypse::automix::Measured>& v)
+        {
+            juce::String s;
+            for (auto& x : v)
+                s << (s.isEmpty() ? "" : ", ") << x.key << " " << juce::String (x.value, 2) << (x.unit.isEmpty() ? "" : " " + x.unit);
+            return s.isEmpty() ? juce::String ("-") : s;
+        };
+        for (auto& l : r.plan.log)
+        {
+            rep << "  " << (l.globalStage ? juce::String ("Output") : juce::String (vocalypse::dsp::moduleDisplayName (l.module)) + (l.instance > 0 ? " " + juce::String (l.instance + 1) : juce::String()))
+                << ": " << (l.active ? "active" : "skipped") << ", problem " << (l.problem.isEmpty() ? juce::String ("-") : l.problem)
+                << ", need " << juce::String (l.need, 2) << ", intensity " << juce::String (l.intensity, 2) << "\n"
+                << "      measured:   " << list (l.measurements) << "\n"
+                << "      parameters: " << list (l.parameters) << "\n"
+                << "      result:     " << list (l.result) << "\n";
+            if (! l.active && l.skipReason.isNotEmpty())
+                rep << "      skipped because: " << vocalypse::i18n::show (l.skipReason) << "\n";
+        }
+    }
     rep << "\nRESULT (captured section)\n"
         << "  " << juce::String (r.original.lufs, 1) << " -> " << juce::String (r.processed.lufs, 1) << " LUFS, peak " << juce::String (r.processed.peakDb, 1)
         << " dBFS, comp GR median " << juce::String (r.processed.compGrMedianDb, 1) << " dB (max " << juce::String (r.processed.compGrMaxDb, 1)

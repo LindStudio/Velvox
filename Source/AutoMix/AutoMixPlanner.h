@@ -4,6 +4,7 @@
 #include "../DSP/Routing.h"
 #include "../DSP/EqDesign.h"
 #include "AutoEq.h"
+#include "DecisionLog.h"
 #include <optional>
 #include <map>
 #include <set>
@@ -30,6 +31,10 @@ namespace vocalypse::automix
         std::vector<Decision> decisions;
         std::vector<juce::String> notes;      // things left alone and why
         bool conservative = false;            // little or unreliable material: gentle settings only
+        std::vector<ModuleLog> log;           // structured decision log: one entry per module the planner decided on
+
+        // The entry of a module instance (created when missing)
+        ModuleLog& logFor (dsp::ModuleId module, int instance = 0);
 
         void set (const juce::String& id, float value);
         float get (const juce::String& id, float fallback = 0.0f) const;

@@ -64,6 +64,18 @@ namespace vocalypse::automix
         return s;
     }
 
+    ModuleLog& MixPlan::logFor (dsp::ModuleId module, int instance)
+    {
+        for (auto& l : log)
+            if (! l.globalStage && l.module == module && l.instance == instance)
+                return l;
+        ModuleLog l;
+        l.module = module;
+        l.instance = instance;
+        log.push_back (std::move (l));
+        return log.back();
+    }
+
     Decision* MixPlan::find (dsp::ModuleId m)
     {
         for (auto& d : decisions)
@@ -220,6 +232,22 @@ namespace vocalypse::automix
             plan.decisions.push_back ({ m, false, std::move (title), std::move (reason), measured });
         };
 
+        // The structured log (one entry per module decided on): need is 1 / 0 for now (the soft decisions come
+        // with later tasks), parameters are filled from plan.values once the plan is complete
+        const auto note = [&plan] (M m, bool active, const char* problem, std::initializer_list<Measured> measured, float intensity, const juce::String& skip)
+        {
+            auto& l = plan.logFor (m);
+            l.active = active;
+            l.problem = problem;
+            l.measurements.clear();
+            for (auto& x : measured)
+                if (std::isfinite (x.value))
+                    l.measurements.push_back (x);
+            l.need = active ? 1.0f : 0.0f;
+            l.intensity = active ? juce::jlimit (0.0f, 1.0f, intensity) : 0.0f;
+            l.skipReason = active ? juce::String() : skip;
+        };
+
         // Levels as the modules see them: the input gain is applied before the chain
         const float inGain = cur (pid::inputGain);
         const float voice = p.voiceRmsDb + inGain;              // median voiced RMS (dBFS)
@@ -248,6 +276,13 @@ namespace vocalypse::automix
                           "Only {0} dB between voice and noise - the noise between the lines gets quieter.", { juce::String (juce::roundToInt (p.snrDb)) }),
                     true);
         }
+        note (M::denoise, plan.on (pid::denoiseOn), "snr",
+              { { "snr", p.snrValid ? p.snrDb : std::nanf (""), "dB" }, { "room", someRoom ? 1.0f : 0.0f, "" }, { "compressed", compressed ? 1.0f : 0.0f, "" } },
+              plan.get (pid::denoiseAmount) / 100.0f,
+              ! p.snrValid ? both ("Raumrauschen bleibt aus: Rauschabstand nicht messbar.", "Room noise stays off: signal-to-noise not measurable.")
+                           : p.snrDb >= 35.0f ? both ("Raumrauschen bleibt aus: genug Abstand zwischen Stimme und Rauschen.", "Room noise stays off: enough distance between voice and noise.")
+                                              : both ("Raumrauschen bleibt aus: Die Aufnahme hat Raum oder ist bereits komprimiert - zwischen den Zeilen liegt kein Rauschen.",
+                                                      "Room noise stays off: the recording has room sound or is already compressed - between the lines is no noise."));
         // 2026-10-29: audible breaths are common - measured 0 .. 3.6 % of the blocks on 31 takes; from 1 % on it lowers them
         if (p.breathShare > 0.01f)
         {
@@ -262,6 +297,8 @@ namespace vocalypse::automix
                           { juce::String (juce::roundToInt (100.0f * p.breathShare)) }),
                     true);
         }
+        note (M::breath, plan.on (pid::breathOn), "breaths", { { "breathShare", 100.0f * p.breathShare, "%" } }, plan.get (pid::breathAmount) / 100.0f,
+              both ("Atem-Absenker bleibt aus: kaum hörbare Atmer.", "Breath control stays off: hardly any audible breaths."));
 
         // ---- Start from a defined state: macros off
         bool macrosWereSet = false;
@@ -339,6 +376,9 @@ namespace vocalypse::automix
         for (auto& m : eqMoves)
             if (setRoleBand (plan, current, 0, m.role, m.band, true) >= 0)
                 decide (M::eq, m.title, m.reason, true);
+        note (M::eq, true, p.hasIssue ("rumble") ? "rumble" : "cleanUp",
+              { { "f0Low", p.pitchValid ? p.f0LowHz : std::nanf (""), "Hz" }, { "rumble", p.rumbleDb, "dB" }, { "presence", p.presenceDb, "dB" },
+                { "curveMoves", (float) eqMoves.size(), "" } }, 1.0f, {});
         // Roles without a move: flat (0.5 bands keep their place), notches and the tone bell off
         {
             const std::pair<dsp::EqRole, dsp::EqBand> flat[] {
@@ -395,6 +435,11 @@ namespace vocalypse::automix
                           "Loud and quiet words are {0} dB apart - quiet words are lifted before the compressor works.", { num (p.dynamicsDb, 1) })
                         + (noisy ? both (" Anhebung begrenzt (Rauschen).", " Lift limited (noise).") : juce::String()), true);
         }
+        note (M::ride, rideWanted, "phraseSpread", { { "phraseSpread", p.dynamicsValid ? p.dynamicsDb : std::nanf (""), "dB" }, { "phraseHi", target.dynamics.phraseHi, "dB" } },
+              plan.get (pid::rideAmount) / 100.0f,
+              plan.conservative ? both ("Kein Level Ride: Es wurde wenig Gesang erfasst.", "No Level Ride: little singing was captured.")
+                                : compressed ? both ("Kein Level Ride: Die Aufnahme ist bereits dicht.", "No Level Ride: the recording is already dense.")
+                                             : both ("Kein Level Ride: Die Phrasen liegen nah genug beieinander.", "No Level Ride: the phrase levels are close enough."));
 
         // ================= Compressor: steady level =================
         {
@@ -445,6 +490,8 @@ namespace vocalypse::automix
                                                    num (release, 0), num (p.onsetRate, 1) })
                                          : juce::String()),
                     true);
+            note (M::comp, true, "phraseSpread", { { "phraseSpread", p.dynamicsValid ? p.dynamicsDb : std::nanf (""), "dB" }, { "crest", p.crestDb, "dB" },
+                                                   { "expectedGr", expectedGr, "dB" } }, 1.0f, {});
         }
 
         // ================= Vocal Smash: density (parallel) =================
@@ -468,6 +515,11 @@ namespace vocalypse::automix
             plan.notes.push_back (both ("Keine Parallelkompression: Die Aufnahme ist bereits stark komprimiert.",
                                         "No parallel compression: the recording is already heavily compressed."));
         }
+        note (M::smash, smash, "density", { { "densityBlend", target.densityBlend, "%" }, { "compressed", compressed ? 1.0f : 0.0f, "" } },
+              plan.get (pid::smashBlend) / 100.0f,
+              compressed ? both ("Keine Parallelkompression: Die Aufnahme ist bereits stark komprimiert.", "No parallel compression: the recording is already heavily compressed.")
+                         : plan.conservative || p.distortionLikely ? both ("Keine Parallelkompression: zu wenig oder übersteuertes Material.", "No parallel compression: too little or clipped material.")
+                                                                   : both ("Keine Parallelkompression: Der Stil braucht keine zusätzliche Dichte.", "No parallel compression: the style needs no extra density."));
 
         // ================= De-esser =================
         const bool deess = p.sibilanceValid && p.sibilanceVsVowelDb > -9.0f;
@@ -489,6 +541,9 @@ namespace vocalypse::automix
             plan.notes.push_back (p.sibilanceValid ? both ("De-Esser bleibt aus: S-Laute sind unauffällig.", "De-Esser stays off: the sibilance is unremarkable.")
                                                    : both ("De-Esser bleibt aus: zu wenige S-Laute zum Messen.", "De-Esser stays off: too few S sounds to measure."));
         }
+        note (M::deess, deess, "sibilance",
+              { { "sibilanceVsVowel", p.sibilanceValid ? p.sibilanceVsVowelDb : std::nanf (""), "dB" }, { "deessFreq", p.deessDetectorHz, "Hz" } },
+              plan.get (pid::deessRange) / 10.0f, plan.notes.empty() ? juce::String() : plan.notes.back());
 
         // ================= Smooth: adaptive resonance control =================
         // One problem, one tool: a resonance the EQ notches (0.6.1) is no reason for SMOOTH
@@ -529,6 +584,11 @@ namespace vocalypse::automix
                                                        "Gentle, as basic care: SMOOTH only smooths resonances that briefly stick out while singing."),
                     marked);
         }
+        note (M::smooth, smooth, highRes != nullptr ? "resonance" : (harsh ? "harsh" : "basicCare"),
+              { { "presence", p.presenceDb, "dB" }, { "resonanceHz", highRes != nullptr ? highRes->hz : std::nanf (""), "Hz" },
+                { "resonanceExcess", highRes != nullptr ? highRes->excessDb : std::nanf (""), "dB" } },
+              plan.get (pid::smoothAmount) / 100.0f,
+              both ("Resonanzkontrolle bleibt aus: zu wenig Material.", "Resonance control stays off: too little material."));
 
         // ================= Saturation: density and colour =================
         const bool sat = ! p.distortionLikely && ! (compressed && harsh);
@@ -570,6 +630,9 @@ namespace vocalypse::automix
                                                              "No saturation: the recording already shows clipping.")
                                                      : both ("Keine Sättigung: bereits dicht und hell.", "No saturation: already dense and bright."));
         }
+        note (M::sat, sat, p.distortionLikely ? "distortion" : "density",
+              { { "distortion", p.distortionLikely ? 1.0f : 0.0f, "" }, { "harsh", harsh ? 1.0f : 0.0f, "" }, { "compressed", compressed ? 1.0f : 0.0f, "" } },
+              plan.get (pid::satMix) / 100.0f, plan.notes.empty() ? juce::String() : plan.notes.back());
 
         // ================= Width: doubler, mono-safe =================
         const bool alreadyWide = p.stereoContent && p.correlation < 0.8f;
@@ -599,6 +662,12 @@ namespace vocalypse::automix
             plan.notes.push_back (both ("Kein Doubler: Die Aufnahme ist bereits breit (Korrelation {0}).",
                                         "No Doubler: the recording is already wide (correlation {0}).", { num (p.correlation, 2) }));
         }
+        note (M::doubler, doubler, "width",
+              { { "correlation", p.stereoContent ? p.correlation : std::nanf (""), "" }, { "pitchedShare", 100.0f * p.pitchedShare, "%" }, { "doublerMix", doublerMix, "%" } },
+              plan.get (pid::doublerMix) / 100.0f,
+              alreadyWide ? both ("Kein Doubler: Die Aufnahme ist bereits breit.", "No Doubler: the recording is already wide.")
+                          : plan.conservative ? both ("Kein Doubler: Es wurde wenig Gesang erfasst.", "No Doubler: little singing was captured.")
+                                              : both ("Kein Doubler: Der Stil braucht hier kaum Breite.", "No Doubler: the style needs hardly any width here."));
         plan.set (pid::monoBelow, 120.0f);
 
         // ================= Space: reverb and delay as sends, ducked =================
@@ -610,6 +679,8 @@ namespace vocalypse::automix
             plan.set (pid::delayOn, 0.0f);
             plan.notes.push_back (both ("Kein Hall und kein Delay: Die Aufnahme hat bereits deutlichen Raum ({0} s Ausklang).",
                                         "No reverb and no delay: the recording already has a clear room sound ({0} s decay).", { num (p.tailSeconds, 1) }));
+            for (auto m : { M::reverb, M::delay })
+                note (m, false, "room", { { "tail", p.tailSeconds, "s" } }, 0.0f, plan.notes.back());
         }
         else
         {
@@ -704,6 +775,9 @@ namespace vocalypse::automix
                                                   : both ("Räumliche Tiefe; 30 ms Pre-Delay und Ducking halten die Wörter vorne.",
                                                           "Spatial depth; 30 ms pre-delay and ducking keep the words up front.")
                         + beatReason, true);
+            note (M::reverb, true, someRoom ? "room" : (spoken ? "spoken" : "style"),
+                  { { "tail", p.tailSeconds, "s" }, { "pitchedShare", 100.0f * p.pitchedShare, "%" }, { "beatDensity", (float) density, "" },
+                    { "hostBpm", (float) p.hostBpm, "BPM" } }, revMix / 70.0f, {});
 
             const bool delay = ! someRoom && ! plan.conservative;   // echoes on a roomy take only add wash
             plan.set (pid::delayOn, delay ? 1.0f : 0.0f);
@@ -735,10 +809,23 @@ namespace vocalypse::automix
                               { spoken ? "400" : "300" })
                             + (density == BeatDensity::dense ? both (" Dichter Beat: leiser.", " Dense beat: quieter.") : juce::String()), false);
             }
+            note (M::delay, delay, someRoom ? "room" : "style", { { "tail", p.tailSeconds, "s" }, { "beatDensity", (float) density, "" } },
+                  plan.get (pid::delayMix) / 40.0f,
+                  someRoom ? both ("Kein Delay: Die Aufnahme hat etwas Raum - Echos würden nur verschmieren.", "No delay: the recording has some room sound - echoes would only add wash.")
+                           : both ("Kein Delay: Es wurde wenig Gesang erfasst.", "No delay: little singing was captured."));
         }
 
         // Output gain is set by the engine after measuring the processed result
         plan.set (pid::outputGain, cur (pid::outputGain));
+        {
+            ModuleLog out;
+            out.globalStage = true;
+            out.active = true;
+            out.problem = "level";
+            out.need = 1.0f;
+            out.intensity = 0.0f;   // the engine sets the level on the render
+            plan.log.push_back (std::move (out));
+        }
 
         // Fair comparison: the bypass plays at the loudness of the mix
         if (cur (pid::levelMatchMode) < 0.5f)
@@ -749,6 +836,7 @@ namespace vocalypse::automix
         params.setAll (current);
         params.setAll (plan.values);
         plan.routing = pruneInaudible (plan.routing, params.read (plan.routing));
+        fillParameters (plan.log, plan.values);
         return plan;
     }
 }

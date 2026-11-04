@@ -1,5 +1,6 @@
 #include "AutoMixEngine.h"
 #include "../Parameters/SettingsReader.h"
+#include "../Parameters/ParameterLayout.h"
 #include "ReportText.h"
 
 namespace vocalypse::automix
@@ -869,7 +870,21 @@ namespace vocalypse::automix
             r.chosenCandidate = (int) best;
             if (best != 0)
             {
+                const auto baseValues = plan.values;
                 plan = variants[best].second;
+                // decision log: the chosen candidate's name on every module it changed
+                for (const auto& [id, v] : plan.values)
+                {
+                    const auto it = baseValues.find (id);
+                    if (it != baseValues.end() && std::abs (it->second - v) < 1.0e-4f)
+                        continue;
+                    const auto* spec = findParameterSpec (id);
+                    const auto module = spec != nullptr ? moduleOfParameter (*spec) : std::nullopt;
+                    if (module.has_value())
+                        for (auto& l : plan.log)
+                            if (! l.globalStage && l.module == *module && l.instance == 0)
+                                setMeasured (l.result, "candidate: " + variants[best].first, (float) best, "");
+                }
                 syncDecisions (plan, variants[best].first, r.candidates[0].score, r.candidates[best].score, current);
                 r.adjustments.push_back (both ("Variante gewählt: ", "Variant chosen: ") + variants[best].first);
             }
@@ -922,6 +937,40 @@ namespace vocalypse::automix
         }
         outDecision.reason += both (" Clip Guard bleibt als Schutz aktiv.", " Clip Guard stays on as a safeguard.");
         plan.decisions.push_back (outDecision);
+
+        // ---- Decision log: the final state of every module, and what the render showed
+        for (auto& l : plan.log)
+        {
+            if (l.globalStage)
+                continue;
+            const bool on = l.module == dsp::ModuleId::denoise ? plan.on (pid::denoiseOn) : l.module == dsp::ModuleId::breath ? plan.on (pid::breathOn)
+                                                                                        : plan.activeModules().count (l.module) > 0;
+            if (on != l.active)
+            {
+                l.active = on;
+                l.need = on ? 1.0f : 0.0f;
+                if (on)
+                    l.skipReason = {};
+            }
+            if (l.module == dsp::ModuleId::comp && on)
+            {
+                setMeasured (l.result, "compGrMedian", m.compGrMedianDb, "dB");
+                setMeasured (l.result, "compGrMax", m.compGrMaxDb, "dB");
+            }
+            if (l.module == dsp::ModuleId::deess && on)
+            {
+                if (m.sibilanceValid)
+                    setMeasured (l.result, "sibilanceVsVowelAfter", m.sibilanceVsVowelDb, "dB");
+                setMeasured (l.result, "deessGrMax", m.deessGrMaxDb, "dB");
+            }
+        }
+        for (auto& l : plan.log)
+            if (l.globalStage)
+            {
+                setMeasured (l.result, "lufs", m.lufs, "LUFS");
+                setMeasured (l.result, "peak", m.peakDb, "dBFS");
+            }
+        fillParameters (plan.log, plan.values);
 
         report (1.0f, "Fertig", "Done");
         r.seconds = (juce::Time::getMillisecondCounterHiRes() - startMs) * 0.001;
