@@ -94,3 +94,18 @@ Umsetzungsplan: `docs/superpowers/plans/2026-11-04-automix-konsistenz.md`.
 6. **Stabile Variantenwahl** (U4): Variante nur bei Nutzen ≥ Marge + Komplexitätskosten.
 7. **Entscheidungsprotokoll** (U6): pro Modul strukturiert (aktiv/übersprungen, Problem, Messwert, Parameter,
    Stärke, Ergebnis, Grund), im Bericht und im gespeicherten JSON.
+
+## 4. Ausgangswert (Testsystem, Stand vor den Korrekturen)
+
+`VocalypseTests --consistency tools/bench/consistency_takes.txt …\konsistenz\baseline` (Commit `509490d`, Party · Druckvoll,
+8 feste Takes, je 22 Prüfungen). Grenzwerte: `Tests/ConsistencyHarness.h`.
+
+| Prüfung | bestanden |
+|---|---|
+| 10× dieselbe Aufnahme (exakt) | 72 / 72 |
+| Pegel −2 / −1 / −0,5 / +0,5 / +1 / +2 dB | 0 / 48 |
+| Rauschen −70 dBFS | 5 / 8 |
+| Start 3 s / 6 s später | 0 / 16 |
+| 2. und 3. Lauf hintereinander (exakt) | 4 / 16 |
+| zufälliger Vorzustand (exakt) | 0 / 16 |
+| **gesamt** | **81 / 176** |
