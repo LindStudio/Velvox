@@ -33,7 +33,10 @@ namespace vocalypse::test
     {
         // gain shift (+-0.5 / 1 / 2 dB of input level): no module flip,
         float inputGainDb = 0.05f;        // inputGain = original - shift +- this
-        float outputGainDb = 0.3f;        // outputGain = original + shift +- this
+        // outputGain = original + shift +- this (the output stage matches the take's loudness) OR original +- this: the
+        // engine clamps its output target absolutely to -24 .. -14 LUFS (AutoMixEngine::targetLufs), so a take outside
+        // that range ends at the same output level whatever its input level (Ruling 12)
+        float outputGainDb = 0.3f;
         float relative = 0.02f;           // every other value: within this share ...
         float absolute = 0.1f;            // ... or this many units (the thresholds too: the plan is made at the working level)
 

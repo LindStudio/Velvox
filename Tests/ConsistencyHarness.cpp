@@ -148,7 +148,8 @@ namespace vocalypse::test
                 if (base == pid::inputGain)
                     return std::abs (b - (a - shiftDb)) <= t.inputGainDb + eps ? juce::String() : what() + " (expected " + num (a - shiftDb) + ")";
                 if (base == pid::outputGain)
-                    return std::abs (b - (a + shiftDb)) <= t.outputGainDb + eps ? juce::String() : what() + " (expected " + num (a + shiftDb) + ")";
+                    return std::abs (b - (a + shiftDb)) <= t.outputGainDb + eps || std::abs (b - a) <= t.outputGainDb + eps
+                               ? juce::String() : what() + " (expected " + num (a + shiftDb) + " or, with the output target clamped, " + num (a) + ")";
                 return withinRelOrAbs (a, b, t.relative, t.absolute) ? juce::String() : what();
             }
 

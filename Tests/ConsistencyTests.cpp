@@ -95,6 +95,12 @@ public:
             b.set (pid::outputGain, 3.0f);
             expect (compare (fingerprint (a), fingerprint (b), Check::gainShift, 2.0f, tol).pass);
 
+            auto o = b;
+            o.set (pid::outputGain, 1.0f);                                  // output unchanged: the clamped output target (Ruling 12)
+            expect (compare (fingerprint (a), fingerprint (o), Check::gainShift, 2.0f, tol).pass);
+            o.set (pid::outputGain, 2.0f);                                  // neither original nor original + shift
+            expect (! compare (fingerprint (a), fingerprint (o), Check::gainShift, 2.0f, tol).pass);
+
             auto g = b;
             g.set (pid::compThreshold, -20.0f);                             // a threshold that follows the shift is no longer allowed
             expect (! compare (fingerprint (a), fingerprint (g), Check::gainShift, 2.0f, tol).pass);
@@ -369,19 +375,25 @@ public:
             expect (r.plan.routing.toString() == reference.plan.routing.toString(), "routing, shift " + juce::String (shift));
         }
 
-        beginTest ("A quiet take (12 dB under the reference) gets 12 dB more input gain; the output gain takes it back");
+        // A take whose median voiced block RMS is `medianDb` (the brief's "-40 dBFS take"): the reference scaled to it
+        const float referenceMedianDb = workingLevelDb - reference.plan.get (pid::inputGain);
+        const auto mixWithMedian = [&] (float medianDb) { return mixShifted (referenceDb + (medianDb - referenceMedianDb)); };
+
+        beginTest ("A -40 dBFS take (median voiced RMS) gets +22 dB of input gain; a take 2 dB higher 2 dB less");
         {
-            const auto r = mixShifted (referenceDb - 12.0f);
-            expect (r.ok, r.error);
-            expectWithinAbsoluteError (r.plan.get (pid::inputGain), reference.plan.get (pid::inputGain) + 12.0f, 0.05f);
-            expect (r.plan.get (pid::inputGain) < 24.0f, "unclamped");
-            // everything but the two gains stays; the output gain of such a quiet take is not "original + shift": the output
-            // stage aims at the loudness of the take, kept within -24 .. -14 LUFS (an absolute target, by design)
-            for (auto& [id, v] : reference.plan.values)
-                if (id != pid::inputGain && id != pid::outputGain && r.plan.values.count (id) == 1)
-                    expect (std::abs (r.plan.values.at (id) - v) <= 1.0e-3f * std::max (1.0f, std::abs (v)), id + ": " + juce::String (v) + " -> " + juce::String (r.plan.values.at (id)));
-            logMessage ("quiet take: inputGain " + juce::String (reference.plan.get (pid::inputGain), 2) + " -> " + juce::String (r.plan.get (pid::inputGain), 2)
-                        + ", outputGain " + juce::String (reference.plan.get (pid::outputGain), 2) + " -> " + juce::String (r.plan.get (pid::outputGain), 2));
+            const auto quiet = mixWithMedian (-40.0f);
+            expect (quiet.ok, quiet.error);
+            expectWithinAbsoluteError (quiet.plan.get (pid::inputGain), 22.0f, 0.05f);
+            expectWithinAbsoluteError (quiet.profile.voiceRmsDb, workingLevelDb, 0.25f, "the profile of the scaled copy sits at the working level");
+
+            // Both takes are far under the output stage's -24 LUFS floor: its target is absolute, so the output gain is the
+            // same for both (the harness accepts "original" as well as "original + shift", Ruling 12)
+            const auto louder = mixWithMedian (-38.0f);
+            expect (louder.ok, louder.error);
+            expectWithinAbsoluteError (louder.plan.get (pid::inputGain), 20.0f, 0.05f);
+            const auto d = compare (fingerprint (louder.plan), fingerprint (quiet.plan), Check::gainShift, -2.0f, tol);
+            expect (d.pass, juce::StringArray (d.overTolerance.data(), (int) d.overTolerance.size()).joinIntoString ("; "));
+            expectWithinAbsoluteError (quiet.plan.get (pid::outputGain), louder.plan.get (pid::outputGain), 0.3f, "clamped output target: same output gain");
         }
 
         beginTest ("A take that needs more than +24 dB is clamped to +24 dB, and the decision log says so");
@@ -433,7 +445,10 @@ public:
                         if (m.key == "workingLevel")  working = m.value;
                     }
                     expectEquals (working, workingLevelDb);
-                    expectWithinAbsoluteError (voice + reference.plan.get (pid::inputGain), workingLevelDb, 1.0e-3f);
+                    // the engine measured the capture's median voiced RMS; the profile of the scaled copy has to read the working level
+                    // (its own gate differs by a few blocks near the -50 dB floor: 0.25 dB)
+                    expectWithinAbsoluteError (reference.profile.voiceRmsDb, workingLevelDb, 0.25f);
+                    expectWithinAbsoluteError (voice, referenceMedianDb, 1.0e-3f);
                 }
         }
 
