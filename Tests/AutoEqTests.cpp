@@ -157,9 +157,10 @@ public:
             expect (! notch.has_value() || ! notch->on || std::abs (notch->gain) < 1.0e-3f, "old notch switched off");
         }
 
-        beginTest ("Planner: Vocal Check and user bands are kept and counted, never written");
+        // Task 3 (U5): the plan starts from the defaults, so bands in the live state (Vocal Check's, the user's) are
+        // neither kept nor counted: they are overwritten with the defaults - every auto mix gives the same EQ
+        beginTest ("Planner: bands in the live state (Vocal Check, user) do not reach the plan; it holds every band at its default or its own value");
         {
-            // Vocal Check already cut the resonance (presence role bell)
             auto cur = defaults();
             dsp::EqBand check = band (dsp::EqBandType::bell, 1800.0f, -8.0f, 6.0f);
             check.role = (int) dsp::EqRole::presence;
@@ -167,20 +168,21 @@ public:
             dsp::EqBand user = band (dsp::EqBandType::bell, 600.0f, 2.0f, 1.0f);
             putBand (cur, 1, user);   // role none
             const auto plan = planOf (res, cur);
+            const auto fresh = planOf (res, defaults());
+            expect (plan.values == fresh.values, "the same plan as from the defaults");
             for (int b : { 0, 1 })
                 for (auto* f : { pid::eqband::on, pid::eqband::type, pid::eqband::freq, pid::eqband::gain, pid::eqband::q, pid::eqband::role })
-                    expect (plan.values.count (eqbands::bandParamId (0, b, f)) == 0, "kept band " + juce::String (b) + " not written: " + f);
-            expect (! roleBand (plan, cur, dsp::EqRole::autoNotch1).has_value() || ! roleBand (plan, cur, dsp::EqRole::autoNotch1)->on,
-                    "no second notch on the Vocal Check cut");
+                    expect (plan.values.count (eqbands::bandParamId (0, b, f)) == 1, "band " + juce::String (b) + " written: " + f);
+            const auto notch = roleBand (plan, cur, dsp::EqRole::autoNotch1);
+            expect (notch.has_value() && notch->on, "the resonance gets its own notch (the old Vocal Check cut is gone)");
 
-            // All 16 slots are user bands: nothing is written, the plan stays valid
+            // All 16 slots filled in the live state: the plan still has its bands
             auto full = defaults();
             for (int b = 0; b < dsp::maxEqBands; ++b)
                 putBand (full, b, band (dsp::EqBandType::bell, 200.0f * (float) (b + 1), 0.5f, 1.0f));
             VocalSpec dark; dark.seconds = 14.0; dark.tiltDb = -5.0f; dark.f0 = 120.0f;
             const auto pf = planOf (dark, full);
-            for (int b = 0; b < dsp::maxEqBands; ++b)
-                expect (pf.values.count (eqbands::bandParamId (0, b, pid::eqband::gain)) == 0, "user band untouched");
+            expect (pf.values == planOf (dark, defaults()).values, "full live EQ: the same plan as from the defaults");
             expect (pf.routing.isValid());
         }
 

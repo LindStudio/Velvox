@@ -174,8 +174,9 @@ namespace vocalypse::automix
         if (n <= 0)
             return m;
 
+        // Defaults, the session parameters from `current`, then everything the plan sets
         OfflineParameters params;
-        params.setAll (current);
+        params.setAll (startValues (current));
         params.setAll (values);
         auto s = params.read (routing);
         s.safetyClip = false;   // measure real overs; the plugin keeps its clip guard
@@ -646,9 +647,11 @@ namespace vocalypse::automix
     }
 
     //==========================================================================
-    AutoMixResult AutoMixEngine::run (const CapturedAudio& audio, const std::map<juce::String, float>& current,
+    AutoMixResult AutoMixEngine::run (const CapturedAudio& audio, const std::map<juce::String, float>& live,
                                       const std::function<bool()>& shouldStop, const Progress& progress, const MixIntent& intent)
     {
+        // The live state is read for the session parameters only; everything else starts at its default
+        const auto current = startValues (live);
         const auto mixTarget = targetFor (intent.genre, intent.vibe);
         AutoMixResult r;
         r.intent = intent;
@@ -723,7 +726,7 @@ namespace vocalypse::automix
             if (! plan.on (pid::deessOn) && m.sibilanceValid
                 && m.sibilanceVsVowelDb > std::max (-8.0f, r.original.sibilanceVsVowelDb + 2.0f))
             {
-                AutoMixPlanner::configureDeEsser (plan, r.profile, current.count (pid::inputGain) ? current.at (pid::inputGain) : 0.0f, 4.0f);
+                AutoMixPlanner::configureDeEsser (plan, r.profile, plan.get (pid::inputGain), 4.0f);
                 plan.decisions.push_back ({ dsp::ModuleId::deess, false,
                                             both ("De-Esser ab {0} Hz, max. 4 dB", "De-Esser from {0} Hz, max. 4 dB", { juce::String (juce::roundToInt (plan.get (pid::deessFreq))) }),
                                             both ("Nach der Kette standen die S-Laute {0} stärker hervor als im Original - dezent ausgeglichen.",

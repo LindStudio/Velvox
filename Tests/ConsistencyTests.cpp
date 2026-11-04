@@ -189,6 +189,117 @@ public:
             }
             expectEquals (identical, 10);
         }
+
+        // ---- Task 3 (U5): every auto mix starts from the defaults and writes every parameter
+        VocalSpec spec;
+        spec.seconds = 14.0;
+        const auto vocal = makeVocal (spec);
+
+        beginTest ("The plan writes every parameter except the session ones (bypass, level match window / range, Check)");
+        {
+            const auto plan = mixFile (vocal, 0.0, false, defaultValues(), MixIntent {});
+            expect (plan.ok, plan.error);
+            expectEquals ((int) sessionParameters().size(), 5);
+            for (auto& s : getParameterSpecs())
+            {
+                const bool session = sessionParameters().count (s.id) > 0;
+                expect (plan.plan.values.count (s.id) == (session ? 0u : 1u), juce::String (session ? "session parameter written: " : "parameter not written: ") + s.id);
+            }
+            for (auto id : { juce::String (pid::inputGain), juce::String (pid::outputGain), juce::String (pid::macroPresence),
+                             eqbands::bandParamId (0, 15, pid::eqband::freq), eqbands::bandParamId (1, 0, pid::eqband::gain) })
+                expect (plan.plan.values.count (id) == 1, id);
+        }
+
+        beginTest ("A plan from any prior state equals the plan from the defaults (exact)");
+        {
+            const auto tolerances = Tolerances {};
+            const auto fromDefaults = mixFile (vocal, 0.0, false, defaultValues(), MixIntent {});
+            expect (fromDefaults.ok, fromDefaults.error);
+            for (juce::uint32 seed : { 1u, 2u })
+            {
+                const auto prior = scrambledValues (seed);
+                const auto r = mixFile (vocal, 0.0, false, prior, MixIntent {});
+                expect (r.ok, r.error);
+                expect (r.plan.values == fromDefaults.plan.values, "values, seed " + juce::String ((int) seed));
+                expect (r.plan.routing.toString() == fromDefaults.plan.routing.toString(), "routing, seed " + juce::String ((int) seed));
+                const auto d = compare (fingerprint (fromDefaults.plan), fingerprint (r.plan), Check::exact, 0.0f, tolerances);
+                expect (d.pass, "fingerprint, seed " + juce::String ((int) seed));
+                expectEquals (d.differing, 0);
+            }
+        }
+
+        beginTest ("Three runs in a row, each from the previous result, are identical to the first");
+        {
+            auto state = scrambledValues (3);
+            std::optional<PlanFingerprint> first;
+            for (int i = 0; i < 3; ++i)
+            {
+                const auto r = mixFile (vocal, 0.0, false, state, MixIntent {});
+                expect (r.ok, r.error);
+                if (! r.ok)
+                    break;
+                const auto fp = fingerprint (r.plan, state);
+                if (! first.has_value())
+                    first = fp;
+                const auto d = compare (*first, fp, Check::exact, 0.0f, tol);
+                expect (d.pass, "run " + juce::String (i) + " differs");
+                for (auto& [id, v] : r.plan.values)
+                    state[id] = v;
+            }
+        }
+
+        beginTest ("applyResult writes every non-session parameter, also those at their default; a module outside the routing is off");
+        {
+            Harness h;
+            auto& c = h.proc.getAutoMix();
+            for (auto& [id, v] : scrambledValues (4))
+                if (sessionParameters().count (id) == 0 && h.proc.getState().getParameter (id) != nullptr)
+                    h.set (id.toRawUTF8(), v);
+            const auto r = c.runSynchronously (vocal);
+            expect (r.ok, r.error);
+            c.applyResult (r);
+
+            const auto sliders = sliderPositions (r.plan.values);   // the SIMPLE faders show what the mix did (positions only)
+            int checked = 0;
+            for (auto& [id, v] : r.plan.values)
+            {
+                auto* param = h.proc.getState().getParameter (id);
+                if (param == nullptr)
+                    continue;
+                const bool fader = sliders.count (id) > 0;
+                const float expected = fader ? sliders.at (id) : v;
+                const float actual = param->convertFrom0to1 (param->getValue());
+                expectWithinAbsoluteError (actual, expected, 1.0e-3f * std::max (1.0f, std::abs (expected)), id);
+                ++checked;
+            }
+            expect (checked > 400, "parameters compared: " + juce::String (checked));
+            expectEquals (h.get (pid::inputGain), 0.0f, "input gain is part of the mix");
+
+            for (auto id : { dsp::ModuleId::eq, dsp::ModuleId::ride, dsp::ModuleId::comp, dsp::ModuleId::smash, dsp::ModuleId::deess, dsp::ModuleId::smooth,
+                             dsp::ModuleId::sat, dsp::ModuleId::doubler, dsp::ModuleId::delay, dsp::ModuleId::reverb, dsp::ModuleId::denoise, dsp::ModuleId::breath })
+                for (int instance = 0; instance < dsp::maxInstances (id); ++instance)
+                    if (! r.plan.routing.contains (id, instance))
+                        expectEquals (h.get (dsp::instanceParamId (juce::String (dsp::moduleKey (id)) + "On", instance).toRawUTF8()), 0.0f,
+                                      juce::String (dsp::moduleKey (id)) + " is not in the routing but on");
+            expect (h.proc.getRouting().toString() == r.plan.routing.toString(), "routing from scratch");
+        }
+
+        beginTest ("A preset loaded before the second run changes nothing");
+        {
+            Harness h;
+            auto& c = h.proc.getAutoMix();
+            const auto first = c.runSynchronously (vocal);
+            expect (first.ok, first.error);
+            c.applyResult (first);
+            for (int preset : { 1, 2 })
+            {
+                h.proc.getPresetManager().loadPreset (preset);
+                const auto again = c.runSynchronously (vocal);
+                expect (again.ok, again.error);
+                expect (again.plan.values == first.plan.values, "values after preset " + juce::String (preset));
+                expect (again.plan.routing.toString() == first.plan.routing.toString(), "routing after preset " + juce::String (preset));
+            }
+        }
     }
 };
 

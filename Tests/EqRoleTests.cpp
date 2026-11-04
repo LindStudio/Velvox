@@ -258,13 +258,15 @@ public:
                 }
             }
 
-            // only role bands: nothing is written to the hidden 0.5 fixed bands
+            // only role bands: the hidden 0.5 fixed bands are written too now (Task 3: every parameter), but at their defaults
             for (auto& [id, v] : r.plan.values)
                 for (auto* fixed : { "hpf", "lowFreq", "lowGain", "lowQ", "lowType", "midFreq", "midGain", "midQ", "highFreq", "highGain", "highQ", "highType", "lpf" })
-                    expect (! id.startsWith (fixed), "fixed band written: " + id);
+                    if (id.startsWith (fixed))
+                        expectWithinAbsoluteError (v, current.at (id), 1.0e-6f, "fixed band moved: " + id);
         }
 
-        beginTest ("Auto-mix keeps user bands, uses free slots, reuses its role bands");
+        // Task 3 (U5): the live EQ bands are not read - user bands are reset to the defaults, the plan is the same from any state
+        beginTest ("Auto-mix does not read the live EQ bands: user bands are reset, a second run gives the same plan");
         {
             auto withUser = current;
             for (int n = 1; n <= 3; ++n)   // the bands of the user in slots 1-3
@@ -276,16 +278,19 @@ public:
             VocalSpec s; s.seconds = 12.0; s.tiltDb = -5.0f; s.f0 = 120.0f;
             const auto profile = automix::VocalProfiler::analyse (makeVocal (s));
             const auto plan = automix::AutoMixPlanner::plan (profile, withUser);
+            const auto fromDefaults = automix::AutoMixPlanner::plan (profile, current);
+            expect (plan.values == fromDefaults.values, "the same plan as from the defaults");
             for (int n = 1; n <= 3; ++n)
                 for (auto* field : { pid::eqband::on, pid::eqband::type, pid::eqband::freq, pid::eqband::gain, pid::eqband::q, pid::eqband::slope, pid::eqband::role })
-                    expect (plan.values.count (pid::eqBandId (n, field)) == 0, "user band " + juce::String (n) + " untouched");
+                    expect (plan.values.count (pid::eqBandId (n, field)) == 1, "band " + juce::String (n) + " is written");
             auto values = plan.values;
-            expectEquals (eqbands::findBand (eqbands::accessFor (values, &withUser), 0, EqRole::lowCut), 3, "first free slot after the user bands");
+            expectEquals (eqbands::findBand (eqbands::accessFor (values, &withUser), 0, EqRole::lowCut), 0, "the low cut takes the first slot again");
 
             auto mixed = withUser;
             for (auto& [id, v] : plan.values)
                 mixed[id] = v;
             const auto again = automix::AutoMixPlanner::plan (profile, mixed);
+            expect (again.values == plan.values, "a second run gives the same plan");
             expectEquals (countRoleBands (again, mixed), countRoleBands (plan, withUser), "a second run adds no role bands");
         }
 

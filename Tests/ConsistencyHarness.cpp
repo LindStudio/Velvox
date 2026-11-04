@@ -37,7 +37,7 @@ namespace vocalypse::test
 
         PlanFingerprint fp;
         for (auto& [id, v] : effective)
-            if (! isEqBandSlotId (id))
+            if (! isEqBandSlotId (id) && automix::sessionParameters().count (id) == 0)   // session parameters are not part of the mix
                 fp.values[id] = v;
 
         const auto access = eqbands::accessFor (effective);

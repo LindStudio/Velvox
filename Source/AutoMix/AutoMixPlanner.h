@@ -21,9 +21,18 @@ namespace vocalypse::automix
         bool measured = false;         // based on a measurement of this recording
     };
 
+    // Parameters the auto mix never writes: they belong to the session, not to the sound. They are
+    // read from the live state ({ bypass, levelMatchWindow, levelMatchRange, checkOn, checkMode }).
+    const std::set<juce::String>& sessionParameters();
+    // Every parameter of the plugin at its default (real units)
+    const std::map<juce::String, float>& defaultParameterValues();
+    // The state an auto mix starts from: every parameter at its default, except the session
+    // parameters, which are taken from `live` (when present there)
+    std::map<juce::String, float> startValues (const std::map<juce::String, float>& live);
+
     // The complete target configuration plus the reasoning behind it. Values are
-    // real parameter units for every parameter the plan sets; everything else
-    // keeps its current value.
+    // real parameter units for EVERY parameter except the session ones (sessionParameters()):
+    // the plan starts from the defaults and writes everything, nothing is carried over.
     struct MixPlan
     {
         std::map<juce::String, float> values;
@@ -45,8 +54,8 @@ namespace vocalypse::automix
         Decision* find (dsp::ModuleId m);
     };
 
-    // ---- EQ role bands of a plan (spec 8, Q5). The plan overlays `current` (the parameter values the
-    //      plan starts from; empty = defaults). User bands (role none) are never written.
+    // ---- EQ role bands of a plan (spec 8, Q5). `current` (the values behind the plan's own, normally
+    //      startValues()) is a fallback for what the plan has not written; empty = defaults.
     dsp::EqBand eqBand (dsp::EqBandType type, float freq, float gain, float q, int slope = 3);
     std::optional<dsp::EqBand> roleBand (const MixPlan& plan, const std::map<juce::String, float>& current, dsp::EqRole role, int instance = 0);
     float roleGain (const MixPlan& plan, const std::map<juce::String, float>& current, dsp::EqRole role, int instance = 0);   // 0 when absent / off

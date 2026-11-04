@@ -28,6 +28,33 @@ namespace vocalypse::automix
     }
 
     //==========================================================================
+    const std::set<juce::String>& sessionParameters()
+    {
+        static const std::set<juce::String> ids { pid::bypass, pid::levelMatchWindow, pid::levelMatchRange, pid::checkOn, pid::checkMode };
+        return ids;
+    }
+
+    const std::map<juce::String, float>& defaultParameterValues()
+    {
+        static const auto values = []
+        {
+            std::map<juce::String, float> v;
+            for (auto& s : getParameterSpecs())
+                v[s.id] = s.defaultValue;
+            return v;
+        }();
+        return values;
+    }
+
+    std::map<juce::String, float> startValues (const std::map<juce::String, float>& live)
+    {
+        auto values = defaultParameterValues();
+        for (auto& id : sessionParameters())
+            if (const auto it = live.find (id); it != live.end())
+                values[id] = it->second;
+        return values;
+    }
+
     void MixPlan::set (const juce::String& id, float value)
     {
         const auto* spec = findParameterSpec (id);
@@ -215,10 +242,16 @@ namespace vocalypse::automix
     }
 
     //==========================================================================
-    MixPlan AutoMixPlanner::plan (const VocalProfile& p, const std::map<juce::String, float>& current, const MixIntent& intent)
+    MixPlan AutoMixPlanner::plan (const VocalProfile& p, const std::map<juce::String, float>& live, const MixIntent& intent)
     {
         const auto target = targetFor (intent.genre, intent.vibe);
+        // Every auto mix starts from the defaults (the live state is read for the session parameters only):
+        // nothing a user or an earlier run left behind reaches the plan. The plan holds every parameter.
+        const auto current = startValues (live);
         MixPlan plan;
+        for (auto& [id, value] : current)
+            if (sessionParameters().count (id) == 0)
+                plan.values[id] = value;
         plan.routing = standardRouting();
         plan.conservative = ! p.enoughMaterial || p.voicedSeconds < 8.0f;
 
@@ -300,16 +333,9 @@ namespace vocalypse::automix
         note (M::breath, plan.on (pid::breathOn), "breaths", { { "breathShare", 100.0f * p.breathShare, "%" } }, plan.get (pid::breathAmount) / 100.0f,
               both ("Atem-Absenker bleibt aus: kaum hörbare Atmer.", "Breath control stays off: hardly any audible breaths."));
 
-        // ---- Start from a defined state: macros off
-        bool macrosWereSet = false;
+        // ---- Macros off (the SIMPLE sliders are placed by the controller afterwards: sliderPositions)
         for (auto* id : { pid::macroPresence, pid::macroWarmth, pid::macroAggression, pid::macroWidth, pid::macroSpace, pid::macroDensity })
-        {
-            macrosWereSet = macrosWereSet || cur (id) > 0.5f;
             plan.set (id, 0.0f);
-        }
-        if (macrosWereSet)
-            plan.notes.push_back (both ("Die SIMPEL-Regler zeigen jetzt, was der Auto Mix eingestellt hat - von dort aus verfeinerst du den neuen Mix.",
-                                        "The SIMPLE controls now show what the auto mix set - from there you fine-tune the new mix."));
 
         plan.set (pid::deessListen, 0.0f);
         plan.set (pid::smoothDelta, 0.0f);
@@ -815,7 +841,7 @@ namespace vocalypse::automix
                            : both ("Kein Delay: Es wurde wenig Gesang erfasst.", "No delay: little singing was captured."));
         }
 
-        // Output gain is set by the engine after measuring the processed result
+        // Output gain is set by the engine after measuring the processed result (it starts at its default)
         plan.set (pid::outputGain, cur (pid::outputGain));
         {
             ModuleLog out;
@@ -836,6 +862,11 @@ namespace vocalypse::automix
         params.setAll (current);
         params.setAll (plan.values);
         plan.routing = pruneInaudible (plan.routing, params.read (plan.routing));
+        // A module that is not in the chain is off, explicitly (instances the auto mix never uses stay at 0, too)
+        for (auto m : { M::eq, M::ride, M::comp, M::smash, M::deess, M::smooth, M::sat, M::doubler, M::delay, M::reverb, M::denoise, M::breath })
+            for (int instance = 0; instance < dsp::maxInstances (m); ++instance)
+                if (! plan.routing.contains (m, instance))
+                    plan.set (dsp::instanceParamId (juce::String (dsp::moduleKey (m)) + "On", instance), 0.0f);
         fillParameters (plan.log, plan.values);
         return plan;
     }

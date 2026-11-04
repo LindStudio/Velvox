@@ -830,7 +830,7 @@ public:
             for (auto& [id, v] : values)
                 h.set (id.toRawUTF8(), v);
             CapturedAudio rendered;
-            AutoMixEngine::render (audio, values, {}, h.proc.getRouting(), &rendered);
+            AutoMixEngine::render (audio, defaults(), values, h.proc.getRouting(), &rendered);   // Task 3: `current` is session-only, the values are the state
 
             juce::AudioBuffer<float> in (2, audio.numSamples());
             for (int ch = 0; ch < 2; ++ch)
