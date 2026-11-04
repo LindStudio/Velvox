@@ -117,7 +117,14 @@ namespace vocalypse::automix
                                              stageText = stage;
                                          }, intent);
             if (r.ok)
-                AnalysisStore::write (r, audio);   // the analysis is kept as JSON (newest 50)
+            {
+                // the analysis is kept as JSON (newest 50); a failure is noted, the mix does not depend on it
+                if (! AnalysisStore::write (r, audio).existsAsFile())
+                {
+                    r.storeNote = "The analysis could not be written to " + AnalysisStore::directory().getFullPathName();
+                    juce::Logger::writeToLog ("VOCALYPSE: " + r.storeNote);
+                }
+            }
             result = std::move (r);
             finished.store (true);
         }

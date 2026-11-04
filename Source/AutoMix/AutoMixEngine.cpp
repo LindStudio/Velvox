@@ -235,7 +235,9 @@ namespace vocalypse::automix
             return audio;
 
         const int fade = std::max (1, (int) std::lround (0.02 * audio.sampleRate));
-        // 20 ms fades at the cuts: where two chosen segments are not neighbours in the capture
+        // 20 ms fades at the cuts (fade out, fade in) where two chosen segments are not neighbours in the capture. Not an
+        // overlapping crossfade: every segment keeps its length, so frame i of the excerpt is where
+        // VocalProfiler::framesForExcerpt puts it, and the excerpt is the same for the same segments
         const auto fadeEdge = [fade] (std::vector<float>& channel, int from, int length, bool in)
         {
             const int f = std::min (fade, length / 2);

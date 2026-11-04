@@ -23,14 +23,16 @@ namespace vocalypse::automix
         static void setDirectory (const juce::File& directory);
         static juce::File directory();
 
-        static juce::var toVar (const AutoMixResult&, const CapturedAudio&);
-        static juce::String toJson (const AutoMixResult&, const CapturedAudio&);   // valid JSON, never NaN / inf
+        // `hash`: hashOf (captured) when the caller has it already
+        static juce::var toVar (const AutoMixResult&, const CapturedAudio&, const juce::String& hash = {});
+        static juce::String toJson (const AutoMixResult&, const CapturedAudio&, const juce::String& hash = {});   // valid JSON, never NaN / inf
         // FNV-1a (64 bit, hex) over the captured samples
         static juce::String hashOf (const CapturedAudio&);
 
         // Writes into directory() and keeps the newest `keepFiles`; returns the file (invalid when writing failed)
         static juce::File write (const AutoMixResult&, const CapturedAudio&);
         static juce::File writeTo (const juce::File& directory, const AutoMixResult&, const CapturedAudio&);
+        // Deletes the oldest files of the store's own name pattern (<date>_<time>_<hash>.json) beyond keepFiles; other files stay
         static void prune (const juce::File& directory);
     };
 }

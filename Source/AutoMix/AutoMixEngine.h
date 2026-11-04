@@ -62,6 +62,7 @@ namespace vocalypse::automix
         std::vector<Segment> segments;           // the analysed segments of the capture
         std::vector<VocalProfile> segmentProfiles;   // the profile of each segment (the profile aggregates them)
         std::vector<int> excerptSegments;        // the segments the renders played, in song order (indices into `segments`)
+        juce::String storeNote;                  // set when the analysis JSON could not be written
     };
 
     // analyse -> plan -> render -> measure -> adjust (max. 4 rounds) -> set the

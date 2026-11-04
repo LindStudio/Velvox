@@ -172,7 +172,7 @@ namespace vocalypse::automix
                 std::vector<std::pair<float, size_t>> v;
                 double sum = 0.0;
                 for (size_t i = 0; i < ps.size(); ++i)
-                    if (use (ps[i]))
+                    if (use (ps[i]) && std::isfinite ((double) get (ps[i])))
                     {
                         v.push_back ({ (float) get (ps[i]), i });
                         sum += w[i];
@@ -255,16 +255,20 @@ namespace vocalypse::automix
     {
         p.sibilantFrames.clear();
         p.vowelFrames.clear();
-        int offset = 0;
+        // The audio is the segments end to end (AutoMixEngine::excerptFor keeps every segment's length), and
+        // sibilanceAt reads frame i at i * hop: a segment that starts `prefix` samples in has its frame f at
+        // round(prefix / hop) + f
+        long long prefix = 0;
         for (int k : chosen)
         {
+            const int offset = (int) std::llround ((double) prefix / hop);
             if (k < 0 || (size_t) k >= segments.size() || (size_t) k >= segmentProfiles.size())
                 continue;
             for (int f : segmentProfiles[(size_t) k].sibilantFrames)
                 p.sibilantFrames.push_back (offset + f);
             for (int f : segmentProfiles[(size_t) k].vowelFrames)
                 p.vowelFrames.push_back (offset + f);
-            offset += framesIn (segments[(size_t) k].numSamples);
+            prefix += segments[(size_t) k].numSamples;
         }
     }
 

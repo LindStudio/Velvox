@@ -142,7 +142,7 @@ namespace vocalypse::automix
         return juce::String::toHexString ((juce::int64) h).paddedLeft ('0', 16);
     }
 
-    juce::var AnalysisStore::toVar (const AutoMixResult& r, const CapturedAudio& captured)
+    juce::var AnalysisStore::toVar (const AutoMixResult& r, const CapturedAudio& captured, const juce::String& hash)
     {
         double ppqStart = -1.0;
         for (double q : captured.blockPpq)
@@ -156,7 +156,7 @@ namespace vocalypse::automix
         root.add ("version", version);
         root.add ("intent", Fields().add ("genre", (int) r.intent.genre).add ("vibe", (int) r.intent.vibe).done());
         root.add ("capture", Fields().add ("seconds", captured.seconds()).add ("voicedSeconds", r.profile.voicedSeconds)
-                                     .add ("hash", juce::var (hashOf (captured)))
+                                     .add ("hash", juce::var (hash.isNotEmpty() ? hash : hashOf (captured)))
                                      .add ("ppqStart", ppqStart >= 0.0 ? number (ppqStart) : juce::var()).done());
 
         juce::Array<juce::var> segments;
@@ -189,14 +189,14 @@ namespace vocalypse::automix
         return tree;
     }
 
-    juce::String AnalysisStore::toJson (const AutoMixResult& r, const CapturedAudio& captured)
+    juce::String AnalysisStore::toJson (const AutoMixResult& r, const CapturedAudio& captured, const juce::String& hash)
     {
-        return juce::JSON::toString (toVar (r, captured), false);
+        return juce::JSON::toString (toVar (r, captured, hash), false);
     }
 
     void AnalysisStore::prune (const juce::File& dir)
     {
-        auto files = dir.findChildFiles (juce::File::findFiles, false, "*.json");
+        auto files = dir.findChildFiles (juce::File::findFiles, false, "????????_??????_*.json");
         std::sort (files.begin(), files.end(), [] (const juce::File& a, const juce::File& b) { return a.getFileName() > b.getFileName(); });
         for (int i = keepFiles; i < files.size(); ++i)
             files.getReference (i).deleteFile();
@@ -206,9 +206,10 @@ namespace vocalypse::automix
     {
         if (! dir.createDirectory().wasOk())
             return {};
-        const auto name = juce::Time::getCurrentTime().formatted ("%Y%m%d_%H%M%S") + "_" + hashOf (captured) + ".json";
+        const auto hash = hashOf (captured);
+        const auto name = juce::Time::getCurrentTime().formatted ("%Y%m%d_%H%M%S") + "_" + hash + ".json";
         const auto file = dir.getChildFile (name);
-        if (! file.replaceWithText (toJson (r, captured), false, false, "\n"))
+        if (! file.replaceWithText (toJson (r, captured, hash), false, false, "\n"))
             return {};
         prune (dir);
         return file;

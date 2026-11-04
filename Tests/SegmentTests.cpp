@@ -172,6 +172,40 @@ public:
             expect (! cb.copyOut().hasPpq(), "no song position, none stored");
         }
 
+        beginTest ("Capture: a stop that is followed by playing again does not end the capture");
+        {
+            CaptureBuffer cb;
+            CaptureConfig cfg;
+            cfg.targetVoicedSeconds = 60.0f;
+            cb.arm (48000.0, 1, cfg);
+            const auto vocal = vocalOf (12.0);
+            const auto feedRange = [&] (int from, int to, bool playing)
+            {
+                for (int start = from; start < to; start += 512)
+                {
+                    const float* ch[] { vocal.vocal[0].data() + start };
+                    cb.push (ch, 1, nullptr, 0, std::min (512, to - start), playing);
+                }
+            };
+            feedRange (0, 3 * 48000, true);
+            const std::vector<float> silence (512, 0.0f);
+            for (int i = 0; i < 100; ++i)
+            {
+                const float* ch[] { silence.data() };
+                cb.push (ch, 1, nullptr, 0, 512, false);
+            }
+            auto p = cb.getProgress();
+            expect (p.transportStopped, "stopped");
+            expect (! p.enough(), "less than the minimum voice: " + juce::String (p.voicedSeconds, 1));
+            feedRange (3 * 48000, 4 * 48000, true);   // plays again
+            p = cb.getProgress();
+            expect (! p.transportStopped, "the stop is over when the host plays again");
+            feedRange (4 * 48000, 9 * 48000, true);
+            p = cb.getProgress();
+            expect (p.enough() && ! p.transportStopped, "enough voice, still playing: the capture goes on");
+            expect (cb.getState() == CaptureBuffer::State::capturing);
+        }
+
         beginTest ("Capture: the beat is stored as one mid channel, on the same timeline");
         {
             CaptureBuffer cb;
@@ -361,7 +395,7 @@ public:
             const auto profile = VocalProfiler::analyseSegmented (a, {}, &parts, 5.0f, 0.0f, &segs);
             int frames = 0;
             for (auto& s : segs)
-                frames += (s.numSamples - VocalProfiler::fftSize) / (VocalProfiler::fftSize / 4) + 1;
+                frames += s.numSamples / (VocalProfiler::fftSize / 4) + 1;   // frame i sits at i * hop of the laid-end-to-end audio
             expect (! profile.sibilantFrames.empty() && ! profile.vowelFrames.empty());
             expect (profile.sibilantFrames.back() < frames && profile.vowelFrames.back() < frames);
             size_t sum = 0;
@@ -395,6 +429,40 @@ public:
             expect (excerpt.vocal[0][(size_t) (2 * len - 1)] < 0.01f, "cut after segment 2: fade out");
             expectEquals (excerpt.vocal[0][(size_t) (2 * len + 48000)], 1.0f);
             expectEquals (AutoMixEngine::excerptFor (a, segs).numSamples(), excerpt.numSamples());
+        }
+
+        beginTest ("Excerpt: the S / vowel frames land where the segments sit in the excerpt (no drift per segment)");
+        {
+            CapturedAudio a;
+            expect (captureLikePlugin (vocalOf (50.0), 0.0, a, true));
+            std::vector<VocalProfile> parts;
+            std::vector<Segment> segs;
+            auto profile = VocalProfiler::analyseSegmented (a, {}, &parts, 5.0f, 0.0f, &segs);
+            const auto chosen = AutoMixEngine::excerptSegments (segs, a.sampleRate);
+            expect (chosen.size() >= 3, "segments in the excerpt: " + juce::String ((int) chosen.size()));
+            VocalProfiler::framesForExcerpt (profile, parts, segs, chosen);
+            constexpr int hop = VocalProfiler::fftSize / 4;
+            size_t mapped = 0;
+            long long prefix = 0;
+            bool placed = true;
+            for (int k : chosen)
+            {
+                for (int f : parts[(size_t) k].sibilantFrames)
+                {
+                    const long long inExcerpt = (long long) profile.sibilantFrames[mapped++] * hop;
+                    placed = placed && std::abs (inExcerpt - (prefix + (long long) f * hop)) <= hop / 2;
+                }
+                prefix += segs[(size_t) k].numSamples;
+            }
+            expect (placed, "every S frame within half a hop of its place in the excerpt");
+            expectEquals ((int) mapped, (int) profile.sibilantFrames.size());
+
+            // and the measurement on the excerpt agrees with the segments' own: S against vowels
+            const auto excerpt = AutoMixEngine::excerptFor (a, segs);
+            const auto onExcerpt = VocalProfiler::sibilanceAt (excerpt, profile);
+            expect (onExcerpt.has_value());
+            if (onExcerpt.has_value())
+                expectWithinAbsoluteError (*onExcerpt, profile.sibilanceVsVowelDb, 1.5f, "S / vowel on the excerpt");
         }
 
         beginTest ("The JSON holds the version, the intent, the capture, every segment, every module log, the values and the routing - NaN as null");
@@ -446,7 +514,10 @@ public:
             captured.channels = 1;
             const auto file = AnalysisStore::writeTo (dir, r, captured);
             expect (file.existsAsFile());
-            expectEquals (dir.findChildFiles (juce::File::findFiles, false, "*.json").size(), AnalysisStore::keepFiles);
+            dir.getChildFile ("notes.json").replaceWithText ("{}");
+            AnalysisStore::prune (dir);
+            expect (dir.getChildFile ("notes.json").existsAsFile(), "files that are not the store's own stay");
+            expectEquals (dir.findChildFiles (juce::File::findFiles, false, "????????_??????_*.json").size(), AnalysisStore::keepFiles);
             expect (file.existsAsFile(), "the newest file is kept");
 
             expect (AnalysisStore::directory() != AnalysisStore::defaultDirectory(), "the test run writes to a temporary folder");
@@ -534,7 +605,7 @@ public:
                 for (int k : r.excerptSegments)
                 {
                     excerptSamples += r.segments[(size_t) k].numSamples;
-                    frames += (r.segments[(size_t) k].numSamples - VocalProfiler::fftSize) / (VocalProfiler::fftSize / 4) + 1;
+                    frames += r.segments[(size_t) k].numSamples / (VocalProfiler::fftSize / 4) + 1;
                 }
                 expect (excerptSamples <= 40 * 48000 && excerptSamples >= 24 * 48000, "excerpt " + juce::String (excerptSamples / 48000.0, 1) + " s");
                 expect (r.profile.sibilantFrames.empty() || r.profile.sibilantFrames.back() < frames);

@@ -125,7 +125,10 @@ namespace vocalypse::automix
         recentRms.store (rmsDb, std::memory_order_relaxed);
 
         if (hostPlaying)
+        {
             sawPlaying = true;
+            stopped.store (false, std::memory_order_relaxed);   // the host plays again: the stop is over
+        }
         else if (sawPlaying && s == State::capturing)
             stopped.store (true, std::memory_order_relaxed);
 

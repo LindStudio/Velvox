@@ -83,7 +83,7 @@ namespace vocalypse::automix
             float recentRmsDb = -100.0f;    // level of the latest blocks (also while waiting)
             float peakDb = -100.0f;         // highest stored peak
             int clipSamples = 0;
-            bool transportStopped = false;  // the host stopped after the capture had started
+            bool transportStopped = false;  // the host is stopped now, after the capture had started (cleared when it plays again)
             bool beatSeen = false;          // the sidechain carried signal
             float minVoicedSeconds = 0.0f;
 
