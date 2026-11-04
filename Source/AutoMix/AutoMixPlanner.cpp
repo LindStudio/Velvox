@@ -163,7 +163,7 @@ namespace vocalypse::automix
         {
             if (! createIfMissing)
                 return -1;
-            i = eqbands::findFreeBand (access, instance);
+            i = eqbands::findFreeBand (access, instance, role);   // the role's fixed slot when free
             if (i < 0)
                 return -1;
         }
@@ -181,9 +181,10 @@ namespace vocalypse::automix
         auto& ctx = s.context;
         ctx.profile = &p;
         ctx.conservative = plan.conservative;
-        ctx.noisy = p.snrValid && p.snrDb < 28.0f;
-        ctx.sibilant = p.hasIssue ("sibilance");
-        ctx.harsh = p.hasIssue ("harsh");
+        // Soft weights of the measurements (Task 7), not the profile's yes / no issues: nothing flips at one number
+        ctx.noisy = autoeq::noisyWeight (p);
+        ctx.sibilant = autoeq::sibilantWeight (p);
+        ctx.harsh = autoeq::harshWeight (p);
         int inUse = 0, available = 0;
         for (int i = 0; i < dsp::maxEqBands; ++i)
         {
@@ -374,16 +375,19 @@ namespace vocalypse::automix
                                "The lowest sung notes are around {0} - below that is only rumble.", { hz (p.f0LowHz) });
                 measured = true;
             }
-            const bool rumble = p.hasIssue ("rumble");
-            if (rumble)
+            // Rumble (Task 7): the weight grows from the issue's edge (-24 dB) to "likely" (-16 dB); the cutoff moves
+            // with it and the slope steps 12 -> 18 -> 24 dB/oct as a choice with margin (the 12 dB slope keeps the
+            // choice until the weight clearly asks for more), no longer one jump from 12 to 24
+            const float rumbleW = soft (p.rumbleDb, -24.0f, -16.0f);
+            if (rumbleW > 0.0f)
             {
-                fc = std::min (p.pitchValid ? 0.75f * p.f0LowHz : 110.0f, fc * 1.2f);
-                fc = clamp (fc, 70.0f, 170.0f);
+                const float fcRumble = clamp (std::min (p.pitchValid ? 0.75f * p.f0LowHz : 110.0f, fc * 1.2f), 70.0f, 170.0f);
+                fc = blend (rumbleW, fc, fcRumble);
                 reason << both (" Zusätzlich viel Energie unter 90 Hz ({0}).", " Also a lot of energy below 90 Hz ({0}).", { db (p.rumbleDb) });
             }
-            setRoleBand (plan, current, 0, dsp::EqRole::lowCut, eqBand (dsp::EqBandType::lowCut, fc, 0.0f, 0.7071f, rumble ? 3 : 1), true);
-            decide (M::eq, rumble ? both ("Low Cut {0}, 24 dB/Okt.", "Low Cut {0}, 24 dB/oct", { hz (fc) })
-                                  : both ("Low Cut {0}, 12 dB/Okt.", "Low Cut {0}, 12 dB/oct", { hz (fc) }), reason, measured);
+            const int slopeIndex = 1 + chooseWithMargin ({ -std::abs (2.0f * rumbleW), -std::abs (2.0f * rumbleW - 1.0f), -std::abs (2.0f * rumbleW - 2.0f) }, 0, 0.25f);
+            setRoleBand (plan, current, 0, dsp::EqRole::lowCut, eqBand (dsp::EqBandType::lowCut, fc, 0.0f, 0.7071f, slopeIndex), true);
+            decide (M::eq, both ("Low Cut {0}, {1} dB/Okt.", "Low Cut {0}, {1} dB/oct", { hz (fc), juce::String (dsp::eqSlopeDbPerOct (slopeIndex)) }), reason, measured);
         }
 
         // 0.6.1 (spec item 7): narrow notches on sustained resonances and broad tonal moves
@@ -404,9 +408,23 @@ namespace vocalypse::automix
         for (auto& m : eqMoves)
             if (setRoleBand (plan, current, 0, m.role, m.band, true) >= 0)
                 decide (M::eq, m.title, m.reason, true);
-        note (M::eq, true, p.hasIssue ("rumble") ? "rumble" : "cleanUp",
+        note (M::eq, true, p.rumbleDb > -16.0f ? "rumble" : "cleanUp",
               { { "f0Low", p.pitchValid ? p.f0LowHz : std::nanf (""), "Hz" }, { "rumble", p.rumbleDb, "dB" }, { "presence", p.presenceDb, "dB" },
-                { "curveMoves", (float) eqMoves.size(), "" } }, 1.0f, {});
+                { "curveMoves", (float) eqMoves.size(), "" }, { "harshWeight", eqContext.harsh, "" }, { "dullWeight", autoeq::dullWeight (p), "" },
+                { "sibilantWeight", eqContext.sibilant, "" }, { "noisyWeight", eqContext.noisy, "" } }, 1.0f, {});
+        {
+            // need: how much the take asks for EQ (a move of 1 dB counts half, 2 dB fully; the rumble weight);
+            // intensity: the moves' total size against 18 dB (3 bands at their usual limit)
+            float biggest = 0.0f, total = 0.0f;
+            for (auto& m : eqMoves)
+            {
+                biggest = std::max (biggest, std::abs (m.band.gain));
+                total += std::abs (m.band.gain);
+            }
+            auto& l = plan.logFor (M::eq);
+            l.need = std::max (soft (p.rumbleDb, -24.0f, -16.0f), soft (biggest, 0.5f, 2.0f));
+            l.intensity = juce::jlimit (0.0f, 1.0f, total / 18.0f);
+        }
         // Roles without a move: flat (0.5 bands keep their place), notches and the tone bell off
         {
             const std::pair<dsp::EqRole, dsp::EqBand> flat[] {

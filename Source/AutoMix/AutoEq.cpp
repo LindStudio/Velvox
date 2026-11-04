@@ -1,5 +1,6 @@
 #include "AutoEq.h"
 #include "ReportText.h"
+#include "Soft.h"
 
 namespace vocalypse::automix::autoeq
 {
@@ -52,6 +53,27 @@ namespace vocalypse::automix::autoeq
                 break;
         }
         return false;
+    }
+
+    float noisyWeight (const VocalProfile& p) noexcept
+    {
+        return p.snrValid ? soft (p.snrDb, 28.0f, 24.0f) : 0.0f;
+    }
+
+    float sibilantWeight (const VocalProfile& p) noexcept
+    {
+        return p.sibilanceValid ? soft (p.sibilanceVsVowelDb, -5.0f, -2.0f) : 0.0f;
+    }
+
+    float harshWeight (const VocalProfile& p) noexcept
+    {
+        // the profiler flags "harsh" only where the take is not dull (above 2 kHz at -16 dB or more)
+        return soft (p.presenceDb, -2.0f, 1.0f) * soft (p.topDb, -16.0f, -14.0f);
+    }
+
+    float dullWeight (const VocalProfile& p) noexcept
+    {
+        return soft (p.topDb, -16.0f, -20.0f);
     }
 
     float responseDb (const std::vector<EqBand>& bands, float freq)
@@ -185,7 +207,7 @@ namespace vocalypse::automix::autoeq
             for (int k = lo; k <= hi; ++k)
                 if (voice[(size_t) k] > -190.0f)
                     // the beat's lift applies in full, like the vibe (inside the spread it would vanish) - not on a harsh voice
-                    r[(size_t) k] = residualDb (t, k, voice[(size_t) k] + offset[(size_t) k]) - (ctx.harsh ? 0.0f : ctx.unmaskDb[(size_t) k]);
+                    r[(size_t) k] = residualDb (t, k, voice[(size_t) k] + offset[(size_t) k]) - (1.0f - ctx.harsh) * ctx.unmaskDb[(size_t) k];
             return r;
         }
 
@@ -213,24 +235,27 @@ namespace vocalypse::automix::autoeq
         {
             const auto& p = *ctx.profile;
             const float scale = ctx.conservative ? 0.6f : 1.0f;
-            const bool highVoice = p.pitchValid && p.f0LowHz > 250.0f;
-            const float cut = (centre < 300.0f ? 3.0f : maxBroadCutDb) * scale;
+            // Every restriction is a weight 0 .. 1 of the measurement behind it (Task 7): the limit shrinks
+            // continuously instead of dropping to 0 at one number
+            const float highVoiceW = p.pitchValid ? soft (p.f0LowHz, 250.0f, 280.0f) * soft (centre, 300.0f, 260.0f) : 0.0f;
+            const float cut = blend (soft (centre, 250.0f, 350.0f), 3.0f, maxBroadCutDb) * scale;
             float lift = maxBroadBoostDb;
             if (type == EqBandType::highShelf || centre > 5000.0f)
-                lift = ctx.noisy ? maxHighLiftNoisyDb : (ctx.sibilant ? maxHighLiftSibilantDb : maxHighLiftDb);
-            bool resonance = false;
+                lift = blend (ctx.noisy, blend (ctx.sibilant, maxHighLiftDb, maxHighLiftSibilantDb), maxHighLiftNoisyDb);
+            float resonanceW = 0.0f;
             for (auto& r : p.resonances)
             {
                 // a resonance the plan already notches does not stand in the way of a broad lift around it
                 const bool notched = std::any_of (moves.begin(), moves.end(), [&r] (const Move& m)
                                                   { return m.narrow && std::abs (std::log2 (m.band.freq / r.hz)) < 1.0f / 12.0f; });
-                resonance = resonance || (! notched && r.excessDb > 7.0f && std::abs (std::log2 (centre / r.hz)) < 1.0f / 3.0f);
+                if (! notched)
+                    resonanceW = juce::jmax (resonanceW, soft (r.excessDb, 7.0f, 10.0f) * soft (std::abs (std::log2 (centre / r.hz)), 1.0f / 3.0f, 0.25f));
             }
-            if ((highVoice && centre < 300.0f) || resonance || (ctx.harsh && centre >= 2000.0f && centre <= 5000.0f))
-                lift = 0.0f;
+            const float harshW = ctx.harsh * soft (centre, 1800.0f, 2000.0f) * soft (centre, 5400.0f, 5000.0f);
+            const float noLift = juce::jmax (highVoiceW, resonanceW, harshW);
             // The vibe's deliberate shift comes on top of the clean-up limit (2026-11-03: with one shared 4 dB
             // the clean-up used it up and AGGRESSIV / FLOATY reached only a third of their shift)
-            else if (lift > 0.0f && ! ctx.noisy)
+            if (lift > 0.0f)
             {
                 // the largest shift within half an octave: a broad band reaches its neighbours (a presence bell at
                 // 4.2 kHz carries Aggressive's 2.5 - 4 kHz lift)
@@ -238,17 +263,16 @@ namespace vocalypse::automix::autoeq
                 for (int k = 0; k < numThirds; ++k)
                     if (std::abs (std::log2 (thirdCentre (k) / centre)) <= 0.5f)
                         style = juce::jmax (style, targetOf (ctx).styleDb[(size_t) k]);
-                lift += style;
+                lift += style * (1.0f - ctx.noisy);
             }
-            return { -cut, lift * scale };
+            return { -cut, lift * (1.0f - noLift) * scale };
         }
 
         // A lift above 5 kHz on a noisy / sibilant take: never more than 2 / 4 dB at 8 or 12 kHz in all
         bool liftTooHigh (const Context& ctx, const std::vector<EqBand>& before, const std::vector<EqBand>& after)
         {
-            if (! (ctx.noisy || ctx.sibilant))
-                return false;
-            const float cap = (ctx.noisy ? maxHighLiftNoisyDb : maxHighLiftSibilantDb) + 1.0e-3f;
+            // the cap closes in continuously with the weights (12 dB = out of reach of every limit)
+            const float cap = blend (ctx.noisy, blend (ctx.sibilant, 12.0f, maxHighLiftSibilantDb), maxHighLiftNoisyDb) + 1.0e-3f;
             return responseDb (after, 8000.0f) - responseDb (before, 8000.0f) > cap
                 || responseDb (after, 12000.0f) - responseDb (before, 12000.0f) > cap;
         }
@@ -281,14 +305,14 @@ namespace vocalypse::automix::autoeq
             {
                 return std::none_of (moves.begin(), moves.end(), [role] (const Move& m) { return m.role == role; });
             };
-            const auto roleFor = [&] (float centre) -> EqRole
+            const auto roleFor = [&] (float centre, EqBandType shape) -> EqRole
             {
                 // The notch roles stay with the resonances; WARMTH (below 700 Hz) and the PRESENCE slider's air
                 // band (above 4 kHz) only take moves of their own range, so the SIMPLE sliders keep their meaning
                 std::vector<EqRole> order;
-                if (centre < 300.0f)
+                if (shape == EqBandType::lowShelf || (shape != EqBandType::highShelf && centre < 300.0f))   // a shelf keeps to its role (Task 7: no flip at a centre frequency)
                     order.push_back (EqRole::warmth);
-                else if (centre > 7000.0f)
+                else if (shape == EqBandType::highShelf || centre > 7000.0f)
                     order.push_back (EqRole::air);
                 for (auto r : { EqRole::autoMix, EqRole::autoTone })
                     order.push_back (r);
@@ -308,6 +332,7 @@ namespace vocalypse::automix::autoeq
                 const auto r = residualOf (thirdsOf (spec, applied), offset, ctx, lo, hi);
 
                 int bestA = -1, bestB = -1;
+                float bestPeak = 0.0f;
                 float bestScore = 0.0f;
                 for (int k = lo; k <= hi;)
                 {
@@ -325,9 +350,10 @@ namespace vocalypse::automix::autoeq
                         peak = std::max (peak, std::abs (r[(size_t) e]));
                         ++e;
                     }
-                    if (peak >= 1.0f && score > bestScore)
+                    if (score > bestScore)
                     {
                         bestScore = score;
+                        bestPeak = peak;
                         bestA = k;
                         bestB = e - 1;
                     }
@@ -352,13 +378,13 @@ namespace vocalypse::automix::autoeq
                 if (bestA == lo && width >= 1.0f && centre < 250.0f)
                 {
                     type = EqBandType::lowShelf;
-                    freq = thirdCentre (bestB);
+                    freq = std::max (thirdCentre (lo), 1.4f * centre);   // the corner follows the weight of the stretch (continuous), not its first third
                     q = 0.7071f;
                 }
                 else if (bestB == hi && width >= 1.0f && thirdCentre (bestA) >= 5000.0f * 0.99f)
                 {
                     type = EqBandType::highShelf;
-                    freq = thirdCentre (bestA);
+                    freq = std::min (thirdCentre (hi), std::max (5000.0f, centre / 1.4f));
                     q = 0.7071f;
                 }
 
@@ -367,8 +393,8 @@ namespace vocalypse::automix::autoeq
                 if (! cut)
                     q = std::min (q, 2.0f);
                 const auto [gLo, gHi] = limitsOf (ctx, centre, type, moves);
-                const auto role = roleFor (centre);
-                if ((cut ? gLo : gHi) == 0.0f || role == EqRole::none || (! cut && bestB == bestA))
+                const auto role = roleFor (centre, type);
+                if ((cut ? -gLo : gHi) < 0.5f || role == EqRole::none)
                 {
                     blockRun();
                     continue;
@@ -389,8 +415,15 @@ namespace vocalypse::automix::autoeq
                         bestCost = c;
                     }
                 }
-                best = roundHalf (0.75f * best);
-                if (std::abs (best) < minMoveDb || bestCost > c0 - 0.5f)
+                // The gain is the deviation's own gain times the weight of every edge a hard "is it worth a band"
+                // test used to be (Task 7): the size of the move (nothing below 0.5 dB, full from 1.5 dB), what the
+                // move gains on the cost (0.25 .. 1), and, for a lift of a single third (a dip between formants),
+                // how deep that dip is. So a move grows from 0 instead of jumping to +-1 dB at the edge.
+                const float weight = soft (std::abs (best), minMoveDb - 0.5f, minMoveDb + 0.5f)
+                                   * soft (c0 - bestCost, 0.25f, 1.0f)
+                                   * (! cut && bestB == bestA ? soft (bestPeak, 2.0f, 4.0f) : 1.0f);
+                best = roundHalf (0.75f * best * weight);
+                if (std::abs (best) < 0.5f)
                 {
                     blockRun();
                     continue;
@@ -430,31 +463,53 @@ namespace vocalypse::automix::autoeq
             return bands;
         };
 
-        // ---- Narrow notches: sustained resonances, unless a kept band already takes them out
+        // ---- Narrow notches: persistent resonances, unless a kept band already takes them out (Task 7: continuous)
+        // A notch's depth is the resonance's own excess times three weights: how clearly it stands out
+        // (`soft (excess, 5, 9)`: nothing below 5 dB, full from 9 dB), how persistent it is (the plan: >= 0.5 of
+        // the take; 0.4 .. 0.6) and the range 250 Hz .. 8 kHz (soft edges). The strongest three (excess x
+        // persistence) get a notch; a later resonance replaces an earlier one in the ranking only when it beats
+        // it by more than 1 dB, so the slots (notch 1 .. 3) do not swap on a hair.
         {
-            int n = 0;
+            struct Candidate { const Resonance* r; float score; };
+            std::vector<Candidate> ranked;
             for (auto& r : p.resonances)
+                if (r.persistence > 0.0f && r.excessDb > 0.0f)
+                    ranked.push_back ({ &r, r.excessDb * r.persistence });
+            for (size_t i = 1; i < ranked.size(); ++i)   // insertion sort with a margin (the profile's order is the favourite)
+                for (size_t j = i; j > 0 && ranked[j].score > ranked[j - 1].score + 1.0f; --j)
+                    std::swap (ranked[j], ranked[j - 1]);
+
+            int n = 0;
+            for (auto& c : ranked)
             {
+                const auto& r = *c.r;
                 if (n >= maxNotches || (int) moves.size() >= ctx.budget)
                     break;
-                if (! r.sustained || r.hz < 250.0f || r.hz > 8000.0f)
-                    continue;
                 // What is left of the peak over its surroundings after the kept bands
                 const auto applied = bandsWithout (EqRole::none);
                 const float third = std::pow (2.0f, 1.0f / 3.0f);
                 const float remaining = r.excessDb + responseDb (applied, r.hz)
                                       - 0.5f * (responseDb (applied, r.hz * third) + responseDb (applied, r.hz / third));
-                if (remaining < 8.0f)
+                const float weight = soft (remaining, 5.0f, 9.0f) * soft (r.persistence, 0.4f, 0.6f)
+                                   * soft (r.hz, 220.0f, 280.0f) * soft (r.hz, 8500.0f, 7500.0f);
+                const float depth = roundHalf (juce::jmin (maxNarrowCutDb, 0.6f * remaining * weight) * scale);
+                if (depth < 0.5f)
                     continue;
-                const float gain = -roundHalf (juce::jlimit (3.0f, maxNarrowCutDb, 0.6f * remaining) * scale);
                 const float q = juce::jlimit (minNarrowQ, maxNarrowQ, r.q);
                 const auto role = notchRoles[n++];
-                const auto b = bandOf (EqBandType::bell, r.hz, gain, q);
+                const auto b = bandOf (EqBandType::bell, r.hz, -depth, q);
                 moves.push_back ({ role, b, titleOf (role, b),
                                    both ("Schmale Spitze {0} über ihrer Umgebung, in der ganzen Aufnahme vorhanden (Raum oder Mikrofon) - ein schmaler Schnitt nimmt nur sie heraus.",
                                          "Narrow peak {0} above its surroundings, present in the whole recording (room or microphone) - a narrow cut takes out only that.",
                                          { db (remaining) }), true });
             }
+            // Roles (and so slots 5-7) go by frequency, not by rank: a notch keeps its role while a neighbour appears or goes
+            std::sort (moves.begin(), moves.end(), [] (const Move& a, const Move& b) { return a.band.freq < b.band.freq; });
+            for (size_t i = 0; i < moves.size(); ++i)
+            {
+                moves[i].role = notchRoles[i];
+                moves[i].title = titleOf (moves[i].role, moves[i].band);
+            }
         }
 
         fitBroad (ctx, moves, std::vector<float> ((size_t) numThirds, 0.0f), ctx.budget, false);
@@ -481,9 +536,6 @@ namespace vocalypse::automix::autoeq
             if (rendered[(size_t) k] > -190.0f && model[(size_t) k] > -190.0f)
                 offset[(size_t) k] = rendered[(size_t) k] - model[(size_t) k];
 
-        const auto r0 = residualOf (model, offset, ctx, lo, hi);
-        if (std::all_of (r0.begin(), r0.end(), [] (float v) { return std::abs (v) <= 0.5f; }))
-            return out;
 
         // 1) The broad moves of the plan: gains re-tuned on the render (frequency and shape stay)
         auto state = owned;
@@ -505,7 +557,8 @@ namespace vocalypse::automix::autoeq
                 all.push_back (b);
                 return costOf (residualOf (thirdsOf (spec, all), offset, ctx, lo, hi)) + costPerDb * std::abs (g);
             };
-            float best = b0.gain, bestCost = costAt (b0.gain);
+            const float cost0 = costAt (b0.gain);
+            float best = b0.gain, bestCost = cost0;
             for (float g = std::ceil (std::min (gLo, b0.gain) * 2.0f) / 2.0f; g <= std::max (gHi, b0.gain) + 1.0e-4f; g += 0.5f)
             {
                 if (g < gLo - 1.0e-4f || g > gHi + 1.0e-4f)
@@ -516,15 +569,21 @@ namespace vocalypse::automix::autoeq
                 all.push_back (b);
                 if (g > b0.gain && liftTooHigh (ctx, others, all))
                     continue;
-                if (const float c = costAt (g); c < bestCost - 0.25f)
+                if (const float c = costAt (g); c < bestCost - 1.0e-4f)
                 {
                     best = g;
                     bestCost = c;
                 }
             }
-            if (std::abs (best - b0.gain) < 0.5f)
+            // The re-tune goes only as far as it pays (Task 7): the step towards the best gain is weighted with
+            // what the render's cost gains (0.25 .. 1.0), so it grows from 0 instead of jumping at one edge
+            const float step = (best - b0.gain) * soft (cost0 - bestCost, 0.25f, 1.0f);
+            if (std::abs (step) < 0.25f)
                 continue;
-            state[i].band.gain = std::abs (best) < 0.25f ? 0.0f : best;
+            const float gain = roundHalf (b0.gain + step);
+            if (gain == b0.gain)
+                continue;
+            state[i].band.gain = std::abs (gain) < 0.25f ? 0.0f : gain;
             state[i].title = titleOf (state[i].role, state[i].band);
             state[i].reason = both ("Nach der Messung der ganzen Kette auf das Ziel nachgeregelt.", "Readjusted to the target after measuring the whole chain.");
             out.push_back (state[i]);

@@ -40,7 +40,241 @@ public:
         modelTests();
         moveTests();
         plannerTests();
+        continuityTests();
         engineTests();
+    }
+
+    // Task 7 (plan 2026-11-04-automix-konsistenz): the EQ decisions are continuous in the measurements and every
+    // role sits in its own fixed slot
+    void continuityTests()
+    {
+        using dsp::EqRole;
+        const auto party = targetFor (Genre::party, Vibe::punchy);
+        const auto base = profileOf (clean14());
+        const auto moveGain = [] (const std::vector<autoeq::Move>& moves, EqRole role)
+        {
+            for (auto& m : moves)
+                if (m.role == role)
+                    return m.band.gain;
+            return 0.0f;
+        };
+        const auto responseOf = [] (const std::vector<autoeq::Move>& moves, float hz)
+        {
+            std::vector<dsp::EqBand> bands;
+            for (auto& m : moves)
+                bands.push_back (m.band);
+            return autoeq::responseDb (bands, hz);
+        };
+
+        // A tilt step of t dB/oct moves the input by 3.7 x t dB at 12.9 kHz, so no EQ that follows the deviation can
+        // change by less than about that: the 13-step sweep (0.5 dB/oct, 1.85 dB at the top per step) is checked for no jump
+        // beyond 2.5 dB, the 49-step sweep (0.125 dB/oct) for the brief's 1 dB
+        const auto tiltSweep = [&] (int steps, float maxStepDb, const juce::String& name)
+        {
+            float lastAir = 1000.0f, lastPresence = 1000.0f;
+            juce::String line;
+            for (int i = 0; i < steps; ++i)
+            {
+                const float tilt = -3.0f + 6.0f * (float) i / (float) (steps - 1);
+                const auto p = onTarget (base, party, [tilt] (float hz) { return hz > 1000.0f ? tilt * std::log2 (hz / 1000.0f) : 0.0f; });
+                autoeq::Context c;
+                c.profile = &p;
+                c.target = &party;
+                const auto moves = autoeq::planCurveMoves (c);
+                const float air = responseOf (moves, 10000.0f), presence = responseOf (moves, 3500.0f);
+                line << juce::String (tilt, 2) << ": " << juce::String (presence, 1) << " / " << juce::String (air, 1) << "  ";
+                if (i > 0)
+                {
+                    const juce::String at = name + " at tilt " + juce::String (tilt, 2);
+                    // (0.3 dB of slack: a bell and a shelf of the same stretch differ a little)
+                    expect (air <= lastAir + 0.3f, "air response monotonic " + at);
+                    expect (presence <= lastPresence + 0.3f, "presence response monotonic " + at);
+                    expect (std::abs (air - lastAir) <= maxStepDb + 1.0e-3f, "air response step " + at + ": " + juce::String (air - lastAir, 2));
+                    expect (std::abs (presence - lastPresence) <= maxStepDb + 1.0e-3f, "presence response step " + at + ": " + juce::String (presence - lastPresence, 2));
+                }
+                lastAir = air;
+                lastPresence = presence;
+            }
+            logMessage ("    " + name + " (3.5 kHz / 10 kHz response): " + line);
+        };
+
+        beginTest ("Continuous EQ: tilt sweep -3 .. +3 dB/oct, 13 steps - air and presence move monotonically without a jump");
+        tiltSweep (13, 2.5f, "13 steps");
+
+        beginTest ("Continuous EQ: tilt sweep -3 .. +3 dB/oct, 49 steps - no step above 1 dB");
+        tiltSweep (49, 1.0f, "49 steps");
+
+        beginTest ("Continuous EQ: resonance sweep 4 .. 12 dB - the notch grows from 0, none below 5 dB");
+        {
+            float last = 0.0f;
+            bool anyNotch = false;
+            for (int i = 0; i <= 32; ++i)
+            {
+                const float excess = 4.0f + 0.25f * (float) i;
+                auto p = base;
+                Resonance r;
+                r.hz = 1800.0f; r.excessDb = excess; r.strong = true; r.persistence = 1.0f; r.sustained = true; r.q = 14.0f;
+                p.resonances = { r };
+                autoeq::Context c;
+                c.profile = &p;
+                c.target = &party;
+                const float depth = -moveGain (autoeq::planCurveMoves (c), EqRole::autoNotch1);
+                const juce::String at = " at " + juce::String (excess, 2) + " dB";
+                if (excess <= 5.0f)
+                    expect (depth == 0.0f, "no notch up to 5 dB excess" + at + ": " + juce::String (depth, 2));
+                expect (depth >= last - 1.0e-4f, "depth monotonic" + at);
+                expect (depth - last <= 1.0f + 1.0e-3f, "depth step <= 1 dB" + at + ": " + juce::String (depth - last, 2));
+                expect (depth <= autoeq::maxNarrowCutDb + 1.0e-3f);
+                anyNotch = anyNotch || depth > 0.0f;
+                last = depth;
+            }
+            expect (anyNotch && last >= 4.0f, "a clear resonance gets a real notch: " + juce::String (last, 2));
+        }
+
+        beginTest ("Continuous EQ: notches only for persistent resonances, the strongest three, ranked with a 1 dB margin");
+        {
+            const auto notchesOf = [&] (std::vector<Resonance> rs)
+            {
+                auto p = base;
+                p.resonances = std::move (rs);
+                autoeq::Context c;
+                c.profile = &p;
+                c.target = &party;
+                return autoeq::planCurveMoves (c);
+            };
+            const auto res = [] (float hz, float excess, float persistence)
+            {
+                Resonance r;
+                r.hz = hz; r.excessDb = excess; r.persistence = persistence; r.sustained = persistence >= 0.75f; r.q = 14.0f;
+                return r;
+            };
+            expect (moveGain (notchesOf ({ res (1800.0f, 14.0f, 0.25f) }), EqRole::autoNotch1) == 0.0f, "persistence 0.25: no notch");
+            expect (moveGain (notchesOf ({ res (1800.0f, 14.0f, 0.75f) }), EqRole::autoNotch1) < -3.0f, "persistence 0.75: notch");
+
+            // four resonances: the weakest gets none
+            const auto four = notchesOf ({ res (500.0f, 13.0f, 1.0f), res (1200.0f, 12.0f, 1.0f), res (2500.0f, 11.0f, 1.0f), res (4000.0f, 10.0f, 1.0f) });
+            int notches = 0;
+            for (auto& m : four)
+            {
+                notches += m.narrow ? 1 : 0;
+                expect (! (m.narrow && near (m.band.freq, 4000.0f, 0.05f)), "the weakest of four gets no notch");
+            }
+            expectEquals (notches, 3);
+
+            // the 1 dB margin decides who stays in the top three: 0.8 dB better does not push out the earlier one, 1.5 dB does
+            const auto has = [&] (const std::vector<autoeq::Move>& moves, float hz)
+            {
+                return std::any_of (moves.begin(), moves.end(), [&] (const autoeq::Move& m) { return m.narrow && near (m.band.freq, hz, 0.02f); });
+            };
+            const auto close = notchesOf ({ res (800.0f, 10.0f, 1.0f), res (2000.0f, 10.8f, 1.0f), res (4000.0f, 12.0f, 1.0f), res (6000.0f, 12.5f, 1.0f) });
+            expect (has (close, 800.0f) && ! has (close, 2000.0f), "0.8 dB apart: the earlier one stays");
+            const auto clear = notchesOf ({ res (800.0f, 10.0f, 1.0f), res (2000.0f, 11.5f, 1.0f), res (4000.0f, 12.0f, 1.0f), res (6000.0f, 12.5f, 1.0f) });
+            expect (has (clear, 2000.0f) && ! has (clear, 800.0f), "1.5 dB apart: the stronger one replaces it");
+
+            // Roles go by frequency: a weak resonance in or out, or two swapping rank, does not move the others
+            const auto roleOfFreq = [&] (const std::vector<autoeq::Move>& moves, float hz) -> int
+            {
+                for (auto& m : moves)
+                    if (m.narrow && near (m.band.freq, hz, 1.0f / 6.0f))
+                        return (int) m.role;
+                return -1;
+            };
+            const auto base3 = notchesOf ({ res (500.0f, 13.0f, 1.0f), res (1200.0f, 12.0f, 1.0f), res (3000.0f, 11.0f, 1.0f) });
+            const auto weakIn = notchesOf ({ res (500.0f, 13.0f, 1.0f), res (1200.0f, 12.0f, 1.0f), res (3000.0f, 11.0f, 1.0f), res (700.0f, 9.0f, 1.0f) });
+            const auto swapped = notchesOf ({ res (500.0f, 12.0f, 1.0f), res (1200.0f, 12.8f, 1.0f), res (3000.0f, 11.0f, 1.0f) });
+            expectEquals (roleOfFreq (base3, 500.0f), (int) EqRole::autoNotch1);
+            expectEquals (roleOfFreq (base3, 1200.0f), (int) EqRole::autoNotch2);
+            expectEquals (roleOfFreq (base3, 3000.0f), (int) EqRole::autoNotch3);
+            for (float hz : { 500.0f, 1200.0f, 3000.0f })
+            {
+                expectEquals (roleOfFreq (swapped, hz), roleOfFreq (base3, hz), "rank swap keeps the role at " + juce::String (hz));
+                expectEquals (roleOfFreq (weakIn, hz), roleOfFreq (base3, hz), "weak resonance in: role at " + juce::String (hz));
+            }
+        }
+
+        beginTest ("Continuous EQ: a harsh take loses its presence lift gradually");
+        {
+            const auto p = onTarget (base, party, [] (float hz) { return hz >= 2000.0f && hz <= 5000.0f ? -6.0f : 0.0f; });
+            float last = 1000.0f;
+            for (int i = 0; i <= 10; ++i)
+            {
+                autoeq::Context c;
+                c.profile = &p;
+                c.target = &party;
+                c.harsh = 0.1f * (float) i;
+                const float lift = responseOf (autoeq::planCurveMoves (c), 3500.0f);
+                expect (lift <= last + 0.05f, "monotonic at harsh " + juce::String (0.1f * (float) i, 1));
+                if (i > 0)
+                    expect (std::abs (lift - last) <= 1.0f + 1.0e-3f, "step <= 1 dB at harsh " + juce::String (0.1f * (float) i, 1) + ": " + juce::String (lift - last, 2));
+                last = lift;
+            }
+            expect (last <= 0.5f, "fully harsh: no lift of 2-5 kHz: " + juce::String (last, 2));
+        }
+
+        beginTest ("Continuous EQ: every role keeps its own slot, whatever the take");
+        {
+            std::vector<VocalSpec> takes;
+            for (unsigned seed : { 1u, 2u, 3u })
+                for (float tilt : { -5.0f, -2.5f, 0.0f, 3.0f })
+                {
+                    VocalSpec s; s.seconds = 14.0; s.seed = seed; s.tiltDb = tilt; s.resonanceHz = seed == 2 ? 0.0f : 1800.0f; s.resonanceDb = 14.0f + (float) seed;
+                    s.rumbleDb = seed == 3 ? -30.0f : -100.0f;
+                    takes.push_back (s);
+                }
+            const auto cur = defaults();
+            std::map<int, int> slotOfRole;   // role -> slot, over all plans
+            for (auto& s : takes)
+            {
+                const auto plan = AutoMixPlanner::plan (VocalProfiler::analyse (makeVocal (s)), cur);
+                auto values = plan.values;
+                const auto access = eqbands::accessFor (values, &cur);
+                for (int i = 0; i < dsp::maxEqBands; ++i)
+                {
+                    const auto b = eqbands::readBand (access, 0, i);
+                    const int expected = eqbands::fixedSlotOf (b.bandRole());
+                    if (b.bandRole() == EqRole::none || expected < 0)
+                        continue;
+                    expectEquals (i, expected, "role " + juce::String (b.role) + " sits in its fixed slot");
+                    slotOfRole[b.role] = i;
+                }
+            }
+            expect (slotOfRole.size() >= 3, "several roles were in use: " + juce::String ((int) slotOfRole.size()));
+            expectEquals (slotOfRole[(int) EqRole::lowCut], 0);
+        }
+
+        beginTest ("Continuous EQ: a role takes its fixed slot when free, else the first free one");
+        {
+            std::map<juce::String, float> values;
+            const auto access = eqbands::accessFor (values);
+            expectEquals (eqbands::findFreeBand (access, 0, EqRole::air), 4);
+            expectEquals (eqbands::findFreeBand (access, 0, EqRole::autoNotch3), 7);
+            expectEquals (eqbands::findFreeBand (access, 0, EqRole::none), 0);   // no fixed slot: the first free one
+            eqbands::writeBand (access, 0, 4, band (dsp::EqBandType::bell, 700.0f, 1.0f, 1.0f));   // a user band sits in the air slot
+            expectEquals (eqbands::findFreeBand (access, 0, EqRole::air), 0);
+        }
+
+        beginTest ("Continuous EQ: rumble raises the low cut step by step (12 -> 18 -> 24 dB/oct), no jump");
+        {
+            const auto cur = defaults();
+            int lastSlope = 1;
+            float lastFc = 0.0f;
+            for (int i = 0; i <= 24; ++i)
+            {
+                auto p = base;
+                p.rumbleDb = -26.0f + 0.5f * (float) i;
+                const auto plan = AutoMixPlanner::plan (p, cur);
+                const auto lowCut = roleBand (plan, cur, EqRole::lowCut);
+                expect (lowCut.has_value(), "low cut");
+                if (! lowCut.has_value())
+                    continue;
+                expect (lowCut->slope >= lastSlope && lowCut->slope - lastSlope <= 1, "slope steps by one: " + juce::String (lastSlope) + " -> " + juce::String (lowCut->slope));
+                expect (lowCut->freq >= lastFc - 0.01f, "cutoff does not fall as the rumble rises");
+                expect (lastFc == 0.0f || lowCut->freq - lastFc <= 12.0f, "cutoff step: " + juce::String (lowCut->freq - lastFc, 1));
+                lastSlope = lowCut->slope;
+                lastFc = lowCut->freq;
+            }
+            expectEquals (lastSlope, 3);
+        }
     }
 
     void engineTests()

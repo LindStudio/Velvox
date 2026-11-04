@@ -33,6 +33,13 @@ namespace vocalypse::eqbands
     int findBand (const Access& access, int instance, dsp::EqRole role);   // -1: none (role none: always -1)
     int findFreeBand (const Access& access, int instance);                 // -1: all 16 in use
 
+    // The slot (0-based; the plan's "slot 1-8" = 0-7) an auto-mix role always uses: low cut 0, warmth 1,
+    // autoMix / mud bell 2, tone (presence) bell 3, air 4, notches 5-7; -1 for roles without a fixed slot
+    // (user bands, Vocal Check roles, high cut). Keeps a role in the same place from run to run.
+    int fixedSlotOf (dsp::EqRole role) noexcept;
+    // The free slot for `role`: its fixed slot when that one is free, else the first free one (-1: all in use)
+    int findFreeBand (const Access& access, int instance, dsp::EqRole role);
+
     // The band that carries `role` (also when it is switched off), or a free slot claimed for it.
     // Sets type, frequency, gain, Q (and the slope when >= 0), the role, and switches it on.
     // Bands of other roles and user bands (role none) are never changed. Returns the band, or -1 when

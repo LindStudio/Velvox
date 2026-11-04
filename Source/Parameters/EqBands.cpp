@@ -159,6 +159,30 @@ namespace vocalypse::eqbands
         return -1;
     }
 
+    int fixedSlotOf (dsp::EqRole role) noexcept
+    {
+        switch (role)
+        {
+            case dsp::EqRole::lowCut:     return 0;
+            case dsp::EqRole::warmth:     return 1;
+            case dsp::EqRole::autoMix:    return 2;
+            case dsp::EqRole::autoTone:   return 3;
+            case dsp::EqRole::air:        return 4;
+            case dsp::EqRole::autoNotch1: return 5;
+            case dsp::EqRole::autoNotch2: return 6;
+            case dsp::EqRole::autoNotch3: return 7;
+            default:                      break;
+        }
+        return -1;
+    }
+
+    int findFreeBand (const Access& a, int instance, dsp::EqRole role)
+    {
+        if (const int slot = fixedSlotOf (role); slot >= 0 && readBand (a, instance, slot).isFree())
+            return slot;
+        return findFreeBand (a, instance);
+    }
+
     int findOrCreateBand (const Access& a, int instance, dsp::EqRole role, dsp::EqBandType type,
                           float freqHz, float gainDb, float q, int slope)
     {
