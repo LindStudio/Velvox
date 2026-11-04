@@ -503,6 +503,13 @@ namespace vocalypse::automix::autoeq
                                          "Narrow peak {0} above its surroundings, present in the whole recording (room or microphone) - a narrow cut takes out only that.",
                                          { db (remaining) }), true });
             }
+            // Roles (and so slots 5-7) go by frequency, not by rank: a notch keeps its role while a neighbour appears or goes
+            std::sort (moves.begin(), moves.end(), [] (const Move& a, const Move& b) { return a.band.freq < b.band.freq; });
+            for (size_t i = 0; i < moves.size(); ++i)
+            {
+                moves[i].role = notchRoles[i];
+                moves[i].title = titleOf (moves[i].role, moves[i].band);
+            }
         }
 
         fitBroad (ctx, moves, std::vector<float> ((size_t) numThirds, 0.0f), ctx.budget, false);

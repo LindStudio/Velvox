@@ -161,16 +161,35 @@ public:
             }
             expectEquals (notches, 3);
 
-            // two resonances within 1 dB (score) of each other keep the profile's order; 1.5 dB apart the stronger one leads
-            const auto frequencyOf = [] (const std::vector<autoeq::Move>& moves, EqRole role)
+            // the 1 dB margin decides who stays in the top three: 0.8 dB better does not push out the earlier one, 1.5 dB does
+            const auto has = [&] (const std::vector<autoeq::Move>& moves, float hz)
+            {
+                return std::any_of (moves.begin(), moves.end(), [&] (const autoeq::Move& m) { return m.narrow && near (m.band.freq, hz, 0.02f); });
+            };
+            const auto close = notchesOf ({ res (800.0f, 10.0f, 1.0f), res (2000.0f, 10.8f, 1.0f), res (4000.0f, 12.0f, 1.0f), res (6000.0f, 12.5f, 1.0f) });
+            expect (has (close, 800.0f) && ! has (close, 2000.0f), "0.8 dB apart: the earlier one stays");
+            const auto clear = notchesOf ({ res (800.0f, 10.0f, 1.0f), res (2000.0f, 11.5f, 1.0f), res (4000.0f, 12.0f, 1.0f), res (6000.0f, 12.5f, 1.0f) });
+            expect (has (clear, 2000.0f) && ! has (clear, 800.0f), "1.5 dB apart: the stronger one replaces it");
+
+            // Roles go by frequency: a weak resonance in or out, or two swapping rank, does not move the others
+            const auto roleOfFreq = [&] (const std::vector<autoeq::Move>& moves, float hz) -> int
             {
                 for (auto& m : moves)
-                    if (m.role == role)
-                        return m.band.freq;
-                return 0.0f;
+                    if (m.narrow && near (m.band.freq, hz, 1.0f / 6.0f))
+                        return (int) m.role;
+                return -1;
             };
-            expect (near (frequencyOf (notchesOf ({ res (800.0f, 12.0f, 1.0f), res (2000.0f, 12.8f, 1.0f) }), EqRole::autoNotch1), 800.0f, 0.02f), "0.8 dB apart: the order stays");
-            expect (near (frequencyOf (notchesOf ({ res (800.0f, 12.0f, 1.0f), res (2000.0f, 13.5f, 1.0f) }), EqRole::autoNotch1), 2000.0f, 0.02f), "1.5 dB apart: the stronger one leads");
+            const auto base3 = notchesOf ({ res (500.0f, 13.0f, 1.0f), res (1200.0f, 12.0f, 1.0f), res (3000.0f, 11.0f, 1.0f) });
+            const auto weakIn = notchesOf ({ res (500.0f, 13.0f, 1.0f), res (1200.0f, 12.0f, 1.0f), res (3000.0f, 11.0f, 1.0f), res (700.0f, 9.0f, 1.0f) });
+            const auto swapped = notchesOf ({ res (500.0f, 12.0f, 1.0f), res (1200.0f, 12.8f, 1.0f), res (3000.0f, 11.0f, 1.0f) });
+            expectEquals (roleOfFreq (base3, 500.0f), (int) EqRole::autoNotch1);
+            expectEquals (roleOfFreq (base3, 1200.0f), (int) EqRole::autoNotch2);
+            expectEquals (roleOfFreq (base3, 3000.0f), (int) EqRole::autoNotch3);
+            for (float hz : { 500.0f, 1200.0f, 3000.0f })
+            {
+                expectEquals (roleOfFreq (swapped, hz), roleOfFreq (base3, hz), "rank swap keeps the role at " + juce::String (hz));
+                expectEquals (roleOfFreq (weakIn, hz), roleOfFreq (base3, hz), "weak resonance in: role at " + juce::String (hz));
+            }
         }
 
         beginTest ("Continuous EQ: a harsh take loses its presence lift gradually");
