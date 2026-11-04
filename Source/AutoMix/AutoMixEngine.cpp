@@ -688,8 +688,10 @@ namespace vocalypse::automix
         auto& plan = r.plan;
         RenderMetrics m;
         // U4: the corrections run in the fixed order below, each kind at most once (a kind that has been
-        // applied is not touched again by a later round). Exception: the de-esser strength is a closed loop
-        // (3 dB per round until the S sounds are controlled; the engine test needs it) and stays free.
+        // applied is not touched again by a later round). The one exception is the de-esser strength: a bounded
+        // convergence loop (3 dB per round toward the measured S / vowel target, 4 rounds at most) stays iterative.
+        // The tone correction waits until the de-esser has stopped changing in a round (or the last round), so
+        // it runs once on a render that already includes the final de-esser.
         enum Kind { kDeessAdd = 2, kAir = 4, kTone = 8, kSmooth = 16, kLowCut = 32, kDoubler = 64 };
         int appliedKinds = 0;
         for (int round = 0; round < 4; ++round)
@@ -741,6 +743,8 @@ namespace vocalypse::automix
                 changed = true; appliedKinds |= kDeessAdd;
             }
 
+            const bool deessMoved = changed;   // only the de-esser blocks above can have set it in this round
+
             // Brightness: the chain must not make an already bright voice brighter (a vibe that asks for more
             // highs, e.g. Floaty, moves the limit by its own lift - otherwise this undid the style, 2026-11-03)
             bool airAdjusted = false;
@@ -769,9 +773,9 @@ namespace vocalypse::automix
             }
 
             // Tone (0.8): the auto-mix bands follow the third octaves of the real render onto the target
-            // curve - compression, saturation, the de-esser and effects move the balance as well (every round:
-            // a de-esser strengthened in a later round darkens the top again)
-            if (! (appliedKinds & kTone) && plan.on (pid::eqOn) && plan.routing.contains (dsp::ModuleId::eq))
+            // curve - compression, saturation, the de-esser and effects move the balance as well. Once, after
+            // the de-esser loop has settled (a de-esser strengthened in a later round would darken the top again)
+            if (! (appliedKinds & kTone) && (! deessMoved || round == 3) && plan.on (pid::eqOn) && plan.routing.contains (dsp::ModuleId::eq))
             {
                 auto state = autoEqState (plan, current, r.profile);
                 state.context.target = &mixTarget;
@@ -866,6 +870,7 @@ namespace vocalypse::automix
                 if (std::find (order.begin(), order.end(), i) == order.end() && (runnerUp == 0 || adjusted (i) < adjusted (runnerUp) - 1.0e-6f))
                     runnerUp = i;
             size_t best = order.empty() ? 0 : order[0];
+            size_t rejectedCombo = 0;
             if (order.size() >= 2 && ! stop())
             {
                 MixPlan combined = variants[order[0]].second;
@@ -883,8 +888,8 @@ namespace vocalypse::automix
                 if (variantEarnsChange (r.candidates[order[0]].score.total(), r.candidates[order[0]].complexity,
                                         r.candidates[ci].score.total(), r.candidates[ci].complexity, baseScore))
                     best = ci;
-                else if (best == order[0] && runnerUp == 0)
-                    runnerUp = ci;
+                else
+                    rejectedCombo = ci;
             }
             r.chosenCandidate = (int) best;
             const auto baseValues = plan.values;
@@ -917,12 +922,15 @@ namespace vocalypse::automix
                             }
                 }
             };
+            if (rejectedCombo != 0)
+                logCandidate (rejectedCombo, false);   // before the taken one: shared modules end up with the taken entry
             if (best != 0)
             {
                 logCandidate (best, true);
                 syncDecisions (plan, variants[best].first, r.candidates[0].score, r.candidates[best].score, current);
                 r.adjustments.push_back (both ("Variante gewählt: ", "Variant chosen: ") + variants[best].first);
-            }            else if (runnerUp != 0)
+            }
+            else if (runnerUp != 0)
                 logCandidate (runnerUp, false);   // the best variant that did not earn the change
         }
 
