@@ -490,16 +490,21 @@ namespace vocalypse::automix
         // ================= Compressor: steady level =================
         {
             // After the rider, words sit around the rider target
-            const float level = rideWanted ? plan.get (pid::rideTarget) : voice;
-            // 0.8: the start of the engine's search follows this voice - the ratio from how far its phrase
-            // spread (after the ride) is from the middle of the target window, the threshold from its crest
-            // (peaky words: deeper), on the search's ratio steps 1.8 / 2.5 / 3.5 / 5
+            // The ride's weight for the compressor (0 / 1 from the ride decision until Task 10 gives it a continuous
+            // intensity): after the rider, words sit around the rider target and the phrase spread is the style's top.
+            // Level, spread and attack are blended by it instead of switching
+            const float rideI = rideWanted ? 1.0f : 0.0f;
+            const float level = blend (rideI, voice, clamp (voice, -40.0f, -6.0f));   // = the ride target
+            // Continuous (Task 6): the ratio is the old calibration - how far the phrase spread is from the middle
+            // of the target window, 1.5 .. 5 - without snapping it to 1.8 / 2.5 / 3.5 / 5; the threshold from the crest
+            // (peaky words: deeper). Dense material (small phrase range AND small crest) blends towards 1.5:1 / 1 dB
             const float mid = 0.5f * (target.dynamics.phraseLo + target.dynamics.phraseHi);
-            const float spread = rideWanted ? target.dynamics.phraseHi : (p.dynamicsValid ? p.dynamicsDb : mid + 2.0f);
-            const float wanted = clamp (spread / mid, 1.5f, 5.0f);
-            float ratio = wanted < 2.15f ? 1.8f : (wanted < 3.0f ? 2.5f : (wanted < 4.25f ? 3.5f : 5.0f));
-            float below = clamp (3.0f + 0.5f * (p.crestDb - target.dynamics.crestHi), 1.5f, 8.0f);   // below the median word (RMS detector reads +3 dB for a sine)
-            if (compressed)       { ratio = 1.8f; below = 1.0f; }
+            const float spread = blend (rideI, p.dynamicsValid ? p.dynamicsDb : mid + 2.0f, target.dynamics.phraseHi);
+            const float wantedRatio = clamp (spread / mid, 1.5f, 5.0f);
+            const float belowWanted = clamp (3.0f + 0.5f * (p.crestDb - target.dynamics.crestHi), 1.5f, 8.0f);   // below the median word (RMS detector reads +3 dB for a sine)
+            const float denseW = p.dynamicsValid ? soft (p.dynamicsDb, 8.0f, 5.0f) * soft (p.crestDb, 12.0f, 9.0f) : 0.0f;   // 1 = already dense
+            float ratio = blend (denseW, wantedRatio, 1.5f);
+            float below = blend (denseW, belowWanted, 1.0f);
             if (plan.conservative) { ratio = std::min (ratio, 2.5f); below = std::min (below, 3.0f); }
 
             const float threshold = clamp (level + 3.0f - below, -60.0f, -6.0f);
@@ -515,20 +520,18 @@ namespace vocalypse::automix
             // 1 dB less peak-to-loudness on ridden hooks than 12 ms). The release follows the syllable rate,
             // so the compressor is back between the syllables (60 % of their spacing, 40 .. 250 ms).
             float attack = p.onsetsValid ? juce::jmap (clamp (p.onsetSharpnessDb, 0.0f, 6.0f), 0.0f, 6.0f, 9.0f, 3.0f) : (p.crestDb > 15.0f ? 5.0f : 8.0f);
-            attack = std::round (attack);
-            if (rideWanted)
-                attack = std::min (attack, 3.0f);
+            attack = blend (rideI, attack, std::min (attack, 3.0f));
             attack += target.vibe == Vibe::aggressive ? -2.0f : (target.vibe == Vibe::floaty ? 8.0f : 0.0f);
             attack = clamp (attack, 1.0f, 30.0f);
             const float release = p.onsetsValid && p.onsetRate > 0.5f ? clamp (600.0f / p.onsetRate, 40.0f, 250.0f) : 110.0f;
             plan.set (pid::compAttack, attack);
             plan.set (pid::compRelease, release);
             plan.set (pid::compKnee, 6.0f);
-            plan.set (pid::compMakeup, clamp (std::round (expectedGr * 2.0f) / 2.0f, 0.0f, 6.0f));
+            plan.set (pid::compMakeup, clamp (expectedGr, 0.0f, 6.0f));
             plan.set (pid::compMix, 100.0f);
             plan.set (pid::compScHpf, 100.0f);
             decide (M::comp, both ("Kompressor {0}:1, Schwelle {1}", "Compressor {0}:1, threshold {1}", { num (ratio, 1), db (threshold) }),
-                    (compressed ? both ("Die Aufnahme ist bereits dicht - nur sanfte Kontrolle.", "The recording is already dense - only gentle control.")
+                    (denseW > 0.5f ? both ("Die Aufnahme ist bereits dicht - nur sanfte Kontrolle.", "The recording is already dense - only gentle control.")
                                 : both ("Etwa {0} dB Reduktion auf typischen Wörtern für einen gleichmäßigen, durchsetzungsfähigen Pegel.",
                                         "About {0} dB of reduction on typical words for an even level that cuts through.", { num (expectedGr, 1) }))
                         + (p.onsetsValid ? both (" Attack {0} ms ({1}), Release {2} ms ({3} Silben/s).", " Attack {0} ms ({1}), release {2} ms ({3} syllables/s).",
@@ -537,7 +540,10 @@ namespace vocalypse::automix
                                          : juce::String()),
                     true);
             note (M::comp, true, "phraseSpread", { { "phraseSpread", p.dynamicsValid ? p.dynamicsDb : std::nanf (""), "dB" }, { "crest", p.crestDb, "dB" },
-                                                   { "expectedGr", expectedGr, "dB" } }, 1.0f, {});
+                                                   { "expectedGr", expectedGr, "dB" }, { "dense", denseW, "" } }, 1.0f, {});
+            auto& cl = plan.logFor (M::comp);   // need: how much compression the voice calls for (not dense), intensity: the ratio's share of 1 .. 5
+            cl.need = 1.0f - denseW;
+            cl.intensity = clamp ((ratio - 1.0f) / 4.0f, 0.0f, 1.0f);
         }
 
         // ================= Vocal Smash: density (parallel) =================
@@ -568,14 +574,18 @@ namespace vocalypse::automix
                                                                    : both ("Keine Parallelkompression: Der Stil braucht keine zusätzliche Dichte.", "No parallel compression: the style needs no extra density."));
 
         // ================= De-esser =================
-        const bool deess = p.sibilanceValid && p.sibilanceVsVowelDb > -9.0f;
+        // Task 6: need = how far the S sounds are above the style's limit (0 at limit - 6 dB, 1 at limit + 3 dB), the range
+        // (up to 8 dB) follows it continuously; the module is on from its minimum audible range on
+        constexpr float deessMaxRangeDb = 8.0f, deessMinAudibleDb = 1.5f;
+        const float deessNeed = p.sibilanceValid ? soft (p.sibilanceVsVowelDb, target.sibilanceMax - 6.0f, target.sibilanceMax + 3.0f) : 0.0f;
+        const float range = blend (deessNeed, 0.0f, deessMaxRangeDb);
+        const bool deess = p.sibilanceValid && range >= deessMinAudibleDb;
         plan.set (pid::deessOn, deess ? 1.0f : 0.0f);
         if (deess)
         {
             const bool strong = p.hasIssue ("sibilance");
-            const float range = p.sibilanceVsVowelDb > 0.0f ? 8.0f : (likely (p, "sibilance") ? 6.0f : (strong ? 5.0f : 3.0f));
             configureDeEsser (plan, p, inGain, range);
-            decide (M::deess, both ("De-Esser ab {0}, max. {1} dB", "De-Esser from {0}, max. {1} dB", { hz (p.deessDetectorHz), juce::String ((int) range) }),
+            decide (M::deess, both ("De-Esser ab {0}, max. {1} dB", "De-Esser from {0}, max. {1} dB", { hz (p.deessDetectorHz), num (range, 1) }),
                     both ("S-Laute {0} gegenüber den Vokalen. ", "Sibilance {0} against the vowels. ", { db (p.sibilanceVsVowelDb) })
                         + (strong ? both ("Schwelle zwischen Vokal- und S-Pegel, damit nur S-Laute reduziert werden.",
                                           "Threshold between vowel and S level, so only the S sounds are reduced.")
@@ -589,7 +599,12 @@ namespace vocalypse::automix
         }
         note (M::deess, deess, "sibilance",
               { { "sibilanceVsVowel", p.sibilanceValid ? p.sibilanceVsVowelDb : std::nanf (""), "dB" }, { "deessFreq", p.deessDetectorHz, "Hz" } },
-              plan.get (pid::deessRange) / 10.0f, plan.notes.empty() ? juce::String() : plan.notes.back());
+              plan.get (pid::deessRange) / deessMaxRangeDb, plan.notes.empty() ? juce::String() : plan.notes.back());
+        {
+            auto& dl = plan.logFor (M::deess);   // the soft weight is kept below the activation edge too
+            dl.need = deessNeed;
+            dl.intensity = deess ? clamp (range / deessMaxRangeDb, 0.0f, 1.0f) : 0.0f;
+        }
 
         // ================= Smooth: adaptive resonance control =================
         // One problem, one tool: a resonance the EQ notches (0.6.1) is no reason for SMOOTH

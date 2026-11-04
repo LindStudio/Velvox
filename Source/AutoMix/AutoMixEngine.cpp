@@ -338,19 +338,19 @@ namespace vocalypse::automix
     {
         if (! plan.on (pid::compOn))
             return 0;
-        static constexpr float ratios[] { 1.8f, 2.5f, 3.5f, 5.0f };
+        // Task 6: the search starts from the planner's continuous ratio / threshold and moves in symmetric steps
+        // around the current value (threshold +-3 dB, ratio x / : 1.4) - no grid that a gain shift could move. A
+        // candidate replaces the current setting only when it lowers the dynamics-window cost by at least 15 %
+        constexpr float thresholdStepDb = 3.0f, ratioStep = 1.4f, marginShare = 0.15f;
         const float t0 = plan.get (pid::compThreshold);
-        int ri = 0;
-        for (int i = 1; i < 4; ++i)
-            if (std::abs (ratios[i] - plan.get (pid::compRatio)) < std::abs (ratios[ri] - plan.get (pid::compRatio)))
-                ri = i;
         float thr = t0;
-        const auto apply = [&plan] (float threshold, float ratio)
+        float ratio = plan.get (pid::compRatio);
+        const auto apply = [&plan] (float threshold, float r)
         {
             plan.set (pid::compThreshold, threshold);
-            plan.set (pid::compRatio, ratio);
+            plan.set (pid::compRatio, r);
         };
-        apply (thr, ratios[ri]);
+        apply (thr, ratio);
         int renders = 0;
         auto m = renderChecked (audio, current, withoutSpace (plan), profile);
         ++renders;
@@ -361,34 +361,38 @@ namespace vocalypse::automix
         {
             const bool loose = (m.dynamicsValid && m.dynamicsDb > 0.5f * (target.dynamics.phraseLo + target.dynamics.phraseHi) + 0.75f)
                             || m.crestDb > 0.5f * (target.dynamics.crestLo + target.dynamics.crestHi) + 1.0f;
-            std::vector<std::pair<float, int>> moves;   // threshold, ratio index
+            std::vector<std::pair<float, float>> moves;   // threshold, ratio
             if (loose)
-                moves = { { thr - 3.0f, ri }, { thr, std::min (3, ri + 1) } };
+                moves = { { thr - thresholdStepDb, ratio }, { thr, ratio * ratioStep } };
             else
-                moves = { { thr + 3.0f, ri }, { thr, std::max (0, ri - 1) } };
-            bool improved = false;
+                moves = { { thr + thresholdStepDb, ratio }, { thr, ratio / ratioStep } };
+            // Every move is rendered, the best one that earns the margin is taken (not the first)
+            std::vector<float> scores { -err };
+            std::vector<std::pair<float, float>> tried { { thr, ratio } };
+            std::vector<RenderMetrics> rendered { m };
             for (auto [t, r] : moves)
             {
-                if (renders >= maxRenders || (t == thr && r == ri) || t < t0 - 12.0f || t > t0 + 12.0f || t < -60.0f || t > -6.0f)
+                r = juce::jlimit (1.5f, 5.0f, r);   // the planner's range
+                if (renders >= maxRenders || (t == thr && r == ratio) || t < t0 - 12.0f || t > t0 + 12.0f || t < -60.0f || t > -6.0f)
                     continue;
-                apply (t, ratios[r]);
+                apply (t, r);
                 const auto mt = renderChecked (audio, current, withoutSpace (plan), profile);
                 ++renders;
-                if (const float e = dynamicsError (mt, target); e < err - 0.05f)
-                {
-                    thr = t;
-                    ri = r;
-                    m = mt;
-                    err = e;
-                    improved = true;
-                    break;
-                }
-                apply (thr, ratios[ri]);
+                scores.push_back (-dynamicsError (mt, target));
+                tried.push_back ({ t, r });
+                rendered.push_back (mt);
             }
-            if (! improved)
+            const int pick = chooseWithMargin (scores, 0, marginShare * err);
+            apply (thr, ratio);
+            if (pick <= 0)
                 break;
+            thr = tried[(size_t) pick].first;
+            ratio = tried[(size_t) pick].second;
+            m = rendered[(size_t) pick];
+            err = -scores[(size_t) pick];
+            apply (thr, ratio);
         }
-        apply (thr, ratios[ri]);
+        apply (thr, ratio);
 
         // Still too far apart between phrases (2026-11-03: Rap / Aggressive ended at 4-8 dB for a 1-3 dB window: the
         // compressor hardly moves the distance between phrases, and the Level Ride, already at 85 %, stopped at its
@@ -487,7 +491,7 @@ namespace vocalypse::automix
         if (auto it = std::find_if (plan.decisions.begin(), plan.decisions.end(), [] (const Decision& x) { return ! x.outputStage && x.module == dsp::ModuleId::comp; });
             it != plan.decisions.end())
         {
-            it->title = both ("Kompressor {0}:1, Schwelle {1}", "Compressor {0}:1, threshold {1}", { num (ratios[ri], 1), db (thr) });
+            it->title = both ("Kompressor {0}:1, Schwelle {1}", "Compressor {0}:1, threshold {1}", { num (ratio, 1), db (thr) });
             if (m.dynamicsValid && profile.dynamicsValid)
                 it->reason += both (" Gesucht auf das Dynamik-Ziel ({0}-{1} dB): Phrasen {2} -> {3} dB.", " Searched for the dynamics target ({0}-{1} dB): phrases {2} -> {3} dB.",
                                     { num (target.dynamics.phraseLo, 0), num (target.dynamics.phraseHi, 0), num (inDyn, 1), num (m.dynamicsDb, 1) });
@@ -675,6 +679,16 @@ namespace vocalypse::automix
                                                                                         juce::String (juce::roundToInt (plan.get (pid::satMix))) }),
                                             both ("Leichte Obertöne - die Variante mit Sättigung schnitt in der Messung besser ab.",
                                                   "Light harmonics - the variant with saturation scored better in the measurement."), true });
+            // The air shelf of the "Softer highs" candidate (and any other candidate's) is an audible EQ band: it gets its entry
+            if (const auto air = roleBand (plan, current, dsp::EqRole::air); air.has_value() && air->on && std::abs (air->gain) > 1.0e-3f
+                && std::none_of (plan.decisions.begin(), plan.decisions.end(), [&] (const Decision& d)
+                                 { return ! d.outputStage && d.module == M::eq && d.title == autoeq::titleOf (dsp::EqRole::air, *air); }))
+            {
+                auto before = *air;
+                before.on = false;
+                updateEqDecision (plan, dsp::EqRole::air, before, *air,
+                                  both ("Die Variante mit sanfteren Höhen schnitt in der Messung besser ab.", "The variant with softer highs scored better in the measurement."));
+            }
             if (plan.routing.contains (M::eq, 1))
             {
                 const float g = roleGain (plan, current, dsp::EqRole::air, 1);
@@ -795,16 +809,20 @@ namespace vocalypse::automix
                 // Too strong in absolute terms, or lifted by the chain clearly above the original
                 const bool tooStrong = m.sibilanceVsVowelDb > -3.0f
                                     || m.sibilanceVsVowelDb > std::max (-8.0f, r.original.sibilanceVsVowelDb + 2.0f);
+                // Task 6: the correction grows with the excess (half of the 3 dB / 2 dB step for a small one, all of it from 3 dB over)
+                const float over = std::max (m.sibilanceVsVowelDb + 3.0f, m.sibilanceVsVowelDb - std::max (-8.0f, r.original.sibilanceVsVowelDb + 2.0f));
+                const float stepShare = 0.5f + 0.5f * soft (over, 0.0f, 3.0f);
                 if (tooStrong && thr > -55.0f && plan.get (pid::deessRange) < 8.0f)
                 {
-                    plan.set (pid::deessThreshold, thr - 3.0f);
-                    plan.set (pid::deessRange, std::min (10.0f, plan.get (pid::deessRange) + 2.0f));
+                    plan.set (pid::deessThreshold, thr - 3.0f * stepShare);
+                    plan.set (pid::deessRange, std::min (8.0f, plan.get (pid::deessRange) + 2.0f * stepShare));
                     r.adjustments.push_back (both ("De-Esser verstärkt (S-Laute nach der Kette noch {0}).", "De-Esser strengthened (sibilance still {0} after the chain).", { db (m.sibilanceVsVowelDb) }));
                     changed = true;
                 }
                 else if (m.sibilanceVsVowelDb < r.profile.sibilanceVsVowelDb - 10.0f)
                 {
-                    plan.set (pid::deessThreshold, thr + 3.0f);
+                    const float under = (r.profile.sibilanceVsVowelDb - 10.0f) - m.sibilanceVsVowelDb;
+                    plan.set (pid::deessThreshold, thr + 3.0f * (0.5f + 0.5f * soft (under, 0.0f, 3.0f)));
                     r.adjustments.push_back (both ("De-Esser zurückgenommen (S-Laute wurden zu stark gedämpft).", "De-Esser backed off (S sounds were reduced too much)."));
                     changed = true;
                 }
