@@ -136,6 +136,21 @@ public:
             expect (! compare (fingerprint (g), fingerprint (h), Check::perturbation, 0.0f, tol).pass);
         }
 
+        beginTest ("A parameter the plan leaves unwritten shows the prior state it leaks from");
+        {
+            const auto plan = basePlan();                       // never writes satDrive
+            expect (plan.values.count (pid::satDrive) == 0);
+            auto priorA = defaultValues(), priorB = defaultValues();
+            priorB[pid::satDrive] = 11.0f;
+            const auto d = compare (fingerprint (plan, priorA), fingerprint (plan, priorB), Check::exact, 0.0f, tol);
+            expect (! d.pass);
+            expectEquals (d.differing, 1);
+            expect (compare (fingerprint (plan, priorA), fingerprint (plan, priorA), Check::exact, 0.0f, tol).pass);
+        }
+
+        beginTest ("An empty file gives a failed result, not a crash");
+        expect (! mixFile (CapturedAudio {}, 0.0, false, defaultValues(), MixIntent {}).ok);
+
         beginTest ("Prior states: defaults and seeded random values are legal and reproducible");
         {
             const auto d = defaultValues();

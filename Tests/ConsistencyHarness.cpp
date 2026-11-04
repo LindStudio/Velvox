@@ -28,15 +28,19 @@ namespace vocalypse::test
         }
     }
 
-    PlanFingerprint fingerprint (const MixPlan& plan)
+    PlanFingerprint fingerprint (const MixPlan& plan, const std::map<juce::String, float>& prior)
     {
-        PlanFingerprint fp;
+        // The state the plugin ends in: what the plan does not write keeps its prior value
+        auto effective = prior;
         for (auto& [id, v] : plan.values)
+            effective[id] = v;
+
+        PlanFingerprint fp;
+        for (auto& [id, v] : effective)
             if (! isEqBandSlotId (id))
                 fp.values[id] = v;
 
-        auto values = plan.values;
-        const auto access = eqbands::accessFor (values);
+        const auto access = eqbands::accessFor (effective);
         for (int instance = 0; instance < dsp::maxInstances (dsp::ModuleId::eq); ++instance)
             for (int band = 0; band < 16; ++band)
             {
@@ -46,11 +50,20 @@ namespace vocalypse::test
             }
 
         for (auto& slot : plan.routing)
-            if (dsp::isChainModule (slot.id) && plan.get (moduleOnId (slot.id, slot.instance).toRawUTF8()) > 0.5f)
-                fp.modulesOn.insert (juce::String (dsp::moduleKey (slot.id)) + "#" + juce::String ((int) slot.instance));
+            if (dsp::isChainModule (slot.id))
+            {
+                const auto on = effective.find (moduleOnId (slot.id, slot.instance));
+                if (on != effective.end() && on->second > 0.5f)
+                    fp.modulesOn.insert (juce::String (dsp::moduleKey (slot.id)) + "#" + juce::String ((int) slot.instance));
+            }
 
         fp.routing = plan.routing.toString();
         return fp;
+    }
+
+    PlanFingerprint fingerprint (const MixPlan& plan)
+    {
+        return fingerprint (plan, defaultValues());
     }
 
     const std::vector<LowIntensity>& lowIntensityTable()
@@ -296,6 +309,12 @@ namespace vocalypse::test
                                     const std::map<juce::String, float>& prior, const automix::MixIntent& intent)
     {
         juce::ignoreUnused (withSongPosition);   // Task 5 gives the capture a song position input and wires it here
+        if (file.vocal.empty() || file.numSamples() <= 0)
+        {
+            automix::AutoMixResult r;
+            r.error = "no audio";
+            return r;
+        }
         CapturedAudio captured;
         if (! captureLikePlugin (file, startSeconds, captured))
         {
@@ -419,7 +438,7 @@ namespace vocalypse::test
                 fail ("reference", Check::exact, "auto mix failed: " + reference.error);
                 return rows;
             }
-            const auto refFp = fingerprint (reference.plan);
+            const auto refFp = fingerprint (reference.plan, defaults);
 
             // One variant: mix, compare with the reference (or another fingerprint)
             const auto variant = [&] (const juce::String& label, Check check, float shiftDb, const CapturedAudio& audio, double start,
@@ -431,7 +450,7 @@ namespace vocalypse::test
                     fail (label, check, "auto mix failed: " + r.error);
                     return std::nullopt;
                 }
-                add (label, check, compare (against, fingerprint (r.plan), check, shiftDb, tol));
+                add (label, check, compare (against, fingerprint (r.plan, prior), check, shiftDb, tol));
                 return r;
             };
 

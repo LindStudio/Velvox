@@ -23,6 +23,9 @@ namespace vocalypse::test
         std::set<juce::String> modulesOn;                            // "<moduleKey>#<instance>" in the routing and switched on
         juce::String routing;                                        // Routing::toString()
     };
+    // The effective state: `prior` (the plugin's parameters before the mix) overlaid with what the plan writes, so a
+    // parameter the plan leaves alone shows the state it leaked from. The one-argument form overlays the defaults.
+    PlanFingerprint fingerprint (const automix::MixPlan& plan, const std::map<juce::String, float>& prior);
     PlanFingerprint fingerprint (const automix::MixPlan& plan);
 
     // The tolerances of the plan's Global Constraints, as named fields (later tasks tighten them)
