@@ -6,6 +6,7 @@
 #include "AutoMix/Soft.h"
 #include "AutoMix/DecisionLog.h"
 #include "AutoMix/AutoMixPlanner.h"
+#include "AutoMix/AutoMixEngine.h"
 #include "AutoMix/VocalProfile.h"
 
 using namespace vocalypse;
@@ -254,10 +255,41 @@ public:
             expect (onSeen);
         }
 
+        beginTest ("De-esser at its edge: just below range 1.5 dB off, at 1.5 dB on with that range and a continuous need");
+        {
+            auto p = denseProfile();
+            p.sibilanceValid = true;
+            p.sibBandVowelP90Db = -40.0f;
+            p.sibBandSibilantP50Db = -30.0f;
+            const float lo = -12.0f, hi = -3.0f;   // style limit -6 dB: soft (v, -12, -3)
+            float a = lo, b = hi;
+            for (int i = 0; i < 60; ++i)   // the S/vowel at which 8 dB x need = 1.5 dB
+            {
+                const float mid = 0.5f * (a + b);
+                (8.0f * soft (mid, lo, hi) < 1.5f ? a : b) = mid;
+            }
+            p.sibilanceVsVowelDb = a - 0.01f;
+            const auto below = AutoMixPlanner::plan (p, {});
+            p.sibilanceVsVowelDb = b + 0.0005f;
+            const auto at = AutoMixPlanner::plan (p, {});
+            expect (! below.on (pid::deessOn));
+            expect (at.on (pid::deessOn));
+            expectWithinAbsoluteError (at.get (pid::deessRange), 1.5f, 0.02f);
+            const auto* lb = logOf (below, dsp::ModuleId::deess);
+            const auto* la = logOf (at, dsp::ModuleId::deess);
+            expect (lb != nullptr && la != nullptr);
+            if (lb != nullptr && la != nullptr)
+            {
+                expect (std::abs (lb->need - la->need) < 0.02f, "need is continuous across the edge: " + juce::String (lb->need, 3) + " / " + juce::String (la->need, 3));
+                expect (lb->need > 0.15f && lb->intensity == 0.0f && la->intensity > 0.15f);
+            }
+        }
+
         // ---- Compressor: ratio and threshold follow the phrase spread continuously
         beginTest ("Compressor ratio and threshold are monotonic in the phrase range, steps <= 0.4 / 1.5 dB");
         {
             std::vector<float> ratio, thr;
+            std::vector<bool> ridden;
             juce::String line;
             for (float range = 4.0f; range <= 16.01f; range += 1.0f)
             {
@@ -268,13 +300,15 @@ public:
                 expect (plan.on (pid::compOn));
                 ratio.push_back (plan.get (pid::compRatio));
                 thr.push_back (plan.get (pid::compThreshold));
+                ridden.push_back (plan.on (pid::rideOn));
                 line << juce::String (profile.dynamicsDb, 1) << "->" << juce::String (ratio.back(), 2) << "/" << juce::String (thr.back(), 1) << " ";
             }
             logMessage ("comp sweep (dynamics -> ratio/threshold): " + line);
             for (size_t i = 1; i < ratio.size(); ++i)
             {
-                expect (ratio[i] >= ratio[i - 1] - 1.0e-4f, "ratio monotonic at " + juce::String ((int) i));
-                expect (ratio[i] - ratio[i - 1] <= 0.4f + 1.0e-3f, "ratio step " + juce::String (ratio[i] - ratio[i - 1], 2));
+                if (ridden[i] == ridden[i - 1])   // the ride edge is the one place the ratio may fall (spread -> phraseHi), by < 0.4
+                    expect (ratio[i] >= ratio[i - 1] - 1.0e-4f, "ratio monotonic at " + juce::String ((int) i));
+                expect (std::abs (ratio[i] - ratio[i - 1]) <= 0.4f + 1.0e-3f, "ratio step " + juce::String (ratio[i] - ratio[i - 1], 2));
                 expect (std::abs (thr[i] - thr[i - 1]) <= 1.5f + 1.0e-3f, "threshold step " + juce::String (thr[i] - thr[i - 1], 2));
             }
         }
@@ -283,6 +317,7 @@ public:
         {
             auto p = denseProfile();
             float lastRatio = 0.0f, lastThr = 1000.0f;
+            bool lastRide = false;
             for (int i = 0; i <= 120; ++i)
             {
                 p.dynamicsDb = 4.0f + 0.1f * (float) i;
@@ -290,13 +325,17 @@ public:
                 const float ratio = plan.get (pid::compRatio), thr = plan.get (pid::compThreshold);
                 if (i > 0)
                 {
-                    expect (ratio >= lastRatio - 1.0e-4f, "ratio at " + juce::String (p.dynamicsDb, 1));
-                    expect (ratio - lastRatio <= 0.1f, "ratio step at " + juce::String (p.dynamicsDb, 1));
+                    const bool ride = plan.on (pid::rideOn);
+                    if (ride == lastRide)
+                        expect (ratio >= lastRatio - 1.0e-4f && ratio - lastRatio <= 0.1f, "ratio at " + juce::String (p.dynamicsDb, 1));
+                    else
+                        expect (std::abs (ratio - lastRatio) <= 0.4f, "ratio at the ride edge " + juce::String (p.dynamicsDb, 1));
                     expect (thr <= lastThr + 1.0e-4f, "threshold monotonic at " + juce::String (p.dynamicsDb, 1));
                 }
                 expect (ratio >= 1.5f - 1.0e-4f && ratio <= 5.0f + 1.0e-4f);
                 lastRatio = ratio;
                 lastThr = thr;
+                lastRide = plan.on (pid::rideOn);
             }
         }
 
@@ -352,6 +391,27 @@ public:
             const auto* d = logOf (plan, dsp::ModuleId::deess);
             if (d != nullptr && d->active)
                 expectWithinAbsoluteError (d->intensity, plan.get (pid::deessRange) / 8.0f, 1.0e-4f);
+        }
+
+        beginTest ("The engine adds the measured compressor GR and the de-esser's S/vowel after processing to the log");
+        {
+            VocalSpec spec;
+            spec.seconds = 12.0;
+            spec.sibilance = 1.2f;
+            const auto r = AutoMixEngine::run (makeVocal (spec), {});
+            expect (r.ok, r.error);
+            if (r.ok)
+            {
+                const auto has = [] (const ModuleLog& l, const char* key)
+                {
+                    return std::any_of (l.result.begin(), l.result.end(), [key] (const Measured& m) { return m.key == key; });
+                };
+                const auto* c = logOf (r.plan, dsp::ModuleId::comp);
+                expect (c != nullptr && has (*c, "compGrMedian"), "compressor: measured GR");
+                const auto* d = logOf (r.plan, dsp::ModuleId::deess);
+                if (d != nullptr && d->active)
+                    expect (has (*d, "sibilanceVsVowelAfter") && has (*d, "deessGrMax"), "de-esser: S/vowel after and GR");
+            }
         }
     }
 };

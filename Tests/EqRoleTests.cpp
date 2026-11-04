@@ -195,15 +195,15 @@ public:
         };
         std::vector<Golden> goldens;
         { VocalSpec s; s.seconds = 12.0;
-          goldens.push_back ({ "clean dry", s, "Basisplan", "v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send", 100.0000f, 0, 1.2327f, { { EqRole::warmth, 0, 284.8685f, -3.0000f, 2.1000f }, { EqRole::autoMix, 0, 6451.6523f, 4.5000f, 0.7000f }, { EqRole::autoTone, 0, 1680.6729f, 4.0000f, 2.0000f }, } }); }
+          goldens.push_back ({ "clean dry", s, "Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send", 100.0000f, 0, 0.3764f, { { EqRole::warmth, 0, 284.8685f, -3.0000f, 2.1000f }, { EqRole::autoMix, 0, 6451.6523f, 4.5000f, 0.7000f }, { EqRole::autoTone, 0, 1680.6729f, 4.0000f, 2.0000f }, } }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = -5.0f; s.f0 = 120.0f;
-          goldens.push_back ({ "dark low", s, "Basisplan", "v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send", 70.0000f, 1, 1.2470f, { { EqRole::warmth, 1, 320.0000f, -3.0000f, 0.7071f }, { EqRole::autoMix, 0, 3715.8601f, 4.0000f, 0.7000f }, { EqRole::autoTone, 0, 507.9684f, -6.0000f, 4.0000f }, } }); }
+          goldens.push_back ({ "dark low", s, "Effekte trockener", "v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send", 70.0000f, 1, 0.9924f, { { EqRole::warmth, 1, 320.0000f, -3.0000f, 0.7071f }, { EqRole::autoMix, 0, 3715.8601f, 4.0000f, 0.7000f }, { EqRole::autoTone, 0, 507.9684f, -6.0000f, 4.0000f }, } }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = 4.0f; s.sibilance = 1.6f; s.f0 = 300.0f;
-          goldens.push_back ({ "bright sibilant", s, "De-Esser st\xc3\xa4rker + H\xc3\xb6hen sanfter", "v2,eq,ride,comp,deess,smooth,doubler,delay:send,reverb:send", 136.4929f, 0, 3.0204f, { { EqRole::warmth, 0, 320.0000f, -3.0000f, 4.0000f }, { EqRole::autoMix, 0, 3621.8435f, -6.0000f, 0.7000f }, { EqRole::air, 2, 5000.0000f, -1.8294f, 0.7071f }, { EqRole::autoTone, 0, 2559.9993f, -4.0000f, 4.0000f }, } }); }
+          goldens.push_back ({ "bright sibilant", s, "De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,deess,smooth,doubler,delay:send,reverb:send", 136.4929f, 0, 1.8763f, { { EqRole::warmth, 0, 320.0000f, -3.0000f, 4.0000f }, { EqRole::autoMix, 0, 3621.8435f, -6.0000f, 0.7000f }, { EqRole::air, 0, 12901.5977f, -3.5000f, 4.0000f }, { EqRole::autoTone, 0, 2559.9998f, -4.0000f, 4.0000f }, } }); }
         { VocalSpec s; s.seconds = 12.0; s.channels = 2; s.stereoDifference = 0.5f; s.rumbleDb = -26.0f;
-          goldens.push_back ({ "stereo with rumble", s, "De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,smash,deess,smooth,sat,delay:send,reverb:send", 126.5934f, 1, -0.5180f, { { EqRole::warmth, 0, 295.9588f, -3.0000f, 2.1000f }, { EqRole::autoMix, 0, 6459.2046f, 4.0000f, 0.7000f }, { EqRole::autoTone, 0, 1589.8947f, 4.0000f, 1.0500f }, } }); }
+          goldens.push_back ({ "stereo with rumble", s, "De-Esser st\xc3\xa4rker", "v2,eq,ride,comp,smash,deess,smooth,sat,delay:send,reverb:send", 126.5934f, 1, -1.2260f, { { EqRole::warmth, 0, 295.9588f, -3.0000f, 2.1000f }, { EqRole::autoMix, 0, 6459.2046f, 4.0000f, 0.7000f }, { EqRole::autoTone, 0, 1589.8947f, 4.0000f, 1.0500f }, } }); }
         { VocalSpec s; s.seconds = 12.0; s.tiltDb = -3.0f; s.f0 = 150.0f; s.sampleRate = 44100.0;
-          goldens.push_back ({ "dark 44.1 kHz", s, "Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send", 70.0000f, 0, 1.7633f, { { EqRole::warmth, 1, 320.0000f, -3.0000f, 0.7071f }, { EqRole::autoMix, 0, 3738.3115f, 4.0000f, 0.7000f }, { EqRole::autoTone, 0, 507.9684f, -2.5000f, 4.0000f }, } }); }
+          goldens.push_back ({ "dark 44.1 kHz", s, "Mehr Raum (Large Hall)", "v2,eq,ride,comp,smash,deess,smooth,sat,doubler,delay:send,reverb:send", 70.0000f, 0, 0.9487f, { { EqRole::warmth, 1, 320.0000f, -3.0000f, 0.7071f }, { EqRole::autoMix, 0, 3738.3115f, 4.0000f, 0.7000f }, { EqRole::autoTone, 0, 507.9684f, -4.0000f, 4.0000f }, } }); }
 
         const auto current = defaultValues();
         for (const auto& g : goldens)
@@ -236,6 +236,8 @@ public:
                 }
             line << " } });";
             logMessage ("    RECORD " + line);
+            logMessage (juce::String ("    COMPLOG ") + g.name + " ratio " + juce::String (r.plan.get (pid::compRatio), 2) + " thr " + juce::String (r.plan.get (pid::compThreshold), 1)
+                        + " gr " + juce::String (r.processed.compGrMedianDb, 2));
 
             const auto lowCut = planBand (r.plan, current, EqRole::lowCut);
             expect (lowCut.has_value() && lowCut->on && lowCut->bandType() == dsp::EqBandType::lowCut, "low cut band");

@@ -719,6 +719,8 @@ public:
                         + " dB, top " + juce::String (r.original.topDb, 1) + " -> " + juce::String (out.topDb, 1)
                         + " dB, rounds " + juce::String (r.iterations) + ", modules " + juce::String ((int) r.plan.activeModules().size()));
 
+            logMessage (juce::String ("    COMPLOG ") + c.name + " ratio " + juce::String (r.plan.get (pid::compRatio), 2) + " thr " + juce::String (r.plan.get (pid::compThreshold), 1)
+                        + " gr " + juce::String (out.compGrMedianDb, 2));
             expect (out.peakDb <= -0.9f, "headroom: peak " + juce::String (out.peakDb));
             const float target = AutoMixEngine::targetLufs (r.original.lufs);
             expect (out.lufs <= target + 1.0f, "not louder than the target (fair compare): " + juce::String (out.lufs));

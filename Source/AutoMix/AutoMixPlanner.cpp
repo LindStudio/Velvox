@@ -472,18 +472,17 @@ namespace vocalypse::automix
         // ================= Compressor: steady level =================
         {
             // After the rider, words sit around the rider target
-            // The ride's weight for the compressor: 0 where no ride is wanted, then growing over 3 dB of phrase spread
-            // above the ride's activation edge (spread = style's phraseHi + 2 dB) - the attack blends by it instead of
-            // jumping with the ride (Task 10 replaces it by the ride's own continuous intensity)
-            const float rideI = rideWanted ? soft (p.dynamicsDb, target.dynamics.phraseHi + 2.0f, target.dynamics.phraseHi + 5.0f) : 0.0f;
-            const float level = voice;
-            // Continuous (Task 6): the ratio from how far the phrase spread (after the ride) is from the middle of
-            // the target window - 1.5 at spread = mid, 5 at 2.5 x mid, no grid -, the threshold from the crest
+            // The ride's weight for the compressor (0 / 1 from the ride decision until Task 10 gives it a continuous
+            // intensity): after the rider, words sit around the rider target and the phrase spread is the style's top.
+            // Level, spread and attack are blended by it instead of switching
+            const float rideI = rideWanted ? 1.0f : 0.0f;
+            const float level = blend (rideI, voice, clamp (voice, -40.0f, -6.0f));   // = the ride target
+            // Continuous (Task 6): the ratio is the old calibration - how far the phrase spread is from the middle
+            // of the target window, 1.5 .. 5 - without snapping it to 1.8 / 2.5 / 3.5 / 5; the threshold from the crest
             // (peaky words: deeper). Dense material (small phrase range AND small crest) blends towards 1.5:1 / 1 dB
             const float mid = 0.5f * (target.dynamics.phraseLo + target.dynamics.phraseHi);
-            // the ride takes the spread down to its activation edge at most (a take beyond it is ridden, not compressed harder)
-            const float spread = std::min (p.dynamicsValid ? p.dynamicsDb : mid + 2.0f, target.dynamics.phraseHi + 2.0f);
-            const float wantedRatio = 1.5f + 3.5f * soft (spread / mid, 1.0f, 2.5f);
+            const float spread = blend (rideI, p.dynamicsValid ? p.dynamicsDb : mid + 2.0f, target.dynamics.phraseHi);
+            const float wantedRatio = clamp (spread / mid, 1.5f, 5.0f);
             const float belowWanted = clamp (3.0f + 0.5f * (p.crestDb - target.dynamics.crestHi), 1.5f, 8.0f);   // below the median word (RMS detector reads +3 dB for a sine)
             const float denseW = p.dynamicsValid ? soft (p.dynamicsDb, 8.0f, 5.0f) * soft (p.crestDb, 12.0f, 9.0f) : 0.0f;   // 1 = already dense
             float ratio = blend (denseW, wantedRatio, 1.5f);
@@ -524,9 +523,9 @@ namespace vocalypse::automix
                     true);
             note (M::comp, true, "phraseSpread", { { "phraseSpread", p.dynamicsValid ? p.dynamicsDb : std::nanf (""), "dB" }, { "crest", p.crestDb, "dB" },
                                                    { "expectedGr", expectedGr, "dB" }, { "dense", denseW, "" } }, 1.0f, {});
-            auto& cl = plan.logFor (M::comp);   // need: how much compression the voice calls for (not dense), intensity: the ratio's share of 1.5 .. 5
+            auto& cl = plan.logFor (M::comp);   // need: how much compression the voice calls for (not dense), intensity: the ratio's share of 1 .. 5
             cl.need = 1.0f - denseW;
-            cl.intensity = clamp ((ratio - 1.5f) / 3.5f, 0.0f, 1.0f);
+            cl.intensity = clamp ((ratio - 1.0f) / 4.0f, 0.0f, 1.0f);
         }
 
         // ================= Vocal Smash: density (parallel) =================
