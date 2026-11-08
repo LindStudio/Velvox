@@ -74,6 +74,9 @@ namespace
             if ((start / h.blockSize) % 32 == 0)
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (1);
         }
+        // The capture listens for up to 60 s of voice (Task 5): a shorter vocal ends with "analyse what is there"
+        if (am.getPhase() == AutoMixController::Phase::capturing || am.getPhase() == AutoMixController::Phase::listening)
+            am.analyseNow();
         const auto until = juce::Time::getMillisecondCounterHiRes() + timeoutSeconds * 1000.0;
         while (juce::Time::getMillisecondCounterHiRes() < until)
         {

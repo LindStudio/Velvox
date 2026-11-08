@@ -147,6 +147,79 @@ namespace vocalypse::automix
             return out;
         }
 
+        // The voice level distribution of the segments pooled: the 50 ms mid blocks of every segment (as
+        // VocalProfiler::analyse measures them), gated against the loud blocks of all of them. Percentiles of the
+        // pool, not a median of per-segment medians: with two or three segments that median is one segment's level
+        // The word / phrase dynamics likewise: the 400 ms windows of every segment (95th - 10th percentile of the pool)
+        struct PooledLevels
+        {
+            bool valid = false;
+            float median = -100.0f, low = -100.0f, high = -100.0f;
+            bool dynamicsValid = false;
+            float dynamicsDb = 0.0f;
+        };
+        PooledLevels pooledLevelsOf (const CapturedAudio& a, const std::vector<Segment>& segments)
+        {
+            PooledLevels out;
+            if (a.vocal.empty() || a.sampleRate <= 0.0)
+                return out;
+            const int block = std::max (64, (int) std::lround (0.05 * a.sampleRate));
+            const auto& L = a.vocal[0];
+            const auto& R = a.vocal.size() > 1 ? a.vocal[1] : a.vocal[0];
+            std::vector<float> blockDb;
+            std::vector<std::pair<size_t, size_t>> ranges;   // the blocks of each segment in blockDb
+            for (auto& seg : segments)
+            {
+                const size_t first = blockDb.size();
+                for (int start = seg.startSample; start + block <= seg.startSample + seg.numSamples; start += block)
+                {
+                    double sum = 0.0;
+                    for (int i = start; i < start + block; ++i)
+                    {
+                        const float m = 0.5f * (L[(size_t) i] + R[(size_t) i]);
+                        sum += (double) m * m;
+                    }
+                    blockDb.push_back (toDb (sum / block));
+                }
+                ranges.push_back ({ first, blockDb.size() });
+            }
+            if (blockDb.empty())
+                return out;
+            const float gate = std::max (-50.0f, percentile (blockDb, 0.95f) - 35.0f);
+
+            // 8 x 50 ms windows, hop 4 blocks, inside one segment (no window across a cut), mostly voice
+            std::vector<float> windowDb;
+            for (auto [first, last] : ranges)
+                for (size_t start = first; start + 8 <= last; start += 4)
+                {
+                    double pw = 0.0;
+                    int voicedCount = 0;
+                    for (size_t i = start; i < start + 8; ++i)
+                    {
+                        pw += std::pow (10.0, blockDb[i] / 10.0);
+                        voicedCount += blockDb[i] > gate ? 1 : 0;
+                    }
+                    if (voicedCount >= 6)
+                        windowDb.push_back (toDb (pw / 8.0));
+                }
+            if (windowDb.size() >= 8)
+            {
+                out.dynamicsValid = true;
+                out.dynamicsDb = percentile (windowDb, 0.95f) - percentile (windowDb, 0.10f);
+            }
+            std::vector<float> voiced;
+            for (float b : blockDb)
+                if (b > gate)
+                    voiced.push_back (b);
+            if (voiced.empty())
+                return out;
+            out.valid = true;
+            out.median = percentile (voiced, 0.5f);
+            out.low = percentile (voiced, 0.1f);
+            out.high = percentile (voiced, 0.9f);
+            return out;
+        }
+
         int framesIn (int numSamples) { return numSamples >= VocalProfiler::fftSize ? (numSamples - VocalProfiler::fftSize) / hop + 1 : 0; }
 
         //======================================================================
@@ -343,12 +416,22 @@ namespace vocalypse::automix
         if (p.loudnessRangeValid)
             p.loudnessRangeDb = wt.median ([] (auto& q) { return q.loudnessRangeDb; }, valid (&VocalProfile::loudnessRangeValid), 0.0f);
         p.crestDb = wt.median ([] (auto& q) { return q.crestDb; });
-        p.dynamicsValid = wt.majority (valid (&VocalProfile::dynamicsValid));
+        const auto pooled = pooledLevelsOf (audio, segments);
+        p.dynamicsValid = pooled.dynamicsValid;
         if (p.dynamicsValid)
-            p.dynamicsDb = wt.median ([] (auto& q) { return q.dynamicsDb; }, valid (&VocalProfile::dynamicsValid), 0.0f);
-        p.voiceRmsDb = wt.median ([] (auto& q) { return q.voiceRmsDb; }, -100.0f);
-        p.voiceRmsLowDb = wt.median ([] (auto& q) { return q.voiceRmsLowDb; }, -100.0f);
-        p.voiceRmsHighDb = wt.median ([] (auto& q) { return q.voiceRmsHighDb; }, -100.0f);
+            p.dynamicsDb = pooled.dynamicsDb;
+        if (const auto& levels = pooled; levels.valid)
+        {
+            p.voiceRmsDb = levels.median;
+            p.voiceRmsLowDb = levels.low;
+            p.voiceRmsHighDb = levels.high;
+        }
+        else
+        {
+            p.voiceRmsDb = wt.median ([] (auto& q) { return q.voiceRmsDb; }, -100.0f);
+            p.voiceRmsLowDb = wt.median ([] (auto& q) { return q.voiceRmsLowDb; }, -100.0f);
+            p.voiceRmsHighDb = wt.median ([] (auto& q) { return q.voiceRmsHighDb; }, -100.0f);
+        }
         p.snrValid = wt.majority (valid (&VocalProfile::snrValid));
         if (p.snrValid)
         {
