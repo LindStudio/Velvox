@@ -109,3 +109,34 @@ Umsetzungsplan: `docs/superpowers/plans/2026-11-04-automix-konsistenz.md`.
 | 2. und 3. Lauf hintereinander (exakt) | 4 / 16 |
 | zufälliger Vorzustand (exakt) | 0 / 16 |
 | **gesamt** | **81 / 176** |
+
+### 4.1 Checkpoint (Task 9, 2026-11-08)
+
+Gleicher Aufruf auf `8984ed9` (Tasks 1–8 gemergt) → `…\konsistenz\checkpoint`. „Start später“ jetzt mit Songposition gezählt,
+ohne Songposition nur zur Information.
+
+| Prüfung | Ausgangswert | Checkpoint |
+|---|---|---|
+| 10× dieselbe Aufnahme (exakt) | 72 / 72 | 72 / 72 |
+| Pegel −2 … +2 dB | 0 / 48 | 43 / 48 |
+| Rauschen −70 dBFS | 5 / 8 | 2 / 8 |
+| Start 3 s / 6 s später (mit Songposition) | 0 / 16 | 0 / 16 |
+| 2. und 3. Lauf hintereinander (exakt) | 4 / 16 | 16 / 16 |
+| zufälliger Vorzustand (exakt) | 0 / 16 | 16 / 16 |
+| **gesamt** | **81 / 176** | **149 / 176** |
+
+Was noch kippt:
+
+- **Pegel (5 Fehler):** `splice_mylk_dry` bei −2 / −0,5 / +1 / +2 dB: Sättigung und Smash schalten um, mit ihnen
+  De-Esser-Range (8 → 10 dB), -Threshold (−3 dB) und ein EQ-Band (0,5 dB) – Sättigung / Smash sind Task 10. Dazu
+  `vs_f3_row_spoken` −2 dB: Eingangsgain an der +24-dB-Grenze (gewollt).
+- **Rauschen (6 Fehler):** fast nur Breath Control / Room Noise schalten ein (Task 10); einzeln Delay-Mix, ein EQ-Band
+  (5,1 → 11,6 kHz, 0 dB) und Attack / Release des Kompressors.
+- **Start später (16 Fehler):** EQ-Notches springen (z. B. 6,1 kHz → 1,3 kHz), Kompressor 1,5 → 1,95 : 1 und −3 dB Threshold,
+  De-Esser-Range, dazu Delay / Doubler / Smash / Sättigung (Task 10). **Ursache zum Teil im Test:** die 8 Takes sind nur
+  12–41 s lang, ein Segment dauert 8 s. 3 bzw. 6 s später fehlen bei einem 12-s-Take bis zur Hälfte des Gesangs – das
+  ist weniger Material, nicht nur ein anderer Startpunkt. Instabil bleibt trotzdem die Resonanz-Erkennung (Notch nur,
+  wenn in ≥ 50 % der Segmente vorhanden: bei 2–3 Segmenten entscheidet ein einziges).
+
+Offene Fragen an Jakob: (1) Offset-Prüfung auf längeren Takes (≥ 60 s) messen, und die Notch-Regel für wenige Segmente
+weicher machen? (2) Der Kompressor landet bei Party · Druckvoll fast immer bei 1,5 : 1 (Ruling 22) – so gewollt?
