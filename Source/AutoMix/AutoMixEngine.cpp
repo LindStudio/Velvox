@@ -195,6 +195,83 @@ namespace vocalypse::automix
         return juce::jlimit (-24.0f, 24.0f, wanted);
     }
 
+    std::vector<int> AutoMixEngine::excerptSegments (const std::vector<Segment>& segments, double sampleRate)
+    {
+        std::vector<int> order;
+        for (int i = 0; i < (int) segments.size(); ++i)
+            order.push_back (i);
+        std::stable_sort (order.begin(), order.end(), [&segments] (int a, int b)
+        {
+            const auto& x = segments[(size_t) a];
+            const auto& y = segments[(size_t) b];
+            return x.voicedSeconds != y.voicedSeconds ? x.voicedSeconds > y.voicedSeconds : x.startSample < y.startSample;
+        });
+        std::vector<int> chosen;
+        double samples = 0.0;
+        for (int k : order)
+        {
+            if (samples >= 30.0 * sampleRate)
+                break;
+            chosen.push_back (k);
+            samples += segments[(size_t) k].numSamples;
+        }
+        std::sort (chosen.begin(), chosen.end());   // song order
+        return chosen;
+    }
+
+    CapturedAudio AutoMixEngine::excerptFor (const CapturedAudio& audio, const std::vector<Segment>& segments)
+    {
+        const auto chosen = excerptSegments (segments, audio.sampleRate);
+        CapturedAudio out;
+        out.sampleRate = audio.sampleRate;
+        out.channels = audio.channels;
+        out.clipSamples = audio.clipSamples;
+        out.stoppedEarly = audio.stoppedEarly;
+        out.hostBpm = audio.hostBpm;
+        out.vocal.resize (audio.vocal.size());
+        if (audio.hasBeat())
+            out.beat.resize (audio.beat.size());
+        if (chosen.empty())
+            return audio;
+
+        const int fade = std::max (1, (int) std::lround (0.02 * audio.sampleRate));
+        // 20 ms fades at the cuts (fade out, fade in) where two chosen segments are not neighbours in the capture. Not an
+        // overlapping crossfade: every segment keeps its length, so frame i of the excerpt is where
+        // VocalProfiler::framesForExcerpt puts it, and the excerpt is the same for the same segments
+        const auto fadeEdge = [fade] (std::vector<float>& channel, int from, int length, bool in)
+        {
+            const int f = std::min (fade, length / 2);
+            for (int i = 0; i < f; ++i)
+            {
+                const float g = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * (float) (i + 1) / (float) (f + 1));
+                const int index = in ? from + i : from + length - 1 - i;
+                channel[(size_t) index] *= g;
+            }
+        };
+        for (size_t c = 0; c < chosen.size(); ++c)
+        {
+            const auto& seg = segments[(size_t) chosen[c]];
+            const bool cutBefore = c > 0 && segments[(size_t) chosen[c - 1]].startSample + segments[(size_t) chosen[c - 1]].numSamples != seg.startSample;
+            const bool cutAfter = c + 1 < chosen.size() && seg.startSample + seg.numSamples != segments[(size_t) chosen[c + 1]].startSample;
+            const auto append = [&] (const std::vector<std::vector<float>>& from, std::vector<std::vector<float>>& to)
+            {
+                for (size_t ch = 0; ch < to.size(); ++ch)
+                {
+                    auto& dst = to[ch];
+                    const int first = (int) dst.size();
+                    dst.insert (dst.end(), from[ch].begin() + seg.startSample, from[ch].begin() + seg.startSample + seg.numSamples);
+                    if (cutBefore)
+                        fadeEdge (dst, first, seg.numSamples, true);
+                    if (cutAfter)
+                        fadeEdge (dst, first, seg.numSamples, false);
+                }
+            };
+            append (audio.vocal, out.vocal);
+            append (audio.beat, out.beat);
+        }
+        return out;
+    }
+
     RenderMetrics AutoMixEngine::renderChecked (const CapturedAudio& audio, const std::map<juce::String, float>& current,
                                                 const MixPlan& plan, const VocalProfile& profile)
     {
@@ -706,7 +783,7 @@ namespace vocalypse::automix
     }
 
     //==========================================================================
-    AutoMixResult AutoMixEngine::run (const CapturedAudio& audio, const std::map<juce::String, float>& live,
+    AutoMixResult AutoMixEngine::run (const CapturedAudio& capture, const std::map<juce::String, float>& live,
                                       const std::function<bool()>& shouldStop, const Progress& progress, const MixIntent& intent)
     {
         // The live state is read for the session parameters only; everything else starts at its default
@@ -720,21 +797,23 @@ namespace vocalypse::automix
         const auto report = [&progress] (float f, const char* german, const char* english) { if (progress) progress (f, both (german, english)); };
 
         // Level independence: measure the capture, scale a copy to the working level, analyse and plan on the copy.
-        // The plan's input gain is that scaling, so the renders below take the ORIGINAL capture and the chain applies it.
+        // The plan's input gain is that scaling, so the renders below take the ORIGINAL audio and the chain applies it.
         float wantedGainDb = 0.0f;
-        const float gainDb = workingGainDb (audio, &wantedGainDb);
-        CapturedAudio scaled;
+        const float gainDb = workingGainDb (capture, &wantedGainDb);
+        const auto scaledCopy = [gainDb] (CapturedAudio a)
         {
             const float g = juce::Decibels::decibelsToGain (gainDb);
-            scaled = audio;
-            for (auto* part : { &scaled.vocal, &scaled.beat })   // the beat scales with the voice: their relation stays as captured
+            for (auto* part : { &a.vocal, &a.beat })   // the beat scales with the voice: their relation stays as captured
                 for (auto& ch : *part)
                     for (auto& x : ch)
                         x *= g;
-        }
+            return a;
+        };
+        const auto scaled = scaledCopy (capture);
 
+        // Segmented, start-independent analysis of the whole capture (up to 2 minutes) ...
         report (0.05f, "Aufnahme wird analysiert", "Analyzing the recording");
-        r.profile = VocalProfiler::analyse (scaled, 5.0f, shouldStop, gainDb);
+        r.profile = VocalProfiler::analyseSegmented (scaled, shouldStop, &r.segmentProfiles, 5.0f, gainDb, &r.segments);
         if (stop())
         {
             r.error = both ("Abgebrochen.", "Canceled.");
@@ -746,6 +825,13 @@ namespace vocalypse::automix
                             "Too little singing captured - play the vocal track and analyze again.");
             return r;
         }
+
+        // ... the renders (dynamics, candidates, verification) play an excerpt of at most ~30 s of it. `audio` is that
+        // excerpt from here on; the S / vowel frames of the profile refer to it.
+        r.excerptSegments = excerptSegments (r.segments, capture.sampleRate);
+        const CapturedAudio audio = r.segments.empty() ? capture : excerptFor (capture, r.segments);
+        if (! r.segments.empty())
+            VocalProfiler::framesForExcerpt (r.profile, r.segmentProfiles, r.segments, r.excerptSegments);
 
         report (0.3f, "Mix wird geplant", "Planning the mix");
         r.plan = AutoMixPlanner::plan (r.profile, current, intent);
@@ -772,7 +858,7 @@ namespace vocalypse::automix
                                               { wantedGainDb > 0.0f ? both ("leise", "quiet") : both ("laut", "loud"), db (gainDb), num (workingLevelDb, 0) + " dBFS" }));
             }
         }
-        r.original = measure (scaled, gainDb);
+        r.original = measure (r.segments.empty() ? scaled : scaledCopy (audio), gainDb);
         r.original.sibilanceVsVowelDb = r.profile.sibilanceVsVowelDb;
         r.original.sibilanceValid = r.profile.sibilanceValid;
 

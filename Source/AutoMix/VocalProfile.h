@@ -27,8 +27,9 @@ namespace vocalypse::automix
         float hz = 0.0f;
         float excessDb = 0.0f;     // above the local spectrum (1/2 octave either side)
         bool strong = false;
-        // 0.6.1: share of 4 consecutive parts of the take whose own spectrum shows the peak; a
-        // resonance of the room / microphone is there all the time, a held note's partial is not
+        // Share of the take's parts that show the peak; a resonance of the room / microphone is there all the time,
+        // a held note's partial is not. analyse(): 4 consecutive parts of the audio. analyseSegmented(): the share of
+        // the segments in which the resonance is present (kept from 50 %).
         float persistence = 0.0f;
         bool sustained = false;    // persistence >= 0.75 and narrow (clearly above the bands 1/6 octave away)
         float q = 12.0f;           // estimated width for a notch, 10 (two bands wide) .. 16 (one band)
@@ -155,6 +156,15 @@ namespace vocalypse::automix
         }
     };
 
+    // A stretch of the capture that is analysed on its own (start-independent: the same audio gives the same
+    // segments wherever the capture began)
+    struct Segment
+    {
+        int startSample = 0, numSamples = 0;
+        double startPpq = -1.0;      // aligned segment start in quarter notes, -1 without song position
+        float voicedSeconds = 0.0f;
+    };
+
     class VocalProfiler
     {
     public:
@@ -170,6 +180,32 @@ namespace vocalypse::automix
         // capture; everything else is measured on `audio` as it is.
         static VocalProfile analyse (const CapturedAudio& audio, float minVoicedSeconds = 5.0f,
                                      const std::function<bool()>& shouldStop = {}, float scaleDb = 0.0f);
+
+        // The capture cut into segments. With a song position and tempo: 4 bars (16 quarter notes) aligned to multiples
+        // of 16 quarter notes (tempo outside 80 .. 160 BPM: 8 bars or 2 bars so a segment lasts 6 .. 12 s), else 8 s
+        // from the first stored sample. Segments with less than 2 s of voice are skipped; when at least 3 segments
+        // are covered completely, the ones cut off by the start or the end of the capture are skipped, too.
+        // Voice = 50 ms blocks within 35 dB of the capture's loud blocks (relative only).
+        static std::vector<Segment> segmentsOf (const CapturedAudio& audio);
+
+        // Analyses every segment on its own and aggregates: scalar features = voiced-time-weighted median over the
+        // segments, long-term spectrum and third octaves = power mean over all voiced frames, resonances kept when
+        // present in >= 50 % of the segments (persistence = that share, `sustained` needs >= 3 segments), S / vowel
+        // frames of all segments (indexed over the segments laid end to end). Deterministic.
+        // `segmentProfiles` receives the profile of every segment; `segmentsOut` the segments. `scaleDb` like analyse().
+        // Without a usable segment (less than 2 s of voice) it is analyse() of the whole capture.
+        static VocalProfile analyseSegmented (const CapturedAudio& audio, const std::function<bool()>& shouldStop = {},
+                                              std::vector<VocalProfile>* segmentProfiles = nullptr,
+                                              float minVoicedSeconds = 5.0f, float scaleDb = 0.0f,
+                                              std::vector<Segment>* segmentsOut = nullptr);
+
+        // S / vowel frame lists of `profile` for audio made of the segments `chosen` (indices into `segments`) laid
+        // end to end - the layout of AutoMixEngine::excerptFor
+        static void framesForExcerpt (VocalProfile& profile, const std::vector<VocalProfile>& segmentProfiles,
+                                      const std::vector<Segment>& segments, const std::vector<int>& chosen);
+
+        // Fills the issues of `profile` from its measurements (clearing none: call on an empty list)
+        static void buildIssues (VocalProfile& profile, float scaleDb);
 
         // Gated integrated loudness (ITU-R BS.1770-4) of a multichannel signal
         static float integratedLufs (const std::vector<const float*>& channels, int numSamples, double sampleRate);

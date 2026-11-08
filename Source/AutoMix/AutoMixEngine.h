@@ -60,6 +60,10 @@ namespace vocalypse::automix
         int chosenCandidate = 0;
         double seconds = 0.0;                    // analysis + all renders
         MixIntent intent;                        // 0.8: the genre / vibe it mixed for
+        std::vector<Segment> segments;           // the analysed segments of the capture
+        std::vector<VocalProfile> segmentProfiles;   // the profile of each segment (the profile aggregates them)
+        std::vector<int> excerptSegments;        // the segments the renders played, in song order (indices into `segments`)
+        juce::String storeNote;                  // set when the analysis JSON could not be written
     };
 
     // analyse -> plan -> render -> measure -> adjust (max. 4 rounds) -> set the
@@ -82,6 +86,12 @@ namespace vocalypse::automix
 
         // `scaleDb`: `audio` is the capture scaled by this gain; lufs, peak and clipping describe the capture
         static RenderMetrics measure (const CapturedAudio& audio, float scaleDb = 0.0f);
+
+        // The audio the renders play: the segments ranked by voiced seconds (ties: the earlier one), taken until 30 s
+        // are reached, laid end to end in song order with 20 ms fades where two of them are not neighbours in the
+        // capture. The length of every segment is kept. Without segments: the capture itself.
+        static std::vector<int> excerptSegments (const std::vector<Segment>& segments, double sampleRate);
+        static CapturedAudio excerptFor (const CapturedAudio& audio, const std::vector<Segment>& segments);
 
         // The input gain that brings the capture to workingLevelDb: working level minus the median RMS of the voiced
         // 50 ms blocks (mid signal; a block counts as voiced from 35 dB under the loud blocks - relative only, so

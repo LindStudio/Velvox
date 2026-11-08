@@ -282,7 +282,7 @@ namespace vocalypse::test
     //==========================================================================
     // Running the auto mix like the plugin
 
-    bool captureLikePlugin (const CapturedAudio& file, double startSeconds, CapturedAudio& captured)
+    bool captureLikePlugin (const CapturedAudio& file, double startSeconds, CapturedAudio& captured, bool withSongPosition)
     {
         using automix::CaptureBuffer;
         const int channels = juce::jlimit (1, 2, std::min (file.channels, (int) file.vocal.size()));
@@ -295,7 +295,9 @@ namespace vocalypse::test
         {
             const int n = std::min (512, total - start);
             std::array<const float*, 2> p { file.vocal[0].data() + start, file.vocal[(size_t) channels - 1].data() + start };
-            capture.push (p.data(), channels, nullptr, 0, n, true);
+            // Song position like a host at 120 BPM that started at 0 with the file: ppq = file time * 2
+            const double ppq = (double) start / file.sampleRate * 2.0;
+            capture.push (p.data(), channels, nullptr, 0, n, true, withSongPosition ? 120.0 : 0.0, withSongPosition ? ppq : -1.0);
         }
         if (capture.getState() != CaptureBuffer::State::complete && ! capture.finishNow())
             return false;
@@ -306,7 +308,6 @@ namespace vocalypse::test
     automix::AutoMixResult mixFile (const CapturedAudio& file, double startSeconds, bool withSongPosition,
                                     const std::map<juce::String, float>& prior, const automix::MixIntent& intent)
     {
-        juce::ignoreUnused (withSongPosition);   // Task 5 gives the capture a song position input and wires it here
         if (file.vocal.empty() || file.numSamples() <= 0)
         {
             automix::AutoMixResult r;
@@ -314,7 +315,7 @@ namespace vocalypse::test
             return r;
         }
         CapturedAudio captured;
-        if (! captureLikePlugin (file, startSeconds, captured))
+        if (! captureLikePlugin (file, startSeconds, captured, withSongPosition))
         {
             automix::AutoMixResult r;
             r.error = "not enough signal";
@@ -357,6 +358,7 @@ namespace vocalypse::test
             int differing = 0;
             juce::StringArray flips, over;
             bool pass = true;
+            bool info = false;   // reported, not counted (offsets without a song position)
         };
 
         juce::String expandEnvironment (juce::String text)
@@ -401,9 +403,11 @@ namespace vocalypse::test
             const auto name = takeFile.getFileNameWithoutExtension();
             const Tolerances tol;
 
+            bool informational = false;
             const auto add = [&] (const juce::String& variant, Check check, const PlanDiff& d)
             {
                 Row r;
+                r.info = informational;
                 r.take = name;
                 r.variant = variant;
                 r.check = check == Check::exact ? "exact" : check == Check::gainShift ? "gainShift" : "perturbation";
@@ -440,9 +444,10 @@ namespace vocalypse::test
 
             // One variant: mix, compare with the reference (or another fingerprint)
             const auto variant = [&] (const juce::String& label, Check check, float shiftDb, const CapturedAudio& audio, double start,
-                                      const std::map<juce::String, float>& prior, const PlanFingerprint& against) -> std::optional<automix::AutoMixResult>
+                                      const std::map<juce::String, float>& prior, const PlanFingerprint& against,
+                                      bool withPosition = false) -> std::optional<automix::AutoMixResult>
             {
-                auto r = mixFile (audio, start, false, prior, intent);
+                auto r = mixFile (audio, start, withPosition, prior, intent);
                 if (! r.ok)
                 {
                     fail (label, check, "auto mix failed: " + r.error);
@@ -476,9 +481,24 @@ namespace vocalypse::test
                 variant ("noise-70", Check::perturbation, 0.0f, noisy, 0.0, defaults, refFp);
             }
 
-            // Start points without a song position (the with-position variants follow with Task 5)
-            for (double start : { 3.0, 6.0 })
-                variant ("offset" + juce::String ((int) start), Check::perturbation, 0.0f, *file, start, defaults, refFp);
+            // Start points. With a song position (the reference runs with the same position from 0) the segments are
+            // the same wherever the capture began; without one the segments follow the first stored sample, so these
+            // rows are reported (informational), not counted.
+            {
+                const auto positioned = mixFile (*file, 0.0, true, defaults, intent);
+                if (positioned.ok)
+                {
+                    const auto positionedFp = fingerprint (positioned.plan, defaults);
+                    for (double start : { 3.0, 6.0 })
+                        variant ("offsetPos" + juce::String ((int) start), Check::perturbation, 0.0f, *file, start, defaults, positionedFp, true);
+                }
+                else
+                    fail ("offsetPos", Check::perturbation, "auto mix with song position failed: " + positioned.error);
+                informational = true;
+                for (double start : { 3.0, 6.0 })
+                    variant ("offsetNoPos" + juce::String ((int) start), Check::perturbation, 0.0f, *file, start, defaults, refFp);
+                informational = false;
+            }
 
             // Sequential: every run starts from the plugin state the previous one left
             {
@@ -542,7 +562,7 @@ namespace vocalypse::test
                     perTake[(size_t) i] = runTake (files[i], intent, repeats);
                     int failed = 0;
                     for (auto& r : perTake[(size_t) i])
-                        failed += r.pass ? 0 : 1;
+                        failed += r.pass || r.info ? 0 : 1;
                     const std::lock_guard<std::mutex> lock (printLock);
                     std::printf ("[%d/%d] %s: %d checks, %d failed\n", i + 1, files.size(), files[i].getFileName().toRawUTF8(),
                                  (int) perTake[(size_t) i].size(), failed);
@@ -561,8 +581,11 @@ namespace vocalypse::test
             {
                 csv << csvField (r.take) << "," << csvField (r.variant) << "," << r.check << "," << r.differing << ","
                     << csvField (r.flips.joinIntoString ("; ")) << "," << csvField (r.over.joinIntoString ("; ")) << "," << (r.pass ? 1 : 0) << "\n";
-                ++total;
-                failed += r.pass ? 0 : 1;
+                if (! r.info)
+                {
+                    ++total;
+                    failed += r.pass ? 0 : 1;
+                }
                 const auto g = groupOf (r.variant);
                 if (std::find (groups.begin(), groups.end(), g) == groups.end())
                     groups.push_back (g);
@@ -595,6 +618,7 @@ namespace vocalypse::test
             }
             summary << "  " << gp << "/" << gt << "\n";
         }
+        summary << "\n(offsetNoPos: no song position - informational, not counted)\n";
         summary << "\n" << (total - failed) << " of " << total << " checks passed" << (failed == 0 ? "" : " - FAILED") << "\n";
 
         const bool written = outDir.getChildFile ("consistency.csv").replaceWithText (csv, false, false, "\n")

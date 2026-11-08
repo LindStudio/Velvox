@@ -6,6 +6,7 @@
 #include "UI/EqPanel.h"
 #include "UI/MascotView.h"
 #include "AutoMix/AutoMixEngine.h"
+#include "AutoMix/AnalysisStore.h"
 #include "SyntheticVocal.h"
 #include "PopScan.h"
 #include "FxLab.h"
@@ -246,6 +247,7 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         rep << "  " << id << " = " << juce::String (v, 2) << "\n";
 
     outDir.getChildFile (base + "_report.txt").replaceWithText (rep);
+    outDir.getChildFile (base + "_analysis.json").replaceWithText (vocalypse::automix::AnalysisStore::toJson (r, captured), false, false, "\n");
     if (row == nullptr)
         std::printf ("%s\n", rep.toRawUTF8());
     return 0;
@@ -686,6 +688,9 @@ static int renderSnapshot (const juce::File& file, const juce::String& presetNam
 int main (int argc, char* argv[])
 {
     juce::ScopedJuceInitialiser_GUI juceInit; // message manager for APVTS / parameter listeners
+
+    // Tests and the command line never write into the user's real analysis store
+    vocalypse::automix::AnalysisStore::setDirectory (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("VocalypseTests-AutoMix"));
 
     if (argc >= 2 && juce::String (argv[1]) == "--sizes")
     {

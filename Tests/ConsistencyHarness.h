@@ -70,11 +70,13 @@ namespace vocalypse::test
 
     // Plays `file` from `startSeconds` through the CaptureBuffer like the plugin and copies the capture out.
     // False when there was not enough signal.
-    bool captureLikePlugin (const automix::CapturedAudio& file, double startSeconds, automix::CapturedAudio& captured);
+    // `withSongPosition`: the host reports 120 BPM and the song position (the file starts at ppq 0, so a start at 6 s is ppq 12).
+    bool captureLikePlugin (const automix::CapturedAudio& file, double startSeconds, automix::CapturedAudio& captured,
+                            bool withSongPosition = false);
 
     // Simulates the plugin: plays `file` from `startSeconds` through CaptureBuffer in 512-sample blocks and runs
-    // the auto mix from the `prior` parameter values. `withSongPosition` (120 BPM, ppq = file time * 2) has no
-    // effect yet: the capture has no song position input (Task 5 wires it).
+    // the auto mix from the `prior` parameter values. `withSongPosition` (120 BPM, ppq = file time * 2) is fed
+    // to the capture like a host does (Task 5).
     automix::AutoMixResult mixFile (const automix::CapturedAudio& file, double startSeconds, bool withSongPosition,
                                     const std::map<juce::String, float>& prior, const automix::MixIntent&);
 

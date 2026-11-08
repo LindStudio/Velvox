@@ -363,9 +363,8 @@ namespace vocalypse::ui
 
     juce::String AnalysisOverlay::introText()
     {
-        return i18n::format (tr ("Spiel deinen Song ab, am besten mit der unbearbeiteten Vocal. VOCALYPSE hört {0} s Gesang zu und stellt dann jedes Modul auf deine Stimme ein.",
-                                 "Play your song, ideally with the unprocessed vocal. VOCALYPSE listens to {0} s of singing and then sets every module for your voice."),
-                             { juce::String (juce::roundToInt (automix::CaptureConfig {}.targetVoicedSeconds)) });
+        return tr ("Spiel die Vocal einmal ganz ab – VOCALYPSE hört bis zu 2 Minuten zu.",
+                   "Play the whole vocal once – VOCALYPSE listens for up to 2 minutes.");
     }
 
     juce::String AnalysisOverlay::beatHelpText()

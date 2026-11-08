@@ -481,7 +481,7 @@ void VocalypseAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // is armed - a bounded, pre-allocated buffer, nothing else on this thread
     autoMix.push (main.getArrayOfReadPointers(), vocalChannels,
                   hasSidechain ? sidechain.getArrayOfReadPointers() : nullptr, hasSidechain ? sidechain.getNumChannels() : 0,
-                  main.getNumSamples(), settings.hostPlaying, settings.hostBpm);
+                  main.getNumSamples(), settings.hostPlaying, settings.hostBpm, settings.hostPpq);
 
     chain.process (main, std::min (mainIn, main.getNumChannels()), settings, hasSidechain ? &sidechain : nullptr);
 }

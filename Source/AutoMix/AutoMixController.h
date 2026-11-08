@@ -63,9 +63,9 @@ namespace vocalypse::automix
 
         // ---- audio thread
         void push (const float* const* vocal, int vocalChannels, const float* const* beat, int beatChannels,
-                   int numSamples, bool hostPlaying, double bpm = 0.0) noexcept
+                   int numSamples, bool hostPlaying, double bpm = 0.0, double ppq = -1.0) noexcept
         {
-            capture.push (vocal, vocalChannels, beat, beatChannels, numSamples, hostPlaying, bpm);
+            capture.push (vocal, vocalChannels, beat, beatChannels, numSamples, hostPlaying, bpm, ppq);
         }
 
         struct Status
