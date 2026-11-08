@@ -567,13 +567,11 @@ public:
             if (reference.ok && later.ok)
             {
                 const auto d = compare (fingerprint (reference.plan, prior), fingerprint (later.plan, prior), Check::perturbation, 0.0f, Tolerances {});
-                // The candidate search ("drier effects" scales the echo / reverb mix by 0.65) can tip on a near tie of its
-                // scores; that is the search's own consistency (Task 8), not the analysis'
-                juce::StringArray others;
-                for (auto& o : d.overTolerance)
-                    if (! o.startsWith ("delayMix") && ! o.startsWith ("reverbMix"))
-                        others.add (o);
-                expect (others.isEmpty(), "perturbation: " + others.joinIntoString ("; ") + " (" + juce::String (d.differing) + " differences)");
+                // Every value, the echo / reverb mix included: since Task 8 the candidate search keeps its favourite unless
+                // another beats it by a margin, so a near tie no longer tips "drier effects" (Ruling 19)
+                const juce::StringArray over (d.overTolerance.data(), (int) d.overTolerance.size());
+                expect (d.pass, "perturbation: " + over.joinIntoString ("; ") + " (" + juce::String (d.differing) + " differences)");
+                expectEquals (later.chosenCandidate, reference.chosenCandidate, "same chosen candidate from 0 s and 6 s");
                 // the analysis itself: the aggregated profile does not depend on where the capture began
                 const auto& pa = reference.profile;
                 const auto& pb = later.profile;

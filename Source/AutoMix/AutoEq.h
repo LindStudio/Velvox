@@ -66,6 +66,7 @@ namespace vocalypse::automix::autoeq
         const VocalProfile* profile = nullptr;
         std::vector<dsp::EqBand> fixed;   // bands that stay (user / Vocal Check bands, the planned low cut)
         bool conservative = false;
+        float caution = -1.0f;            // 0 .. 1 (MixPlan::caution); < 0 = unset: 1 when conservative, else 0
         // 0 .. 1 weights (Task 7, continuous decisions): 0 = not the case, 1 = clearly the case. A bool still works
         // (false = 0, true = 1); the planner fills them with noisyWeight / sibilantWeight / harshWeight.
         float noisy = 0.0f, sibilant = 0.0f, harsh = 0.0f;
@@ -104,7 +105,8 @@ namespace vocalypse::automix::autoeq
     // The thirds the curve fit and the objective look at: from 160 Hz (and 1.3 x the lowest sung note) to 12.9 kHz
     std::pair<int, int> fitRange (const VocalProfile& profile);
     // The target lift per third where the beat on the sidechain covers the voice (1 - 5 kHz, 0 .. 2.5 dB)
-    std::array<float, numThirds> unmaskOf (const VocalProfile& profile, bool conservative);
+    // `caution` 0 .. 1 (MixPlan::caution; a bool still works): the lift shrinks to 0.6 x at 1
+    std::array<float, numThirds> unmaskOf (const VocalProfile& profile, float caution);
 
     // The title of a move: "Dröhnen -3,5 dB bei 340 Hz", "Brillanz +3,0 dB (Shelf 10 kHz)", "Resonanz 1,8 kHz -6,0 dB (schmal, Q 12)"
     juce::String titleOf (dsp::EqRole role, const dsp::EqBand& band);
@@ -125,5 +127,7 @@ namespace vocalypse::automix::autoeq
     };
     Masking maskingOf (const VocalProfile& profile);
     // The lift for a masking of `excessDb` (0 below unmaskFromDb), 0.5 .. 2.5 dB in 0.5 dB steps
-    float unmaskGainDb (float excessDb, bool conservative) noexcept;
+    float unmaskGainDb (float excessDb, float caution) noexcept;
+    // The caution of a context: Context::caution, or 1 / 0 from Context::conservative when it is unset
+    float cautionOf (const Context& ctx) noexcept;
 }

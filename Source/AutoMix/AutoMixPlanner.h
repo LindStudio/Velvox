@@ -39,7 +39,10 @@ namespace vocalypse::automix
         dsp::Routing routing = dsp::Routing::legacyDefaults();   // the planner's chain keeps delay / reverb sends
         std::vector<Decision> decisions;
         std::vector<juce::String> notes;      // things left alone and why
-        bool conservative = false;            // little or unreliable material: gentle settings only
+        bool conservative = false;            // little or unreliable material: gentle settings only (caution >= 0.5)
+        // 0 .. 1: how gentle the EQ / compressor / de-esser values are. 1 without enough material or at <= 6 s of
+        // singing, 0 from 10 s, smooth in between (Ruling 19: no hard flip at 8 s when a start offset costs a segment)
+        float caution = 0.0f;
         std::vector<ModuleLog> log;           // structured decision log: one entry per module the planner decided on
 
         // The entry of a module instance (created when missing)

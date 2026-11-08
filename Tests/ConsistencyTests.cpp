@@ -373,6 +373,9 @@ public:
             }
             expectEquals (moved, 0, "values moved by a shift of " + juce::String (shift) + " dB");
             expect (r.plan.routing.toString() == reference.plan.routing.toString(), "routing, shift " + juce::String (shift));
+            // Ruling 14: the variant search (Task 8) picks the same candidate at every level
+            expectEquals ((int) r.candidates.size(), (int) reference.candidates.size(), "candidates, shift " + juce::String (shift));
+            expectEquals (r.chosenCandidate, reference.chosenCandidate, "same chosen candidate, shift " + juce::String (shift));
         }
 
         // A take whose median voiced block RMS is `medianDb` (the brief's "-40 dBFS take"): the reference scaled to it

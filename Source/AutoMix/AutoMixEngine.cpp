@@ -968,7 +968,7 @@ namespace vocalypse::automix
             {
                 auto state = autoEqState (plan, current, r.profile);
                 state.context.target = &mixTarget;
-                state.context.unmaskDb = autoeq::unmaskOf (r.profile, plan.conservative);
+                state.context.unmaskDb = autoeq::unmaskOf (r.profile, plan.caution);
                 // S sounds still too strong after the chain: no more lift up there than on a sibilant take
                 if (m.sibilanceValid)   // Task 7: a weight, 0 at the target maximum, 1 two dB above
                     state.context.sibilant = std::max (state.context.sibilant, soft (m.sibilanceVsVowelDb, mixTarget.sibilanceMax, mixTarget.sibilanceMax + 2.0f));

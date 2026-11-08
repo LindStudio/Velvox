@@ -166,7 +166,7 @@ namespace vocalypse::automix::autoeq
         return { lo, hi };
     }
 
-    std::array<float, numThirds> unmaskOf (const VocalProfile& p, bool conservative)
+    std::array<float, numThirds> unmaskOf (const VocalProfile& p, float caution)
     {
         // Where the beat covers the voice (sidechain, at the output level), 1 - 5 kHz: the target rises there
         std::array<float, numThirds> u {};
@@ -186,7 +186,7 @@ namespace vocalypse::automix::autoeq
                     sum += p.beatOverVocalDb[(size_t) b];
                     ++n;
                 }
-            u[(size_t) k] = n > 0 ? unmaskGainDb (sum / (float) n - shift, conservative) : 0.0f;
+            u[(size_t) k] = n > 0 ? unmaskGainDb (sum / (float) n - shift, caution) : 0.0f;
         }
         return u;
     }
@@ -234,7 +234,7 @@ namespace vocalypse::automix::autoeq
         std::pair<float, float> limitsOf (const Context& ctx, float centre, EqBandType type, const std::vector<Move>& moves)
         {
             const auto& p = *ctx.profile;
-            const float scale = ctx.conservative ? 0.6f : 1.0f;
+            const float scale = 1.0f - 0.4f * cautionOf (ctx);
             // Every restriction is a weight 0 .. 1 of the measurement behind it (Task 7): the limit shrinks
             // continuously instead of dropping to 0 at one number
             const float highVoiceW = p.pitchValid ? soft (p.f0LowHz, 250.0f, 280.0f) * soft (centre, 300.0f, 260.0f) : 0.0f;
@@ -453,7 +453,7 @@ namespace vocalypse::automix::autoeq
         if (! p.enoughMaterial || p.spectrumDb.size() != (size_t) VocalProfiler::numBands)
             return moves;
 
-        const float scale = ctx.conservative ? 0.6f : 1.0f;
+        const float scale = 1.0f - 0.4f * cautionOf (ctx);
         const auto bandsWithout = [&] (EqRole skip)
         {
             auto bands = ctx.fixed;
@@ -635,11 +635,16 @@ namespace vocalypse::automix::autoeq
         return m;
     }
 
-    float unmaskGainDb (float excessDb, bool conservative) noexcept
+    float cautionOf (const Context& ctx) noexcept
+    {
+        return ctx.caution >= 0.0f ? juce::jlimit (0.0f, 1.0f, ctx.caution) : (ctx.conservative ? 1.0f : 0.0f);
+    }
+
+    float unmaskGainDb (float excessDb, float caution) noexcept
     {
         if (excessDb <= unmaskFromDb)
             return 0.0f;
-        const float g = juce::jlimit (0.5f, 2.5f, 0.3f * (excessDb - unmaskFromDb) * (conservative ? 0.6f : 1.0f));
+        const float g = juce::jlimit (0.5f, 2.5f, 0.3f * (excessDb - unmaskFromDb) * (1.0f - 0.4f * juce::jlimit (0.0f, 1.0f, caution)));
         return std::max (0.5f, roundHalf (g));
     }
 

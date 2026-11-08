@@ -181,6 +181,7 @@ namespace vocalypse::automix
         auto& ctx = s.context;
         ctx.profile = &p;
         ctx.conservative = plan.conservative;
+        ctx.caution = plan.caution;
         // Soft weights of the measurements (Task 7), not the profile's yes / no issues: nothing flips at one number
         ctx.noisy = autoeq::noisyWeight (p);
         ctx.sibilant = autoeq::sibilantWeight (p);
@@ -254,6 +255,7 @@ namespace vocalypse::automix
             if (sessionParameters().count (id) == 0)
                 plan.values[id] = value;
         plan.routing = standardRouting();
+        plan.caution = p.enoughMaterial ? soft (p.voicedSeconds, 10.0f, 6.0f) : 1.0f;
         plan.conservative = ! p.enoughMaterial || p.voicedSeconds < 8.0f;
 
         const auto cur = [&current] (const char* id, float fallback = 0.0f)
@@ -396,7 +398,7 @@ namespace vocalypse::automix
         // the model: a resonance Vocal Check already cut is not cut twice.
         auto eqContext = autoEqState (plan, current, p, true).context;
         eqContext.target = &target;
-        eqContext.unmaskDb = autoeq::unmaskOf (p, plan.conservative);
+        eqContext.unmaskDb = autoeq::unmaskOf (p, plan.caution);
         const auto eqMoves = autoeq::planCurveMoves (eqContext);
         const auto moveFor = [&eqMoves] (dsp::EqRole role) -> const autoeq::Move*
         {
@@ -505,7 +507,9 @@ namespace vocalypse::automix
             const float denseW = p.dynamicsValid ? soft (p.dynamicsDb, 8.0f, 5.0f) * soft (p.crestDb, 12.0f, 9.0f) : 0.0f;   // 1 = already dense
             float ratio = blend (denseW, wantedRatio, 1.5f);
             float below = blend (denseW, belowWanted, 1.0f);
-            if (plan.conservative) { ratio = std::min (ratio, 2.5f); below = std::min (below, 3.0f); }
+            // little material: the caps close in continuously (5:1 / 8 dB = no cap at caution 0, 2.5:1 / 3 dB at 1)
+            ratio = std::min (ratio, blend (plan.caution, 5.0f, 2.5f));
+            below = std::min (below, blend (plan.caution, 8.0f, 3.0f));
 
             const float threshold = clamp (level + 3.0f - below, -60.0f, -6.0f);
             const float expectedGr = below * (1.0f - 1.0f / ratio);
