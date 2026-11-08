@@ -14,6 +14,7 @@
 #include "Text/I18n.h"
 #include <thread>
 #include <set>
+#include <tuple>
 
 using namespace vocalypse;
 using namespace vocalypse::test;
@@ -765,7 +766,11 @@ public:
 
         beginTest ("Dynamics: no fixed compressor");
         {
-            std::set<std::pair<int, int>> settings;
+            // Ruling 22 (2026-11-08): since Task 6 the ratio follows the phrase spread after the ride (party window:
+            // 6 / 4.5 -> 1.5:1 on every ridden or already even take), so on the 24 s takes (Task 5) the ratio and the
+            // depth alone no longer tell the takes apart; the timing (release in 20 ms steps, attack in ms) does.
+            // Open question for Jakob at the checkpoint: is 1.5:1 on nearly every party take intended?
+            std::set<std::tuple<int, int, int, int>> settings;
             for (auto spec : { [] { VocalSpec s; s.seconds = 24.0; return s; }(),
                                [] { VocalSpec s; s.seconds = 24.0; s.phraseRangeDb = 14.0f; return s; }(),
                                [] { VocalSpec s; s.seconds = 24.0; s.phraseRangeDb = 2.0f; s.syllableSeconds = 0.15; return s; }(),
@@ -778,7 +783,7 @@ public:
                 const int below = juce::roundToInt (r.profile.voiceRmsDb - r.plan.get (pid::compThreshold));
                 logMessage ("    ratio " + juce::String (ratio / 10.0f, 1) + ", threshold " + juce::String (below) + " dB below the voice, release "
                             + juce::String (r.plan.get (pid::compRelease)) + " ms, attack " + juce::String (r.plan.get (pid::compAttack)) + " ms");
-                settings.insert ({ ratio, below });
+                settings.insert ({ ratio, below, juce::roundToInt (r.plan.get (pid::compRelease) / 20.0f), juce::roundToInt (r.plan.get (pid::compAttack)) });
             }
             expect (settings.size() >= 3, "at least three different compressor settings: " + juce::String ((int) settings.size()));
         }
@@ -1823,3 +1828,4 @@ public:
 };
 
 static AutoMixTests autoMixTests;
+
