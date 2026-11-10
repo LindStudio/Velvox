@@ -28,20 +28,30 @@ einzeln verkaufen, später ein Hub, der alle verbindet. Plan-Seite: https://clau
 - Hören: Aus / S-Band (der Detektor-Bereich) / Delta (was entfernt wird). Dazu Mix, Output und Bypass (Host-Bypass,
   20 ms Überblendung, Latenz bleibt gleich).
 
-## AUTO (`EmberAuto.*`)
+## AUTO (`EmberAuto.*`) – subtil (Jakob 2026-11-10: „nur subtil die S-Laute wegnehmen, nicht die Stimme zerstören“)
 1. Klick auf AUTO oder auf Ember: Die Pausen werden übersprungen, er nimmt bis zu 12 s Gesang auf (höchstens 30 s,
    FERTIG geht ab 3 s).
-2. Analyse im Hintergrund-Thread: Die Frames werden in S-Laute (Höhen über 4 kHz überwiegen) und Vokale getrennt.
-   Die S-Spitze wird zwischen 4 und 12 kHz gesucht, die Frequenz liegt bei 70 % davon (begrenzt auf 4,5–9 kHz).
-3. Threshold durch **Ausprobieren**: Die Engine rendert den Take, eine binäre Suche trifft genau den Wert, bei dem die
-   S-Laute 5 dB Energie verlieren. Verlieren die Vokale mehr als 0,3 dB, wird der Threshold angehoben. Die Range wird
-   aus dem 95-%-Wert der S-Reduktion plus 2 dB bestimmt (4–12 dB).
-4. Ember zeigt „Passt!“, die Statuszeile sagt, was eingestellt wurde.
+2. Analyse im Hintergrund-Thread: Die Frames werden getrennt in S-Laute (Höhen über 4 kHz überwiegen), Vokale und
+   gemischte Frames (S direkt am Vokal). Die S-Spitze wird zwischen 4 und 12 kHz gesucht, die Frequenz liegt bei 80 %
+   davon (begrenzt auf 5–9,5 kHz), damit die Präsenz (2–5 kHz) unberührt bleibt.
+3. Ziel je nach Schärfe: Wie laut sind die S gegenüber den Vokalen? Weiche S (14 dB darunter) verlieren 1,5 dB,
+   scharfe S (2 dB darunter) 3,5 dB.
+4. Threshold durch **Ausprobieren**: Die Engine rendert den Take mit einer Range von 6 dB, eine binäre Suche trifft das
+   Ziel. Verlieren die Vokale mehr als 0,1 dB oder die gemischten Frames mehr als 0,5 dB, wird der Threshold angehoben.
+   Range = 90-%-Wert der S-Reduktion plus 1 dB (3–6 dB), Release 35 ms (lässt vor dem nächsten Vokal los).
+5. Defaults ohne AUTO: Range 5 dB; Stimme Tief / Mittel / Hoch = 5 / 6,5 / 8 kHz.
 
-Echte Takes (2026-11-10, 11 SONOVOX-Leads und 6 VocalSet-Takes): alle 17 eingestellt, Frequenz 4,5–7,65 kHz,
-S-Laute −4,1 bis −5,0 dB, Vokale höchstens −0,1 dB.
+Echte Takes (17 Takes, 2026-11-10): Frequenz 5–8,7 kHz, S-Laute −1,2 bis −2,6 dB (Energie), Range 3–5 dB,
+Vokale höchstens −0,02 dB, S-nahe Vokalteile höchstens −0,45 dB. Gerendert: unter 2 kHz 0,00 dB, 2–4 kHz höchstens
+−0,09 dB, größte Reduktion 3–5 dB (vorher 9–11 dB).
 
 ## Maskottchen (`EmberMascot.*`)
+Ruhig (Jakob: „springt sehr viel herum“): Eine neue Stimmung muss 0,25 s anliegen, jede Stimmung bleibt mindestens
+0,9 s, das Maskottchen bekommt die geglättete Reduktion. Standbilder bewegen sich nur leicht (Atmen, sanftes Wiegen).
+Clips: `<state>_in_###` → `<state>_###` (Schleife) → `<state>_out_###`; ein Wechsel spielt out → in → Schleife,
+ohne Clips wird 0,35 s überblendet. 12 fps (`mascot.json`). Animations-Anleitung für Jakob:
+Drive `Plugins/01 EMBER De-Esser/ANLEITUNG_Animation.md`, Werkzeug `tools/mascot/video_to_frames.py`.
+
 Stimmungen: idle, singing, snapping, fire (Stärke = Gain Reduction), overheated (über 9 dB für 0,3 s, „Klingt
 gelispelt!“), sleeping (Bypass), listening (AUTO hört zu), proud (AUTO fertig). Fehlen Bilder für eine Stimmung,
 zeichnet das Plugin einen Vektor-Teufel als Platzhalter. Bilder: `Products/Ember/Mascot/frames/<stimmung>_001.png …`
@@ -58,7 +68,8 @@ zeichnet das Plugin einen Vektor-Teufel als Platzhalter. Bilder: `Products/Ember
 - Installieren (FL Studio vorher schließen): `.\scripts\install-vst3.ps1 -Product Ember` → `EMBER De-Esser.vst3`.
 
 ## Offen
-- Jakobs Hörtest: `%USERPROFILE%\dev\velvox-bench\2026-11-10\ember_hoertest\` (Original / Ember / Delta, 6 Takes).
+- Jakobs Hörtest (subtil): Drive `Plugins/01 EMBER De-Esser/Hoertest/2026-11-10_subtil` (FLAC; WAV in
+  `velvox-bench/2026-11-10/ember_hoertest_subtil`).
 - Echte Maskottchen-Bilder (Jakob).
 - Lizenz (Lemon Squeezy) ist für EMBER noch nicht eingebaut: der VOCALYPSE-Lizenzcode hängt an `ProductInfo.h`.
   Vor dem Verkauf: eigene Produkt-ID, Trial/Key.

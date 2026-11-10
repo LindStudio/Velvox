@@ -58,14 +58,34 @@ namespace ember
         const float target = juce::jlimit (0.0f, 1.0f, gr / 12.0f);
         intensity += (target - intensity) * (target > intensity ? 0.6f : 0.15f);
 
-        if (in.bypass)                   setState (MascotState::sleeping);
-        else if (in.autoListening)       setState (MascotState::listening);
-        else if (proudLeft > 0.0)        setState (MascotState::proud);
-        else if (hot)                    setState (MascotState::overheated);
-        else if (fireLeft > 0.0)         setState (MascotState::fire);
-        else if (gr > snapDb)            setState (MascotState::snapping);
-        else if (in.hasSignal)           setState (MascotState::singing);
-        else                             setState (MascotState::idle);
+        MascotState wanted;
+        if (in.bypass)                   wanted = MascotState::sleeping;
+        else if (in.autoListening)       wanted = MascotState::listening;
+        else if (proudLeft > 0.0)        wanted = MascotState::proud;
+        else if (hot)                    wanted = MascotState::overheated;
+        else if (fireLeft > 0.0)         wanted = MascotState::fire;
+        else if (gr > snapDb)            wanted = MascotState::snapping;
+        else if (in.hasSignal)           wanted = MascotState::singing;
+        else                             wanted = MascotState::idle;
+
+        const bool immediate = wanted == MascotState::sleeping || wanted == MascotState::listening || wanted == MascotState::proud
+                            || state == MascotState::sleeping || state == MascotState::listening;
+        if (wanted == state)
+        {
+            pendingFor = 0.0;
+            return;
+        }
+        if (wanted != pending)
+        {
+            pending = wanted;
+            pendingFor = 0.0;
+        }
+        pendingFor += dt;
+        if (immediate || (pendingFor >= debounceS && timeInState >= minHoldS))
+        {
+            setState (wanted);
+            pendingFor = 0.0;
+        }
     }
 
     // ----------------------------------------------------------------- frames
@@ -79,7 +99,10 @@ namespace ember
             if (! file.endsWithIgnoreCase (".png"))
                 continue;
             const auto stem = file.upToLastOccurrenceOf (".", false, false);
-            const auto prefix = stem.upToLastOccurrenceOf ("_", false, false).toLowerCase();
+            auto prefix = stem.upToLastOccurrenceOf ("_", false, false).toLowerCase();
+            auto clip = MascotClip::loop;
+            if (prefix.endsWith ("_in"))       { clip = MascotClip::in;  prefix = prefix.dropLastCharacters (3); }
+            else if (prefix.endsWith ("_out")) { clip = MascotClip::out; prefix = prefix.dropLastCharacters (4); }
             for (int s = 0; s < numMascotStates; ++s)
                 if (prefix == mascotStateName ((MascotState) s))
                 {
@@ -87,7 +110,7 @@ namespace ember
                     const char* data = EmberMascotData::getNamedResource (resource, size);
                     auto img = juce::ImageFileFormat::loadFrom (data, (size_t) size);
                     if (img.isValid())
-                        frames[s].add (img);
+                        frames[key ((MascotState) s, clip)].add (img);   // resources come sorted by name: 001, 002 ...
                 }
         }
 
@@ -106,17 +129,17 @@ namespace ember
         }
     }
 
-    bool MascotFrames::has (MascotState s) const noexcept { return count (s) > 0; }
+    bool MascotFrames::has (MascotState s, MascotClip c) const noexcept { return count (s, c) > 0; }
 
-    int MascotFrames::count (MascotState s) const noexcept
+    int MascotFrames::count (MascotState s, MascotClip c) const noexcept
     {
-        const auto it = frames.find ((int) s);
+        const auto it = frames.find (key (s, c));
         return it == frames.end() ? 0 : it->second.size();
     }
 
-    const juce::Image& MascotFrames::frame (MascotState s, int index) const
+    const juce::Image& MascotFrames::frame (MascotState s, MascotClip c, int index) const
     {
-        const auto& list = frames.at ((int) s);
+        const auto& list = frames.at (key (s, c));
         return list.getReference (juce::jlimit (0, list.size() - 1, index));
     }
 
@@ -149,15 +172,9 @@ namespace ember
     {
         constexpr double dt = 1.0 / 30.0;
         t += dt;
-        const auto before = brain.getState();
-        const double beforeTime = brain.getTimeInState();
         brain.update (input, dt);
-        if (brain.getState() != before)
-        {
-            previousState = before;
-            previousTime = beforeTime;
-        }
         input.autoJustFinished = false;
+        advanceClips (dt);
 
         const auto st = brain.getState();
         const float k = brain.getIntensity();
@@ -192,6 +209,50 @@ namespace ember
         repaint();
     }
 
+    void MascotView::advanceClips (double dt)
+    {
+        clipTime += dt;
+        fadeTime += dt;
+        const auto desired = brain.getState();
+
+        const auto switchTo = [this] (MascotState s, bool viaClips)
+        {
+            previousState = shownState;
+            previousTime = clipTime;
+            fading = ! viaClips && s != shownState;
+            fadeTime = 0.0;
+            shownState = s;
+            shownClip = frames.has (s, MascotClip::in) ? MascotClip::in : MascotClip::loop;
+            clipTime = 0.0;
+        };
+
+        if (shownClip == MascotClip::out)
+        {
+            if (clipTime >= frames.duration (shownState, MascotClip::out))
+                switchTo (desired, true);
+        }
+        else if (shownClip == MascotClip::in)
+        {
+            if (clipTime >= frames.duration (shownState, MascotClip::in))
+            {
+                shownClip = MascotClip::loop;
+                clipTime = 0.0;
+            }
+        }
+        else if (desired != shownState)
+        {
+            if (frames.has (shownState, MascotClip::out))
+            {
+                shownClip = MascotClip::out;
+                clipTime = 0.0;
+            }
+            else
+            {
+                switchTo (desired, frames.has (desired, MascotClip::in));
+            }
+        }
+    }
+
     void MascotView::paint (juce::Graphics& g)
     {
         auto area = getLocalBounds().toFloat();
@@ -204,13 +265,13 @@ namespace ember
                                                  juce::Colour (0xffff3b1f).withAlpha (0.0f), centre.translated (area.getWidth() * 0.5f, 0), true));
         g.fillEllipse (area.reduced (area.getWidth() * 0.02f));
 
-        if (frames.has (st))
+        if (frames.has (shownState))
         {
-            // Short cross-fade from the previous mood
-            const float fade = (float) juce::jlimit (0.0, 1.0, brain.getTimeInState() / 0.15);
-            if (fade < 1.0f && frames.has (previousState) && previousState != st)
-                paintFrame (g, area, previousState, previousTime + brain.getTimeInState(), 1.0f - fade);
-            paintFrame (g, area, st, brain.getTimeInState(), fade);
+            // Moods without in / out clips cross-fade
+            const float fade = fading ? (float) juce::jlimit (0.0, 1.0, fadeTime / 0.35) : 1.0f;
+            if (fade < 1.0f && frames.has (previousState) && previousState != shownState)
+                paintFrame (g, area, previousState, MascotClip::loop, previousTime + fadeTime, 1.0f - fade);
+            paintFrame (g, area, shownState, shownClip, clipTime, fade);
         }
         else
         {
@@ -222,11 +283,15 @@ namespace ember
             paintBubble (g, area);
     }
 
-    void MascotView::paintFrame (juce::Graphics& g, juce::Rectangle<float> area, MascotState st, double time, float alpha)
+    void MascotView::paintFrame (juce::Graphics& g, juce::Rectangle<float> area, MascotState st, MascotClip clip, double time, float alpha)
     {
-        const int frame = (int) (time * frames.fps (st)) % frames.count (st);
-        const auto& img = frames.frame (st, frame);
-        const bool still = frames.count (st) == 1;   // one picture per mood: the motion comes from here
+        if (! frames.has (st, clip))
+            clip = MascotClip::loop;
+        const int n = frames.count (st, clip);
+        const int raw = (int) (time * frames.fps (st));
+        const int frame = clip == MascotClip::loop ? raw % n : std::min (raw, n - 1);   // in / out play once
+        const auto& img = frames.frame (st, clip, frame);
+        const bool still = n == 1 && clip == MascotClip::loop;   // one picture per mood: the motion comes from here
 
         // Fit the (square) picture into the area, anchored at its bottom centre
         const float side = std::min (area.getWidth(), area.getHeight() * 1.1f);
@@ -238,22 +303,22 @@ namespace ember
         {
             switch (st)
             {
-                case MascotState::idle:       sy = 1.0f + 0.012f * std::sin (tt * 2.0f); sx = 2.0f - sy; break;
-                case MascotState::singing:    rot = 0.05f * std::sin (tt * 5.0f); dy = -std::abs (std::sin (tt * 5.0f)) * side * 0.015f; break;
-                case MascotState::snapping:   dx = std::sin (tt * 38.0f) * side * 0.006f; sy = 1.0f + 0.02f * std::abs (std::sin (tt * 9.0f)); break;
+                // Small, slow motion only: breathing and a gentle sway (calm, Jakob 2026-11-10)
+                case MascotState::idle:       sy = 1.0f + 0.008f * std::sin (tt * 1.8f); sx = 2.0f - sy; break;
+                case MascotState::singing:    rot = 0.015f * std::sin (tt * 2.6f); sy = 1.0f + 0.006f * std::sin (tt * 5.2f); break;
+                case MascotState::snapping:   sy = 1.0f + 0.01f * std::sin (tt * 6.0f); break;
                 case MascotState::fire:
                 {
-                    // the stronger the reduction, the harder he shakes and the bigger he gets
-                    const float shake = (0.004f + 0.012f * k) * side;
-                    dx = std::sin (tt * 47.0f) * shake;
-                    dy = std::cos (tt * 39.0f) * shake * 0.6f;
-                    sx = sy = 1.0f + 0.05f * k;
+                    // a slight tremble that grows a little with the reduction, and he swells a bit
+                    const float shake = (0.0015f + 0.003f * k) * side;
+                    dx = std::sin (tt * 21.0f) * shake;
+                    sx = sy = 1.0f + 0.025f * k;
                     break;
                 }
-                case MascotState::overheated: dx = std::sin (tt * 61.0f) * side * 0.01f; rot = 0.03f * std::sin (tt * 23.0f); break;
-                case MascotState::sleeping:   sy = 1.0f + 0.02f * std::sin (tt * 1.1f); break;
-                case MascotState::listening:  rot = -0.04f + 0.02f * std::sin (tt * 1.6f); break;
-                case MascotState::proud:      dy = -std::abs (std::sin (tt * 4.0f)) * side * 0.03f * (float) std::max (0.0, 1.0 - time / 2.0); break;
+                case MascotState::overheated: dx = std::sin (tt * 17.0f) * side * 0.003f; break;
+                case MascotState::sleeping:   sy = 1.0f + 0.012f * std::sin (tt * 1.1f); break;
+                case MascotState::listening:  rot = -0.02f + 0.008f * std::sin (tt * 1.4f); break;
+                case MascotState::proud:      dy = -std::abs (std::sin (tt * 3.0f)) * side * 0.012f * (float) std::max (0.0, 1.0 - time / 1.5); break;
             }
         }
 

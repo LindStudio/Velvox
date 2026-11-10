@@ -166,7 +166,7 @@ namespace
         const auto s = readSettings (p.state);
         near (s.freq, 6500.0, 0.5, "default freq");
         near (s.thresholdDb, -30.0, 0.01, "default threshold");
-        near (s.rangeDb, 8.0, 0.01, "default range");
+        near (s.rangeDb, 5.0, 0.01, "default range (gentle)");
         near (s.amount, 0.5, 1e-4, "default Amount 50 %");
         check (s.relative && s.mode == 0 && s.listen == 0 && ! s.bypass, "default modes");
         check (p.getBypassParameter() != nullptr, "host bypass parameter");
@@ -324,6 +324,7 @@ namespace
         {
             Settings s;
             s.lookaheadMs = la;
+            s.rangeDb = 12.0f;
             s.thresholdDb = -40.0f;
             s.relative = false;
             s.mode = 1;
@@ -396,20 +397,25 @@ namespace
             check (r.status == AutoResult::Status::ok, "ok");
             check (r.freq >= 4000.0f && r.freq <= 8000.0f, "corner in 4-8 kHz");
             check (r.thresholdDb > r.vowel95Db, "threshold above the vowels");
-            near (r.expectedReductionDb, autoTargetReductionDb, 0.6, "S sounds lose ~5 dB (rendered)");
-            check (r.vowelReductionDb <= autoVowelMaxDb + 0.05f, "vowels <= 0.3 dB");
+            std::printf ("    S vs vowels %.1f dB -> target %.1f dB, mixed frames lose %.2f dB\n", r.sibilanceVsVowelDb, r.targetDb, r.mixedReductionDb);
+            check (r.targetDb >= autoMinTargetDb && r.targetDb <= autoMaxTargetDb, "target within the subtle window");
+            check (r.expectedReductionDb > 0.3f && r.expectedReductionDb <= r.targetDb + 0.6f, "S lose at most the target (rendered)");
+            check (r.mixedReductionDb <= autoMixedMaxDb + 0.05f, "vowel side of each S kept");
+            check (r.vowelReductionDb <= autoVowelMaxDb + 0.02f, "vowels <= 0.1 dB");
+            check (r.rangeDb <= autoMaxRangeDb, "range <= 6 dB");
 
             Settings s;
             s.freq = r.freq;
             s.thresholdDb = r.thresholdDb;
             s.rangeDb = r.rangeDb;
+            s.releaseMs = autoReleaseMs;
             E e (fs, s);
             const auto y = run (e, take.x);
             const int L = e.getLatencySamples();
             const double sd = rangesDb (take.x, take.sRanges, 0) - rangesDb (y, take.sRanges, L);
             const double vd = rangesDb (take.x, take.vRanges, 0) - rangesDb (y, take.vRanges, L);
             std::printf ("    applied: S -%.2f dB, vowels -%.2f dB\n", sd, vd);
-            check (sd > 4.0 && sd < 6.5, "S reduced 4-6.5 dB");
+            check (sd > 0.3 && sd < 4.5, "S reduced, subtly (0.3-4.5 dB)");
             check (std::abs (vd) < 0.5, "vowels within 0.5 dB");
         }
 
@@ -501,26 +507,43 @@ namespace
         const double dt = 1.0 / 30.0;
         const auto runFor = [&] (MascotInput in, double seconds) { for (double s = 0; s < seconds; s += dt) b.update (in, dt); };
         MascotInput in;
-        runFor (in, 0.2);
+        runFor (in, 1.0);
         check (b.getState() == MascotState::idle, "idle without signal");
         in.hasSignal = true;
-        runFor (in, 0.2);
+        runFor (in, 1.2);
         check (b.getState() == MascotState::singing, "singing");
-        in.reductionDb = 0.8f;
-        runFor (in, 0.3);
+        in.reductionDb = 1.0f;
+        runFor (in, 1.2);
         check (b.getState() == MascotState::snapping, "snapping");
         in.reductionDb = 5.0f;
-        runFor (in, 0.1);
+        runFor (in, 1.2);
         check (b.getState() == MascotState::fire, "fire");
         check (b.getIntensity() > 0.3f, "fire intensity follows GR");
         in.reductionDb = 11.0f;
-        runFor (in, 0.5);
-        check (b.getState() == MascotState::overheated, "overheated after 0.3 s above 9 dB");
+        runFor (in, 1.5);
+        check (b.getState() == MascotState::overheated, "overheated after a while above 9 dB");
         in.reductionDb = 0.0f;
         runFor (in, 0.3);
         check (b.getState() == MascotState::overheated, "stays hot a moment");
-        runFor (in, 0.6);
+        runFor (in, 2.5);
         check (b.getState() == MascotState::singing, "cools down");
+
+        // Calm: a GR that flickers every 100 ms does not make him flicker
+        {
+            MascotBrain c;
+            MascotInput fl;
+            fl.hasSignal = true;
+            for (double s = 0; s < 1.5; s += dt) c.update (fl, dt);
+            int changes = 0;
+            auto last = c.getState();
+            for (int i = 0; i < 90; ++i)   // 3 s
+            {
+                fl.reductionDb = (i / 3) % 2 == 0 ? 2.5f : 0.0f;
+                c.update (fl, dt);
+                if (c.getState() != last) { ++changes; last = c.getState(); }
+            }
+            check (changes <= 3, "flickering GR: at most 3 mood changes in 3 s (got " + juce::String (changes) + ")");
+        }
         in.autoListening = true;
         runFor (in, 0.1);
         check (b.getState() == MascotState::listening, "listening");
@@ -539,6 +562,39 @@ namespace
             check (juce::String (mascotStateName ((MascotState) s)).isNotEmpty(), "state name");
     }
 
+    void testMascotClips()
+    {
+        Test t ("mascot clips: out of the old mood, into the new one, then its loop");
+        MascotView view;
+        view.setSize (500, 400);
+        auto& f = view.getFramesForTest();
+        f.clear();
+        juce::Image img (juce::Image::ARGB, 8, 8, true);
+        const auto addN = [&] (MascotState s, MascotClip c, int n) { for (int i = 0; i < n; ++i) f.add (s, c, img); };
+        addN (MascotState::singing, MascotClip::loop, 24);
+        addN (MascotState::singing, MascotClip::out, 12);    // 0.5 s at 24 fps
+        addN (MascotState::fire, MascotClip::in, 12);
+        addN (MascotState::fire, MascotClip::loop, 24);
+        const double dt = 1.0 / 30.0;
+        MascotInput in;
+        in.hasSignal = true;
+        view.setInput (in);
+        for (int i = 0; i < 60; ++i) view.stepForTest (dt);
+        check (view.getShownState() == MascotState::singing && view.getShownClip() == MascotClip::loop, "singing loop");
+        in.reductionDb = 5.0f;
+        view.setInput (in);
+        bool sawOut = false, sawIn = false;
+        for (int i = 0; i < 90; ++i)
+        {
+            view.stepForTest (dt);
+            sawOut = sawOut || (view.getShownState() == MascotState::singing && view.getShownClip() == MascotClip::out);
+            sawIn = sawIn || (view.getShownState() == MascotState::fire && view.getShownClip() == MascotClip::in);
+        }
+        check (sawOut, "played singing_out");
+        check (sawIn, "played fire_in");
+        check (view.getShownState() == MascotState::fire && view.getShownClip() == MascotClip::loop, "ends in the fire loop");
+    }
+
     void testMascotFrames (const juce::File& snapshotDir)
     {
         Test t ("mascot pictures built in (Jakob's Ember, 2026-11-10)");
@@ -548,7 +604,8 @@ namespace
             const auto st = (MascotState) s;
             check (frames.has (st), juce::String ("picture for ") + mascotStateName (st));
             if (frames.has (st))
-                check (frames.frame (st, 0).getWidth() >= 512 && frames.frame (st, 0).hasAlphaChannel(), juce::String ("size + alpha ") + mascotStateName (st));
+                check (frames.frame (st, MascotClip::loop, 0).getWidth() >= 512 && frames.frame (st, MascotClip::loop, 0).hasAlphaChannel(),
+                       juce::String ("size + alpha ") + mascotStateName (st));
         }
         if (snapshotDir == juce::File())
             return;
@@ -675,7 +732,7 @@ namespace
                      in.getFileName().toRawUTF8(), (int) r.status, r.freq, r.thresholdDb, r.rangeDb, r.sibilantMedianDb, r.vowel95Db,
                      r.expectedReductionDb, r.sibilantFrames);
         Settings s;
-        if (r.status == AutoResult::Status::ok) { s.freq = r.freq; s.thresholdDb = r.thresholdDb; s.rangeDb = r.rangeDb; }
+        if (r.status == AutoResult::Status::ok) { s.freq = r.freq; s.thresholdDb = r.thresholdDb; s.rangeDb = r.rangeDb; s.releaseMs = autoReleaseMs; }
         dir.createDirectory();
         for (int listen : { 0, 2 })
         {
@@ -739,14 +796,16 @@ namespace
                 continue;
             const auto mono = monoOf (*buf);
             const auto r = autoOn (mono, fs);
-            std::printf ("    %-48s %s freq %5.0f thr %6.1f range %4.1f S -%.1f V -%.2f dB (S %d V %d) peak %.0f\n",
+            std::printf ("    %-48s %s freq %5.0f thr %6.1f range %4.1f S -%.1f V -%.2f M -%.2f dB (S/V %.1f) peak %.0f\n",
                          f.getFileName().substring (0, 48).toRawUTF8(), r.status == AutoResult::Status::ok ? "ok  " : "none",
-                         r.freq, r.thresholdDb, r.rangeDb, r.expectedReductionDb, r.vowelReductionDb, r.sibilantFrames, r.vowelFrames, r.peakHz);
+                         r.freq, r.thresholdDb, r.rangeDb, r.expectedReductionDb, r.vowelReductionDb, r.mixedReductionDb, r.sibilanceVsVowelDb, r.peakHz);
             if (r.status != AutoResult::Status::ok)
                 continue;
             ++ok;
             check (r.freq >= autoMinCornerHz && r.freq <= autoMaxCornerHz, f.getFileName() + ": corner in range");
-            check (r.vowelReductionDb <= 0.5f, f.getFileName() + ": vowels nearly untouched");
+            check (r.vowelReductionDb <= 0.15f, f.getFileName() + ": vowels untouched");
+            check (r.mixedReductionDb <= autoMixedMaxDb + 0.1f, f.getFileName() + ": S next to vowels keeps the vowel");
+            check (r.rangeDb <= autoMaxRangeDb && r.expectedReductionDb <= autoMaxTargetDb + 0.5f, f.getFileName() + ": subtle");
         }
         std::printf ("    %d of %d takes set up\n", ok, files.size());
     }
@@ -780,6 +839,7 @@ int main (int argc, char** argv)
     testCapture();
     testProcessor();
     testMascot();
+    testMascotClips();
     testMascotFrames (snapshotDir);
     testEditor (snapshotDir);
     testRealTakes();

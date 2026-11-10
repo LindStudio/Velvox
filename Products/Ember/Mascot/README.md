@@ -1,5 +1,11 @@
 # Ember – Bilder für das Maskottchen (2D)
 
+**Stand 2026-11-10:** Jakobs Standbilder sind drin (Quelle: Drive `Plugins/01 EMBER De-Esser/Maskottchen/Bilder`,
+freigestellt mit `tools/mascot/cut_ember.py`). Für echte Animation: Videos pro Stimmung (`fire.mp4`, `fire_in.mp4`,
+`fire_out.mp4`) → `python tools/mascot/video_to_frames.py <Animation-Ordner> Products/Ember/Mascot/frames`.
+Anleitung für Jakob: Drive `Plugins/01 EMBER De-Esser/ANLEITUNG_Animation.md`. Clips: `<state>_in_###` (einmal),
+`<state>_###` (Schleife), `<state>_out_###` (einmal); ein Wechsel spielt out → in → Schleife.
+
 Ember zeigt im Plugin acht Stimmungen. Für jede Stimmung kannst du eine Bildfolge (Animation) liefern.
 Solange eine Stimmung keine Bilder hat, zeichnet das Plugin dafür den Platzhalter-Teufel. Du kannst also
 eine Stimmung nach der anderen liefern.

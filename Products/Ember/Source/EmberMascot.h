@@ -38,8 +38,11 @@ namespace ember
     {
     public:
         // Thresholds (dB of gain reduction)
-        static constexpr float snapDb = 0.3f, fireDb = 1.5f, hotDb = 9.0f, coolDb = 7.0f;
-        static constexpr double hotAfterS = 0.3, coolAfterS = 0.6, proudForS = 2.5, fireHoldS = 0.25;
+        static constexpr float snapDb = 0.6f, fireDb = 1.5f, hotDb = 9.0f, coolDb = 7.0f;
+        static constexpr double hotAfterS = 0.4, coolAfterS = 0.8, proudForS = 2.5, fireHoldS = 0.6;
+        // Calm (Jakob 2026-11-10: "Ember springt sehr viel herum"): a new mood must last debounceS, and a mood
+        // is shown at least minHoldS (bypass and AUTO switch at once)
+        static constexpr double debounceS = 0.25, minHoldS = 0.9;
 
         void update (const MascotInput& in, double dtSeconds) noexcept;
         MascotState getState() const noexcept { return state; }
@@ -50,22 +53,33 @@ namespace ember
         void setState (MascotState s) noexcept;
         MascotState state = MascotState::idle;
         float intensity = 0.0f;
-        double timeInState = 0.0, hotFor = 0.0, coolFor = 0.0, proudLeft = 0.0, fireLeft = 0.0;
+        double timeInState = 0.0, hotFor = 0.0, coolFor = 0.0, proudLeft = 0.0, fireLeft = 0.0, pendingFor = 0.0;
+        MascotState pending = MascotState::idle;
         bool hot = false;
     };
 
-    // Frames of Jakob's 2D mascot, grouped by state (built in as binary data)
+    // The clips of a mood: <state>_in_### (from the neutral pose into the mood, played once),
+    // <state>_### (the loop) and <state>_out_### (back to the neutral pose, played once).
+    // A change of mood plays: out of the old mood -> in of the new one -> its loop, so every change is smooth
+    // when all in / out clips start / end on the same neutral pose. Moods without in / out clips cross-fade.
+    enum class MascotClip { loop = 0, in = 1, out = 2 };
+
+    // Frames of Jakob's 2D mascot, grouped by state and clip (built in as binary data)
     class MascotFrames
     {
     public:
         MascotFrames();   // loads every built-in frame
-        bool has (MascotState s) const noexcept;
-        int count (MascotState s) const noexcept;
-        const juce::Image& frame (MascotState s, int index) const;
+        bool has (MascotState s, MascotClip c = MascotClip::loop) const noexcept;
+        int count (MascotState s, MascotClip c = MascotClip::loop) const noexcept;
+        const juce::Image& frame (MascotState s, MascotClip c, int index) const;
         float fps (MascotState s) const noexcept;
+        double duration (MascotState s, MascotClip c) const noexcept { return count (s, c) / (double) fps (s); }
         bool anyFrames() const noexcept { return ! frames.empty(); }
+        void clear() { frames.clear(); }                                   // tests
+        void add (MascotState s, MascotClip c, const juce::Image& img) { frames[key (s, c)].add (img); }   // tests
 
     private:
+        static int key (MascotState s, MascotClip c) noexcept { return (int) s * 3 + (int) c; }
         std::map<int, juce::Array<juce::Image>> frames;
         std::map<int, float> rates;
         float defaultFps = 24.0f;
@@ -88,11 +102,17 @@ namespace ember
         void mouseExit (const juce::MouseEvent&) override { hover = false; }
 
         const MascotBrain& getBrain() const noexcept { return brain; }
+        MascotState getShownState() const noexcept { return shownState; }
+        MascotClip getShownClip() const noexcept { return shownClip; }
+        // Tests: one tick without the timer, and the frames to play
+        void stepForTest (double dt) { brain.update (input, dt); input.autoJustFinished = false; advanceClips (dt); }
+        MascotFrames& getFramesForTest() noexcept { return frames; }
         bool usesFrames() const noexcept { return frames.anyFrames(); }
 
     private:
         void timerCallback() override;
-        void paintFrame (juce::Graphics&, juce::Rectangle<float> area, MascotState, double time, float alpha);
+        void advanceClips (double dt);
+        void paintFrame (juce::Graphics&, juce::Rectangle<float> area, MascotState, MascotClip, double time, float alpha);
         void paintPlaceholder (juce::Graphics&, juce::Rectangle<float> area);
         void paintFire (juce::Graphics&);
         void paintBubble (juce::Graphics&, juce::Rectangle<float> area);
@@ -105,8 +125,13 @@ namespace ember
         MascotFrames frames;
         juce::String bubble;
         juce::Point<float> mouth;
-        MascotState previousState = MascotState::idle;   // for the cross-fade
-        double previousTime = 0.0;
+        // What is on screen (follows the brain through the in / loop / out clips)
+        MascotState shownState = MascotState::idle;
+        MascotClip shownClip = MascotClip::loop;
+        double clipTime = 0.0;
+        MascotState previousState = MascotState::idle;   // for the cross-fade between moods without clips
+        double previousTime = 0.0, fadeTime = 1.0;
+        bool fading = false;
         double t = 0.0;
         bool compact = false, hover = false;
     };

@@ -47,7 +47,7 @@ namespace ember
 
         layout.add (std::make_unique<Float> (id (pid::freq), "Frequency", logRange (2000.0f, 16000.0f, 6500.0f), 6500.0f, hz()));
         layout.add (std::make_unique<Float> (id (pid::threshold), "Threshold", juce::NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -30.0f, unit ("dB", 1)));
-        layout.add (std::make_unique<Float> (id (pid::range), "Range", juce::NormalisableRange<float> (0.0f, 24.0f, 0.1f), 8.0f, unit ("dB", 1)));
+        layout.add (std::make_unique<Float> (id (pid::range), "Range", juce::NormalisableRange<float> (0.0f, 24.0f, 0.1f), 5.0f, unit ("dB", 1)));
         layout.add (std::make_unique<Float> (id (pid::amount), "Amount", juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f, percent()));
         layout.add (std::make_unique<Float> (id (pid::attack), "Attack", logRange (0.1f, 20.0f, 1.0f), 0.5f, unit ("ms", 2)));
         layout.add (std::make_unique<Float> (id (pid::release), "Release", logRange (10.0f, 400.0f, 60.0f), 60.0f, unit ("ms", 0)));

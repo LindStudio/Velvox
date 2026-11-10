@@ -156,6 +156,7 @@ namespace ember
         set (pid::freq, r.freq);
         set (pid::threshold, r.thresholdDb);
         set (pid::range, r.rangeDb);
+        set (pid::release, autoReleaseMs);
         set (pid::amount, 50.0f);
         set (pid::mode, 0.0f);
         set (pid::detection, 0.0f);

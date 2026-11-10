@@ -30,7 +30,10 @@ def smoothstep(x, a, b):
     return t * t * (3 - 2 * t)
 
 def cut(path, size):
-    im = Image.open(path).convert('RGB')
+    return cut_image(Image.open(path).convert('RGB'), size)
+
+def cut_image(im, size):
+    """Square RGB picture on a dark background -> RGBA of size x size with the background removed."""
     work = im.resize((1024, 1024), Image.LANCZOS)   # mask on a smaller copy, applied at full size below
     a = np.asarray(work).astype(np.float32)
     border = np.concatenate([a[:8].reshape(-1, 3), a[-8:].reshape(-1, 3), a[:, :8].reshape(-1, 3), a[:, -8:].reshape(-1, 3)])

@@ -274,9 +274,9 @@ namespace ember
         voiceLow.onClick = [this] { setVoice (voiceLowHz); };
         voiceMid.onClick = [this] { setVoice (voiceMidHz); };
         voiceHigh.onClick = [this] { setVoice (voiceHighHz); };
-        voiceLow.setTooltip (tr ("Tiefe Stimme: S-Bereich ab 4,8 kHz", "Low voice: S range from 4.8 kHz"));
+        voiceLow.setTooltip (tr ("Tiefe Stimme: S-Bereich ab 5 kHz", "Low voice: S range from 5 kHz"));
         voiceMid.setTooltip (tr ("Mittlere Stimme: ab 6,5 kHz", "Mid voice: from 6.5 kHz"));
-        voiceHigh.setTooltip (tr ("Hohe Stimme: ab 8,2 kHz", "High voice: from 8.2 kHz"));
+        voiceHigh.setTooltip (tr ("Hohe Stimme: ab 8 kHz", "High voice: from 8 kHz"));
         listenBtn.setButtonText ("DELTA");
         listenBtn.setTooltip (tr ("Delta: nur das hören, was entfernt wird.", "Delta: hear only what is removed."));
         listenBtn.onClick = [this]
@@ -464,7 +464,7 @@ namespace ember
         mi.hasSignal = in > 0.00316f;
         mi.autoListening = phase == Phase::listening || phase == Phase::analysing;
         mi.autoJustFinished = phase == Phase::done && lastPhase != Phase::done;
-        mi.reductionDb = gr;
+        mi.reductionDb = shownGr;
         mascot.setInput (mi);
 
         if (phase != lastPhase && (phase == Phase::done || phase == Phase::failed))
