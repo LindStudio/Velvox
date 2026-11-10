@@ -1,0 +1,9 @@
+{
+  "fps": 24,
+  "states": {
+    "fire": 30,
+    "snapping": 30,
+    "sleeping": 12,
+    "idle": 18
+  }
+}

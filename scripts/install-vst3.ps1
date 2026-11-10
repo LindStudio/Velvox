@@ -1,25 +1,30 @@
 <#
-  Copies the built VOCALYPSE.vst3 bundle into the system VST3 folder
+  Copies a built VST3 bundle into the system VST3 folder
   (C:\Program Files\Common Files\VST3). Writing there needs administrator
   rights, so the script re-launches itself elevated (UAC prompt) if necessary.
 
-  Usage:  .\scripts\install-vst3.ps1 [-Config Release] [-BuildDir <path>]
-  Remove: delete "C:\Program Files\Common Files\VST3\VOCALYPSE.vst3"
-  The bundles of the earlier names "Headliner.vst3" and "Velvox.vst3" (same plugin ID) are removed
-  so the host never sees two copies.
+  Usage:  .\scripts\install-vst3.ps1 [-Product Vocalypse|Ember] [-Config Release] [-BuildDir <path>]
+          (default: Vocalypse; "Ember" installs "EMBER De-Esser.vst3")
+  Remove: delete the bundle in "C:\Program Files\Common Files\VST3"
+  For VOCALYPSE the bundles of the earlier names "Headliner.vst3" and "Velvox.vst3" (same plugin ID) are
+  removed so the host never sees two copies. Close FL Studio first: a loaded plugin DLL cannot be replaced.
 #>
 param(
+    [ValidateSet("Vocalypse", "Ember")]
+    [string]$Product  = "Vocalypse",
     [string]$Config   = "Release",
     [string]$BuildDir = ""
 )
 
 $ErrorActionPreference = "Stop"
 if (-not $BuildDir) { $BuildDir = Join-Path (Split-Path -Parent $PSScriptRoot) "build" }
-$sourceBundle = Join-Path $BuildDir "Vocalypse_artefacts\$Config\VST3\VOCALYPSE.vst3"
+$bundleName = if ($Product -eq "Ember") { "EMBER De-Esser.vst3" } else { "VOCALYPSE.vst3" }
+$sourceBundle = Join-Path $BuildDir "${Product}_artefacts\$Config\VST3\$bundleName"
 $targetDir    = Join-Path $env:CommonProgramFiles "VST3"
-$targetBundle = Join-Path $targetDir "VOCALYPSE.vst3"
-# earlier product names (same plugin ID); never the new name - Windows paths ignore case
-$legacyBundles = @("Headliner.vst3", "Velvox.vst3") | ForEach-Object { Join-Path $targetDir $_ }
+$targetBundle = Join-Path $targetDir $bundleName
+# earlier product names of VOCALYPSE (same plugin ID); never the new name - Windows paths ignore case
+$legacyBundles = @()
+if ($Product -eq "Vocalypse") { $legacyBundles = @("Headliner.vst3", "Velvox.vst3") | ForEach-Object { Join-Path $targetDir $_ } }
 
 if (-not (Test-Path $sourceBundle)) { throw "No build found at $sourceBundle - run scripts\build.ps1 first." }
 
@@ -28,7 +33,7 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 
 if (-not $isAdmin) {
     Write-Host "Administrator rights are required - confirm the UAC prompt."
-    $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Config $Config -BuildDir `"$BuildDir`""
+    $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Product $Product -Config $Config -BuildDir `"$BuildDir`""
     $p = Start-Process powershell -Verb RunAs -ArgumentList $argList -Wait -PassThru
     exit $p.ExitCode
 }

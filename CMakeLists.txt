@@ -298,3 +298,6 @@ endif()
 if(VOCALYPSE_BUILD_TESTS)
     target_sources(VocalypseTests PRIVATE Tests/BeatTests.cpp)
 endif()
+
+# Single plugins of the VOCALYPSE family
+include(Products/Ember/Ember.cmake)

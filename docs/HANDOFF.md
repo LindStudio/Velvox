@@ -1,5 +1,19 @@
 # HEADLINER – Übergabe für die nächste Session
 
+## STAND 2026-11-10 (Haupt-PC) – HIER WEITERMACHEN: neuer Plan, EMBER De-Esser fertig
+**Planänderung (Jakob):** kein All-in-one mehr. Jedes Modul wird ein eigenes Plugin (Abstand Wochen/Monate), danach ein
+Hub, der alle verbindet. Verkauf einzeln, als Bundle und als Abo. Name = Maskottchen + Funktion, gleiche Knobs und
+Buttons, nur Farbe und Maskottchen (2D, **Jakob zeichnet**) wechseln, SIMPLE + ADVANCED + AUTO-Knopf in jedem Plugin.
+Plan-Seite: https://claude.ai/artifact/T2uCsbjZGFrqUMHBDkYknZ · Reihenfolge: Ember (De-Esser) → Velvet (Smooth) → …
+- Branch **`feature/ember-deesser`** (von `feature/automix-konsistenz`). Die Auto-Mix-Stabilisierung ist **pausiert**
+  (Jakob), ihr Ledger bleibt gültig.
+- **EMBER De-Esser** komplett: `Products/Ember/` (Engine, AUTO, Parameter, Maskottchen, Prozessor, Editor, Tests),
+  CMake `Products/Ember/Ember.cmake` (Ziele `Ember`, `EmberTests`). Alles Weitere: **`docs/products/EMBER.md`**.
+- 104 Checks grün (dazu 34 an 17 echten Takes über `EMBER_VOCALS`), pluginval 10 **SUCCESS**. VOCALYPSE-Code nicht angefasst.
+- **Nicht installiert** (UAC/FL), nicht gepusht. Hör-Kit: `%USERPROFILE%\dev\velvox-bench\2026-11-10\ember_hoertest\`.
+- Maskottchen-Bilder: `Products/Ember/Mascot/README.md` (Dateinamen `fire_001.png` …, 1000 × 800, transparent).
+
+
 ## STAND 2026-11-03 NACHT (Haupt-PC) – HIER WEITERMACHEN: offene Punkte abgearbeitet
 Branch **`feature/vocalypse-rebrand`**. Jakob: „mach alle Punkte als Info … erledige, was du kannst“ (er war weg).
 **Die Liste für Jakob: `docs/OFFENE_PUNKTE.md`** (Preise, Empfehlungen, was er tun muss). Details: CHANGELOG oben.

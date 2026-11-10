@@ -53,4 +53,7 @@ Write-Host "`nVST3 bundle: $vst3"
 if (-not $SkipTests) {
     & (Join-Path $BuildDir "VocalypseTests_artefacts\$Config\VocalypseTests.exe")
     if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
+    # Single plugins (VOCALYPSE family): EMBER De-Esser
+    & (Join-Path $BuildDir "EmberTests_artefacts\$Config\EmberTests.exe")
+    if ($LASTEXITCODE -ne 0) { throw "EMBER tests failed" }
 }
