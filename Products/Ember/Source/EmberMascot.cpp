@@ -149,7 +149,14 @@ namespace ember
     {
         constexpr double dt = 1.0 / 30.0;
         t += dt;
+        const auto before = brain.getState();
+        const double beforeTime = brain.getTimeInState();
         brain.update (input, dt);
+        if (brain.getState() != before)
+        {
+            previousState = before;
+            previousTime = beforeTime;
+        }
         input.autoJustFinished = false;
 
         const auto st = brain.getState();
@@ -199,10 +206,11 @@ namespace ember
 
         if (frames.has (st))
         {
-            const int frame = (int) (brain.getTimeInState() * frames.fps (st)) % frames.count (st);
-            const auto& img = frames.frame (st, frame);
-            g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-            g.drawImage (img, area.reduced (4.0f), juce::RectanglePlacement::centred);
+            // Short cross-fade from the previous mood
+            const float fade = (float) juce::jlimit (0.0, 1.0, brain.getTimeInState() / 0.15);
+            if (fade < 1.0f && frames.has (previousState) && previousState != st)
+                paintFrame (g, area, previousState, previousTime + brain.getTimeInState(), 1.0f - fade);
+            paintFrame (g, area, st, brain.getTimeInState(), fade);
         }
         else
         {
@@ -212,6 +220,54 @@ namespace ember
 
         if (bubble.isNotEmpty() || st == MascotState::overheated)
             paintBubble (g, area);
+    }
+
+    void MascotView::paintFrame (juce::Graphics& g, juce::Rectangle<float> area, MascotState st, double time, float alpha)
+    {
+        const int frame = (int) (time * frames.fps (st)) % frames.count (st);
+        const auto& img = frames.frame (st, frame);
+        const bool still = frames.count (st) == 1;   // one picture per mood: the motion comes from here
+
+        // Fit the (square) picture into the area, anchored at its bottom centre
+        const float side = std::min (area.getWidth(), area.getHeight() * 1.1f);
+        auto box = juce::Rectangle<float> (side, side).withCentre (area.getCentre()).withBottom (area.getBottom() + side * 0.04f);
+
+        const float tt = (float) time, k = brain.getIntensity();
+        float dx = 0.0f, dy = 0.0f, rot = 0.0f, sx = 1.0f, sy = 1.0f;
+        if (still)
+        {
+            switch (st)
+            {
+                case MascotState::idle:       sy = 1.0f + 0.012f * std::sin (tt * 2.0f); sx = 2.0f - sy; break;
+                case MascotState::singing:    rot = 0.05f * std::sin (tt * 5.0f); dy = -std::abs (std::sin (tt * 5.0f)) * side * 0.015f; break;
+                case MascotState::snapping:   dx = std::sin (tt * 38.0f) * side * 0.006f; sy = 1.0f + 0.02f * std::abs (std::sin (tt * 9.0f)); break;
+                case MascotState::fire:
+                {
+                    // the stronger the reduction, the harder he shakes and the bigger he gets
+                    const float shake = (0.004f + 0.012f * k) * side;
+                    dx = std::sin (tt * 47.0f) * shake;
+                    dy = std::cos (tt * 39.0f) * shake * 0.6f;
+                    sx = sy = 1.0f + 0.05f * k;
+                    break;
+                }
+                case MascotState::overheated: dx = std::sin (tt * 61.0f) * side * 0.01f; rot = 0.03f * std::sin (tt * 23.0f); break;
+                case MascotState::sleeping:   sy = 1.0f + 0.02f * std::sin (tt * 1.1f); break;
+                case MascotState::listening:  rot = -0.04f + 0.02f * std::sin (tt * 1.6f); break;
+                case MascotState::proud:      dy = -std::abs (std::sin (tt * 4.0f)) * side * 0.03f * (float) std::max (0.0, 1.0 - time / 2.0); break;
+            }
+        }
+
+        const auto anchor = box.getCentre().withY (box.getBottom() - side * 0.12f);
+        const auto transform = juce::AffineTransform::translation (-anchor.x, -anchor.y)
+                                    .scaled (sx, sy)
+                                    .rotated (rot)
+                                    .translated (anchor.x + dx, anchor.y + dy);
+
+        juce::Graphics::ScopedSaveState save (g);
+        g.addTransform (transform);
+        g.setOpacity (juce::jlimit (0.0f, 1.0f, alpha));
+        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+        g.drawImage (img, box, juce::RectanglePlacement::centred);
     }
 
     void MascotView::paintPlaceholder (juce::Graphics& g, juce::Rectangle<float> area)

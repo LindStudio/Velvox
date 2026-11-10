@@ -539,6 +539,49 @@ namespace
             check (juce::String (mascotStateName ((MascotState) s)).isNotEmpty(), "state name");
     }
 
+    void testMascotFrames (const juce::File& snapshotDir)
+    {
+        Test t ("mascot pictures built in (Jakob's Ember, 2026-11-10)");
+        MascotFrames frames;
+        for (int s = 0; s < numMascotStates; ++s)
+        {
+            const auto st = (MascotState) s;
+            check (frames.has (st), juce::String ("picture for ") + mascotStateName (st));
+            if (frames.has (st))
+                check (frames.frame (st, 0).getWidth() >= 512 && frames.frame (st, 0).hasAlphaChannel(), juce::String ("size + alpha ") + mascotStateName (st));
+        }
+        if (snapshotDir == juce::File())
+            return;
+
+        // One picture per mood, as the plugin shows it (500 x 400)
+        const std::pair<const char*, MascotInput> moods[] {
+            { "idle", {} },
+            { "singing", { false, true, false, false, 0.0f } },
+            { "snapping", { false, true, false, false, 0.8f } },
+            { "fire", { false, true, false, false, 8.0f } },
+            { "overheated", { false, true, false, false, 12.0f } },
+            { "sleeping", { true, false, false, false, 0.0f } },
+            { "listening", { false, true, true, false, 0.0f } },
+        };
+        snapshotDir.createDirectory();
+        for (const auto& [name, in] : moods)
+        {
+            MascotView view;
+            view.setSize (500, 400);
+            view.setInput (in);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (700);
+            juce::Image img (juce::Image::ARGB, 500, 400, true);
+            {
+                juce::Graphics g (img);
+                g.fillAll (juce::Colour (0xff05060a));
+                view.paintEntireComponent (g, true);
+            }
+            juce::PNGImageFormat png;
+            juce::FileOutputStream out (snapshotDir.getChildFile (juce::String ("mascot_") + name + ".png"));
+            if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
+        }
+    }
+
     juce::Image snapshot (EmberEditor& ed)
     {
         for (int i = 0; i < 40; ++i)
@@ -737,6 +780,7 @@ int main (int argc, char** argv)
     testCapture();
     testProcessor();
     testMascot();
+    testMascotFrames (snapshotDir);
     testEditor (snapshotDir);
     testRealTakes();
 

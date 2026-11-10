@@ -92,6 +92,7 @@ namespace ember
 
     private:
         void timerCallback() override;
+        void paintFrame (juce::Graphics&, juce::Rectangle<float> area, MascotState, double time, float alpha);
         void paintPlaceholder (juce::Graphics&, juce::Rectangle<float> area);
         void paintFire (juce::Graphics&);
         void paintBubble (juce::Graphics&, juce::Rectangle<float> area);
@@ -104,6 +105,8 @@ namespace ember
         MascotFrames frames;
         juce::String bubble;
         juce::Point<float> mouth;
+        MascotState previousState = MascotState::idle;   // for the cross-fade
+        double previousTime = 0.0;
         double t = 0.0;
         bool compact = false, hover = false;
     };
