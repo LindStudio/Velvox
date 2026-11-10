@@ -55,6 +55,7 @@ namespace ember
 
         // The flame stays a moment after the S, so a short S still shows a puff of fire
         fireLeft = gr > fireDb ? fireHoldS : std::max (0.0, fireLeft - dt);
+        snapLeft = gr > snapDb ? snapHoldS : std::max (0.0, snapLeft - dt);
         const float target = juce::jlimit (0.0f, 1.0f, gr / 12.0f);
         intensity += (target - intensity) * (target > intensity ? 0.6f : 0.15f);
 
@@ -64,7 +65,7 @@ namespace ember
         else if (proudLeft > 0.0)        wanted = MascotState::proud;
         else if (hot)                    wanted = MascotState::overheated;
         else if (fireLeft > 0.0)         wanted = MascotState::fire;
-        else if (gr > snapDb)            wanted = MascotState::snapping;
+        else if (snapLeft > 0.0)         wanted = MascotState::snapping;
         else if (in.hasSignal)           wanted = MascotState::singing;
         else                             wanted = MascotState::idle;
 

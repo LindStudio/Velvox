@@ -39,10 +39,13 @@ namespace ember
     public:
         // Thresholds (dB of gain reduction)
         static constexpr float snapDb = 0.6f, fireDb = 1.5f, hotDb = 9.0f, coolDb = 7.0f;
-        static constexpr double hotAfterS = 0.4, coolAfterS = 0.8, proudForS = 2.5, fireHoldS = 0.6;
+        // Fire stays while S keep coming: a phrase with an S every second or two is one fire, not fire-dance-fire
+        // (Jakob 2026-11-10: "wechselt oft zwischen tanzen und feuer, er soll bei einer pose bleiben").
+        // Back to dancing only after fireHoldS without any S; snapping likewise after snapHoldS.
+        static constexpr double hotAfterS = 0.4, coolAfterS = 0.8, proudForS = 2.5, fireHoldS = 4.0, snapHoldS = 2.5;
         // Calm (Jakob 2026-11-10: "Ember springt sehr viel herum"): a new mood must last debounceS, and a mood
         // is shown at least minHoldS (bypass and AUTO switch at once)
-        static constexpr double debounceS = 0.25, minHoldS = 0.9;
+        static constexpr double debounceS = 0.25, minHoldS = 2.0;
 
         void update (const MascotInput& in, double dtSeconds) noexcept;
         MascotState getState() const noexcept { return state; }
@@ -53,7 +56,7 @@ namespace ember
         void setState (MascotState s) noexcept;
         MascotState state = MascotState::idle;
         float intensity = 0.0f;
-        double timeInState = 0.0, hotFor = 0.0, coolFor = 0.0, proudLeft = 0.0, fireLeft = 0.0, pendingFor = 0.0;
+        double timeInState = 0.0, hotFor = 0.0, coolFor = 0.0, proudLeft = 0.0, fireLeft = 0.0, snapLeft = 0.0, pendingFor = 0.0;
         MascotState pending = MascotState::idle;
         bool hot = false;
     };

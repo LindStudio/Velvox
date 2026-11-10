@@ -510,23 +510,43 @@ namespace
         runFor (in, 1.0);
         check (b.getState() == MascotState::idle, "idle without signal");
         in.hasSignal = true;
-        runFor (in, 1.2);
+        runFor (in, 2.5);
         check (b.getState() == MascotState::singing, "singing");
         in.reductionDb = 1.0f;
-        runFor (in, 1.2);
+        runFor (in, 2.5);
         check (b.getState() == MascotState::snapping, "snapping");
         in.reductionDb = 5.0f;
-        runFor (in, 1.2);
+        runFor (in, 2.5);
         check (b.getState() == MascotState::fire, "fire");
         check (b.getIntensity() > 0.3f, "fire intensity follows GR");
         in.reductionDb = 11.0f;
-        runFor (in, 1.5);
+        runFor (in, 2.5);
         check (b.getState() == MascotState::overheated, "overheated after a while above 9 dB");
         in.reductionDb = 0.0f;
         runFor (in, 0.3);
         check (b.getState() == MascotState::overheated, "stays hot a moment");
         runFor (in, 2.5);
-        check (b.getState() == MascotState::singing, "cools down");
+        check (b.getState() == MascotState::fire, "then keeps the fire pose for a while");
+        runFor (in, 7.0);
+        check (b.getState() == MascotState::singing, "back to dancing after 4 s without S");
+
+        // A sung phrase: an S every 1.5 s for 20 s -> one fire, no fire-dance-fire
+        {
+            MascotBrain c;
+            MascotInput ph;
+            ph.hasSignal = true;
+            for (double s = 0; s < 3.0; s += dt) c.update (ph, dt);
+            int changes = 0;
+            auto last = c.getState();
+            for (int i = 0; i < 600; ++i)   // 20 s
+            {
+                ph.reductionDb = (i % 45) < 5 ? 3.0f : 0.0f;   // 0.17 s S every 1.5 s
+                c.update (ph, dt);
+                if (c.getState() != last) { ++changes; last = c.getState(); }
+            }
+            check (changes == 1 && c.getState() == MascotState::fire,
+                   "S every 1.5 s: one change into fire and stays (got " + juce::String (changes) + ")");
+        }
 
         // Calm: a GR that flickers every 100 ms does not make him flicker
         {
@@ -584,7 +604,7 @@ namespace
         in.reductionDb = 5.0f;
         view.setInput (in);
         bool sawOut = false, sawIn = false;
-        for (int i = 0; i < 90; ++i)
+        for (int i = 0; i < 180; ++i)
         {
             view.stepForTest (dt);
             sawOut = sawOut || (view.getShownState() == MascotState::singing && view.getShownClip() == MascotClip::out);

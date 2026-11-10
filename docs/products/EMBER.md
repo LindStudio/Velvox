@@ -46,8 +46,9 @@ Vokale höchstens −0,02 dB, S-nahe Vokalteile höchstens −0,45 dB. Gerendert
 −0,09 dB, größte Reduktion 3–5 dB (vorher 9–11 dB).
 
 ## Maskottchen (`EmberMascot.*`)
-Ruhig (Jakob: „springt sehr viel herum“): Eine neue Stimmung muss 0,25 s anliegen, jede Stimmung bleibt mindestens
-0,9 s, das Maskottchen bekommt die geglättete Reduktion. Standbilder bewegen sich nur leicht (Atmen, sanftes Wiegen).
+Ruhig (Jakob: „springt sehr viel herum“, „wechselt zwischen tanzen und feuer“): Feuer bleibt, bis 4 s kein S kam
+(Snapping 2,5 s). Eine neue Stimmung muss 0,25 s anliegen, jede Stimmung bleibt mindestens
+2 s, das Maskottchen bekommt die geglättete Reduktion. Standbilder bewegen sich nur leicht (Atmen, sanftes Wiegen).
 Clips: `<state>_in_###` → `<state>_###` (Schleife) → `<state>_out_###`; ein Wechsel spielt out → in → Schleife,
 ohne Clips wird 0,35 s überblendet. 12 fps (`mascot.json`). Animations-Anleitung für Jakob:
 Drive `Plugins/01 EMBER De-Esser/ANLEITUNG_Animation.md`, Werkzeug `tools/mascot/video_to_frames.py`.
