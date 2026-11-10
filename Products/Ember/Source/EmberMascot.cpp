@@ -218,8 +218,12 @@ namespace ember
         const auto switchTo = [this] (MascotState s, bool viaClips)
         {
             previousState = shownState;
+            previousClip = shownClip;
             previousTime = clipTime;
-            fading = ! viaClips && s != shownState;
+            // Clips meet in the neutral pose, but AI clips never match exactly: a short blend hides the seam.
+            // Moods without clips get a longer cross-fade.
+            fading = s != shownState;
+            fadeLength = viaClips ? 0.15 : 0.35;
             fadeTime = 0.0;
             shownState = s;
             shownClip = frames.has (s, MascotClip::in) ? MascotClip::in : MascotClip::loop;
@@ -268,9 +272,9 @@ namespace ember
         if (frames.has (shownState))
         {
             // Moods without in / out clips cross-fade
-            const float fade = fading ? (float) juce::jlimit (0.0, 1.0, fadeTime / 0.35) : 1.0f;
+            const float fade = fading ? (float) juce::jlimit (0.0, 1.0, fadeTime / fadeLength) : 1.0f;
             if (fade < 1.0f && frames.has (previousState) && previousState != shownState)
-                paintFrame (g, area, previousState, MascotClip::loop, previousTime + fadeTime, 1.0f - fade);
+                paintFrame (g, area, previousState, previousClip, previousTime + fadeTime, 1.0f - fade);
             paintFrame (g, area, shownState, shownClip, clipTime, fade);
         }
         else

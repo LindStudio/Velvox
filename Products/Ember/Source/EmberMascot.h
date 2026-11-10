@@ -129,8 +129,9 @@ namespace ember
         MascotState shownState = MascotState::idle;
         MascotClip shownClip = MascotClip::loop;
         double clipTime = 0.0;
-        MascotState previousState = MascotState::idle;   // for the cross-fade between moods without clips
-        double previousTime = 0.0, fadeTime = 1.0;
+        MascotState previousState = MascotState::idle;   // for the cross-fade between two clips
+        MascotClip previousClip = MascotClip::loop;
+        double previousTime = 0.0, fadeTime = 1.0, fadeLength = 0.35;
         bool fading = false;
         double t = 0.0;
         bool compact = false, hover = false;

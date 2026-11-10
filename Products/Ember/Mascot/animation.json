@@ -1,0 +1,10 @@
+{
+  "_source": "Drive: Plugins/01 EMBER De-Esser/Maskottchen/Animation (Jakob's AI videos, 2026-11-10)",
+  "_build": "python tools/mascot/video_to_frames.py \"<that folder>\" Products/Ember/Mascot/frames --recipe Products/Ember/Mascot/animation.json",
+  "idle":       { "src": "SittingIdleEmber.mp4", "loop": "crossfade" },
+  "idle_out":   { "src": "SittingtoStandup Ember.mp4" },
+  "singing_in": { "src": "SingingEmber.mp4", "start": 2.9, "end": 3.6 },
+  "singing":    { "src": "SingingEmber.mp4", "start": 3.6, "loop": "pingpong" },
+  "fire_in":    { "src": "FireEmber.mp4", "end": 1.2 },
+  "fire":       { "src": "FireEmber.mp4", "start": 1.2, "loop": "crossfade" }
+}

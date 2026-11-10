@@ -626,7 +626,7 @@ namespace
             MascotView view;
             view.setSize (500, 400);
             view.setInput (in);
-            juce::MessageManager::getInstance()->runDispatchLoopUntil (700);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (3000);
             juce::Image img (juce::Image::ARGB, 500, 400, true);
             {
                 juce::Graphics g (img);
