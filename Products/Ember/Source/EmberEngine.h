@@ -30,6 +30,7 @@ namespace ember
         float outputDb = 0.0f;
         int mode = 0;                // 0 = split (only the band above freq), 1 = wideband
         bool relative = true;        // detection relative to the full-band level (loud and quiet phrases alike)
+        bool smart = true;           // only where the S band outweighs the body of the voice (relative implied)
         int listen = 0;              // 0 = off, 1 = S band (detector band), 2 = delta (what is removed)
         bool bypass = false;
     };
@@ -42,6 +43,8 @@ namespace ember
     // absolute mode for a voice peaking at -18 dBFS. Below fullFloorDb (near-silence) nothing is de-essed.
     inline constexpr float referenceDb = -18.0f;
     inline constexpr float fullFloorDb = -60.0f;
+    // Smart detection: weight 0 at smartNoneDb (body clearly louder), 1 at smartFullDb and above
+    inline constexpr float smartNoneDb = -12.0f, smartFullDb = -3.0f;
 
     // Static curve: reduction in dB (>= 0) for a detector level, soft knee
     float staticReductionDb (float inDb, float thresholdDb) noexcept;
@@ -58,10 +61,19 @@ namespace ember
         float process (const float* frame, int numChannels, bool relative, float* band = nullptr) noexcept;
         bool isFinite() const noexcept;
 
+        // Smart detection: how much the S band outweighs the body of the voice (250 Hz - 3 kHz), in dB,
+        // from 30 ms envelopes, and the resulting weight 0..1 for the reduction. An S is noise high up with
+        // little body; a bright vowel or breath has its energy in the body -> weight 0, left alone.
+        float getSibilanceIndexDb() const noexcept { return indexDb; }
+        float getSibilanceWeight() const noexcept { return weight; }
+        static float weightForIndex (float indexDb) noexcept;
+
     private:
         double fs = 44100.0;
-        Biquad hp1, hp2;
+        Biquad hp1, hp2, bodyHp, bodyLp;
         float fullEnv = 0.0f, fullRelease = 0.0f;
+        float sEnv = 0.0f, bodyEnv = 0.0f, envRelease = 0.0f;
+        float indexDb = -60.0f, weight = 0.0f;
     };
 
     class Engine
@@ -80,6 +92,8 @@ namespace ember
         PeakMeter gainReductionDb, inputPeak, outputPeak;
         SampleTap inputTap, outputTap;
         std::atomic<float> currentReductionDb { 0.0f };
+        // Loudest detector level of the last block (dB, relative or absolute as set) and the smart weight there
+        std::atomic<float> detectorDb { -100.0f }, detectorWeight { 0.0f };
 
     private:
         void updateShelf (float reductionDb) noexcept;

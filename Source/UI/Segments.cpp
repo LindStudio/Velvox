@@ -112,9 +112,9 @@ namespace vocalypse::ui
 
             const auto* spec = findParameterSpec (paramId);
             const juce::String description = spec != nullptr ? i18n::paramDescription (paramId, spec->description) : juce::String();
-            info = std::make_unique<HoverInfo> (*this, [this] { return i18n::paramName (paramId, parameter->getName (48)); },
+            info = std::make_unique<HoverInfo> (*this, [this] { return customTitle.isNotEmpty() ? customTitle : i18n::paramName (paramId, parameter->getName (48)); },
                                                 [this] { return shownValueText(); },
-                                                [description] { return description; });
+                                                [this, description] { return customDescription.isNotEmpty() ? customDescription : description; });
         }
     }
 

@@ -18,7 +18,7 @@ namespace ember
         }
     }
 
-    AutoResult analyse (const float* mono, int numSamples, double fs)
+    AutoResult analyse (const float* mono, int numSamples, double fs, bool smart)
     {
         AutoResult r;
         r.seconds = fs > 0.0 ? numSamples / fs : 0.0;
@@ -195,6 +195,7 @@ namespace ember
             st.thresholdDb = thr;
             st.rangeDb = range;
             st.releaseMs = autoReleaseMs;
+            st.smart = smart;
             Engine e;
             e.setSettings (st);
             e.prepare (fs, 4096);

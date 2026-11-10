@@ -4,13 +4,14 @@
 # look-and-feel, spectrum, fonts) and DSP primitives, so every Lind Audio plugin looks and feels the same.
 # Mascot frames: drop PNGs into Products/Ember/Mascot/frames (see the README there) and re-run CMake.
 # ---------------------------------------------------------------------------
-set(EMBER_VERSION 0.9.0)
+set(EMBER_VERSION 1.0.0)
 
 set(EMBER_SOURCES
     Products/Ember/Source/EmberEngine.cpp
     Products/Ember/Source/EmberAuto.cpp
     Products/Ember/Source/EmberParams.cpp
     Products/Ember/Source/EmberMascot.cpp
+    Products/Ember/Source/EmberPresets.cpp
     Products/Ember/Source/EmberProcessor.cpp
     Products/Ember/Source/EmberEditor.cpp
 )
@@ -53,7 +54,8 @@ juce_add_plugin(Ember
     PLUGIN_CODE                 Embr          # NEVER change: the VST3 class ID comes from it
     FORMATS                     VST3 Standalone
     PRODUCT_NAME                "EMBER De-Esser"
-    DESCRIPTION                 "De-esser with lookahead, auto setup and Ember the imp"
+    DESCRIPTION                 "De-esser with smart detection, auto setup and Ember the imp"
+    ICON_BIG                    "${CMAKE_CURRENT_SOURCE_DIR}/Products/Ember/Installer/ember_icon.png"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE
     NEEDS_MIDI_OUTPUT           FALSE

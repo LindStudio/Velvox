@@ -1,5 +1,33 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
+## STAND 1.0.0 (2026-11-10) – verkaufsfertig ohne Lizenz
+Jakob: „UX und S-Algorithmus verbessern, Erklärtext beim Hovern, Englisch, Ember nur in SIMPLE, komplett verkaufsfertig
+(außer Lizenzierung)“.
+- **Smart-Erkennung** (neuer Standard, `emDetection` 0 = Smart / 1 = Relativ / 2 = Absolut): Der Detektor vergleicht das
+  S-Band mit dem Stimmkörper (250 Hz–3 kHz, Hüllkurven 30 ms). Die Reduktion wird mit
+  `smoothstep(index, −12 dB, −3 dB)` gewichtet. Gemessen bei kräftiger Handeinstellung (Thr −50 dB, Range 10 dB) an
+  4 echten Takes: S-Laute gleich (−4,9 bis −7,3 dB), Luft der Vokale (8–16 kHz) −0,5 bis −4,3 statt −3,9 bis −8,7 dB,
+  Präsenz der Vokale (2–5 kHz) −0,04 bis −0,45 statt −0,5 bis −1,1 dB. Mit AUTO-Einstellungen ändert sich kaum etwas
+  (AUTO ist schon vorsichtig).
+- **Oberfläche (900 × 600):** Erklärkarte bei jedem Regler, Button und Umschalter (`InfoPopupHost` im Panel,
+  `Segments::setInfo` neu im gemeinsamen Kit). Sprache: Wie das System / Deutsch / English (Menü, gespeichert in
+  `%APPDATA%\Lind Audio\EMBER.settings`, das Panel wird neu aufgebaut). Ember nur in SIMPLE. In ADVANCED: volles
+  Spektrum und S-PEGEL-Anzeige mit ziehbarem Threshold (grau = Smart hört kein S). Preset-Leiste ‹ Name › mit
+  9 Werks-Presets, eigenen Presets (`Dokumente\Lind Audio\EMBER\Presets\*.emberpreset`), * = geändert,
+  SPEICHERN, A/B mit A → B. Menü ≡: Sprache, Handbuch, Ember-Tipp, Über EMBER. Beim ersten Start sagt Ember
+  „Klick mich für AUTO!“. Die Fenstergröße wird gemerkt. GR-Anzeige 0–12 dB mit Zahlenwert.
+- **Verkauf:** Version 1.0.0, App-Icon (Embers Kopf aus Jakobs Front-Bild), Installer
+  `scripts\make-installer.ps1` (Inno Setup 6, per-user per winget installiert) →
+  `build\installer\EMBER_De-Esser_1.0.0_Windows_Setup.exe`, DE/EN, Lizenzvertrag (ENTWURF), VST3 + Standalone +
+  Handbücher, Deinstallation getestet (die Presets des Nutzers bleiben). Handbuch DE/EN, EULA und Shop-Text in
+  `Products/Ember/Installer` und `docs/products/EMBER_Shop.md`. Release-Kopie: Drive
+  `Plugins/01 EMBER De-Esser/Release/1.0.0`.
+- **Tests:** 193 Checks (261 mit `EMBER_VOCALS`), CPU 0,26 % eines Kerns, pluginval 10 SUCCESS auf der installierten
+  Version, die Standalone-App startet.
+- **Offen vor dem Verkauf:** Lizenz/Kopierschutz, Code-Signing-Zertifikat (sonst warnt SmartScreen), EULA anwaltlich
+  prüfen lassen (Adresse fehlt), Support-Adresse und URL (`support@lind-audio.com`, `lind-audio.com/ember` sind
+  Platzhalter), Mac-Version (braucht einen Mac), Shop/Zahlung, Produktseite.
+
 Stand 2026-11-10, Version 0.9.0 (Beta). Erstes Einzel-Plugin nach dem neuen Plan (Jakob 2026-11-10): jedes Modul
 einzeln verkaufen, später ein Hub, der alle verbindet. Plan-Seite: https://claude.ai/artifact/T2uCsbjZGFrqUMHBDkYknZ
 

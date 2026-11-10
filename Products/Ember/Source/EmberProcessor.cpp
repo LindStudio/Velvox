@@ -15,6 +15,7 @@ namespace ember
           state (*this, nullptr, stateType, createLayout())
     {
         bypassParam = state.getParameter (pid::bypass);
+        presetValues = ember::capture (state);
         engine.prepare (currentRate, 512);
         capture.prepare (currentRate);
         setLatencySamples (engine.getLatencySamples());
@@ -74,12 +75,116 @@ namespace ember
         if (xml == nullptr || ! xml->hasTagName (state.state.getType()))
             return;
         state.replaceState (juce::ValueTree::fromXml (*xml));
+        factoryIndex = (int) state.state.getProperty ("factoryPreset", 0);
+        userPresetName = state.state.getProperty ("userPreset", juce::String()).toString();
         // replaceState leaves parameters that the saved state does not mention untouched and does not
         // always resend values; snap every parameter to the stored value (VOCALYPSE lesson 0.6.1)
         for (auto* p : getParameters())
             if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
                 if (auto* raw = state.getRawParameterValue (rp->getParameterID()))
                     rp->setValueNotifyingHost (rp->convertTo0to1 (raw->load()));
+        // a project reopens as it was saved: the restored values count as the preset's
+        presetValues = ember::capture (state);
+    }
+
+    // ---------------------------------------------------------------- presets
+    void EmberAudioProcessor::loadFactoryPreset (int index)
+    {
+        const auto& list = factoryPresets();
+        if (! juce::isPositiveAndBelow (index, (int) list.size()))
+            return;
+        ember::apply (state, list[(size_t) index].values);
+        factoryIndex = index;
+        userPresetName = {};
+        presetValues = ember::capture (state);
+        state.state.setProperty ("factoryPreset", index, nullptr);
+        state.state.setProperty ("userPreset", juce::String(), nullptr);
+    }
+
+    bool EmberAudioProcessor::loadUserPreset (const juce::File& file)
+    {
+        ParamValues v;
+        if (! ember::loadUserPreset (file, v))
+            return false;
+        ember::apply (state, v);
+        factoryIndex = -1;
+        userPresetName = file.getFileNameWithoutExtension();
+        presetValues = ember::capture (state);
+        state.state.setProperty ("factoryPreset", -1, nullptr);
+        state.state.setProperty ("userPreset", userPresetName, nullptr);
+        return true;
+    }
+
+    bool EmberAudioProcessor::saveUserPreset (const juce::File& file)
+    {
+        const auto target = file.withFileExtension (presetExtension);
+        if (! ember::saveUserPreset (target, ember::capture (state)))
+            return false;
+        factoryIndex = -1;
+        userPresetName = target.getFileNameWithoutExtension();
+        presetValues = ember::capture (state);
+        state.state.setProperty ("factoryPreset", -1, nullptr);
+        state.state.setProperty ("userPreset", userPresetName, nullptr);
+        return true;
+    }
+
+    juce::String EmberAudioProcessor::getPresetName() const
+    {
+        if (factoryIndex >= 0 && factoryIndex < (int) factoryPresets().size())
+            return presetName (factoryPresets()[(size_t) factoryIndex]);
+        if (userPresetName.isNotEmpty())
+            return userPresetName;
+        return tr ("AUTO-Einstellung", "AUTO setting");
+    }
+
+    bool EmberAudioProcessor::isPresetModified() const
+    {
+        return ! ember::sameValues (presetValues, ember::capture (state));
+    }
+
+    void EmberAudioProcessor::stepPreset (int direction)
+    {
+        // order: factory presets, then user presets
+        const int numFactory = (int) factoryPresets().size();
+        const auto users = userPresets();
+        const int total = numFactory + users.size();
+        int current = factoryIndex;
+        if (current < 0)
+        {
+            current = numFactory;
+            for (int i = 0; i < users.size(); ++i)
+                if (users[i].getFileNameWithoutExtension() == userPresetName)
+                    current = numFactory + i;
+        }
+        const int next = ((current + direction) % total + total) % total;
+        if (next < numFactory)
+            loadFactoryPreset (next);
+        else
+            loadUserPreset (users[next - numFactory]);
+    }
+
+    // -------------------------------------------------------------------- A/B
+    void EmberAudioProcessor::switchSlot (int slot)
+    {
+        if (slot == activeSlot || ! juce::isPositiveAndBelow (slot, 2))
+            return;
+        slots[activeSlot] = ember::capture (state);
+        slotUsed[activeSlot] = true;
+        activeSlot = slot;
+        if (slotUsed[slot])
+            ember::apply (state, slots[slot]);
+        else
+        {
+            slots[slot] = ember::capture (state);   // first visit: B starts as a copy of A
+            slotUsed[slot] = true;
+        }
+    }
+
+    void EmberAudioProcessor::copyActiveToOther()
+    {
+        const int other = 1 - activeSlot;
+        slots[other] = ember::capture (state);
+        slotUsed[other] = true;
     }
 
     // ------------------------------------------------------------------- AUTO
@@ -161,6 +266,11 @@ namespace ember
         set (pid::mode, 0.0f);
         set (pid::detection, 0.0f);
         set (pid::listen, 0.0f);
+        factoryIndex = -1;
+        userPresetName = {};
+        presetValues = ember::capture (state);
+        state.state.setProperty ("factoryPreset", -1, nullptr);
+        state.state.setProperty ("userPreset", juce::String(), nullptr);
     }
 
     juce::String EmberAudioProcessor::getAutoMessage() const

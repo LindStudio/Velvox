@@ -36,7 +36,8 @@ namespace ember
     };
 
     // Analysis of a mono take. Needs at least ~3 s of voice and some S sounds.
-    AutoResult analyse (const float* mono, int numSamples, double sampleRate);
+    // smart = the engine's smart detection (default, as the plugin runs it); false = plain relative detection
+    AutoResult analyse (const float* mono, int numSamples, double sampleRate, bool smart = true);
 
     // Subtle by design (Jakob 2026-11-10: "es soll nur subtil die S-Laute wegnehmen"):
     // S lose 1.5 dB (soft S, 14 dB under the vowels) to 3.5 dB (harsh S, 2 dB under the vowels)

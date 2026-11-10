@@ -83,7 +83,9 @@ namespace ember
         s.mix = mix->load() * 0.01f;
         s.outputDb = output->load();
         s.mode = (int) std::lround (mode->load());
-        s.relative = std::lround (detection->load()) == 0;
+        const auto det = std::lround (detection->load());
+        s.smart = det == 0;
+        s.relative = det <= 1;
         s.listen = (int) std::lround (listen->load());
         s.bypass = bypass->load() > 0.5f;
         return s;

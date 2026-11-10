@@ -28,6 +28,8 @@ namespace vocalypse::ui
         int getIdealWidth (int height) const;   // every text segment fits its name (review 2026-10-28)
         void clickSegment (int segment);
         void setAccent (juce::Colour accent);
+        // Info card texts for parameters without a VOCALYPSE ParameterSpec (single plugins); empty = default
+        void setInfo (const juce::String& title, const juce::String& description) { customTitle = title; customDescription = description; }
         const juce::String& getParamId() const noexcept { return paramId; }
 
         // Optional tile look (Saturation character tiles): each segment is painted by this function
@@ -63,6 +65,7 @@ namespace vocalypse::ui
         int selectedSegment = -1;
         std::unique_ptr<HoverInfo> info;
         TilePainter tilePainter;
+        juce::String customTitle, customDescription;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Segments)
     };

@@ -1,0 +1,184 @@
+ENTWURF – vor dem Verkauf rechtlich prüfen lassen / DRAFT – have it reviewed before selling
+
+==========================================================================
+EMBER De-Esser – Endbenutzer-Lizenzvereinbarung (EULA)
+Lind Audio, Österreich · Version 1.0.0
+==========================================================================
+
+Bitte lies diese Vereinbarung sorgfältig, bevor du EMBER De-Esser
+installierst oder verwendest. Mit der Installation oder Nutzung erklärst du
+dich mit diesen Bedingungen einverstanden. Wenn du nicht einverstanden bist,
+installiere oder verwende die Software nicht.
+
+1. Vertragsparteien und Gegenstand
+   Diese Vereinbarung wird zwischen Lind Audio, Österreich
+   ("Lizenzgeber") und dir als Käufer ("Lizenznehmer") geschlossen. Sie gilt
+   für die Software EMBER De-Esser (VST3-Plugin und Standalone-Anwendung)
+   einschließlich Presets, Handbüchern und Updates ("Software").
+
+2. Lizenzumfang
+   2.1 Du erhältst eine einfache, nicht übertragbare, nicht
+       unterlizenzierbare Lizenz für einen einzelnen Benutzer.
+   2.2 Du darfst die Software auf bis zu zwei (2) Computern installieren,
+       die dir gehören bzw. von dir selbst genutzt werden. Die Software
+       darf nur von dir verwendet werden.
+   2.3 Du darfst die Software für private und kommerzielle Musik-, Audio-
+       und Medienproduktionen verwenden. Mit der Software bearbeitetes
+       Audiomaterial gehört dir; daran erwirbt der Lizenzgeber keine Rechte.
+   2.4 Die Software wird lizenziert, nicht verkauft. Alle Rechte, die dir
+       nicht ausdrücklich eingeräumt werden, verbleiben beim Lizenzgeber.
+
+3. Einschränkungen
+   Soweit nicht gesetzlich zwingend erlaubt, ist es dir nicht gestattet:
+   a) die Software oder deine Lizenz weiterzuverkaufen, zu vermieten, zu
+      verleihen, zu verschenken oder anderweitig an Dritte weiterzugeben;
+   b) die Software zu vervielfältigen oder zu verbreiten, ausgenommen
+      Installationen gemäß Punkt 2.2 und eine Sicherungskopie für den
+      eigenen Gebrauch;
+   c) die Software zu dekompilieren, zu disassemblieren, zurückzuentwickeln
+      (Reverse Engineering) oder abgeleitete Werke daraus zu erstellen;
+   d) Urheberrechtsvermerke, Marken oder Kennzeichnungen zu entfernen oder
+      zu verändern.
+   Gesetzlich zwingende Rechte (etwa nach § 40e des österreichischen
+   Urheberrechtsgesetzes zur Herstellung der Interoperabilität) bleiben
+   unberührt.
+
+4. Komponenten Dritter
+   Die Software wurde mit JUCE entwickelt und enthält die Schriften
+   Montserrat (SIL Open Font License 1.1) und Roboto Mono (Apache License
+   2.0). Für diese Komponenten gelten zusätzlich deren jeweilige
+   Lizenzbedingungen.
+
+5. Gewährleistung
+   5.1 Die Software wird "wie besehen" bereitgestellt. Der Lizenzgeber
+       übernimmt keine Garantie dafür, dass die Software fehlerfrei,
+       ununterbrochen oder mit jeder Hard- und Software kompatibel läuft
+       oder für einen bestimmten Zweck geeignet ist.
+   5.2 Gesetzliche Gewährleistungsrechte, insbesondere nach dem
+       Verbrauchergewährleistungsgesetz (VGG) und dem
+       Konsumentenschutzgesetz (KSchG), bleiben unberührt.
+
+6. Haftung
+   6.1 Soweit gesetzlich zulässig, haftet der Lizenzgeber nicht für
+       mittelbare Schäden, Folgeschäden, entgangenen Gewinn, Datenverlust
+       oder Schäden an Aufnahmen, Projekten oder Geräten.
+   6.2 Soweit gesetzlich zulässig, ist die Haftung des Lizenzgebers der Höhe
+       nach auf den für die Lizenz bezahlten Kaufpreis begrenzt.
+   6.3 Diese Beschränkungen gelten nicht bei Vorsatz oder grober
+       Fahrlässigkeit, für Personenschäden sowie in allen anderen Fällen,
+       in denen eine Haftungsbeschränkung nach österreichischem Recht
+       unzulässig ist.
+
+7. Beendigung
+   Die Lizenz gilt unbefristet. Sie endet automatisch, wenn du wesentlich
+   gegen diese Vereinbarung verstößt. In diesem Fall musst du die Software
+   und alle Kopien löschen.
+
+8. Verbraucherrechte
+   Wenn du Verbraucher bist, bleiben deine gesetzlichen Verbraucherrechte,
+   einschließlich zwingender Schutzvorschriften des Staates deines
+   gewöhnlichen Aufenthalts, von dieser Vereinbarung unberührt.
+
+9. Anwendbares Recht und Gerichtsstand
+   Es gilt österreichisches Recht unter Ausschluss der Verweisungsnormen
+   des internationalen Privatrechts und des UN-Kaufrechts (CISG).
+   Gerichtsstand ist das sachlich zuständige Gericht in Österreich am Sitz
+   des Lizenzgebers. Für Verbraucher gelten die gesetzlichen
+   Gerichtsstände.
+
+10. Schlussbestimmungen
+   Sollte eine Bestimmung dieser Vereinbarung unwirksam sein, bleibt die
+   Wirksamkeit der übrigen Bestimmungen unberührt.
+
+Kontakt: Lind Audio, Österreich · support@lind-audio.com
+(Anschrift des Lizenzgebers: [vor Veröffentlichung ergänzen])
+
+
+==========================================================================
+EMBER De-Esser – End User Licence Agreement (EULA)
+Lind Audio, Austria · Version 1.0.0
+==========================================================================
+
+Please read this agreement carefully before installing or using EMBER
+De-Esser. By installing or using the software you agree to these terms. If
+you do not agree, do not install or use the software.
+
+In case of any difference between the German and the English version, the
+German version prevails.
+
+1. Parties and subject matter
+   This agreement is made between Lind Audio, Austria ("Licensor") and you
+   as the purchaser ("Licensee"). It covers the software EMBER De-Esser
+   (VST3 plugin and standalone application) including presets, manuals and
+   updates ("Software").
+
+2. Scope of licence
+   2.1 You receive a non-exclusive, non-transferable, non-sublicensable
+       licence for a single user.
+   2.2 You may install the Software on up to two (2) computers that you own
+       or use yourself. The Software may be used by you only.
+   2.3 You may use the Software for private and commercial music, audio
+       and media productions. Audio processed with the Software belongs to
+       you; the Licensor acquires no rights in it.
+   2.4 The Software is licensed, not sold. All rights not expressly granted
+       to you remain with the Licensor.
+
+3. Restrictions
+   Except where mandatory law permits it, you may not:
+   a) resell, rent, lend, give away or otherwise transfer the Software or
+      your licence to third parties;
+   b) copy or distribute the Software, except for installations under
+      clause 2.2 and one backup copy for your own use;
+   c) decompile, disassemble, reverse engineer or create derivative works
+      of the Software;
+   d) remove or alter copyright notices, trademarks or labels.
+   Mandatory statutory rights (such as section 40e of the Austrian
+   Copyright Act on achieving interoperability) remain unaffected.
+
+4. Third-party components
+   The Software was built with JUCE and contains the fonts Montserrat (SIL
+   Open Font License 1.1) and Roboto Mono (Apache License 2.0). Their
+   respective licence terms apply to these components in addition.
+
+5. Warranty
+   5.1 The Software is provided "as is". The Licensor does not warrant that
+       the Software is free of errors, runs without interruption, is
+       compatible with all hardware and software, or is fit for a
+       particular purpose.
+   5.2 Statutory warranty rights, in particular under the Austrian Consumer
+       Warranty Act (VGG) and Consumer Protection Act (KSchG), remain
+       unaffected.
+
+6. Liability
+   6.1 To the extent permitted by law, the Licensor is not liable for
+       indirect or consequential damages, lost profits, loss of data, or
+       damage to recordings, projects or equipment.
+   6.2 To the extent permitted by law, the Licensor's liability is limited
+       in amount to the purchase price paid for the licence.
+   6.3 These limitations do not apply in cases of intent or gross
+       negligence, to personal injury, or in any other case in which a
+       limitation of liability is not permitted under Austrian law.
+
+7. Termination
+   The licence is perpetual. It ends automatically if you materially breach
+   this agreement. In that case you must delete the Software and all
+   copies.
+
+8. Consumer rights
+   If you are a consumer, your statutory consumer rights, including
+   mandatory protective provisions of the country of your habitual
+   residence, remain unaffected by this agreement.
+
+9. Governing law and jurisdiction
+   This agreement is governed by Austrian law, excluding its conflict-of-law
+   rules and the UN Convention on Contracts for the International Sale of
+   Goods (CISG). Place of jurisdiction is the competent court in Austria at
+   the Licensor's registered seat. For consumers, the statutory places of
+   jurisdiction apply.
+
+10. Final provisions
+   If any provision of this agreement is invalid, the validity of the
+   remaining provisions remains unaffected.
+
+Contact: Lind Audio, Austria · support@lind-audio.com
+(Licensor's postal address: [add before publication])

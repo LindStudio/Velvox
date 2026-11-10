@@ -17,7 +17,7 @@ namespace ember::pid
     inline constexpr const char* mix       = "emMix";
     inline constexpr const char* output    = "emOutput";
     inline constexpr const char* mode      = "emMode";       // Split / Wideband
-    inline constexpr const char* detection = "emDetection";  // Relative / Absolute
+    inline constexpr const char* detection = "emDetection";  // Smart / Relative / Absolute
     inline constexpr const char* listen    = "emListen";     // Off / S band / Delta
     inline constexpr const char* bypass    = "emBypass";
 }
@@ -42,7 +42,7 @@ namespace ember
 
     // Choice names (host / automation; the UI shows its own labels)
     inline const juce::StringArray modeChoices { "Split", "Wideband" };
-    inline const juce::StringArray detectionChoices { "Relative", "Absolute" };
+    inline const juce::StringArray detectionChoices { "Smart", "Relative", "Absolute" };
     inline const juce::StringArray listenChoices { "Off", "S band", "Delta" };
 
     // Stimme presets of SIMPLE (UI writes the frequency)

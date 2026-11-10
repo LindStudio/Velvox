@@ -1,5 +1,10 @@
 # HEADLINER – Übergabe für die nächste Session
 
+## STAND 2026-11-10 ABEND – EMBER De-Esser 1.0.0 verkaufsfertig (ohne Lizenz)
+Branch `feature/ember-deesser`. Alles in `docs/products/EMBER.md`, Abschnitt „STAND 1.0.0“. Installer:
+`.\scripts\make-installer.ps1 -Product Ember`. Installiert per Installer (VST3 + Standalone), pluginval 10 SUCCESS.
+Nicht gepusht. Offen: Lizenz, Code-Signing, EULA-Prüfung, Platzhalter für Support und URL, echte Animationen (Jakob).
+
 ## STAND 2026-11-10 (Haupt-PC) – HIER WEITERMACHEN: neuer Plan, EMBER De-Esser fertig
 **Planänderung (Jakob):** kein All-in-one mehr. Jedes Modul wird ein eigenes Plugin (Abstand Wochen/Monate), danach ein
 Hub, der alle verbindet. Verkauf einzeln, als Bundle und als Abo. Name = Maskottchen + Funktion, gleiche Knobs und

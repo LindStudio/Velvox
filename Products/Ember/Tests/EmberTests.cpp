@@ -10,6 +10,7 @@
 #include "EmberProcessor.h"
 #include "EmberEditor.h"
 #include "EmberMascot.h"
+#include "EmberPresets.h"
 #include "Text/I18n.h"
 
 using namespace ember;
@@ -168,7 +169,7 @@ namespace
         near (s.thresholdDb, -30.0, 0.01, "default threshold");
         near (s.rangeDb, 5.0, 0.01, "default range (gentle)");
         near (s.amount, 0.5, 1e-4, "default Amount 50 %");
-        check (s.relative && s.mode == 0 && s.listen == 0 && ! s.bypass, "default modes");
+        check (s.smart && s.relative && s.mode == 0 && s.listen == 0 && ! s.bypass, "default modes (Smart detection)");
         check (p.getBypassParameter() != nullptr, "host bypass parameter");
     }
 
@@ -362,6 +363,29 @@ namespace
         }
     }
 
+    void testCpu()
+    {
+        Test t ("CPU: 60 s of stereo audio at 48 kHz");
+        const double fs = 48000.0;
+        const auto take = makeTake (fs, 10.0);
+        Settings s;
+        s.thresholdDb = -40.0f;
+        E e (fs, s);
+        std::vector<float> l (512), r (512);
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
+        for (int rep = 0; rep < 6; ++rep)
+            for (int start = 0; start + 512 <= (int) take.x.size(); start += 512)
+            {
+                std::copy_n (take.x.data() + start, 512, l.data());
+                std::copy_n (take.x.data() + start, 512, r.data());
+                float* ch[2] { l.data(), r.data() };
+                e.process (ch, 2, 512);
+            }
+        const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+        std::printf ("    %.0f ms for 60 s = %.2f %% of one core\n", ms, ms / 600.0);
+        check (ms < 1200.0, "below 2 % of one core");
+    }
+
     void testRobust()
     {
         Test t ("NaN / Inf input recovers, silence stays silent");
@@ -489,7 +513,7 @@ namespace
         const auto s = readSettings (p.state);
         near (s.freq, p.getLastAuto().freq, 15.0, "freq applied");
         near (s.thresholdDb, p.getLastAuto().thresholdDb, 0.1, "threshold applied");
-        check (s.mode == 0 && s.relative && std::abs (s.amount - 0.5f) < 1e-3f, "split, relative, Amount 50 %");
+        check (s.mode == 0 && s.smart && std::abs (s.amount - 0.5f) < 1e-3f, "split, smart, Amount 50 %");
         check (p.getAutoMessage().isNotEmpty(), "message");
 
         juce::AudioProcessor::BusesLayout mono, stereo, mixed;
@@ -669,11 +693,115 @@ namespace
         return ed.createComponentSnapshot (ed.getLocalBounds());
     }
 
+    void testSmart()
+    {
+        Test t ("Smart detection: S reduced, bright vowels keep their air");
+        const double fs = 48000.0;
+        auto take = makeTake (fs, 6.0);
+        // add "air" to the vowels: soft noise above 7 kHz (a bright, breathy voice)
+        juce::Random rnd (11);
+        Biq a1, a2;
+        a1.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 7000.0, 0.54));
+        a2.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 7000.0, 1.31));
+        for (auto [s0, s1] : take.vRanges)
+            for (int i = s0; i < s1; ++i)
+                take.x[(size_t) i] += 0.012f * a2.run (a1.run (rnd.nextFloat() * 2.0f - 1.0f));
+        const auto airDb = [&] (const std::vector<float>& x, int offset)
+        {
+            Biq h1, h2;
+            h1.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 7000.0, 0.54));
+            h2.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 7000.0, 1.31));
+            std::vector<float> hp (x.size());
+            for (size_t i = 0; i < x.size(); ++i)
+                hp[i] = h2.run (h1.run (x[i]));
+            return rangesDb (hp, take.vRanges, offset);
+        };
+        double sLoss[2], airLoss[2];
+        for (int smart = 0; smart < 2; ++smart)
+        {
+            Settings s;
+            s.thresholdDb = -50.0f;   // a heavy hand-set setting
+            s.rangeDb = 10.0f;
+            s.freq = 5000.0f;
+            s.smart = smart == 1;
+            E e (fs, s);
+            const auto y = run (e, take.x);
+            const int L = e.getLatencySamples();
+            sLoss[smart] = rangesDb (take.x, take.sRanges, 0) - rangesDb (y, take.sRanges, L);
+            airLoss[smart] = airDb (take.x, 0) - airDb (y, L);
+        }
+        std::printf ("    plain: S -%.2f dB, vowel air -%.2f dB | smart: S -%.2f dB, vowel air -%.2f dB\n", sLoss[0], airLoss[0], sLoss[1], airLoss[1]);
+        check (sLoss[1] > sLoss[0] - 1.5, "smart still takes the S down");
+        check (airLoss[1] < airLoss[0] * 0.5 && airLoss[1] < 1.5, "smart leaves the air of the vowels (less than half the loss, < 1.5 dB)");
+    }
+
+    void testPresets()
+    {
+        Test t ("presets: factory, user, modified marker, A/B");
+        EmberAudioProcessor p;
+        p.prepareToPlay (48000.0, 512);
+        const auto& list = factoryPresets();
+        check (list.size() >= 8, "factory presets");
+        for (int i = 0; i < (int) list.size(); ++i)
+        {
+            p.loadFactoryPreset (i);
+            check (! p.isPresetModified(), juce::String ("fresh preset not modified: ") + list[(size_t) i].nameEn);
+            for (const auto& [id, v] : list[(size_t) i].values)
+                if (auto* raw = p.state.getRawParameterValue (id))
+                    near (raw->load(), v, std::max (0.02, std::abs (v) * 0.002), juce::String (list[(size_t) i].nameEn) + " " + id);
+        }
+        p.loadFactoryPreset (1);
+        if (auto* thr = p.state.getParameter (pid::threshold))
+            thr->setValueNotifyingHost (thr->convertTo0to1 (-12.0f));
+        check (p.isPresetModified(), "change -> modified");
+
+        // user preset round trip
+        const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_preset_test");
+        dir.deleteRecursively();
+        const auto file = dir.getChildFile ("Mein Test");
+        check (p.saveUserPreset (file), "save");
+        check (dir.getChildFile (juce::String ("Mein Test") + presetExtension).existsAsFile(), "file with extension");
+        p.loadFactoryPreset (0);
+        check (p.loadUserPreset (dir.getChildFile (juce::String ("Mein Test") + presetExtension)), "load");
+        near (readSettings (p.state).thresholdDb, -12.0, 0.05, "user preset value back");
+        check (p.getPresetName() == "Mein Test" && ! p.isPresetModified(), "user preset name, not modified");
+        dir.deleteRecursively();
+
+        // bypass is never part of a preset
+        if (auto* b = p.state.getParameter (pid::bypass))
+            b->setValueNotifyingHost (1.0f);
+        p.loadFactoryPreset (2);
+        check (readSettings (p.state).bypass, "loading a preset keeps bypass");
+        if (auto* b = p.state.getParameter (pid::bypass))
+            b->setValueNotifyingHost (0.0f);
+
+        // A/B
+        p.loadFactoryPreset (0);
+        p.switchSlot (1);   // B starts as a copy of A
+        near (readSettings (p.state).thresholdDb, -30.0, 0.05, "B starts as A");
+        if (auto* thr = p.state.getParameter (pid::threshold))
+            thr->setValueNotifyingHost (thr->convertTo0to1 (-40.0f));
+        p.switchSlot (0);
+        near (readSettings (p.state).thresholdDb, -30.0, 0.05, "A back");
+        p.switchSlot (1);
+        near (readSettings (p.state).thresholdDb, -40.0, 0.05, "B kept its change");
+        p.copyActiveToOther();
+        p.switchSlot (0);
+        near (readSettings (p.state).thresholdDb, -40.0, 0.05, "B copied to A");
+
+        // stepping wraps around the factory list
+        p.loadFactoryPreset ((int) list.size() - 1);
+        const auto users = userPresets();
+        p.stepPreset (1);
+        check (users.isEmpty() ? p.getFactoryIndex() == 0 : p.getFactoryIndex() == -1, "next after the last factory preset");
+    }
+
     void testEditor (const juce::File& snapshotDir)
     {
         Test t ("editor: both views, scaling, languages");
         EmberAudioProcessor p;
         p.prepareToPlay (48000.0, 512);
+        UserSettings::useFileForTests (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_test.settings"));
         for (auto lang : { vocalypse::i18n::Language::german, vocalypse::i18n::Language::english })
         {
             vocalypse::i18n::overrideSystemLanguage (lang);
@@ -682,6 +810,7 @@ namespace
             check (ed != nullptr, "editor type");
             if (ed == nullptr)
                 return;
+            ed->setSize (look::baseW, look::baseH);   // the editor remembers its last size
             const juce::String suffix = lang == vocalypse::i18n::Language::german ? "de" : "en";
             for (bool adv : { false, true })
             {
@@ -702,6 +831,19 @@ namespace
         }
         vocalypse::i18n::overrideSystemLanguage (std::nullopt);
         check ((bool) p.state.state.getProperty ("advanced", false), "view stored in the state");
+
+        // Language switch in the menu: rebuilds the panel, keeps the view, is remembered
+        {
+            std::unique_ptr<juce::AudioProcessorEditor> base (p.createEditor());
+            auto* ed = dynamic_cast<EmberEditor*> (base.get());
+            ed->setLanguage ("en");
+            check (! vocalypse::i18n::isGerman() && ed->isAdvanced(), "English, view kept");
+            ed->setLanguage ("de");
+            check (vocalypse::i18n::isGerman(), "German");
+            juce::SharedResourcePointer<UserSettings> us;
+            check (us->getLanguage() == "de", "language remembered");
+            ed->setLanguage ("system");
+        }
     }
 
     // ------------------------------------------------------------ real takes
@@ -728,7 +870,7 @@ namespace
     }
 
     // AUTO as the plugin does it: only the non-silent blocks of the first 30 s
-    AutoResult autoOn (const std::vector<float>& mono, double fs)
+    AutoResult autoOn (const std::vector<float>& mono, double fs, bool smart = true)
     {
         AutoCapture c;
         c.prepare (fs);
@@ -738,7 +880,7 @@ namespace
             const float* ch[1] { mono.data() + start };
             c.push (ch, 1, std::min (512, (int) mono.size() - start));
         }
-        return analyse (c.data(), c.getNumSamples(), fs);
+        return analyse (c.data(), c.getNumSamples(), fs, smart);
     }
 
     int render (const juce::File& in, const juce::File& dir)
@@ -753,6 +895,16 @@ namespace
                      r.expectedReductionDb, r.sibilantFrames);
         Settings s;
         if (r.status == AutoResult::Status::ok) { s.freq = r.freq; s.thresholdDb = r.thresholdDb; s.rangeDb = r.rangeDb; s.releaseMs = autoReleaseMs; }
+        // EMBER_MANUAL="threshold,range,smart" renders a hand-set (heavy) setting instead of AUTO's
+        const auto manual = juce::StringArray::fromTokens (juce::SystemStats::getEnvironmentVariable ("EMBER_MANUAL", {}), ",", "");
+        if (manual.size() == 3)
+        {
+            s.thresholdDb = manual[0].getFloatValue();
+            s.rangeDb = manual[1].getFloatValue();
+            s.smart = manual[2].getIntValue() != 0;
+            s.freq = 5000.0f;
+            std::printf ("  manual: thr %.1f range %.1f smart %d freq 5000\n", s.thresholdDb, s.rangeDb, (int) s.smart);
+        }
         dir.createDirectory();
         for (int listen : { 0, 2 })
         {
@@ -822,6 +974,13 @@ namespace
             if (r.status != AutoResult::Status::ok)
                 continue;
             ++ok;
+            if (juce::SystemStats::getEnvironmentVariable ("EMBER_COMPARE", {}).isNotEmpty())
+            {
+                const auto p = autoOn (mono, fs, false);
+                std::printf ("      plain relative: thr %6.1f range %4.1f S -%.1f V -%.2f M -%.2f | smart: S -%.1f V -%.2f M -%.2f\n",
+                             p.thresholdDb, p.rangeDb, p.expectedReductionDb, p.vowelReductionDb, p.mixedReductionDb,
+                             r.expectedReductionDb, r.vowelReductionDb, r.mixedReductionDb);
+            }
             check (r.freq >= autoMinCornerHz && r.freq <= autoMaxCornerHz, f.getFileName() + ": corner in range");
             check (r.vowelReductionDb <= 0.15f, f.getFileName() + ": vowels untouched");
             check (r.mixedReductionDb <= autoMixedMaxDb + 0.1f, f.getFileName() + ": S next to vowels keeps the vowel");
@@ -833,6 +992,7 @@ namespace
 
 int main (int argc, char** argv)
 {
+    std::setvbuf (stdout, nullptr, _IONBF, 0);   // progress stays visible even if a test crashes
     juce::ScopedJuceInitialiser_GUI gui;
     juce::StringArray args;
     for (int i = 1; i < argc; ++i)
@@ -854,11 +1014,14 @@ int main (int argc, char** argv)
     testBypass();
     testLookahead();
     testBlockSizes();
+    testCpu();
     testRobust();
     testAuto();
     testCapture();
     testProcessor();
     testMascot();
+    testSmart();
+    testPresets();
     testMascotClips();
     testMascotFrames (snapshotDir);
     testEditor (snapshotDir);

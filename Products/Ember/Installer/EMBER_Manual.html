@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EMBER De-Esser – Manual</title>
+<!-- Support address and website are placeholders: to be confirmed by Jakob before release. -->
+<style>
+  :root {
+    --bg: #05060a;
+    --panel: #0d0f16;
+    --line: #1c2030;
+    --text: #e6e7ec;
+    --muted: #9a9db0;
+    --ember: #ff3b1f;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Montserrat, "Segoe UI", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { border-bottom: 2px solid var(--ember); padding-bottom: 20px; margin-bottom: 28px; }
+  .brand { color: var(--muted); font-size: 13px; letter-spacing: .18em; text-transform: uppercase; }
+  h1 { font-size: 40px; margin: 6px 0 4px; letter-spacing: .02em; }
+  h1 span { color: var(--ember); }
+  .sub { color: var(--muted); margin: 0; }
+  h2 { color: var(--ember); font-size: 22px; margin: 44px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 24px 0 8px; }
+  a { color: var(--ember); }
+  nav { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 20px; }
+  nav ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+  nav li { margin: 2px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 15px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+  td:first-child { white-space: nowrap; font-weight: 600; }
+  code, .mono { font-family: "Roboto Mono", Consolas, monospace; font-size: 14px; background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+  .key { display: inline-block; border: 1px solid var(--line); background: var(--panel); border-radius: 4px; padding: 0 6px; font-size: 14px; }
+  footer { margin-top: 56px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+  @media (max-width: 640px) {
+    h1 { font-size: 30px; }
+    nav ol { columns: 1; }
+    td:first-child { white-space: normal; }
+    table { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">Lind Audio · VOCALYPSE</div>
+  <h1>EMBER <span>De-Esser</span></h1>
+  <p class="sub">Manual · Version 1.0.0 · Windows VST3 and standalone</p>
+</header>
+
+<nav>
+  <ol>
+    <li><a href="#quickstart">Quick start</a></li>
+    <li><a href="#simple">SIMPLE view</a></li>
+    <li><a href="#advanced">ADVANCED view</a></li>
+    <li><a href="#auto">AUTO</a></li>
+    <li><a href="#smart">Smart detection explained simply</a></li>
+    <li><a href="#moods">Ember's moods</a></li>
+    <li><a href="#presets">Presets and A/B</a></li>
+    <li><a href="#tips">Tips for great results</a></li>
+    <li><a href="#gestures">Mouse and keyboard</a></li>
+    <li><a href="#install">Installation and uninstall</a></li>
+    <li><a href="#system">System requirements</a></li>
+    <li><a href="#credits">Credits and licences</a></li>
+    <li><a href="#support">Support</a></li>
+  </ol>
+</nav>
+
+<p>EMBER is a de-esser for vocals and speech from the VOCALYPSE family by Lind Audio. It turns down harsh S, Z and Sh sounds without touching the rest of the voice. Latency is always 5 ms; it is fixed and reported to your host so the host can compensate for it automatically.</p>
+
+<h2 id="quickstart">1. Quick start</h2>
+<ol>
+  <li><strong>Insert:</strong> Load EMBER as an insert on your vocal or speech track.</li>
+  <li><strong>AUTO:</strong> Play the vocal and click <strong>AUTO</strong> (or click Ember). Ember listens and sets frequency, threshold and range for you.</li>
+  <li><strong>Check:</strong> Press <strong>DELTA</strong> to hear only what is removed – that should be sibilants only. Adjust <strong>Amount</strong> if needed.</li>
+</ol>
+
+<h2 id="simple">2. SIMPLE view</h2>
+<p>SIMPLE shows only what you need. Ember sits large in the middle and shows what is happening through his mood.</p>
+<table>
+  <tr><th>Element</th><th>Function</th></tr>
+  <tr><td>Amount</td><td>How strongly EMBER works. 50 % is exactly what threshold and range set, 100 % is twice that, 0 % turns processing off.</td></tr>
+  <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets where the S range starts: from 5 kHz (LOW), 6.5 kHz (MID) or 8 kHz (HIGH).</td></tr>
+  <tr><td>DELTA</td><td>Hear only what is removed.</td></tr>
+  <tr><td>Gain reduction meter</td><td>Shows the current reduction from 0 to 12 dB.</td></tr>
+</table>
+
+<h2 id="advanced">3. ADVANCED view</h2>
+<p>ADVANCED gives you access to every parameter.</p>
+<h3>Displays</h3>
+<ul>
+  <li><strong>Spectrum:</strong> The red S range shows where EMBER works. Drag its edge to set the frequency. The reduction history runs along the top.</li>
+  <li><strong>S LEVEL</strong> (right): level in the S band. The red line is the threshold; you can drag it. A grey bar means Smart detection hears no sibilant at the moment.</li>
+</ul>
+<h3>Controls</h3>
+<table>
+  <tr><th>Control</th><th>Range</th><th>Function</th></tr>
+  <tr><td>Frequency</td><td>2–16 kHz</td><td>Lower edge of the S range.</td></tr>
+  <tr><td>Threshold</td><td>−60 to 0 dB</td><td>S-band level above which reduction starts.</td></tr>
+  <tr><td>Range</td><td>0–24 dB</td><td>Maximum reduction.</td></tr>
+  <tr><td>Amount</td><td>0–100 %</td><td>Strength: 50 % = what threshold and range set, 100 % = twice, 0 % = off.</td></tr>
+  <tr><td>Attack</td><td>0.1–20 ms</td><td>How fast EMBER reacts to a sibilant.</td></tr>
+  <tr><td>Release</td><td>10–400 ms</td><td>How fast the reduction recovers afterwards.</td></tr>
+  <tr><td>Lookahead</td><td>0–5 ms</td><td>How far EMBER looks ahead to catch sibilants right at their start. Latency stays at 5 ms regardless.</td></tr>
+  <tr><td>Mix</td><td>0–100 %</td><td>Blend of processed and unprocessed signal.</td></tr>
+  <tr><td>Output</td><td>±12 dB</td><td>Output level.</td></tr>
+  <tr><td>Mode: Split</td><td></td><td>Only the range above the frequency gets quieter (dynamic high shelf).</td></tr>
+  <tr><td>Mode: Wideband</td><td></td><td>The whole voice dips briefly.</td></tr>
+  <tr><td>Detection: Smart</td><td></td><td>Default and recommended. Reacts only when a real sibilant sounds (see <a href="#smart">section 5</a>).</td></tr>
+  <tr><td>Detection: Relative</td><td></td><td>The S is measured against the loudness of the voice – quiet and loud parts are treated alike.</td></tr>
+  <tr><td>Detection: Absolute</td><td></td><td>Fixed level, classic behaviour.</td></tr>
+  <tr><td>Listen: Off</td><td></td><td>Normal output.</td></tr>
+  <tr><td>Listen: S band</td><td></td><td>Hear only the S band, the range EMBER is watching.</td></tr>
+  <tr><td>Listen: Delta</td><td></td><td>Hear only what is removed.</td></tr>
+</table>
+
+<h2 id="auto">4. AUTO</h2>
+<p>Play the vocal and click <strong>AUTO</strong> or click Ember.</p>
+<ul>
+  <li>Ember listens to about 12 seconds of singing (pauses are skipped, up to 30 seconds), holding his hand to his ear. <strong>DONE</strong> ends listening early, from 3 seconds on.</li>
+  <li>EMBER then tries settings by rendering the take:
+    <ul>
+      <li>The frequency is set just below the strongest S (between 5 and 9.5 kHz).</li>
+      <li>Threshold and range are set so that S sounds lose 1.5 to 3.5 dB, depending on how harsh they are.</li>
+      <li>Vowels stay untouched (0.1 dB or less).</li>
+      <li>Release is set to 35 ms.</li>
+    </ul>
+  </li>
+  <li>When AUTO is done, Ember gives a thumbs up.</li>
+</ul>
+<p>The result is subtle by design. If you want more, raise Amount.</p>
+<p>If EMBER finds too few S sounds, a message asks you to play a part with many S, Z or Sh sounds. Then start AUTO again.</p>
+
+<h2 id="smart">5. Smart detection explained simply</h2>
+<p>A classic de-esser reacts to anything that is loud in the high frequencies. That includes bright vowels, air in the voice and breaths – the voice then sounds dull or lispy.</p>
+<p>Smart detection therefore compares the S band with the body of the voice (250 Hz to 3 kHz). Only when the S band clearly stands out relative to the body is it a real sibilant, and EMBER steps in. Bright vowels, air and breaths stay untouched.</p>
+<p>You can see this in the S LEVEL meter: when the bar is grey, Smart detection hears no sibilant.</p>
+
+<h2 id="moods">6. Ember's moods</h2>
+<table>
+  <tr><th>Ember …</th><th>means</th></tr>
+  <tr><td>sits and smokes</td><td>No signal.</td></tr>
+  <tr><td>dances</td><td>Singing, but no sibilants.</td></tr>
+  <tr><td>snaps at the S</td><td>Light sibilants.</td></tr>
+  <tr><td>spits fire</td><td>EMBER is de-essing. Ember stays in fire while sibilants keep coming and goes back to dancing after 4 seconds without an S.</td></tr>
+  <tr><td>overheats and coughs ("Sounds lispy!")</td><td>Reduction has been above 9 dB for a while. The voice may lisp – lower Range or Amount.</td></tr>
+  <tr><td>sleeps</td><td>Bypass is on.</td></tr>
+  <tr><td>holds his hand to his ear</td><td>AUTO is listening.</td></tr>
+  <tr><td>gives a thumbs up</td><td>AUTO is done.</td></tr>
+</table>
+
+<h2 id="presets">7. Presets and A/B</h2>
+<p>The presets bar shows <strong>‹ preset name ›</strong>. Use the arrows to step through presets; click the name to open the menu.</p>
+<ul>
+  <li><strong>Factory presets:</strong> Default, Gentle, Pop vocal, Rap, Deep voice, High voice, Backing vocals, Speech / podcast, Strong.</li>
+  <li><strong>Your presets</strong>, plus <strong>Save preset…</strong> and <strong>Open preset folder</strong>.</li>
+  <li>A <strong>*</strong> after the name means you have changed something since loading.</li>
+  <li><strong>SAVE</strong> stores your own preset as <code>.emberpreset</code> in <code>Documents\Lind Audio\EMBER\Presets</code>.</li>
+</ul>
+<h3>A/B compare</h3>
+<p>Slots <strong>A</strong> and <strong>B</strong> let you compare two settings. B starts as a copy of A. <strong>A → B</strong> copies the settings of A to B.</p>
+<h3>Menu (≡ top right)</h3>
+<ul>
+  <li><strong>Language:</strong> system / Deutsch / English – remembered.</li>
+  <li><strong>Open the manual</strong></li>
+  <li><strong>Show Ember's tip again</strong></li>
+  <li><strong>About EMBER</strong></li>
+</ul>
+
+<h2 id="tips">8. Tips for great results</h2>
+<ul>
+  <li>Start with <strong>AUTO</strong> and work from there.</li>
+  <li>3 to 6 dB of range sounds natural. More can make the voice lisp.</li>
+  <li>Use <strong>DELTA</strong>: you should hear only sibilants. If you hear vowels or parts of words, lower Range or Amount, or raise the frequency.</li>
+  <li>For speech, try <strong>Wideband</strong> mode.</li>
+  <li>Put EMBER after EQ or compression that boosts the highs, and before reverb and delay.</li>
+</ul>
+
+<h2 id="gestures">9. Mouse and keyboard</h2>
+<table>
+  <tr><th>Action</th><th>Result</th></tr>
+  <tr><td>Rest the mouse</td><td>Every control shows an info card.</td></tr>
+  <tr><td>Double-click</td><td>Resets the control to its default.</td></tr>
+  <tr><td><span class="key">Shift</span> / <span class="key">Ctrl</span> + drag</td><td>Fine adjustment.</td></tr>
+  <tr><td>Click the value</td><td>Type a value.</td></tr>
+  <tr><td>Right-click</td><td>Context menu.</td></tr>
+  <tr><td>BYPASS</td><td>Turns processing off; latency is kept so your track stays in sync.</td></tr>
+</table>
+
+<h2 id="install">10. Installation and uninstall</h2>
+<p>The installer places the files here:</p>
+<table>
+  <tr><th>Component</th><th>Location</th></tr>
+  <tr><td>VST3 plugin</td><td><code>C:\Program Files\Common Files\VST3\EMBER De-Esser.vst3</code></td></tr>
+  <tr><td>Standalone app</td><td><code>C:\Program Files\Lind Audio\EMBER</code></td></tr>
+  <tr><td>Manuals</td><td><code>C:\ProgramData\Lind Audio\EMBER</code></td></tr>
+</table>
+<p>If EMBER does not appear right away, let your host rescan its plugins.</p>
+<p><strong>Uninstall:</strong> Windows Settings &gt; Apps, select EMBER De-Esser and uninstall.</p>
+
+<h2 id="system">11. System requirements</h2>
+<ul>
+  <li>Windows 10 or 11, 64-bit</li>
+  <li>VST3 host (e.g. FL Studio, Ableton Live, Cubase, Reaper, Studio One, Bitwig …) or the included standalone app</li>
+  <li>CPU with SSE2</li>
+  <li>50 MB free disk space</li>
+</ul>
+<p>A Mac version is not yet available.</p>
+
+<h2 id="credits">12. Credits and licences</h2>
+<ul>
+  <li>Built with JUCE.</li>
+  <li>Montserrat font – SIL Open Font License 1.1.</li>
+  <li>Roboto Mono font – Apache License 2.0.</li>
+</ul>
+<p>EMBER De-Esser © Lind Audio, Austria. Use is subject to the included licence agreement (EULA).</p>
+
+<h2 id="support">13. Support</h2>
+<p>Questions or problems? Write to <a href="mailto:support@lind-audio.com">support@lind-audio.com</a>. Please include your Windows version, your host and your EMBER version (see ≡ &gt; About EMBER).</p>
+<p>Website: <a href="https://lind-audio.com/ember">https://lind-audio.com/ember</a></p>
+
+<footer>EMBER De-Esser 1.0.0 · Lind Audio · VOCALYPSE</footer>
+
+</div>
+</body>
+</html>

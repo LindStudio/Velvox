@@ -4,6 +4,7 @@
 #include "EmberParams.h"
 #include "EmberEngine.h"
 #include "EmberAuto.h"
+#include "EmberPresets.h"
 #include <future>
 
 namespace ember
@@ -61,6 +62,19 @@ namespace ember
 
         double getCurrentSampleRate() const noexcept { return currentRate; }
 
+        // ---- Presets and A/B (message thread) -----------------------------------------------
+        void loadFactoryPreset (int index);
+        bool loadUserPreset (const juce::File&);
+        bool saveUserPreset (const juce::File&);
+        juce::String getPresetName() const;        // shown name; factory names follow the interface language
+        bool isPresetModified() const;              // the values differ from the loaded preset
+        int getFactoryIndex() const noexcept { return factoryIndex; }
+        void stepPreset (int direction);           // previous / next over factory + user presets
+
+        int getActiveSlot() const noexcept { return activeSlot; }   // 0 = A, 1 = B
+        void switchSlot (int slot);                // stores the current values in the active slot, loads the other
+        void copyActiveToOther();
+
         static constexpr const char* stateType = "EmberState";
 
     private:
@@ -72,6 +86,13 @@ namespace ember
         AutoPhase autoPhase = AutoPhase::idle;
         AutoResult lastAuto;
         std::future<AutoResult> pending;
+
+        int factoryIndex = 0;                      // -1 = user preset / AUTO result
+        juce::String userPresetName;
+        ParamValues presetValues;                  // what the loaded preset set (for "modified")
+        ParamValues slots[2];
+        bool slotUsed[2] { false, false };
+        int activeSlot = 0;
         double currentRate = 44100.0;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EmberAudioProcessor)
