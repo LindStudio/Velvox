@@ -217,11 +217,11 @@ namespace ember
         : AudioProcessorEditor (p), processor (p),
           spectrumSource (p.engine.inputTap, p.engine.outputTap),
           display (p, spectrumSource),
-          tame (p.state, pid::amount, tr ("Zähmen", "Tame"), look::accent),
+          amountBig (p.state, pid::amount, "Amount", look::accent),
           freqK (p.state, pid::freq, tr ("Frequenz", "Frequency"), look::accent),
           threshK (p.state, pid::threshold, "Threshold", look::accent),
           rangeK (p.state, pid::range, "Range", look::accent),
-          amountK (p.state, pid::amount, tr ("Zähmen", "Tame"), look::accent),
+          amountK (p.state, pid::amount, "Amount", look::accent),
           attackK (p.state, pid::attack, "Attack", look::accent),
           releaseK (p.state, pid::release, "Release", look::accent),
           lookK (p.state, pid::lookahead, "Lookahead", look::accent),
@@ -262,11 +262,11 @@ namespace ember
         root.addAndMakeVisible (meter);
         root.addChildComponent (display);
 
-        tame.setHero (true);
-        tame.setDialSize (150);
-        tame.setDescription (tr ("Wie stark Ember die S-Laute zähmt. 50 % = so, wie AUTO oder Threshold und Range es vorgeben.",
-                                 "How hard Ember tames the S sounds. 50 % = what AUTO or threshold and range ask for."));
-        root.addAndMakeVisible (tame);
+        amountBig.setHero (true);
+        amountBig.setDialSize (150);
+        amountBig.setDescription (tr ("Stärke der Reduktion. 50 % = so, wie AUTO bzw. Threshold und Range es vorgeben, 100 % = doppelt.",
+                                      "Strength of the reduction. 50 % = what AUTO or threshold and range set, 100 % = twice."));
+        root.addAndMakeVisible (amountBig);
 
         styleSegment (voiceLow, tr ("TIEF", "LOW"), 2);
         styleSegment (voiceMid, tr ("MITTEL", "MID"), 2);
@@ -277,8 +277,8 @@ namespace ember
         voiceLow.setTooltip (tr ("Tiefe Stimme: S-Bereich ab 4,8 kHz", "Low voice: S range from 4.8 kHz"));
         voiceMid.setTooltip (tr ("Mittlere Stimme: ab 6,5 kHz", "Mid voice: from 6.5 kHz"));
         voiceHigh.setTooltip (tr ("Hohe Stimme: ab 8,2 kHz", "High voice: from 8.2 kHz"));
-        listenBtn.setButtonText (tr ("S HÖREN", "HEAR S"));
-        listenBtn.setTooltip (tr ("Hör nur, was Ember wegnimmt.", "Hear only what Ember removes."));
+        listenBtn.setButtonText ("DELTA");
+        listenBtn.setTooltip (tr ("Delta: nur das hören, was entfernt wird.", "Delta: hear only what is removed."));
         listenBtn.onClick = [this]
         {
             if (auto* lp = processor.state.getParameter (pid::listen))
@@ -347,7 +347,7 @@ namespace ember
         simpleBtn.setToggleState (! a, juce::dontSendNotification);
         advancedBtn.setToggleState (a, juce::dontSendNotification);
 
-        for (juce::Component* comp : { (juce::Component*) &tame, (juce::Component*) &voiceLow, (juce::Component*) &voiceMid,
+        for (juce::Component* comp : { (juce::Component*) &amountBig, (juce::Component*) &voiceLow, (juce::Component*) &voiceMid,
                                        (juce::Component*) &voiceHigh, (juce::Component*) &listenBtn, (juce::Component*) &meter })
             comp->setVisible (! a);
         for (juce::Component* comp : { (juce::Component*) &display, (juce::Component*) &freqK, (juce::Component*) &threshK,
@@ -375,7 +375,7 @@ namespace ember
         {
             mascot.setBounds (R (28, 80, 500, 400));
             meter.setBounds (R (540, 96, 44, 372));
-            tame.setBounds (R (612, 82, 250, 230));
+            amountBig.setBounds (R (612, 82, 250, 230));
             voiceLow.setBounds (R (612, 342, 82, 32));
             voiceMid.setBounds (R (696, 342, 82, 32));
             voiceHigh.setBounds (R (780, 342, 82, 32));

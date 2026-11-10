@@ -167,7 +167,7 @@ namespace
         near (s.freq, 6500.0, 0.5, "default freq");
         near (s.thresholdDb, -30.0, 0.01, "default threshold");
         near (s.rangeDb, 8.0, 0.01, "default range");
-        near (s.amount, 0.5, 1e-4, "default Zähmen 50 %");
+        near (s.amount, 0.5, 1e-4, "default Amount 50 %");
         check (s.relative && s.mode == 0 && s.listen == 0 && ! s.bypass, "default modes");
         check (p.getBypassParameter() != nullptr, "host bypass parameter");
     }
@@ -208,7 +208,7 @@ namespace
         z.thresholdDb = -60.0f;
         E e3 (fs, z);
         const auto take = makeTake (fs, 3.0);
-        check (maxDiffDelayed (run (e3, take.x), take.x, e3.getLatencySamples()) < 1.0e-6f, "Zähmen 0 % = untouched, even with S");
+        check (maxDiffDelayed (run (e3, take.x), take.x, e3.getLatencySamples()) < 1.0e-6f, "Amount 0 % = untouched, even with S");
         Settings m;
         m.mix = 0.0f;
         m.thresholdDb = -60.0f;
@@ -232,7 +232,7 @@ namespace
         check (sIn - sOut > 3.0, "S at least 3 dB softer");
         check (std::abs (vIn - vOut) < 0.3, "vowels within 0.3 dB");
 
-        // Range caps the reduction; Zähmen 100 % doubles it
+        // Range caps the reduction; Amount 100 % doubles it
         for (float amount : { 0.5f, 1.0f })
         {
             Settings r;
@@ -248,7 +248,7 @@ namespace
                 er.process (ch, 2, std::min (256, (int) l.size() - start));
                 maxGr = std::max (maxGr, er.gainReductionDb.pull());
             }
-            near (maxGr, 4.0 * amount * 2.0, 0.05, "max reduction = range x Zähmen x 2 (" + juce::String (amount) + ")");
+            near (maxGr, 4.0 * amount * 2.0, 0.05, "max reduction = range x Amount x 2 (" + juce::String (amount) + ")");
         }
     }
 
@@ -483,7 +483,7 @@ namespace
         const auto s = readSettings (p.state);
         near (s.freq, p.getLastAuto().freq, 15.0, "freq applied");
         near (s.thresholdDb, p.getLastAuto().thresholdDb, 0.1, "threshold applied");
-        check (s.mode == 0 && s.relative && std::abs (s.amount - 0.5f) < 1e-3f, "split, relative, Zähmen 50 %");
+        check (s.mode == 0 && s.relative && std::abs (s.amount - 0.5f) < 1e-3f, "split, relative, Amount 50 %");
         check (p.getAutoMessage().isNotEmpty(), "message");
 
         juce::AudioProcessor::BusesLayout mono, stereo, mixed;

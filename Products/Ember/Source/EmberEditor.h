@@ -8,7 +8,7 @@
 #include "UI/Spectrum.h"
 
 // EMBER De-Esser editor. Same controls, knobs and buttons as VOCALYPSE; only the colour (Glutrot) and
-// the mascot are Ember's own. SIMPLE: Ember large, Zähmen, Stimme, S hören, AUTO. ADVANCED: spectrum with
+// the mascot are Ember's own. SIMPLE: Ember large, Amount, voice, Delta, AUTO. ADVANCED: spectrum with
 // the draggable S band, every parameter, Ember small.
 namespace ember
 {
@@ -92,7 +92,7 @@ namespace ember
         BandDisplay display;
 
         // SIMPLE
-        vocalypse::ui::Knob tame;
+        vocalypse::ui::Knob amountBig;
         juce::TextButton voiceLow, voiceMid, voiceHigh, listenBtn;
         juce::Label status;
 

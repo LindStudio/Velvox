@@ -5,6 +5,7 @@ einzeln verkaufen, später ein Hub, der alle verbindet. Plan-Seite: https://clau
 
 ## Regeln der Familie (Jakob)
 - Name = Maskottchen + Funktion: **EMBER De-Esser**.
+- Bedienelemente mit den üblichen Profi-Begriffen (Amount, Threshold, Range, Delta …), keine Spaßnamen (Jakob 2026-11-10).
 - Layout, Knobs, Buttons und Segmente sind dieselben wie in VOCALYPSE (gemeinsamer UI-Kit aus `Source/UI`).
   Pro Plugin ändern sich nur die Farbe (EMBER: Glutrot `#ff3b1f`) und das Maskottchen.
 - Jedes Plugin hat SIMPLE und ADVANCED und einen AUTO-Knopf.
@@ -19,7 +20,7 @@ einzeln verkaufen, später ein Hub, der alle verbindet. Plan-Seite: https://clau
 - Detektor: Hochpass 4. Ordnung (Butterworth) an der Frequenz, Stereo gekoppelt, Spitzenwert.
   Erkennung relativ zum Gesamtpegel (Standard), damit laute und leise Phrasen gleich behandelt werden, oder absolut.
   Unter −60 dBFS (fast Stille) wird nie reduziert.
-- Kennlinie 4:1 mit 6 dB Soft-Knee, Range begrenzt, **Zähmen** skaliert das Ergebnis (50 % = wie eingestellt,
+- Kennlinie 4:1 mit 6 dB Soft-Knee, Range begrenzt, **Amount** skaliert das Ergebnis (50 % = wie eingestellt,
   100 % = doppelt, 0 % = aus), höchstens 24 dB.
 - Split: dynamisches High-Shelf ab der Frequenz. Ohne Reduktion wird das Shelf übersprungen, also bit-genau.
   Breitband: die ganze Stimme taucht kurz ab.
@@ -47,7 +48,7 @@ zeichnet das Plugin einen Vektor-Teufel als Platzhalter. Bilder: `Products/Ember
 
 ## Bauen, testen, installieren
 - `scripts\build.ps1` baut alles (auch `Ember_VST3`, `Ember_Standalone`, `EmberTests`) und führt beide Test-Runner aus.
-- `EmberTests.exe`: 104 Checks (Null-Test, S-Reduktion, Range/Zähmen, Breitband, Delta, Bypass, Lookahead,
+- `EmberTests.exe`: 104 Checks (Null-Test, S-Reduktion, Range/Amount, Breitband, Delta, Bypass, Lookahead,
   Blockgrößen 1–4096, NaN, Latenz bei 44,1–192 kHz, AUTO bei 44,1/48/96 kHz, Capture, State, Busse, Maskottchen,
   Editor in beiden Ansichten und Sprachen).
   - `EMBER_VOCALS=<Ordner;Datei;…>` prüft AUTO zusätzlich an echten Takes.

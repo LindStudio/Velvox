@@ -21,8 +21,8 @@ namespace ember
     {
         float freq = 6500.0f;        // detection / shelf corner, Hz
         float thresholdDb = -30.0f;
-        float rangeDb = 8.0f;        // most the S band is ever reduced (before Zähmen)
-        float amount = 0.5f;         // Zähmen 0..1; 0.5 = the reduction threshold / range ask for, 1 = twice
+        float rangeDb = 8.0f;        // most the S band is ever reduced (before Amount)
+        float amount = 0.5f;         // Amount 0..1; 0.5 = the reduction threshold / range ask for, 1 = twice
         float attackMs = 0.5f;
         float releaseMs = 60.0f;
         float lookaheadMs = 2.0f;    // 0 .. maxLookaheadMs

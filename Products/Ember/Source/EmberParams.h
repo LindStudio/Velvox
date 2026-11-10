@@ -10,7 +10,7 @@ namespace ember::pid
     inline constexpr const char* freq      = "emFreq";
     inline constexpr const char* threshold = "emThreshold";
     inline constexpr const char* range     = "emRange";
-    inline constexpr const char* amount    = "emAmount";     // "Zähmen"
+    inline constexpr const char* amount    = "emAmount";     // Amount (50 % = nominal)
     inline constexpr const char* attack    = "emAttack";
     inline constexpr const char* release   = "emRelease";
     inline constexpr const char* lookahead = "emLookahead";
