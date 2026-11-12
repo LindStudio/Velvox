@@ -11,9 +11,9 @@
 
 namespace ember
 {
-    inline constexpr long long lemonStoreId = 0;
-    inline constexpr long long lemonProductId = 0;
-    inline constexpr const char* buyUrl = "https://lind-audio.com/ember";
+    inline constexpr long long lemonStoreId = 522230;      // Lemon Squeezy store "lindaudio" (2026-11-12)
+    inline constexpr long long lemonProductId = 1522200;   // EMBER De-Esser (test mode; the live copy gets a new id)
+    inline constexpr const char* buyUrl = "https://lindaudio.lemonsqueezy.com/checkout/buy/0cc81f7a-56f2-4444-bd83-5969eca82a9d";
 
     inline vocalypse::licensing::Config licenceConfig()
     {

@@ -515,7 +515,7 @@ namespace
         {
             lastUrl = url;
             return { 200, R"({"activated":true,"license_key":{"status":"active"},"instance":{"id":"inst-1"},
-                              "meta":{"store_id":0,"product_id":0,"customer_name":"Jakob"}})" };
+                              "meta":{"store_id":522230,"product_id":1522200,"customer_name":"Jakob"}})" };
         };
         lic::Manager m (cfg);
         check (m.status().access == lic::Access::locked && m.isLocked(), "trial over -> locked");
@@ -566,6 +566,32 @@ namespace
                                                 "meta":{"store_id":1,"product_id":99}})", 200, "activated", 1, 2);
         check (! reply.ok, "key of another product refused");
         dir.deleteRecursively();
+
+        // Optional: the real Lemon Squeezy API with a test-mode key (never stored in the repo):
+        //   set EMBER_LICENCE_TEST_KEY=<key>  ->  activate, weekly re-check, release
+        const auto realKey = juce::SystemStats::getEnvironmentVariable ("EMBER_LICENCE_TEST_KEY", {});
+        if (realKey.isNotEmpty())
+        {
+            auto live = licenceConfig();
+            live.on = true;
+            live.file = dir.getChildFile ("EMBER.license");
+            live.asynchronous = false;
+            juce::int64 clock = juce::Time::currentTimeMillis();
+            live.now = [&clock] { return clock; };
+            lic::Manager lm (live);
+            bool done = false; juce::String message;
+            lm.activate (realKey, [&] (bool r, const juce::String& m) { done = r; message = m; });
+            std::printf ("    Lemon Squeezy activate: %s (%s)\n", done ? "ok" : "FAILED", message.toRawUTF8());
+            check (done && lm.status().access == lic::Access::licensed, "real key activates (store + product match)");
+            clock += 8 * day;                               // a week later: re-check online
+            lm.checkIfDue();
+            check (lm.status().access == lic::Access::licensed && ! lm.record().revoked, "weekly re-check: still valid");
+            bool released = false;
+            lm.deactivate ([&] (bool r, const juce::String& m) { released = r; message = m; });
+            std::printf ("    Lemon Squeezy deactivate: %s (%s)\n", released ? "ok" : "FAILED", message.toRawUTF8());
+            check (released, "release frees the activation again");
+            dir.deleteRecursively();
+        }
     }
 
     void testProcessor()
