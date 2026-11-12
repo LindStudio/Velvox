@@ -56,7 +56,10 @@ namespace ember
             return;
 
         capture.push (buffer.getArrayOfReadPointers(), channels, buffer.getNumSamples());
-        engine.setSettings (params.read());
+        auto settings = params.read();
+        if (licence->isLocked())
+            settings.bypass = true;   // trial over / key invalid: unprocessed, same latency
+        engine.setSettings (settings);
         engine.process (buffer.getArrayOfWritePointers(), channels, buffer.getNumSamples());
     }
 

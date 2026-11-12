@@ -7,6 +7,7 @@
 #include "UI/Widgets.h"
 #include "UI/Segments.h"
 #include "UI/Spectrum.h"
+#include "UI/LicenceUI.h"
 
 // EMBER De-Esser editor. Same controls, knobs and buttons as VOCALYPSE; only the colour (Glutrot) and the
 // mascot are Ember's own.
@@ -169,6 +170,7 @@ namespace ember
 
         vocalypse::ui::InfoPopup infoPopup;
         std::unique_ptr<AboutOverlay> about;
+        vocalypse::ui::LicenceLock licenceLock;   // on top of everything while locked
         std::vector<std::unique_ptr<vocalypse::ui::HoverInfo>> infos;
         std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
         std::unique_ptr<juce::FileChooser> chooser;

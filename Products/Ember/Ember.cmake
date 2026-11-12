@@ -6,6 +6,9 @@
 # ---------------------------------------------------------------------------
 set(EMBER_VERSION 1.0.0)
 
+# Licence check (Lemon Squeezy): OFF until the shop ids are in Products/Ember/Source/EmberLicence.h
+option(EMBER_LICENSING "EMBER: 14-day trial + licence key activation" OFF)
+
 set(EMBER_SOURCES
     Products/Ember/Source/EmberEngine.cpp
     Products/Ember/Source/EmberAuto.cpp
@@ -31,6 +34,8 @@ set(EMBER_SHARED_SOURCES
     Source/Text/I18n.cpp
     Source/Text/ParamText.cpp
     Source/Parameters/ParameterLayout.cpp
+    Source/UI/LicenceUI.cpp
+    Source/Licensing/License.cpp
 )
 
 file(GLOB EMBER_MASCOT_FRAMES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Products/Ember/Mascot/frames/*.png")
@@ -44,7 +49,8 @@ set(EMBER_DEFINITIONS
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
-    EMBER_VERSION_STRING="${EMBER_VERSION}")
+    EMBER_VERSION_STRING="${EMBER_VERSION}"
+    EMBER_LICENSING=$<BOOL:${EMBER_LICENSING}>)
 
 juce_add_plugin(Ember
     VERSION                     ${EMBER_VERSION}

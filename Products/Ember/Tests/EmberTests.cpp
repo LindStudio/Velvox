@@ -478,6 +478,96 @@ namespace
         check (c.isFull() && ! c.isCapturing(), "stops at 30 s");
     }
 
+    void testLicence()
+    {
+        Test t ("licence: off by default, locked = unprocessed, key activates, own file");
+        namespace lic = vocalypse::licensing;
+        {
+            EmberAudioProcessor p;
+            check (p.getLicence().isOn() == (EMBER_LICENSING != 0), "build switch decides");
+            check (p.getLicence().productName() == "EMBER" && p.getLicence().buyUrl().isNotEmpty(), "EMBER's name and shop");
+        }
+
+        const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember-licence-test");
+        dir.deleteRecursively();
+        const auto file = dir.getChildFile ("EMBER.license");
+        const juce::int64 now = 1'800'000'000'000LL, day = 24LL * 3600 * 1000;
+
+        // a VOCALYPSE licence file is no EMBER licence
+        {
+            lic::Record r;
+            r.key = "K"; r.instanceId = "I"; r.firstRunMs = now;
+            lic::writeRecord (file, r);
+            check (lic::readRecord (file, licenceConfig().identity).key.isEmpty(), "VOCALYPSE file refused");
+        }
+
+        // trial started 20 days ago -> locked
+        lic::Record old;
+        old.firstRunMs = now - 20 * day;
+        lic::writeRecord (file, old, licenceConfig().identity);
+        juce::String lastUrl;
+        auto cfg = licenceConfig();
+        cfg.on = true;
+        cfg.file = file;
+        cfg.asynchronous = false;
+        cfg.now = [now] { return now; };
+        cfg.transport = [&lastUrl] (const juce::String& url, const juce::StringPairArray&) -> std::pair<int, juce::String>
+        {
+            lastUrl = url;
+            return { 200, R"({"activated":true,"license_key":{"status":"active"},"instance":{"id":"inst-1"},
+                              "meta":{"store_id":0,"product_id":0,"customer_name":"Jakob"}})" };
+        };
+        lic::Manager m (cfg);
+        check (m.status().access == lic::Access::locked && m.isLocked(), "trial over -> locked");
+
+        const double fs = 48000.0;
+        const auto take = makeTake (fs, 1.0, -6.0f);   // loud S: processed audio clearly differs
+        const auto runProcessor = [&] (EmberAudioProcessor& p)
+        {
+            juce::AudioBuffer<float> buf (2, 256);
+            juce::MidiBuffer midi;
+            std::vector<float> out;
+            for (int start = 0; start + 256 <= (int) take.x.size(); start += 256)
+            {
+                for (int ch = 0; ch < 2; ++ch)
+                    buf.copyFrom (ch, 0, take.x.data() + start, 256);
+                p.processBlock (buf, midi);
+                out.insert (out.end(), buf.getReadPointer (0), buf.getReadPointer (0) + 256);
+            }
+            return out;
+        };
+        {
+            EmberAudioProcessor p;
+            p.setLicenceForTest (m);
+            p.prepareToPlay (fs, 256);
+            if (auto* thr = p.state.getParameter (pid::threshold))
+                thr->setValueNotifyingHost (thr->convertTo0to1 (-60.0f));
+            const auto y = runProcessor (p);
+            check (maxDiffDelayed (y, take.x, p.getLatencySamples(), (int) (fs * 0.1)) < 1.0e-6f, "locked: output == delayed input");
+        }
+
+        bool ok = false;
+        m.activate ("38B1460A-5104-4067-A91D-77B872934D51", [&ok] (bool r, const juce::String&) { ok = r; });
+        check (ok && lastUrl.endsWith ("/activate"), "key activates");
+        check (m.status().access == lic::Access::licensed && ! m.isLocked(), "licensed -> unlocked");
+        check (lic::readRecord (file, licenceConfig().identity).instanceId == "inst-1", "activation stored in EMBER's file");
+        {
+            EmberAudioProcessor p;
+            p.setLicenceForTest (m);
+            p.prepareToPlay (fs, 256);
+            if (auto* thr = p.state.getParameter (pid::threshold))
+                thr->setValueNotifyingHost (thr->convertTo0to1 (-60.0f));
+            const auto y = runProcessor (p);
+            check (maxDiffDelayed (y, take.x, p.getLatencySamples(), (int) (fs * 0.1)) > 1.0e-3f, "licensed: processed again");
+        }
+
+        // a key of another product is refused once the ids are set
+        const auto reply = lic::parseReply (R"({"activated":true,"license_key":{"status":"active"},"instance":{"id":"x"},
+                                                "meta":{"store_id":1,"product_id":99}})", 200, "activated", 1, 2);
+        check (! reply.ok, "key of another product refused");
+        dir.deleteRecursively();
+    }
+
     void testProcessor()
     {
         Test t ("processor: state, AUTO applies, layouts");
@@ -849,6 +939,10 @@ namespace
                     juce::PNGImageFormat png;
                     juce::FileOutputStream out (snapshotDir.getChildFile (juce::String (adv ? "advanced_" : "simple_") + suffix + ".png"));
                     if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
+                    // twice the resolution for the website (sharp on high-density screens)
+                    const auto hi = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
+                    juce::FileOutputStream out2 (snapshotDir.getChildFile (juce::String (adv ? "advanced_" : "simple_") + suffix + "@2x.png"));
+                    if (out2.openedOk()) { out2.setPosition (0); out2.truncate(); png.writeImageToStream (hi, out2); }
                 }
             }
             ed->setSize (look::baseW * 3 / 2, look::baseH * 3 / 2);
@@ -1045,6 +1139,7 @@ int main (int argc, char** argv)
     testAuto();
     testCapture();
     testProcessor();
+    testLicence();
     testMascot();
     testSmart();
     testPresets();

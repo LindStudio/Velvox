@@ -8,6 +8,8 @@
 
 // Licence check (Lemon Squeezy License API), prepared 2026-11-03 - OFF until Jakob has a store:
 // configure with -DVOCALYPSE_LICENSING=ON and fill in the store / product ids in ProductInfo.h.
+// Product-neutral since 2026-11-12 (Config: name, file identity, shop link), so the single plugins
+// (EMBER: -DEMBER_LICENSING=ON, Products/Ember/Source/EmberLicence.h) use the same code.
 //
 // Rules (docs/LICENSING.md):
 //   - 14 days trial from the first start on a computer, everything works.
@@ -58,9 +60,16 @@ namespace vocalypse::licensing
     Reply parseReply (const juce::String& json, int httpStatus, const juce::String& okField,
                       juce::int64 storeId, juce::int64 productId);
 
-    juce::String signatureOf (const Record&);
-    Record readRecord (const juce::File&);           // missing / edited file: empty record
-    bool writeRecord (const juce::File&, const Record&);
+    // Which product a licence file belongs to: the salt makes another product's file (or a hand-edited one) invalid
+    struct FileIdentity
+    {
+        juce::String salt = "VOCALYPSE/Lnda/Vlvx/7c1e";
+        juce::String tag = "VocalypseLicence";
+    };
+
+    juce::String signatureOf (const Record&, const FileIdentity& = {});
+    Record readRecord (const juce::File&, const FileIdentity& = {});   // missing / edited file: empty record
+    bool writeRecord (const juce::File&, const Record&, const FileIdentity& = {});
 
     // HTTP POST (form data) -> (status, body). Status 0 = not reached.
     using Transport = std::function<std::pair<int, juce::String> (const juce::String& url, const juce::StringPairArray& form)>;
@@ -69,18 +78,22 @@ namespace vocalypse::licensing
     struct Config
     {
         bool on = enabledInBuild;
-        juce::File file;                  // default: <app data>/Lind Audio/VOCALYPSE/VOCALYPSE.license
+        juce::String productName = "VOCALYPSE";   // in messages, the computer's name at the store, the default file
+        FileIdentity identity;
+        juce::String buyUrl;              // the shop / checkout page
+        juce::File file;                  // default: <app data>/Lind Audio/<productName>/<productName>.license
         Transport transport;              // default: internetTransport()
         std::function<juce::int64()> now; // default: current time
         juce::int64 storeId = 0, productId = 0;   // 0 = not checked
         bool asynchronous = true;         // tests: false (the request runs inside the call)
     };
 
-    // One per process (juce::SharedResourcePointer<Manager>). Message thread, except isLocked().
-    class Manager final : public juce::ChangeBroadcaster
+    // One per process (juce::SharedResourcePointer<Manager> in VOCALYPSE, a subclass with its own
+    // configuration per single plugin). Message thread, except isLocked().
+    class Manager : public juce::ChangeBroadcaster
     {
     public:
-        Manager();                        // the build's configuration
+        Manager();                        // VOCALYPSE's configuration (VocalypseLicence.cpp)
         explicit Manager (Config);
         ~Manager() override;
 
@@ -98,7 +111,8 @@ namespace vocalypse::licensing
         void checkIfDue();                // background re-check once a week
 
         juce::String describe() const;    // one line for the settings sheet
-        static juce::String buyUrl();
+        const juce::String& buyUrl() const noexcept { return cfg.buyUrl; }
+        const juce::String& productName() const noexcept { return cfg.productName; }
 
     private:
         void store();

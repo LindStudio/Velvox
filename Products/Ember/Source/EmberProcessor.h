@@ -5,6 +5,7 @@
 #include "EmberEngine.h"
 #include "EmberAuto.h"
 #include "EmberPresets.h"
+#include "EmberLicence.h"
 #include <future>
 
 namespace ember
@@ -77,8 +78,15 @@ namespace ember
 
         static constexpr const char* stateType = "EmberState";
 
+        // ---- Licence: locked (trial over / key invalid) = the audio passes through as in bypass -------------
+        vocalypse::licensing::Manager& getLicence() noexcept { return *licence; }
+        void setLicenceForTest (vocalypse::licensing::Manager& m) noexcept { licence = &m; }
+
     private:
         void timerCallback() override;
+
+        juce::SharedResourcePointer<EmberLicence> sharedLicence;
+        vocalypse::licensing::Manager* licence = &sharedLicence.getObject();
 
         ParamCache params { state };
         juce::AudioProcessorParameter* bypassParam = nullptr;

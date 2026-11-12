@@ -1,5 +1,4 @@
 #include "License.h"
-#include "../ProductInfo.h"
 #include "../Text/I18n.h"
 
 namespace vocalypse::licensing
@@ -10,9 +9,6 @@ namespace vocalypse::licensing
     {
         constexpr juce::int64 dayMs = 24LL * 60 * 60 * 1000;
         constexpr const char* apiBase = "https://api.lemonsqueezy.com/v1/licenses/";
-
-        // Not a secret against a determined cracker - it only makes a hand-edited file invalid
-        constexpr const char* salt = "VOCALYPSE/Lnda/Vlvx/7c1e";
 
         juce::String shortKey (const juce::String& key)
         {
@@ -25,8 +21,8 @@ namespace vocalypse::licensing
                 return tr ("Keine Verbindung zum Lizenz-Server. Prüf die Internetverbindung und versuch es noch einmal.",
                            "No connection to the licence server. Check the internet connection and try again.");
             if (r.error.containsIgnoreCase ("activation limit"))
-                return tr ("Dieser Schlüssel ist schon auf der erlaubten Anzahl Computer aktiv. Gib ihn zuerst auf einem anderen Computer frei (Einstellungen > Lizenz > Freigeben).",
-                           "This key is already active on the allowed number of computers. Release it on another computer first (Settings > Licence > Release).");
+                return tr ("Dieser Schlüssel ist schon auf der erlaubten Anzahl Computer aktiv. Gib ihn zuerst auf einem anderen Computer frei (Lizenz > Freigeben).",
+                           "This key is already active on the allowed number of computers. Release it on another computer first (Licence > Release).");
             if (r.keyStatus == "expired")
                 return tr ("Dieser Schlüssel ist abgelaufen.", "This key has expired.");
             if (r.keyStatus == "disabled")
@@ -100,9 +96,10 @@ namespace vocalypse::licensing
         return r;
     }
 
-    juce::String signatureOf (const Record& r)
+    juce::String signatureOf (const Record& r, const FileIdentity& id)
     {
-        const auto text = juce::String (salt) + "|" + r.key + "|" + r.instanceId + "|" + r.customer + "|"
+        // Not a secret against a determined cracker - the salt only makes a hand-edited file invalid
+        const auto text = id.salt + "|" + r.key + "|" + r.instanceId + "|" + r.customer + "|"
                           + juce::String (r.firstRunMs) + "|" + juce::String (r.lastCheckMs) + "|" + (r.revoked ? "1" : "0");
         // FNV-1a 64, two seeds (juce_cryptography is not linked; this only has to notice an edit)
         juce::String out;
@@ -115,11 +112,11 @@ namespace vocalypse::licensing
         return out;
     }
 
-    Record readRecord (const juce::File& f)
+    Record readRecord (const juce::File& f, const FileIdentity& id)
     {
         Record r;
         const auto xml = juce::XmlDocument::parse (f);
-        if (xml == nullptr || ! xml->hasTagName ("VocalypseLicence"))
+        if (xml == nullptr || ! xml->hasTagName (id.tag))
             return r;
         r.key = xml->getStringAttribute ("key");
         r.instanceId = xml->getStringAttribute ("instance");
@@ -127,7 +124,7 @@ namespace vocalypse::licensing
         r.firstRunMs = xml->getStringAttribute ("firstRun").getLargeIntValue();
         r.lastCheckMs = xml->getStringAttribute ("lastCheck").getLargeIntValue();
         r.revoked = xml->getBoolAttribute ("revoked");
-        if (xml->getStringAttribute ("sig") != signatureOf (r))
+        if (xml->getStringAttribute ("sig") != signatureOf (r, id))
         {
             // Edited by hand: the key is dropped, the trial counts from the stored start (never a fresh trial)
             Record dropped;
@@ -137,16 +134,16 @@ namespace vocalypse::licensing
         return r;
     }
 
-    bool writeRecord (const juce::File& f, const Record& r)
+    bool writeRecord (const juce::File& f, const Record& r, const FileIdentity& id)
     {
-        juce::XmlElement xml ("VocalypseLicence");
+        juce::XmlElement xml (id.tag);
         xml.setAttribute ("key", r.key);
         xml.setAttribute ("instance", r.instanceId);
         xml.setAttribute ("customer", r.customer);
         xml.setAttribute ("firstRun", juce::String (r.firstRunMs));
         xml.setAttribute ("lastCheck", juce::String (r.lastCheckMs));
         xml.setAttribute ("revoked", r.revoked);
-        xml.setAttribute ("sig", signatureOf (r));
+        xml.setAttribute ("sig", signatureOf (r, id));
         f.getParentDirectory().createDirectory();
         return xml.writeTo (f);
     }
@@ -173,18 +170,6 @@ namespace vocalypse::licensing
     }
 
     //==============================================================================
-    namespace
-    {
-        Config buildConfig()
-        {
-            Config c;
-            c.storeId = product::lemonStoreId;
-            c.productId = product::lemonProductId;
-            return c;
-        }
-    }
-
-    Manager::Manager() : Manager (buildConfig()) {}
 
     Manager::Manager (Config c) : cfg (std::move (c))
     {
@@ -195,13 +180,13 @@ namespace vocalypse::licensing
 
         if (cfg.file == juce::File())
             cfg.file = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                           .getChildFile (product::companyName).getChildFile (product::name).getChildFile ("VOCALYPSE.license");
+                           .getChildFile ("Lind Audio").getChildFile (cfg.productName).getChildFile (cfg.productName + ".license");
         if (! cfg.transport)
             cfg.transport = internetTransport();
         if (cfg.asynchronous)
-            pool = std::make_unique<juce::ThreadPool> (juce::ThreadPoolOptions{}.withThreadName ("VOCALYPSE licence").withNumberOfThreads (1));
+            pool = std::make_unique<juce::ThreadPool> (juce::ThreadPoolOptions{}.withThreadName (cfg.productName + " licence").withNumberOfThreads (1));
 
-        rec = readRecord (cfg.file);
+        rec = readRecord (cfg.file, cfg.identity);
         if (rec.firstRunMs <= 0)
         {
             rec.firstRunMs = cfg.now();
@@ -232,7 +217,7 @@ namespace vocalypse::licensing
     void Manager::store()
     {
         if (cfg.on)
-            writeRecord (cfg.file, rec);
+            writeRecord (cfg.file, rec, cfg.identity);
     }
 
     void Manager::run (std::function<void()> job)
@@ -253,7 +238,7 @@ namespace vocalypse::licensing
         }
         juce::StringPairArray form;
         form.set ("license_key", key);
-        form.set ("instance_name", juce::SystemStats::getComputerName().isNotEmpty() ? juce::SystemStats::getComputerName() : juce::String ("VOCALYPSE"));
+        form.set ("instance_name", juce::SystemStats::getComputerName().isNotEmpty() ? juce::SystemStats::getComputerName() : cfg.productName);
 
         auto transport = cfg.transport;
         const auto storeId = cfg.storeId, productId = cfg.productId;
@@ -277,7 +262,7 @@ namespace vocalypse::licensing
                     rec.lastCheckMs = cfg.now();
                     store();
                     update();
-                    if (done) done (true, tr ("VOCALYPSE ist aktiviert. Danke!", "VOCALYPSE is activated. Thank you!"));
+                    if (done) done (true, i18n::format (tr ("{0} ist aktiviert. Danke!", "{0} is activated. Thank you!"), { cfg.productName }));
                 }
                 else if (done)
                 {
@@ -374,10 +359,5 @@ namespace vocalypse::licensing
                                                       : tr ("Testzeit vorbei - bitte aktivieren", "Trial over - please activate");
         }
         return {};
-    }
-
-    juce::String Manager::buyUrl()
-    {
-        return product::buyUrl;
     }
 }

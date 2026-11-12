@@ -88,6 +88,18 @@ Stimmungen: idle, singing, snapping, fire (Stärke = Gain Reduction), overheated
 gelispelt!“), sleeping (Bypass), listening (AUTO hört zu), proud (AUTO fertig). Fehlen Bilder für eine Stimmung,
 zeichnet das Plugin einen Vektor-Teufel als Platzhalter. Bilder: `Products/Ember/Mascot/frames/<stimmung>_001.png …`
 
+## Lizenz (2026-11-12, eingebaut, noch AUS)
+Gleiches Modul und gleiche Regeln wie VOCALYPSE (`docs/LICENSING.md`): 14 Tage Test, Schlüssel aus der Bestell-Mail,
+2 Computer, offline bleibt aktiviert, gesperrt = Audio läuft wie im Bypass durch (gleiche Latenz).
+- Werte: `Products/Ember/Source/EmberLicence.h` (`lemonStoreId`, `lemonProductId`, `buyUrl`). Datei
+  `%APPDATA%\Lind Audio\EMBER\EMBER.license`, eigene Signatur (eine VOCALYPSE-Datei gilt nicht).
+- Einschalten: `cmake -S . -B build -DEMBER_LICENSING=ON`, bauen, EmberTests, pluginval, Testschlüssel aktivieren.
+- Oberfläche: ≡ > Lizenz (Status, Schlüssel eingeben, Computer freigeben, Kaufen); Sperrkarte über dem Panel
+  (`Source/UI/LicenceUI.*`, gemeinsam mit VOCALYPSE).
+- Jakobs Anleitung für Lemon Squeezy: https://claude.ai/artifact/KHmzAvoA58gojurohHMkkT
+- Offen: Gratis-Release mit Mail-Liste statt Verkauf? (Jakob 2026-11-12, später besprechen) – die Lizenz bleibt
+  dann gleich, nur der Preis ist 0 €.
+
 ## Bauen, testen, installieren
 - `scripts\build.ps1` baut alles (auch `Ember_VST3`, `Ember_Standalone`, `EmberTests`) und führt beide Test-Runner aus.
 - `EmberTests.exe`: 104 Checks (Null-Test, S-Reduktion, Range/Amount, Breitband, Delta, Bypass, Lookahead,
@@ -103,7 +115,6 @@ zeichnet das Plugin einen Vektor-Teufel als Platzhalter. Bilder: `Products/Ember
 - Jakobs Hörtest (subtil): Drive `Plugins/01 EMBER De-Esser/Hoertest/2026-11-10_subtil` (FLAC; WAV in
   `velvox-bench/2026-11-10/ember_hoertest_subtil`).
 - Echte Maskottchen-Bilder (Jakob).
-- Lizenz (Lemon Squeezy) ist für EMBER noch nicht eingebaut: der VOCALYPSE-Lizenzcode hängt an `ProductInfo.h`.
-  Vor dem Verkauf: eigene Produkt-ID, Trial/Key.
+- Lizenz: eingebaut (siehe oben), es fehlen nur Jakobs Lemon-Squeezy-Werte.
 - Installer, Produktseite und Preis (Plan: 29–39 €, Einführungspreis).
 - Presets (Factory-Presets, z. B. „Rap hell“, „Sanft“) sind noch nicht da; der Host speichert alles im Projekt.

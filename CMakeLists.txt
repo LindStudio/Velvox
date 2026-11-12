@@ -112,9 +112,11 @@ set(VOCALYPSE_SOURCES
     Source/UI/HelpOverlay.cpp
     Source/UI/TutorialOverlay.cpp
     Source/UI/SettingsOverlay.cpp
+    Source/UI/LicenceUI.cpp
     Source/Text/I18n.cpp
     Source/Text/ParamText.cpp
     Source/Licensing/License.cpp
+    Source/Licensing/VocalypseLicence.cpp
 )
 
 # Saturation panel (0.6: character tiles, big Drive, Low / Mid / High strip)

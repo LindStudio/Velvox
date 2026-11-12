@@ -324,7 +324,7 @@ namespace ember
             g.drawText ("De-Esser  " + juce::String (EMBER_VERSION_STRING), r.removeFromTop (22.0f), juce::Justification::centredLeft);
             g.setColour (c::textMuted);
             g.setFont (ui::font (13.0f));
-            g.drawText (utf8 ("© 2026 Lind Audio · VOCALYPSE"), r.removeFromTop (20.0f), juce::Justification::centredLeft);
+            g.drawText (utf8 ("© 2026 Lind Audio · lind-audio.com"), r.removeFromTop (20.0f), juce::Justification::centredLeft);
             r.removeFromTop (14.0f);
             g.setColour (c::textSoft);
             g.setFont (ui::font (12.5f));
@@ -532,6 +532,8 @@ namespace ember
         addChildComponent (infoPopup);
         about = std::make_unique<AboutOverlay>();
         addChildComponent (*about);
+        addChildComponent (licenceLock);
+        licenceLock.setLicence (&processor.getLicence());
 
         setSize (look::baseW, look::baseH);
         advanced = (bool) processor.state.state.getProperty ("advanced", false);
@@ -582,7 +584,7 @@ namespace ember
         g.drawText ("De-Esser", sub.removeFromTop (sub.getHeight() * 0.55f), juce::Justification::bottomLeft);
         g.setFont (ui::caps (10.5f));
         g.setColour (c::textFaint);
-        g.drawText (utf8 ("LIND AUDIO  ·  VOCALYPSE"), sub, juce::Justification::topLeft);
+        g.drawText (utf8 ("LIND AUDIO"), sub, juce::Justification::topLeft);
 
         // preset bar backing
         g.setColour (c::control);
@@ -668,6 +670,7 @@ namespace ember
         infoPopup.setBounds (getLocalBounds());
         if (about != nullptr)
             about->setBounds (getLocalBounds());
+        licenceLock.setBounds (getLocalBounds());
     }
 
     void EmberPanel::setVoice (float hz)
@@ -758,11 +761,36 @@ namespace ember
         menu.addSubMenu (tr ("Sprache", "Language"), lang);
         menu.addItem (20, tr ("Handbuch öffnen", "Open the manual"));
         menu.addItem (21, tr ("Ember-Tipp wieder zeigen", "Show Ember's tip again"));
+        auto& licence = processor.getLicence();
+        if (licence.isOn())
+        {
+            // Licence > status line, enter key, release this computer, buy
+            const bool licensed = licence.status().access == vocalypse::licensing::Access::licensed;
+            juce::PopupMenu lic;
+            lic.addItem (-1, licence.describe(), false);
+            lic.addSeparator();
+            lic.addItem (40, tr ("Lizenzschlüssel eingeben …", "Enter licence key …"), ! licensed);
+            lic.addItem (41, tr ("Diesen Computer freigeben", "Release this computer"), licensed);
+            lic.addItem (42, tr ("EMBER kaufen", "Buy EMBER"), ! licensed && licence.buyUrl().isNotEmpty());
+            menu.addSubMenu (tr ("Lizenz", "Licence"), lic);
+        }
         menu.addSeparator();
         menu.addItem (30, tr ("Über EMBER …", "About EMBER …"));
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (menuBtn),
                             [this] (int id)
                             {
+                                auto& lic = processor.getLicence();
+                                if (id == 40)
+                                    vocalypse::ui::showActivationDialog (lic, getTopLevelComponent());
+                                else if (id == 41)
+                                    lic.deactivate ([] (bool ok, const juce::String& message)
+                                    {
+                                        if (message.isNotEmpty())
+                                            juce::AlertWindow::showMessageBoxAsync (ok ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon,
+                                                                                    tr ("Lizenz", "Licence"), message);
+                                    });
+                                else if (id == 42)
+                                    juce::URL (lic.buyUrl()).launchInDefaultBrowser();
                                 if (id >= 11 && id <= 13)
                                 {
                                     const juce::String pref = id == 11 ? "system" : (id == 12 ? "de" : "en");

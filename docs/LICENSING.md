@@ -3,6 +3,10 @@
 Stand 2026-11-03. Code: `Source/Licensing/License.{h,cpp}`, Tests: `Tests/LicenseTests.cpp`,
 Oberfläche: `Source/UI/SettingsOverlay.{h,cpp}` (Zeile „Lizenz“, Aktivieren-Fenster, `LicenceLock`).
 
+Seit 2026-11-12 produktneutral: `licensing::Config` trägt Name, Datei-Kennung (Salt/Tag) und Shop-Link.
+VOCALYPSE: `Source/Licensing/VocalypseLicence.cpp`. EMBER: `Products/Ember/Source/EmberLicence.h`
+(`-DEMBER_LICENSING=ON`). Schlüsselkarte und Sperre: `Source/UI/LicenceUI.*`.
+
 ## Regeln
 
 - **Aus**, solange nicht mit `-DVOCALYPSE_LICENSING=ON` gebaut wird: keine Datei, kein Thread, kein Netz,
