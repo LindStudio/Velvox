@@ -2,6 +2,7 @@
 #include "EmberMascotData.h"
 #include "UI/Theme.h"
 #include "Text/I18n.h"
+#include <list>
 
 namespace ember
 {
@@ -90,7 +91,60 @@ namespace ember
     }
 
     // ----------------------------------------------------------------- frames
-    MascotFrames::MascotFrames()
+    // Decoded pictures, shared by every MascotFrames in the process and freed with the last one (never a
+    // static juce::Image: releasing Direct2D images at DLL unload hung FL Studio, VOCALYPSE 2026-11-03).
+    // Least recently shown pictures are dropped first. Message thread only.
+    struct FrameCache
+    {
+        std::list<std::pair<int, juce::Image>> lru;   // front = most recently used
+
+        juce::Image get (int resource)
+        {
+            for (auto it = lru.begin(); it != lru.end(); ++it)
+                if (it->first == resource)
+                {
+                    lru.splice (lru.begin(), lru, it);
+                    return lru.front().second;
+                }
+            int size = 0;
+            const char* data = EmberMascotData::getNamedResource (EmberMascotData::namedResourceList[resource], size);
+            auto img = data != nullptr ? juce::ImageFileFormat::loadFrom (data, (size_t) size) : juce::Image();
+            lru.emplace_front (resource, img);
+            while ((int) lru.size() > MascotFrames::cacheCapacity)
+                lru.pop_back();
+            return img;
+        }
+    };
+
+    namespace
+    {
+        std::weak_ptr<FrameCache>& sharedCache()
+        {
+            static std::weak_ptr<FrameCache> cache;   // holds no pictures itself
+            return cache;
+        }
+
+        std::shared_ptr<FrameCache> acquireCache()
+        {
+            auto p = sharedCache().lock();
+            if (p == nullptr)
+            {
+                p = std::make_shared<FrameCache>();
+                sharedCache() = p;
+            }
+            return p;
+        }
+    }
+
+    int MascotFrames::decodedPicturesForTest()
+    {
+        const auto p = sharedCache().lock();
+        return p == nullptr ? 0 : (int) p->lru.size();
+    }
+
+    MascotFrames::~MascotFrames() = default;
+
+    MascotFrames::MascotFrames() : cache (acquireCache())
     {
         // File names: <state>_<number>.png, e.g. fire_001.png ... (Products/Ember/Mascot/frames)
         for (int i = 0; i < EmberMascotData::namedResourceListSize; ++i)
@@ -106,13 +160,7 @@ namespace ember
             else if (prefix.endsWith ("_out")) { clip = MascotClip::out; prefix = prefix.dropLastCharacters (4); }
             for (int s = 0; s < numMascotStates; ++s)
                 if (prefix == mascotStateName ((MascotState) s))
-                {
-                    int size = 0;
-                    const char* data = EmberMascotData::getNamedResource (resource, size);
-                    auto img = juce::ImageFileFormat::loadFrom (data, (size_t) size);
-                    if (img.isValid())
-                        frames[key ((MascotState) s, clip)].add (img);   // resources come sorted by name: 001, 002 ...
-                }
+                    frames[key ((MascotState) s, clip)].add ({ i, {} });   // resources come sorted by name: 001, 002 ...
         }
 
         // Optional frame rates: Mascot/mascot.json {"fps": 24, "states": {"fire": 30}}
@@ -138,10 +186,11 @@ namespace ember
         return it == frames.end() ? 0 : it->second.size();
     }
 
-    const juce::Image& MascotFrames::frame (MascotState s, MascotClip c, int index) const
+    juce::Image MascotFrames::frame (MascotState s, MascotClip c, int index) const
     {
         const auto& list = frames.at (key (s, c));
-        return list.getReference (juce::jlimit (0, list.size() - 1, index));
+        const auto& src = list.getReference (juce::jlimit (0, list.size() - 1, index));
+        return src.resource >= 0 ? cache->get (src.resource) : src.image;
     }
 
     float MascotFrames::fps (MascotState s) const noexcept
@@ -295,7 +344,7 @@ namespace ember
         const int n = frames.count (st, clip);
         const int raw = (int) (time * frames.fps (st));
         const int frame = clip == MascotClip::loop ? raw % n : std::min (raw, n - 1);   // in / out play once
-        const auto& img = frames.frame (st, clip, frame);
+        const auto img = frames.frame (st, clip, frame);
         const bool still = n == 1 && clip == MascotClip::loop;   // one picture per mood: the motion comes from here
 
         // Fit the (square) picture into the area, anchored at its bottom centre

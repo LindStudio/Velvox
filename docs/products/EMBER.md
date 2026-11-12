@@ -74,6 +74,9 @@ Vokale höchstens −0,02 dB, S-nahe Vokalteile höchstens −0,45 dB. Gerendert
 −0,09 dB, größte Reduktion 3–5 dB (vorher 9–11 dB).
 
 ## Maskottchen (`EmberMascot.*`)
+Speicher (2026-11-12): Die PNGs bleiben komprimiert im Plugin; ein Bild wird erst beim Anzeigen dekodiert (1,7 ms)
+und in einem Cache für 24 Bilder gehalten, den alle EMBER-Fenster teilen. Vorher wurden beim Öffnen jedes Fensters alle
+189 Bilder entpackt (281 MB). Gemessen im RefHost mit offenem Fenster: 481 MB → 185 MB für den ganzen Prozess.
 Ruhig (Jakob: „springt sehr viel herum“, „wechselt zwischen tanzen und feuer“): Feuer bleibt, bis 4 s kein S kam
 (Snapping 2,5 s). Eine neue Stimmung muss 0,25 s anliegen, jede Stimmung bleibt mindestens
 2 s, das Maskottchen bekommt die geglättete Reduktion. Standbilder bewegen sich nur leicht (Atmen, sanftes Wiegen).

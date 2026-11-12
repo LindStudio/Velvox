@@ -642,7 +642,9 @@ namespace
     void testMascotFrames (const juce::File& snapshotDir)
     {
         Test t ("mascot pictures built in (Jakob's Ember, 2026-11-10)");
+        const int decodedBefore = MascotFrames::decodedPicturesForTest();
         MascotFrames frames;
+        check (MascotFrames::decodedPicturesForTest() == decodedBefore, "opening decodes no picture");
         for (int s = 0; s < numMascotStates; ++s)
         {
             const auto st = (MascotState) s;
@@ -650,6 +652,30 @@ namespace
             if (frames.has (st))
                 check (frames.frame (st, MascotClip::loop, 0).getWidth() >= 512 && frames.frame (st, MascotClip::loop, 0).hasAlphaChannel(),
                        juce::String ("size + alpha ") + mascotStateName (st));
+        }
+
+        // Every picture decodes; only a few stay decoded, shared by all windows (was ~281 MB per window)
+        {
+            int total = 0, valid = 0;
+            const auto t0 = juce::Time::getMillisecondCounterHiRes();
+            for (int s = 0; s < numMascotStates; ++s)
+                for (int c = 0; c < 3; ++c)
+                    for (int i = 0; i < frames.count ((MascotState) s, (MascotClip) c); ++i)
+                    {
+                        ++total;
+                        valid += frames.frame ((MascotState) s, (MascotClip) c, i).isValid() ? 1 : 0;
+                    }
+            const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+            check (total > 0 && valid == total, "every picture decodes");
+            check (MascotFrames::decodedPicturesForTest() <= MascotFrames::cacheCapacity, "at most cacheCapacity pictures decoded");
+            std::printf ("    %d pictures, %.2f ms per decode, %d kept decoded\n", total, ms / juce::jmax (1, total),
+                         MascotFrames::decodedPicturesForTest());
+
+            MascotFrames second;
+            const auto a = frames.frame (MascotState::idle, MascotClip::loop, 0);
+            const auto b = second.frame (MascotState::idle, MascotClip::loop, 0);
+            check (a.getPixelData() == b.getPixelData(), "two windows share one decoded picture");
+            check (MascotFrames::decodedPicturesForTest() <= MascotFrames::cacheCapacity, "second window adds nothing");
         }
         if (snapshotDir == juce::File())
             return;

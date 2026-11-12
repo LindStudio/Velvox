@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 
 // Ember, the imp of EMBER De-Esser.
 //
@@ -67,25 +68,35 @@ namespace ember
     // when all in / out clips start / end on the same neutral pose. Moods without in / out clips cross-fade.
     enum class MascotClip { loop = 0, in = 1, out = 2 };
 
-    // Frames of Jakob's 2D mascot, grouped by state and clip (built in as binary data)
+    struct FrameCache;
+
+    // Frames of Jakob's 2D mascot, grouped by state and clip (built in as binary data).
+    // The PNGs stay compressed; a picture is decoded when it is shown and kept in a small cache that all
+    // EMBER windows in the process share. Decoding all 189 frames up front cost ~281 MB per window.
     class MascotFrames
     {
     public:
-        MascotFrames();   // loads every built-in frame
+        MascotFrames();   // indexes the built-in frames (decodes nothing)
+        ~MascotFrames();
         bool has (MascotState s, MascotClip c = MascotClip::loop) const noexcept;
         int count (MascotState s, MascotClip c = MascotClip::loop) const noexcept;
-        const juce::Image& frame (MascotState s, MascotClip c, int index) const;
+        juce::Image frame (MascotState s, MascotClip c, int index) const;   // message thread
         float fps (MascotState s) const noexcept;
         double duration (MascotState s, MascotClip c) const noexcept { return count (s, c) / (double) fps (s); }
         bool anyFrames() const noexcept { return ! frames.empty(); }
         void clear() { frames.clear(); }                                   // tests
-        void add (MascotState s, MascotClip c, const juce::Image& img) { frames[key (s, c)].add (img); }   // tests
+        void add (MascotState s, MascotClip c, const juce::Image& img) { frames[key (s, c)].add ({ -1, img }); }   // tests
+
+        static constexpr int cacheCapacity = 24;   // decoded pictures kept (~35 MB at 600 x 600)
+        static int decodedPicturesForTest();      // pictures held decoded right now, all windows
 
     private:
+        struct Source { int resource = -1; juce::Image image; };   // built-in (decoded on demand) or a test picture
         static int key (MascotState s, MascotClip c) noexcept { return (int) s * 3 + (int) c; }
-        std::map<int, juce::Array<juce::Image>> frames;
+        std::map<int, juce::Array<Source>> frames;
         std::map<int, float> rates;
         float defaultFps = 24.0f;
+        std::shared_ptr<FrameCache> cache;
     };
 
     class MascotView final : public juce::Component, private juce::Timer
