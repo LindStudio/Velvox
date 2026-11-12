@@ -1,5 +1,18 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
+## STAND 2026-11-12 – HIER WEITERMACHEN
+Erledigt (Branch feature/ember-deesser, nicht gepusht, nicht installiert):
+- Maskottchen-Speicher: Bilder werden erst beim Anzeigen dekodiert, geteilter Cache (f7e7dd1, 481 → 185 MB).
+- Lizenz eingebaut, Standard AUS (`-DEMBER_LICENSING=ON`), Lemon Squeezy TESTMODUS: Store 522230, Produkt 1522200,
+  Checkout-Link als Kaufen-Link (`EmberLicence.h`). Echter API-Test grün (`EMBER_LICENCE_TEST_KEY`, Schlüssel nie im Repo).
+- „VOCALYPSE“ aus Kopf und Über-Fenster entfernt; `--snapshots` schreibt auch @2x-PNGs für die Website.
+Offen:
+- Jakob poliert und testet das Plugin selbst; danach: Lizenz einschalten, Installer bauen, bei Lemon Squeezy hochladen.
+- Entscheidung Jakob: Ohne Schlüssel gar nicht laufen oder unbegrenzt laufen (EMBER ist gratis; 14-Tage-Test passt nicht)?
+- Lemon Squeezy: Preis 0 € und Newsletter-Zustimmung erledigt (Jakob); Store-Prüfung läuft. Nach Freigabe: Produkt in den
+  Live-Modus kopieren → neue Produkt-ID in `EmberLicence.h`, neuer Checkout-Link auf die Website.
+- Website lind-audio.com: siehe Repo `%USERPROFILE%\dev\lind-audio-web` (README im build.py-Kopf).
+
 ## STAND 1.0.0 (2026-11-10) – verkaufsfertig ohne Lizenz
 Jakob: „UX und S-Algorithmus verbessern, Erklärtext beim Hovern, Englisch, Ember nur in SIMPLE, komplett verkaufsfertig
 (außer Lizenzierung)“.
