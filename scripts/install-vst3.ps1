@@ -18,6 +18,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 if (-not $BuildDir) { $BuildDir = Join-Path (Split-Path -Parent $PSScriptRoot) "build" }
+# absolute, because the elevated (UAC) copy of this script starts in System32
+if (Test-Path $BuildDir) { $BuildDir = (Resolve-Path $BuildDir).Path }
 $bundleName = if ($Product -eq "Ember") { "EMBER De-Esser.vst3" } else { "VOCALYPSE.vst3" }
 $sourceBundle = Join-Path $BuildDir "${Product}_artefacts\$Config\VST3\$bundleName"
 $targetDir    = Join-Path $env:CommonProgramFiles "VST3"
