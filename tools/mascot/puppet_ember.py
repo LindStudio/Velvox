@@ -112,6 +112,7 @@ class Puppet:
             & (self.px > min(e[1] for e in self.eyes)) & (self.px < max(e[2] for e in self.eyes))
         self.skin = np.median(rgb[above], axis=0)
         self.line = np.array([0.30, 0.10, 0.12], np.float32)
+        self.lid = np.array([0.08, 0.04, 0.06], np.float32)   # closed eye: as dark as the outline
 
     # ------------------------------------------------------------ frame
     def blinked(self, close):
@@ -128,7 +129,7 @@ class Puppet:
             yy = self.py[y0:y1 + 1, x0:x1 + 1]
             lid = sub & (yy <= edge[None, :])
             region = img[y0:y1 + 1, x0:x1 + 1]
-            region[lid, :3] = self.skin
+            region[lid, :3] = self.lid   # Jakob 2026-11-13: dark lids, not skin
             dist = np.abs(yy - edge[None, :])
             line = sub & (dist < 2.6) & (close > 0.15)
             a = np.clip(2.6 - dist, 0, 1)[..., None]
@@ -186,6 +187,17 @@ def to_frame(img):
     return canvas
 
 
+def plugin_background(size):
+    """What the plugin draws behind Ember in SIMPLE: the panel colour and a soft red glow (EmberMascot.cpp)."""
+    y, x = np.mgrid[0:size, 0:size].astype(np.float32)
+    r = np.hypot(x - size * 0.45, y - size * 0.5) / (size * 0.5)
+    glow = 0.18 * np.clip(1 - r, 0, 1) ** 1.5
+    panel = np.array([7, 8, 13], np.float32)
+    red = np.array([255, 59, 31], np.float32)
+    rgb = panel * (1 - glow[..., None]) + red * glow[..., None]
+    return Image.fromarray(np.concatenate([rgb, np.full((size, size, 1), 255, np.float32)], axis=2).astype(np.uint8), 'RGBA')
+
+
 # ---------------------------------------------------------------- states
 def ease(x):
     return 0.5 - 0.5 * math.cos(math.pi * np.clip(x, 0, 1))
@@ -234,10 +246,10 @@ def main():
             f.save(os.path.join(a.out, f'{name}_{i + 1:03d}.png'), optimize=True)
             frames.append(f)
         if a.preview:
-            bg = (24, 14, 16, 255)
+            bg = plugin_background(OUT)
             pv = []
             for f in frames:
-                c = Image.new('RGBA', f.size, bg)
+                c = bg.copy()
                 c.alpha_composite(f)
                 pv.append(c.convert('RGB').convert('P', palette=Image.ADAPTIVE))
             pv[0].save(os.path.join(a.out, f'{name}_preview.gif'), save_all=True, append_images=pv[1:],
