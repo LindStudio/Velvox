@@ -83,6 +83,9 @@ namespace ember
         juce::Image frame (MascotState s, MascotClip c, int index) const;   // message thread
         float fps (MascotState s) const noexcept;
         double duration (MascotState s, MascotClip c) const noexcept { return count (s, c) / (double) fps (s); }
+        // Where his mouth is in a frame, as a fraction of the (square) picture; (-1, -1) when mascot.json has none.
+        // The plugin draws the fire from there, as big as the reduction (the frames show only the pose).
+        juce::Point<float> mouth() const noexcept { return mouthFrac; }
         bool anyFrames() const noexcept { return ! frames.empty(); }
         void clear() { frames.clear(); }                                   // tests
         void add (MascotState s, MascotClip c, const juce::Image& img) { frames[key (s, c)].add ({ -1, img }); }   // tests
@@ -96,6 +99,7 @@ namespace ember
         std::map<int, juce::Array<Source>> frames;
         std::map<int, float> rates;
         float defaultFps = 24.0f;
+        juce::Point<float> mouthFrac { -1.0f, -1.0f };
         std::shared_ptr<FrameCache> cache;
     };
 

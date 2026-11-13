@@ -170,6 +170,9 @@ namespace ember
             const auto v = juce::JSON::parse (juce::String::fromUTF8 (json, size));
             if (v.hasProperty ("fps"))
                 defaultFps = (float) (double) v["fps"];
+            // "mouth": [x, y, size] in frame pixels
+            if (auto* m = v["mouth"].getArray(); m != nullptr && m->size() == 3 && (double) (*m)[2] > 0.0)
+                mouthFrac = { (float) ((double) (*m)[0] / (double) (*m)[2]), (float) ((double) (*m)[1] / (double) (*m)[2]) };
             if (auto* states = v["states"].getDynamicObject())
                 for (const auto& p : states->getProperties())
                     for (int s = 0; s < numMascotStates; ++s)
@@ -231,9 +234,18 @@ namespace ember
         const bool fireNow = st == MascotState::fire || st == MascotState::overheated;
         const float scale = getHeight() / 300.0f;
 
-        if (! frames.has (st))
+        // Fire comes from his mouth: the placeholder's, or the one mascot.json gives for the frames
+        const bool mouthKnown = ! frames.has (st) || (st == MascotState::fire && frames.mouth().x >= 0.0f);   // overheated frames cough smoke
+        if (frames.has (st) && mouthKnown)
         {
-            if (fireNow)
+            // the same box paintFrame draws the picture into (frames with motion are drawn untransformed)
+            const auto area = getLocalBounds().toFloat();
+            const float side = std::min (area.getWidth(), area.getHeight() * 1.1f);
+            const auto box = juce::Rectangle<float> (side, side).withCentre (area.getCentre()).withBottom (area.getBottom() + side * 0.04f);
+            mouth = { box.getX() + frames.mouth().x * side, box.getY() + frames.mouth().y * side };
+        }
+        if (fireNow && mouthKnown)
+        {
             {
                 const int n = 1 + (int) (k * 10.0f);
                 for (int i = 0; i < n; ++i)
@@ -241,6 +253,9 @@ namespace ember
                                                     (random.nextFloat() - 0.5f) * (1.5f + k * 4.0f) * scale },
                                            1.0f, (5.0f + random.nextFloat() * 5.0f + k * 9.0f) * scale, false });
             }
+        }
+        if (! frames.has (st))
+        {
             const bool smoky = st == MascotState::idle || st == MascotState::sleeping || st == MascotState::overheated;
             if (smoky && random.nextFloat() < 0.06f)
                 particles.push_back ({ mouth.translated (-20.0f * scale, -30.0f * scale), { 0.3f * scale, -0.9f * scale }, 1.0f, 5.0f * scale, true });
@@ -326,6 +341,7 @@ namespace ember
             if (fade < 1.0f && frames.has (previousState) && previousState != shownState)
                 paintFrame (g, area, previousState, previousClip, previousTime + fadeTime, 1.0f - fade);
             paintFrame (g, area, shownState, shownClip, clipTime, fade);
+            paintFire (g);
         }
         else
         {
@@ -381,6 +397,10 @@ namespace ember
                                     .scaled (sx, sy)
                                     .rotated (rot)
                                     .translated (anchor.x + dx, anchor.y + dy);
+
+        if (frames.mouth().x >= 0.0f && alpha >= 0.5f)
+            mouth = juce::Point<float> (box.getX() + frames.mouth().x * box.getWidth(),
+                                        box.getY() + frames.mouth().y * box.getHeight()).transformedBy (transform);
 
         juce::Graphics::ScopedSaveState save (g);
         g.addTransform (transform);

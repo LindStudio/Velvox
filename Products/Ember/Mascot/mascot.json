@@ -1,3 +1,9 @@
 {
-  "fps": 12
+  "fps": 12,
+  "mouth": [
+    291.2,
+    272.0,
+    600
+  ],
+  "_source": "tools/mascot/puppet_ember.py <Drive: Plugins/01 EMBER De-Esser/Embernew.png> Products/Ember/Mascot/frames --plugin"
 }
