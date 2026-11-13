@@ -12,6 +12,11 @@ die Stimme. Erledigt (feature/ember-deesser, installiert mit Lizenz AN aus `buil
 - **Schrift 35 % größer** (`ui::setTextScale`, nur EMBER; Wortmarke bleibt gleich groß).
 - Hörvergleich für Jakob: Drive `Plugins/01 EMBER De-Esser/Hoertest/2026-11-13_vs_ProDS`.
 - 248 Checks grün (mit `EMBER_VOCALS`), pluginval 10 SUCCESS (`--skip-gui-tests`).
+- **Neues Maskottchen** (Jakob: KI-Videos „machen es nicht richtig“, Fiverr 500 €): Ember aus `Embernew.png` als
+  2D-Puppe, alle 8 Stimmungen per `tools/mascot/puppet_ember.py` (siehe `Products/Ember/Mascot/README.md`), Feuer
+  live aus dem Mund. 228 Bilder, 7,2 MB. Vorschau-Videos: Drive `Maskottchen/Animation/Puppe_Vorschau`. Installiert,
+  pluginval 10 SUCCESS (mit GUI). Offen: Jakobs Urteil zu den 7 neuen Stimmungen; Website-Hörbeispiele
+  (Drive `Vocal vergleiche`, live oder Vorschau?).
 
 ## STAND 2026-11-12
 Erledigt (Branch feature/ember-deesser, nicht gepusht, nicht installiert):
