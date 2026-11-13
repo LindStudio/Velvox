@@ -43,8 +43,14 @@ namespace ember
     // absolute mode for a voice peaking at -18 dBFS. Below fullFloorDb (near-silence) nothing is de-essed.
     inline constexpr float referenceDb = -18.0f;
     inline constexpr float fullFloorDb = -60.0f;
-    // Smart detection: weight 0 at smartNoneDb (body clearly louder), 1 at smartFullDb and above
-    inline constexpr float smartNoneDb = -12.0f, smartFullDb = -3.0f;
+    // Smart detection (2026-11-13, measured against FabFilter Pro-DS on 9 real takes): the energy above
+    // smartBandHz against the body of the voice (150 Hz - 3 kHz), smartEnvMs RMS envelopes. Real S sit at
+    // +1 .. +20 dB, vowels under -13 dB, the loud S-into-vowel transitions at -10 .. -1 dB. Weight 0 at
+    // smartNoneDb, 1 at smartFullDb: a transition keeps its vowel, only the S itself is taken down.
+    inline constexpr float smartNoneDb = -1.0f, smartFullDb = 5.0f;
+    inline constexpr float smartBandHz = 4000.0f, smartEnvMs = 5.0f;
+    // The weight follows fast (it is the gate that keeps vowels out of the reduction)
+    inline constexpr float smartRiseMs = 0.5f, smartFallMs = 1.0f;
 
     // Static curve: reduction in dB (>= 0) for a detector level, soft knee
     float staticReductionDb (float inDb, float thresholdDb) noexcept;
@@ -61,18 +67,19 @@ namespace ember
         float process (const float* frame, int numChannels, bool relative, float* band = nullptr) noexcept;
         bool isFinite() const noexcept;
 
-        // Smart detection: how much the S band outweighs the body of the voice (250 Hz - 3 kHz), in dB,
-        // from 30 ms envelopes, and the resulting weight 0..1 for the reduction. An S is noise high up with
-        // little body; a bright vowel or breath has its energy in the body -> weight 0, left alone.
+        // Smart detection: how much the energy above smartBandHz outweighs the body of the voice
+        // (150 Hz - 3 kHz), in dB, from 5 ms RMS envelopes, and the resulting weight 0..1 for the reduction.
+        // An S is noise high up with little body; a vowel, or a vowel the S runs into, has its energy in the
+        // body -> weight 0, left alone.
         float getSibilanceIndexDb() const noexcept { return indexDb; }
         float getSibilanceWeight() const noexcept { return weight; }
         static float weightForIndex (float indexDb) noexcept;
 
     private:
         double fs = 44100.0;
-        Biquad hp1, hp2, bodyHp, bodyLp;
+        Biquad hp1, hp2, bodyHp, bodyLp, idxHp1, idxHp2;
         float fullEnv = 0.0f, fullRelease = 0.0f;
-        float sEnv = 0.0f, bodyEnv = 0.0f, envRelease = 0.0f;
+        float sEnv = 0.0f, bodyEnv = 0.0f, envCoeff = 0.0f;   // energies (mean square)
         float indexDb = -60.0f, weight = 0.0f;
     };
 
@@ -105,13 +112,14 @@ namespace ember
         Biquad shelf, listenHp1, listenHp2;
         juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> freq { 6500.0f };
         juce::SmoothedValue<float> mixSm { 1.0f }, outSm { 1.0f }, bypassSm { 0.0f };
-        float attackCoeff = 0.0f, releaseCoeff = 0.0f;
-        float envDb = 0.0f, shelfDb = 0.0f;
+        float attackCoeff = 0.0f, releaseCoeff = 0.0f, riseCoeff = 0.0f, fallCoeff = 0.0f;
+        float envDb = 0.0f, shelfDb = 0.0f, weightSm = 0.0f;
 
         // Delay lines: audio (per channel) and the reduction envelope
         std::array<std::vector<float>, maxChannels> audioDelay;
         std::vector<float> envDelay;
-        int writePos = 0, delaySize = 1;
+        int writePos = 0, delaySize = 1, gridPhase = 0;
+        bool shelfStale = false;
         std::vector<float> dryScratch[maxChannels], wetScratch[maxChannels];
     };
 }

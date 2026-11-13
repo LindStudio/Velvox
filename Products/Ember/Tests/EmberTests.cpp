@@ -422,11 +422,11 @@ namespace
             check (r.freq >= 4000.0f && r.freq <= 8000.0f, "corner in 4-8 kHz");
             check (r.thresholdDb > r.vowel95Db, "threshold above the vowels");
             std::printf ("    S vs vowels %.1f dB -> target %.1f dB, mixed frames lose %.2f dB\n", r.sibilanceVsVowelDb, r.targetDb, r.mixedReductionDb);
-            check (r.targetDb >= autoMinTargetDb && r.targetDb <= autoMaxTargetDb, "target within the subtle window");
+            check (r.targetDb >= autoMinTargetDb && r.targetDb <= autoMaxTargetDb, "target within the AUTO window");
             check (r.expectedReductionDb > 0.3f && r.expectedReductionDb <= r.targetDb + 0.6f, "S lose at most the target (rendered)");
             check (r.mixedReductionDb <= autoMixedMaxDb + 0.05f, "vowel side of each S kept");
             check (r.vowelReductionDb <= autoVowelMaxDb + 0.02f, "vowels <= 0.1 dB");
-            check (r.rangeDb <= autoMaxRangeDb, "range <= 6 dB");
+            check (r.rangeDb <= autoMaxRangeDb, "range <= autoMaxRangeDb");
 
             Settings s;
             s.freq = r.freq;
@@ -877,6 +877,56 @@ namespace
         check (airLoss[1] < airLoss[0] * 0.5 && airLoss[1] < 1.5, "smart leaves the air of the vowels (less than half the loss, < 1.5 dB)");
     }
 
+    // 2026-11-13 (Jakob vs. Pro-DS: "bei Delta hoert man die Stimme mit"): an S that runs straight into a vowel.
+    // The reduction must be gone when the vowel starts, however long the release - only the S is in the delta.
+    void testSIntoVowel()
+    {
+        Test t ("smart: S straight into a vowel - the vowel is not reduced");
+        const double fs = 48000.0;
+        std::vector<float> x;
+        std::vector<std::pair<int, int>> sR, vR;
+        juce::Random rnd (5);
+        Biq hp1, hp2;
+        hp1.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 5000.0, 0.54));
+        hp2.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 5000.0, 1.31));
+        double phase = 0.0;
+        for (int rep = 0; rep < 8; ++rep)
+        {
+            const int s0 = (int) x.size(), sLen = (int) (fs * 0.1), vLen = (int) (fs * 0.25);
+            for (int k = 0; k < sLen; ++k)
+                x.push_back (0.25f * hp2.run (hp1.run (rnd.nextFloat() * 2.0f - 1.0f)) * std::min (1.0f, k / (float) (fs * 0.01)));
+            const int v0 = (int) x.size();
+            for (int k = 0; k < vLen; ++k)
+            {
+                phase += 200.0 / fs;
+                float v = 0.0f;
+                for (int h = 1; h * 200 < 9000; ++h)   // bright vowel: harmonics up to 9 kHz
+                    v += (h * 200 < 1000 ? 1.0f / h : 0.3f / h) * (float) std::sin (juce::MathConstants<double>::twoPi * phase * h);
+                x.push_back (0.12f * v);
+            }
+            for (int k = 0; k < (int) (fs * 0.1); ++k)
+                x.push_back (0.0f);
+            sR.push_back ({ s0 + (int) (fs * 0.015), v0 - (int) (fs * 0.005) });
+            vR.push_back ({ v0 + (int) (fs * 0.003), v0 + (int) (fs * 0.08) });   // the first 80 ms of the vowel
+        }
+        for (float releaseMs : { 35.0f, 150.0f })
+        {
+            Settings s;
+            s.thresholdDb = -50.0f;
+            s.rangeDb = 10.0f;
+            s.freq = 5000.0f;
+            s.releaseMs = releaseMs;
+            E e (fs, s);
+            const auto y = run (e, x);
+            const int L = e.getLatencySamples();
+            const double sLoss = rangesDb (x, sR, 0) - rangesDb (y, sR, L);
+            const double vLoss = rangesDb (x, vR, 0) - rangesDb (y, vR, L);
+            std::printf ("    release %.0f ms: S -%.2f dB, vowel onset -%.3f dB\n", releaseMs, sLoss, vLoss);
+            check (sLoss > 4.0, "the S is taken down");
+            check (vLoss < 0.1, "the vowel after the S keeps its level (release " + juce::String (releaseMs, 0) + " ms)");
+        }
+    }
+
     void testPresets()
     {
         Test t ("presets: factory, user, modified marker, A/B");
@@ -1168,6 +1218,7 @@ int main (int argc, char** argv)
     testLicence();
     testMascot();
     testSmart();
+    testSIntoVowel();
     testPresets();
     testMascotClips();
     testMascotFrames (snapshotDir);

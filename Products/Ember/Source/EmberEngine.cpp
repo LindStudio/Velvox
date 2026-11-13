@@ -27,8 +27,10 @@ namespace ember
     {
         fs = sampleRate;
         fullRelease = timeConstantCoeff (250.0f, fs);
-        envRelease = timeConstantCoeff (30.0f, fs);
-        bodyHp.setCoeffs (design::highPass (fs, 250.0, 0.7071));
+        envCoeff = timeConstantCoeff (smartEnvMs, fs);
+        bodyHp.setCoeffs (design::highPass (fs, 150.0, 0.7071));
+        idxHp1.setCoeffs (design::highPass (fs, std::min ((double) smartBandHz, fs * 0.45), q1));
+        idxHp2.setCoeffs (design::highPass (fs, std::min ((double) smartBandHz, fs * 0.45), q2));
         bodyLp.setCoeffs (design::lowPass (fs, std::min (3000.0, fs * 0.45), 0.7071));
         reset();
     }
@@ -39,6 +41,8 @@ namespace ember
         hp2.reset();
         bodyHp.reset();
         bodyLp.reset();
+        idxHp1.reset();
+        idxHp2.reset();
         fullEnv = sEnv = bodyEnv = 0.0f;
         indexDb = -60.0f;
         weight = 0.0f;
@@ -59,21 +63,26 @@ namespace ember
 
     float Detector::process (const float* frame, int numChannels, bool relative, float* band) noexcept
     {
-        float peak = 0.0f, full = 0.0f, body = 0.0f;
+        float peak = 0.0f, full = 0.0f, hiSq = 0.0f, bodySq = 0.0f;
         for (int ch = 0; ch < numChannels; ++ch)
         {
             full = std::max (full, std::abs (frame[ch]));
             const float b = hp2.process (hp1.process (frame[ch], ch), ch);
             peak = std::max (peak, std::abs (b));
-            body = std::max (body, std::abs (bodyLp.process (bodyHp.process (frame[ch], ch), ch)));
+            const float h = idxHp2.process (idxHp1.process (frame[ch], ch), ch);
+            const float bd = bodyLp.process (bodyHp.process (frame[ch], ch), ch);
+            hiSq += h * h;
+            bodySq += bd * bd;
             if (band != nullptr)
                 band[ch] = b;
         }
 
-        // Sibilance index for smart detection (instant attack, 30 ms release on both sides)
-        sEnv = peak > sEnv ? peak : peak + envRelease * (sEnv - peak);
-        bodyEnv = body > bodyEnv ? body : body + envRelease * (bodyEnv - body);
-        indexDb = gainToDb (sEnv) - gainToDb (bodyEnv);
+        // Sibilance index for smart detection: 5 ms RMS of both bands (energy ratio in dB)
+        sEnv = hiSq + envCoeff * (sEnv - hiSq);
+        bodyEnv = bodySq + envCoeff * (bodyEnv - bodySq);
+        constexpr float tiny = 1.0e-12f;
+        indexDb = (sEnv < tiny && bodyEnv < tiny) ? -60.0f
+                                                  : juce::jlimit (-60.0f, 60.0f, 10.0f * std::log10 ((sEnv + tiny) / (bodyEnv + tiny)));
         weight = weightForIndex (indexDb);
 
         float inDb = gainToDb (peak);
@@ -92,6 +101,7 @@ namespace ember
     bool Detector::isFinite() const noexcept
     {
         return hp1.isStateFinite() && hp2.isStateFinite() && bodyHp.isStateFinite() && bodyLp.isStateFinite()
+            && idxHp1.isStateFinite() && idxHp2.isStateFinite()
             && std::isfinite (fullEnv) && std::isfinite (sEnv) && std::isfinite (bodyEnv);
     }
 
@@ -137,7 +147,10 @@ namespace ember
             std::fill (d.begin(), d.end(), 0.0f);
         std::fill (envDelay.begin(), envDelay.end(), 0.0f);
         writePos = 0;
+        gridPhase = 0;
+        shelfStale = false;
         envDb = 0.0f;
+        weightSm = 0.0f;
         updateShelf (0.0f);
         currentReductionDb.store (0.0f, std::memory_order_relaxed);
     }
@@ -154,6 +167,8 @@ namespace ember
         bypassSm.setTargetValue (settings.bypass ? 1.0f : 0.0f);
         attackCoeff = timeConstantCoeff (std::max (0.01f, settings.attackMs), fs);
         releaseCoeff = timeConstantCoeff (std::max (1.0f, settings.releaseMs), fs);
+        riseCoeff = timeConstantCoeff (smartRiseMs, fs);
+        fallCoeff = timeConstantCoeff (smartFallMs, fs);
     }
 
     void Engine::updateShelf (float reductionDb) noexcept
@@ -184,10 +199,13 @@ namespace ember
         float maxReduction = 0.0f, outPk = 0.0f, maxDet = -200.0f, weightAtMax = 0.0f;
         float envAt[subBlock];
 
-        for (int start = 0; start < numSamples; start += subBlock)
+        // Sub-blocks follow a fixed 16-sample grid (gridPhase carries over between host blocks), so the shelf
+        // is recomputed at the same samples whatever block size the host uses
+        for (int start = 0, n = 0; start < numSamples; start += n)
         {
-            const int n = std::min (subBlock, numSamples - start);
-            bool freqChanged = false;
+            n = std::min (subBlock - gridPhase, numSamples - start);
+            const bool onGrid = gridPhase == 0;
+            gridPhase = (gridPhase + n) % subBlock;
             if (freq.isSmoothing())
             {
                 freq.skip (n);
@@ -196,7 +214,7 @@ namespace ember
                 const double fl = juce::jlimit (1000.0, fs * 0.45, (double) f);
                 listenHp1.setCoeffs (design::highPass (fs, fl, q1));
                 listenHp2.setCoeffs (design::highPass (fs, fl, q2));
-                freqChanged = true;
+                shelfStale = true;
             }
 
             // 1) detection on the undelayed input, delay audio and envelope
@@ -218,11 +236,14 @@ namespace ember
                     maxDet = inDb;
                     weightAtMax = smartWeight;
                 }
+                // Level -> reduction with attack / release; the smart weight gates it afterwards with its own
+                // fast envelope, so the release never reaches into the vowel after an S
                 const float target = std::min (maxReductionDb,
-                                               std::min (settings.rangeDb, staticReductionDb (inDb, settings.thresholdDb)) * amountScale * smartWeight);
+                                               std::min (settings.rangeDb, staticReductionDb (inDb, settings.thresholdDb)) * amountScale);
                 const float coeff = target > envDb ? attackCoeff : releaseCoeff;
                 envDb = target + coeff * (envDb - target);
-                envDelay[(size_t) writePos] = envDb;
+                weightSm = smartWeight + (smartWeight > weightSm ? riseCoeff : fallCoeff) * (weightSm - smartWeight);
+                envDelay[(size_t) writePos] = envDb * weightSm;
 
                 const int readAudio = (writePos - latency + delaySize) % delaySize;
                 const int readEnv = (writePos - envLag + delaySize) % delaySize;
@@ -243,8 +264,11 @@ namespace ember
             }
             else
             {
-                if (freqChanged || std::abs (blockMaxEnv - shelfDb) > 0.01f)
-                    updateShelf (blockMaxEnv);
+                if (onGrid && (shelfStale || std::abs (envAt[0] - shelfDb) > 0.01f))
+                {
+                    updateShelf (envAt[0]);
+                    shelfStale = false;
+                }
 
                 if (shelfDb < 0.001f)
                 {
@@ -297,7 +321,7 @@ namespace ember
 
         // Mono input on a stereo bus: nothing to do for the second channel (host copies)
         gainReductionDb.push (settings.bypass ? 0.0f : maxReduction);
-        currentReductionDb.store (settings.bypass ? 0.0f : envDb, std::memory_order_relaxed);
+        currentReductionDb.store (settings.bypass ? 0.0f : envDb * weightSm, std::memory_order_relaxed);
         detectorDb.store (std::max (-100.0f, maxDet), std::memory_order_relaxed);
         detectorWeight.store (weightAtMax, std::memory_order_relaxed);
         outputPeak.push (outPk);

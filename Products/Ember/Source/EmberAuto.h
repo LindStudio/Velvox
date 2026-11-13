@@ -39,13 +39,15 @@ namespace ember
     // smart = the engine's smart detection (default, as the plugin runs it); false = plain relative detection
     AutoResult analyse (const float* mono, int numSamples, double sampleRate, bool smart = true);
 
-    // Subtle by design (Jakob 2026-11-10: "es soll nur subtil die S-Laute wegnehmen"):
-    // S lose 1.5 dB (soft S, 14 dB under the vowels) to 3.5 dB (harsh S, 2 dB under the vowels)
-    inline constexpr float autoMinTargetDb = 1.5f, autoMaxTargetDb = 3.5f;
+    // 2026-11-10 subtle (1.5-3.5 dB); 2026-11-13 Jakob: "mindestens genauso gut wie Pro-DS im S-Laute absenken".
+    // Pro-DS at its default takes 1.3-4.1 dB (mean 2.7) off the S of our 9 bench takes; AUTO now 2.5 dB
+    // (soft S, 14 dB under the vowels) to 4.5 dB (harsh S, 2 dB under the vowels). The vowels stay untouched
+    // because the smart gate keeps them out of the reduction (EmberEngine.h), not because AUTO holds back.
+    inline constexpr float autoMinTargetDb = 2.5f, autoMaxTargetDb = 4.5f;
     inline constexpr float autoSoftSDb = -14.0f, autoHarshSDb = -2.0f;
     inline constexpr float autoVowelMaxDb = 0.1f;          // vowels lose at most this
     inline constexpr float autoMixedMaxDb = 0.5f;          // S next to a vowel: the vowel part must survive
-    inline constexpr float autoMinRangeDb = 3.0f, autoMaxRangeDb = 6.0f;
+    inline constexpr float autoMinRangeDb = 4.0f, autoMaxRangeDb = 8.0f;
     inline constexpr float autoReleaseMs = 35.0f;          // lets go before the next vowel
     inline constexpr float autoCornerRatio = 0.8f, autoMinCornerHz = 5000.0f, autoMaxCornerHz = 9500.0f;
     inline constexpr double autoMinSeconds = 3.0;          // finish button works from here
