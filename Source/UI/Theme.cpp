@@ -20,16 +20,21 @@ namespace vocalypse::ui
         // every existing text box at its old width
         constexpr float sizeScale = 0.93f;
 
+        std::atomic<float> productTextScale { 1.0f };
+
         juce::Font make (juce::Typeface::Ptr EmbeddedFonts::* which, float height, float kerning = 0.0f, float scale = sizeScale)
         {
             juce::SharedResourcePointer<EmbeddedFonts> fonts;
             const auto& tf = (*fonts).*which;
-            height *= scale;
+            height *= scale * productTextScale.load (std::memory_order_relaxed);
             if (tf == nullptr)
                 return juce::Font (juce::FontOptions (height)).withExtraKerningFactor (kerning);
             return juce::Font (juce::FontOptions (tf).withHeight (height).withKerningFactor (kerning));
         }
     }
+
+    void setTextScale (float s) noexcept { productTextScale.store (juce::jlimit (0.5f, 3.0f, s), std::memory_order_relaxed); }
+    float getTextScale() noexcept       { return productTextScale.load (std::memory_order_relaxed); }
 
     juce::Font font (float height, bool bold)  { return make (bold ? &EmbeddedFonts::semibold : &EmbeddedFonts::regular, height); }
     juce::Font medium (float height)           { return make (&EmbeddedFonts::medium, height); }

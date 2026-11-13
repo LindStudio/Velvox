@@ -10,6 +10,12 @@ namespace ember
 
     namespace
     {
+        // Jakob 2026-11-13 (next to FabFilter Pro-DS at the same window size): "die Woerter kann man nicht lesen".
+        // EMBER's panel uses larger type than the VOCALYPSE design; set when the plugin binary loads, before
+        // any component makes a font.
+        constexpr float emberTextScale = 1.35f;
+        const bool textScaleSet = (ui::setTextScale (emberTextScale), true);
+
         juce::String utf8 (const char* s) { return juce::String::fromUTF8 (s); }
 
         juce::Path triangle (bool right)
@@ -63,8 +69,8 @@ namespace ember
     void ReductionMeter::paint (juce::Graphics& g)
     {
         auto r = getLocalBounds().toFloat();
-        auto readout = r.removeFromTop (20.0f);
-        auto label = r.removeFromBottom (18.0f);
+        auto readout = r.removeFromTop (26.0f);
+        auto label = r.removeFromBottom (20.0f);
         auto bar = r.removeFromRight (14.0f);
         g.setColour (c::panelInset);
         g.fillRoundedRectangle (bar, 4.0f);
@@ -91,7 +97,7 @@ namespace ember
         for (float db : { 0.0f, 3.0f, 6.0f, 9.0f, 12.0f })
         {
             const float y = bar.getY() + 2.0f + (bar.getHeight() - 4.0f) * db / maxDb;
-            g.drawText (juce::String ((int) db), juce::Rectangle<float> (bar.getX() - 24.0f, y - 6.0f, 20.0f, 12.0f), juce::Justification::centredRight);
+            g.drawText (juce::String ((int) db), juce::Rectangle<float> (bar.getX() - 28.0f, y - 8.0f, 24.0f, 16.0f), juce::Justification::centredRight);
         }
         g.setFont (ui::monoFont (11.0f));
         g.setColour (peakHold >= 0.05f ? look::glow : c::textMuted);
@@ -316,7 +322,7 @@ namespace ember
             g.setColour (look::accent.withAlpha (0.6f));
             g.drawRoundedRectangle (card, ui::radius::panel, 1.0f);
             auto r = card.reduced (28.0f, 22.0f);
-            g.setFont (ui::display (30.0f, true).withExtraKerningFactor (0.06f));
+            g.setFont (ui::display (30.0f / emberTextScale, true).withExtraKerningFactor (0.06f));   // the wordmark keeps its size
             g.setGradientFill (juce::ColourGradient (look::glow, r.getX(), r.getY(), look::accent, r.getX(), r.getY() + 34.0f, false));
             g.drawText ("EMBER", r.removeFromTop (36.0f), juce::Justification::centredLeft);
             g.setColour (c::textStrong);
@@ -575,7 +581,7 @@ namespace ember
         g.fillRect (top.getX(), top.getBottom() - 1.0f, top.getWidth(), 1.0f);
 
         auto brand = top.reduced (24.0f, 10.0f).removeFromLeft (360.0f);
-        g.setFont (ui::display (30.0f, true).withExtraKerningFactor (0.06f));
+        g.setFont (ui::display (30.0f / emberTextScale, true).withExtraKerningFactor (0.06f));   // the wordmark keeps its size
         g.setGradientFill (juce::ColourGradient (look::glow, brand.getX(), brand.getY(), look::accent, brand.getX(), brand.getBottom(), false));
         g.drawText ("EMBER", brand.removeFromLeft (128.0f), juce::Justification::centredLeft);
         g.setFont (ui::semiBold (15.0f, 0.04f));

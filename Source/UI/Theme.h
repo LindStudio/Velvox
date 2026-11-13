@@ -260,6 +260,11 @@ namespace vocalypse::ui
         juce::Typeface::Ptr regular, medium, semibold, light, bold, mono;
     };
 
+    // Text size factor for every font below (default 1). Set once per plugin binary by a product whose panel
+    // needs larger type than the VOCALYPSE design (EMBER 2026-11-13: readable like FabFilter at the same size).
+    void setTextScale (float scale) noexcept;
+    float getTextScale() noexcept;
+
     // Design system type (exact pixel sizes): values in Roboto Mono, labels in Montserrat SemiBold
     juce::Font monoFont (float height);
     juce::Font semiBold (float height, float tracking = 0.0f);
