@@ -822,6 +822,21 @@ namespace
             juce::PNGImageFormat png;
             juce::FileOutputStream out (snapshotDir.getChildFile (juce::String ("mascot_") + name + ".png"));
             if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
+
+            // the live fire (drawn by the view, not in the pictures): 3 s at 12 pictures/s (preview video)
+            if (juce::String (name) == "fire")
+                for (int k = 1; k <= 36; ++k)
+                {
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (83);
+                    juce::Image seq (juce::Image::ARGB, 500, 400, true);
+                    {
+                        juce::Graphics g (seq);
+                        g.fillAll (juce::Colour (0xff05060a));
+                        view.paintEntireComponent (g, true);
+                    }
+                    juce::FileOutputStream o2 (snapshotDir.getChildFile ("mascot_fire_" + juce::String (k).paddedLeft ('0', 3) + ".png"));
+                    if (o2.openedOk()) { o2.setPosition (0); o2.truncate(); png.writeImageToStream (seq, o2); }
+                }
         }
     }
 

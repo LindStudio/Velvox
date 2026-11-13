@@ -241,39 +241,33 @@ class Puppet:
         return img
 
     def frame(self, pose, close=0.0):
-        """pose: head, tail, ear_l, ear_r, arm_l, arm_r (degrees), breath (0..1), bob (px up)."""
-        px, py = self.px, self.py
-        sx, sy = px.copy(), py.copy()
+        """pose: head, tail, ear_l, ear_r, arm_l, arm_r, lean (degrees), breath (0..), squash (-..+, + = flatter),
+        bob (px up), look (px), mouth (0..1)."""
+        # 1) the whole body: where each output pixel sits on the body at rest
+        gx, gy = global_inverse(self.px, self.py, pose, self.w_belly)
 
-        def add(w, c, deg):
-            nonlocal sx, sy
-            if abs(deg) < 1e-3:
-                return
-            rx, ry = rot_inverse(px, py, c, deg)
-            sx += w * (rx - px)
-            sy += w * (ry - py)
+        def wt(arr):
+            return ndimage.map_coordinates(arr, [gy, gx], order=1, mode='nearest')
 
-        add(self.w_head, NECK, pose.get('head', 0))
-        add(self.w_ear_l, EAR_L, pose.get('ear_l', 0))
-        add(self.w_ear_r, EAR_R, pose.get('ear_r', 0))
-        add(self.w_arm_l, SHOULDER_L, pose.get('arm_l', 0))
-        add(self.w_arm_r, SHOULDER_R, pose.get('arm_r', 0))
-        body = (sx, sy)
+        # 2) the parts, around their joints, with their weights read at that rest position
+        def parts(spec):
+            sx, sy = gx.copy(), gy.copy()
+            for w, c, deg in spec:
+                if abs(deg) < 1e-3:
+                    continue
+                rx, ry = rot_inverse(gx, gy, c, deg)
+                sx += w * (rx - gx)
+                sy += w * (ry - gy)
+            return sx, sy
+
+        body = parts([(wt(self.w_head), NECK, pose.get('head', 0)),
+                      (wt(self.w_ear_l), EAR_L, pose.get('ear_l', 0)),
+                      (wt(self.w_ear_r), EAR_R, pose.get('ear_r', 0)),
+                      (wt(self.w_arm_l), SHOULDER_L, pose.get('arm_l', 0)),
+                      (wt(self.w_arm_r), SHOULDER_R, pose.get('arm_r', 0))])
         # the tail layer bends: the further out, the more it turns (two joints)
-        sx, sy = px.copy(), py.copy()
-        add(self.w_tail, TAIL_BASE, pose.get('tail', 0) * 0.6)
-        add(self.w_tail ** 2, TAIL_BASE, pose.get('tail', 0) * 0.4)
-        tail = (sx, sy)
-
-        b = pose.get('breath', 0.0)
-        bob = pose.get('bob', 0.0)
-
-        def global_(m):
-            # breathing: the body stretches up from the feet, the belly widens a little
-            mx, my = m
-            my = FEET_Y + (my - FEET_Y) / (1.0 + 0.018 * b)
-            mx = mx - self.w_belly * (mx - 512) * 0.025 * b
-            return mx, my + bob
+        wtl = wt(self.w_tail)
+        tail = parts([(wtl, TAIL_BASE, pose.get('tail', 0) * 0.6), (wtl ** 2, TAIL_BASE, pose.get('tail', 0) * 0.4)])
 
         img = self.face(close, pose.get('look', 0.0), pose.get('mouth', 0.0))
         # premultiplied, so transparent pixels never bleed colour into the edge
@@ -281,7 +275,7 @@ class Puppet:
         pm[..., :3] *= pm[..., 3:4]
 
         def warp(layer, m):
-            mx, my = global_(m)
+            mx, my = m
             return np.stack([ndimage.map_coordinates(layer[..., c], [my, mx], order=1, mode='constant', cval=0.0)
                              for c in range(4)], axis=2)
 
@@ -294,14 +288,39 @@ class Puppet:
         return out
 
 
+FOOT = (512.0, FEET_Y)
+
+
+def body_scale(pose):
+    """Vertical / horizontal scale of the body from the feet: breathing stretches, squash flattens and widens."""
+    sy = 1.0 + 0.018 * pose.get('breath', 0.0) - pose.get('squash', 0.0)
+    sx = 1.0 + 0.6 * pose.get('squash', 0.0)
+    return sx, sy
+
+
+def global_inverse(x, y, pose, w_belly=None):
+    """Output pixel -> the point of the resting body (undo bob, lean, squash / breath)."""
+    y = y + pose.get('bob', 0.0)
+    a = math.radians(-pose.get('lean', 0.0))
+    dx, dy = x - FOOT[0], y - FOOT[1]
+    x = FOOT[0] + math.cos(a) * dx - math.sin(a) * dy
+    y = FOOT[1] + math.sin(a) * dx + math.cos(a) * dy
+    sx, sy = body_scale(pose)
+    y = FOOT[1] + (y - FOOT[1]) / sy
+    x = FOOT[0] + (x - FOOT[0]) / sx
+    if w_belly is not None:
+        x = x - w_belly * (x - 512) * 0.025 * pose.get('breath', 0.0)
+    return x, y
+
+
 def to_frame(img):
     """1024 working picture -> 600 x 600 plugin frame: Ember ~480 px tall, a little left of centre (fire goes right)."""
     pil = Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8), 'RGBA')
-    crop = pil.crop((170, 130, 870, 900))           # 700 x 770 around Ember (tail and bob included)
+    crop = pil.crop((170, 60, 870, 900))            # 700 x 840 around Ember (tail, jumps and effects included)
     scale = 520 / 770
-    crop = crop.resize((round(700 * scale), 520), Image.LANCZOS)
+    crop = crop.resize((round(700 * scale), round(840 * scale)), Image.LANCZOS)
     canvas = Image.new('RGBA', (OUT, OUT), (0, 0, 0, 0))
-    canvas.alpha_composite(crop, (60, 50))
+    canvas.alpha_composite(crop, (60, round(50 - 70 * scale)))   # Ember stays where he was, more room above
     return canvas
 
 
@@ -322,12 +341,18 @@ MOUTH = (518, 470)
 
 
 def head_point(p, pose):
-    """Where a point on the head ends up for this pose (head tilt, breathing, bob) - effects follow the head."""
+    """Where a point on the head ends up for this pose - effects follow the head."""
     a = math.radians(pose.get('head', 0.0))
     dx, dy = p[0] - NECK[0], p[1] - NECK[1]
     x = NECK[0] + math.cos(a) * dx - math.sin(a) * dy
     y = NECK[1] + math.sin(a) * dx + math.cos(a) * dy
-    y = FEET_Y + (y - FEET_Y) * (1.0 + 0.018 * pose.get('breath', 0.0))
+    sx, sy = body_scale(pose)
+    x = FOOT[0] + (x - FOOT[0]) * sx
+    y = FOOT[1] + (y - FOOT[1]) * sy
+    b = math.radians(pose.get('lean', 0.0))
+    dx, dy = x - FOOT[0], y - FOOT[1]
+    x = FOOT[0] + math.cos(b) * dx - math.sin(b) * dy
+    y = FOOT[1] + math.sin(b) * dx + math.cos(b) * dy
     return x, y - pose.get('bob', 0.0)
 
 
@@ -434,70 +459,79 @@ def idle(t, T):
 
 
 def singing(t, T):
-    """Bobs along (4 beats in 2 s = 120 BPM), head sways, eyes wander, mouth moves, notes rise."""
-    bounce = abs(math.sin(math.pi * t * 2.0))
-    pose = dict(bob=8.0 * bounce, breath=0.4 + 0.4 * bounce, head=5.0 * cyc(t, T), look=9.0 * cyc(t, T, 0.15),
-                tail=14.0 * cyc(t, T / 2), ear_l=3.0 * cyc(t, T / 2), ear_r=-3.0 * cyc(t, T / 2),
-                arm_l=4.0 * cyc(t, T / 2), arm_r=-4.0 * cyc(t, T / 2), mouth=0.3 + 0.35 * bounce)
+    """Grooves along (120 BPM): bounces with squash and stretch, sways side to side, head bops, mouth sings,
+    eyes wander, notes rise."""
+    beat = (t * 2.0) % 1.0
+    up = math.sin(math.pi * beat)                                  # 0 on the beat, 1 between
+    land = max(0.0, 1.0 - beat / 0.18) if beat < 0.18 else 0.0     # squash just after the beat
+    pose = dict(bob=26.0 * up, squash=0.06 * land - 0.03 * up, lean=6.0 * cyc(t, T), head=9.0 * cyc(t, T, 0.1),
+                look=12.0 * cyc(t, T, 0.25), tail=26.0 * cyc(t, T / 2), ear_l=8.0 * cyc(t, T / 2), ear_r=-8.0 * cyc(t, T / 2),
+                arm_l=10.0 * cyc(t, T / 2), arm_r=-10.0 * cyc(t, T / 2), mouth=0.25 + 0.75 * up, breath=0.5)
 
     def fx(f, pose):
         for i in range(3):
             ph = (t / T + i / 3.0) % 1.0
-            x = 720 + 35 * i + 25 * math.sin(2 * math.pi * ph * 1.5 + i)
-            y = 470 - 260 * ph
-            f.note(x, y, 24 + 6 * (i % 2), (255, 214, 140), 0.95 * math.sin(math.pi * ph))
-    return pose, min(1.0, 1.3 * pulse(t, 1.3, 0.42)), fx
+            x = 720 + 35 * i + 30 * math.sin(2 * math.pi * ph * 1.5 + i)
+            y = 470 - 270 * ph
+            f.note(x, y, 30 + 6 * (i % 2), (255, 214, 140), 0.95 * math.sin(math.pi * ph))
+    return pose, 0.0, fx
 
 
 def snapping(t, T):
-    """A small S: ears twitch, a quick snap of the head, eyes dart to it."""
-    snap = pulse(t, 0.15, 0.3)
-    pose = dict(head=-4.0 * snap, ear_l=10.0 * pulse(t, 0.1, 0.2), ear_r=-10.0 * pulse(t, 0.12, 0.2),
-                look=10.0 * snap, tail=8.0 * cyc(t, T), breath=0.3 + 0.2 * cyc(t, T), mouth=0.6 * pulse(t, 0.12, 0.22))
+    """A small S: ears shoot up, he leans in and snaps at it twice (chomp), eyes dart to it."""
+    snap1, snap2 = pulse(t, 0.15, 0.25), pulse(t, 0.55, 0.25)
+    snap = max(snap1, snap2)
+    alert = pulse(t, 0.0, 1.2)
+    pose = dict(lean=7.0 * alert, head=-10.0 * snap + 3.0 * alert, ear_l=22.0 * alert, ear_r=-22.0 * alert,
+                look=14.0 * alert, mouth=0.9 * snap, bob=10.0 * snap, squash=-0.03 * snap, tail=20.0 * cyc(t, T / 2),
+                arm_l=-8.0 * alert, arm_r=8.0 * alert, breath=0.6)
     return pose, 0.0, None
 
 
 def fire(t, T):
-    """Spits fire. The plugin draws the flames from his mouth, as big as the reduction; here: head back,
-    mouth wide, a small tremble."""
+    """Spits fire. The plugin draws the flames from his mouth, as big as the reduction; here: leans back, head
+    back, chest puffed, mouth wide, shaking with the effort, tail up."""
     tr = math.sin(2 * math.pi * t * 6.0)
-    pose = dict(head=-6.0 + 1.0 * tr, mouth=0.95 + 0.05 * tr, breath=1.0, bob=1.5 * tr, tail=18.0 + 6.0 * cyc(t, T / 2),
-                ear_l=-6.0, ear_r=6.0, look=6.0, arm_l=-3.0, arm_r=3.0)
+    pose = dict(lean=-6.0 + 1.5 * tr, head=-10.0 + 2.5 * tr, mouth=1.0, breath=2.2, squash=-0.02, bob=3.0 * tr,
+                tail=30.0 + 8.0 * cyc(t, T / 2), ear_l=-14.0, ear_r=14.0, look=10.0, arm_l=-14.0, arm_r=14.0)
     return pose, 0.0, None
 
 
 def overheated(t, T):
-    """Too much: trembles, sweats, coughs little puffs of smoke."""
+    """Too much: shakes all over, sweats, doubles over coughing puffs of smoke."""
     tr = math.sin(2 * math.pi * t * 9.0)
-    cough = max(pulse(t, 0.3, 0.3), pulse(t, 1.3, 0.3))
-    pose = dict(head=0.9 * tr + 6.0 * cough, bob=-4.0 * cough + 1.0 * tr, mouth=0.25 + 0.55 * cough,
-                breath=0.6 - 0.5 * cough, tail=-10.0 + 3.0 * tr, ear_l=8.0, ear_r=-8.0, look=-4.0)
+    cough = max(pulse(t, 0.3, 0.35), pulse(t, 1.3, 0.35))
+    pose = dict(lean=2.5 * tr + 10.0 * cough, head=1.5 * tr + 12.0 * cough, bob=-6.0 * cough, squash=0.07 * cough,
+                mouth=0.2 + 0.8 * cough, breath=0.8 - 0.8 * cough, tail=-18.0 + 6.0 * tr, ear_l=16.0, ear_r=-16.0,
+                look=-8.0, arm_l=6.0 * cough, arm_r=-6.0 * cough)
 
     def fx(f, pose):
         for px_, ph0 in ((405, 0.0), (630, 0.45), (380, 0.7)):
             ph = (t / T + ph0) % 1.0
-            x, y = head_point((px_, 300 + 110 * ph), pose)
-            f.drop(x, y, 13, 0.95 * math.sin(math.pi * ph))
+            x, y = head_point((px_, 300 + 120 * ph), pose)
+            f.drop(x, y, 18, 0.95 * math.sin(math.pi * ph))
         for at in (0.3, 1.3):
-            k = (t - at) / 0.8
+            k = (t - at) / 0.9
             if 0 <= k <= 1:
                 mx, my = head_point(MOUTH, pose)
-                for j in range(3):
-                    f.circle(mx + 30 + 60 * k + 18 * j, my - 10 - 40 * k - 8 * j, 10 + 20 * k + 4 * j, (170, 160, 160), 0.5 * (1 - k))
+                for j in range(4):
+                    f.circle(mx + 30 + 110 * k + 26 * j, my - 10 - 70 * k - 12 * j, 16 + 34 * k + 6 * j, (175, 165, 165), 0.6 * (1 - k))
     return pose, 0.0, fx
 
 
 def sleeping(t, T):
-    """Bypass: eyes shut, slow deep breathing, the head nods, Zzz."""
+    """Bypass: eyes shut, slumped, deep slow breaths, the head drops and jerks back up once, Zzz."""
     w = 2 * math.pi * t / T
-    pose = dict(breath=0.5 - 0.5 * math.cos(w), head=4.0 + 3.0 * math.sin(w), tail=-14.0 + 3.0 * math.sin(w),
-                ear_l=-5.0, ear_r=5.0, arm_l=1.0 * math.sin(w), arm_r=-1.0 * math.sin(w), mouth=0.12)
+    drop = ease(t / (T * 0.75)) if t < T * 0.75 else 1.0 - ease((t - T * 0.75) / (T * 0.08))
+    pose = dict(breath=1.4 * (0.5 - 0.5 * math.cos(2 * w)), squash=0.03, head=6.0 + 9.0 * drop, lean=3.0 * drop + 1.5 * math.sin(w),
+                bob=-6.0 * drop, tail=-22.0 + 4.0 * math.sin(w), ear_l=-12.0, ear_r=12.0, arm_l=2.0 * math.sin(w),
+                arm_r=-2.0 * math.sin(w), mouth=0.15 + 0.1 * (0.5 - 0.5 * math.cos(2 * w)))
 
     def fx(f, pose):
         x0, y0 = head_point((660, 330), pose)
         for i in range(3):
             ph = (t / T + i / 3.0) % 1.0
-            f.text(x0 + 120 * ph + 12 * math.sin(6 * ph), y0 - 150 * ph, 'Z', 40 + 34 * ph, (240, 230, 250),
+            f.text(x0 + 120 * ph + 12 * math.sin(6 * ph), y0 - 150 * ph, 'Z', 44 + 40 * ph, (240, 230, 250),
                    math.sin(math.pi * ph) ** 0.7, angle=14)
     return pose, 1.0, fx
 
@@ -517,24 +551,27 @@ def listening(t, T):
 
 
 def proud(t, T):
-    """AUTO is done: a little hop, chest out, sparkles."""
-    hop = pulse(t, 0.1, 0.45)
-    land = pulse(t, 0.55, 0.2)
-    pose = dict(bob=28.0 * hop - 6.0 * land, breath=1.6 * (1 - land) + 0.4, head=-4.0 * hop + 3.0, mouth=0.55,
-                tail=20.0 * cyc(t, T / 4), ear_l=-8.0 * hop, ear_r=8.0 * hop, arm_l=-10.0 * hop, arm_r=10.0 * hop)
+    """AUTO is done: crouches, jumps for joy with his arms out, lands, chest out, sparkles."""
+    crouch = pulse(t, 0.0, 0.3)
+    hop = pulse(t, 0.25, 0.55)
+    land = pulse(t, 0.8, 0.25)
+    pose = dict(bob=70.0 * hop - 8.0 * land - 6.0 * crouch, squash=0.10 * crouch + 0.10 * land - 0.06 * hop,
+                breath=2.0, head=-8.0 * hop + 4.0 * math.sin(2 * math.pi * t / T), lean=-3.0 * hop,
+                mouth=0.7, tail=30.0 * cyc(t, T / 4), ear_l=-18.0 * hop, ear_r=18.0 * hop,
+                arm_l=-30.0 * hop, arm_r=30.0 * hop)
 
     def fx(f, pose):
         for i, (sx_, sy_) in enumerate(((320, 230), (710, 210), (770, 400), (260, 430))):
             ph = (t * 1.5 + i * 0.27) % 1.0
             x, y = head_point((sx_, sy_), pose)
-            f.star(x, y, 16 + 22 * math.sin(math.pi * ph), (255, 230, 150), math.sin(math.pi * ph))
+            f.star(x, y, 22 + 28 * math.sin(math.pi * ph), (255, 230, 150), math.sin(math.pi * ph))
     return pose, 0.0, fx
 
 
 STATES = {
     'idle': (idle, 4.0),
     'singing': (singing, 2.0),
-    'snapping': (snapping, 1.0),
+    'snapping': (snapping, 1.5),
     'fire': (fire, 1.0),
     'overheated': (overheated, 2.0),
     'sleeping': (sleeping, 4.0),
