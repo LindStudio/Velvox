@@ -85,55 +85,84 @@ class Puppet:
         purple = (rgb[..., 2] > rgb[..., 1] + 0.04) & (rgb[..., 0] < 0.6) & (al > 0.5) & (px > TAIL_BASE[0] - 30) & (py > 620) & ((px > 714) | (py > 750)) & (py < 815)
         lab, n = ndimage.label(purple)
         big = np.argmax(ndimage.sum(purple, lab, range(1, n + 1))) + 1
-        tail = ndimage.binary_dilation(ndimage.binary_fill_holes(lab == big), iterations=7)
-        self.w_tail = ndimage.gaussian_filter(tail.astype(np.float32), 2.0) * smoothstep(d, 0, 140)
-        self.tail_len = 1.0
+        tail = ndimage.binary_dilation(ndimage.binary_fill_holes(lab == big), iterations=7) & (px > 610)
+        # the tail is its own layer (under the body): it can swing anywhere without being cut off
+        self.tail_mask = ndimage.gaussian_filter(tail.astype(np.float32), 1.2)
+        self.w_tail = smoothstep(d, 0, 140)
         # ears: outside the face
         self.w_ear_l = (1 - smoothstep(px, EAR_L[0] - 5, EAR_L[0] + 20)) * (1 - smoothstep(py, 410, 440)) * smoothstep(py, 260, 280)
         self.w_ear_r = smoothstep(px, EAR_R[0] - 20, EAR_R[0] + 5) * (1 - smoothstep(py, 410, 440)) * smoothstep(py, 260, 280)
         # arms: outside the torso, from the shoulder down (the right hand stays clear of the tail box)
         self.w_arm_l = (1 - smoothstep(px, SHOULDER_L[0] - 5, SHOULDER_L[0] + 15)) * smoothstep(py, 560, 600) * (1 - smoothstep(py, 760, 780))
-        self.w_arm_r = smoothstep(px, SHOULDER_R[0] - 15, SHOULDER_R[0] + 5) * smoothstep(py, 560, 600) * (1 - smoothstep(py, 760, 780)) * (1 - self.w_tail)
+        self.w_arm_r = smoothstep(px, SHOULDER_R[0] - 15, SHOULDER_R[0] + 5) * smoothstep(py, 560, 600) * (1 - smoothstep(py, 760, 780)) * (1 - self.tail_mask)
         self.w_belly = np.exp(-(((px - 512) / 150) ** 2 + ((py - 640) / 120) ** 2))
 
     def _eyes(self):
+        """Each eye as an ellipse fitted to its yellow (both halves around the pupil), plus the skin around it."""
         rgb = self.src[..., :3]
         yellow = (rgb[..., 0] > 0.75) & (rgb[..., 1] > 0.6) & (rgb[..., 2] < 0.5) & (self.py < 450) & (self.py > 300)
-        lab, n = ndimage.label(yellow)
-        sizes = ndimage.sum(yellow, lab, range(1, n + 1))
-        keep = np.argsort(sizes)[::-1][:2] + 1
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        skinlike = (r > 0.7) & (g > 0.2) & (g < 0.6) & (b < 0.4) & (self.src[..., 3] > 0.9)
         self.eyes = []
-        for k in keep:
-            m = ndimage.binary_fill_holes(ndimage.binary_dilation(lab == k, iterations=3))
-            ys, xs = np.nonzero(m)
-            self.eyes.append((m, xs.min(), xs.max(), ys.min(), ys.max()))
-        # skin above the eyes (lid colour) and the outline colour
-        above = (self.py > min(e[3] for e in self.eyes) - 40) & (self.py < min(e[3] for e in self.eyes) - 25) \
-            & (self.px > min(e[1] for e in self.eyes)) & (self.px < max(e[2] for e in self.eyes))
-        self.skin = np.median(rgb[above], axis=0)
-        self.line = np.array([0.30, 0.10, 0.12], np.float32)
-        self.lid = np.array([0.08, 0.04, 0.06], np.float32)   # closed eye: as dark as the outline
+        # the two biggest yellow areas once the halves around each pupil are joined = the eyes
+        grown = ndimage.binary_fill_holes(ndimage.binary_dilation(yellow, iterations=6))
+        lab, n = ndimage.label(grown)
+        sizes = ndimage.sum(grown, lab, range(1, n + 1))
+        for k in np.argsort(sizes)[::-1][:2] + 1:
+            ys, xs = np.nonzero(yellow & (lab == k))
+            # level ellipse from the extent of the yellow (a fitted tilt made the shut line run to the nose)
+            c = np.array([(xs.min() + xs.max()) * 0.5, (ys.min() + ys.max()) * 0.5])
+            A, B = (xs.max() - xs.min()) * 0.5, (ys.max() - ys.min()) * 0.5
+            major = np.array([1.0, 0.0])
+            u = self.px - c[0]
+            v = self.py - c[1]
+            margin = 7.0                                                     # the dark outline around the eye
+            region = (u / (A + margin)) ** 2 + (v / (B + margin)) ** 2 <= 1.0
+            ring = ndimage.binary_dilation(region, iterations=18) & ~ndimage.binary_dilation(region, iterations=3) & skinlike
+            sig = 14
+            num = np.stack([ndimage.gaussian_filter(rgb[..., k] * ring, sig) for k in range(3)], axis=2)
+            den = ndimage.gaussian_filter(ring.astype(np.float32), sig)[..., None]
+            flat = np.median(rgb[ring], axis=0)
+            wgt = np.clip(den / 0.05, 0, 1)
+            skin = ((num / np.maximum(den, 1e-6)) * wgt + flat * (1 - wgt)).astype(np.float32)
+            yy, xx = np.nonzero(region)
+            box = (yy.min() - 2, yy.max() + 3, xx.min() - 2, xx.max() + 3)
+            self.eyes.append(dict(c=c, major=major, A=A + margin, B=B + margin, u=u, v=v, region=region, skin=skin, box=box))
+        self.line = np.array([0.10, 0.04, 0.06], np.float32)   # closed eye: a line as dark as the outline
 
     # ------------------------------------------------------------ frame
     def blinked(self, close):
-        """Source picture with both eyes closed by `close` (0 open .. 1 shut): a lid of skin with a dark edge."""
+        """Source picture with both eyes closed by `close` (0 open .. 1 shut), like a cartoon blink: the eye is
+        squashed onto its middle, skin closes over it, and shut it is a dark, slightly bowed line."""
         if close <= 0.01:
             return self.src
         img = self.src.copy()
-        for m, x0, x1, y0, y1 in self.eyes:
-            sub = m[y0:y1 + 1, x0:x1 + 1]
-            cols = np.arange(x0, x1 + 1)
-            top = np.array([np.argmax(sub[:, i]) if sub[:, i].any() else 0 for i in range(len(cols))]) + y0
-            bot = np.array([len(sub) - 1 - np.argmax(sub[::-1, i]) if sub[:, i].any() else 0 for i in range(len(cols))]) + y0
-            edge = top + close * (bot - top)
-            yy = self.py[y0:y1 + 1, x0:x1 + 1]
-            lid = sub & (yy <= edge[None, :])
-            region = img[y0:y1 + 1, x0:x1 + 1]
-            region[lid, :3] = self.lid   # Jakob 2026-11-13: dark lids, not skin
-            dist = np.abs(yy - edge[None, :])
-            line = sub & (dist < 2.6) & (close > 0.15)
-            a = np.clip(2.6 - dist, 0, 1)[..., None]
-            region[..., :3] = np.where(line[..., None], region[..., :3] * (1 - a) + self.line * a, region[..., :3])
+        sq = max(0.04, 1.0 - close)
+        for e in self.eyes:
+            y0, y1, x0, x1 = e['box']
+            u = e['u'][y0:y1, x0:x1]
+            v = e['v'][y0:y1, x0:x1]
+            region = e['region'][y0:y1, x0:x1]
+            A, B, c, mj = e['A'], e['B'], e['c'], e['major']
+            # the eye closes onto a line a little below its middle (the upper lid travels further)
+            v0 = 0.15 * B
+            vs = v0 + (v - v0) / sq                                       # where the squashed pixel comes from
+            inside = region & ((u / A) ** 2 + (vs / B) ** 2 <= 1.0) & (close < 0.9)   # shut: only skin and the line
+            sxp = c[0] + u
+            syp = c[1] + vs
+            eye = np.stack([ndimage.map_coordinates(self.src[..., k], [syp, sxp], order=1) for k in range(3)], axis=2)
+            reg = img[y0:y1, x0:x1]
+            sk = e['skin'][y0:y1, x0:x1]
+            soft = np.clip(((1.0 - np.sqrt((u / A) ** 2 + (v / B) ** 2)) * B) / 1.5, 0, 1)[..., None]   # 1.5 px soft rim
+            new = np.where(inside[..., None], eye, sk)
+            reg[..., :3] = reg[..., :3] * (1 - soft) + new * soft
+            # the lid line: follows the squashed middle, bowed down a little, thinning to both ends
+            t = np.clip(u / A, -1, 1)
+            bow = v0 + 0.18 * B * (1 - t * t) * close
+            half = (2.0 + 2.2 * close) * np.sqrt(np.clip(1 - t * t, 0, 1))
+            dist = np.abs(v - bow)
+            a = (np.clip(half + 0.8 - dist, 0, 1) * smoothstep(close, 0.35, 0.8) * (np.abs(u) < A * 0.92))[..., None]
+            reg[..., :3] = reg[..., :3] * (1 - a) + self.line * a
         return img
 
     def frame(self, pose, close=0.0):
@@ -150,27 +179,41 @@ class Puppet:
             sy += w * (ry - py)
 
         add(self.w_head, NECK, pose.get('head', 0))
-        # the tail bends: the further out, the more it turns (two joints)
-        add(self.w_tail, TAIL_BASE, pose.get('tail', 0) * 0.6)
-        add(self.w_tail ** 2, TAIL_BASE, pose.get('tail', 0) * 0.4)
         add(self.w_ear_l, EAR_L, pose.get('ear_l', 0))
         add(self.w_ear_r, EAR_R, pose.get('ear_r', 0))
         add(self.w_arm_l, SHOULDER_L, pose.get('arm_l', 0))
         add(self.w_arm_r, SHOULDER_R, pose.get('arm_r', 0))
-        # breathing: the body stretches up from the feet, the belly widens a little
+        body = (sx, sy)
+        # the tail layer bends: the further out, the more it turns (two joints)
+        sx, sy = px.copy(), py.copy()
+        add(self.w_tail, TAIL_BASE, pose.get('tail', 0) * 0.6)
+        add(self.w_tail ** 2, TAIL_BASE, pose.get('tail', 0) * 0.4)
+        tail = (sx, sy)
+
         b = pose.get('breath', 0.0)
-        s = 1.0 + 0.018 * b
-        sy = FEET_Y + (sy - FEET_Y) / s
-        sx = sx - self.w_belly * (sx - 512) * 0.025 * b
-        sy = sy + pose.get('bob', 0.0)
+        bob = pose.get('bob', 0.0)
+
+        def global_(m):
+            # breathing: the body stretches up from the feet, the belly widens a little
+            mx, my = m
+            my = FEET_Y + (my - FEET_Y) / (1.0 + 0.018 * b)
+            mx = mx - self.w_belly * (mx - 512) * 0.025 * b
+            return mx, my + bob
 
         img = self.blinked(close)
-        out = np.empty_like(img)
         # premultiplied, so transparent pixels never bleed colour into the edge
         pm = img.copy()
         pm[..., :3] *= pm[..., 3:4]
-        for ch in range(4):
-            out[..., ch] = ndimage.map_coordinates(pm[..., ch], [sy, sx], order=1, mode='constant', cval=0.0)
+
+        def warp(layer, m):
+            mx, my = global_(m)
+            return np.stack([ndimage.map_coordinates(layer[..., c], [my, mx], order=1, mode='constant', cval=0.0)
+                             for c in range(4)], axis=2)
+
+        t = self.tail_mask[..., None]
+        out_body = warp(pm * (1 - t), body)
+        out_tail = warp(pm * t, tail)
+        out = out_body + out_tail * (1 - out_body[..., 3:4])     # tail under the body
         a = out[..., 3:4]
         out[..., :3] = np.where(a > 1e-4, out[..., :3] / np.maximum(a, 1e-4), 0)
         return out
@@ -219,8 +262,7 @@ def idle(t, T):
         ear_l=1.5 * math.sin(w + 1.0),
         arm_l=1.5 * math.sin(2 * w), arm_r=-1.5 * math.sin(2 * w),
     )
-    close = max(pulse(t, 1.1, 0.3), 0.0)
-    close = min(1.0, close * 1.6)
+    close = min(1.0, 1.3 * pulse(t, 1.08, 0.42))                   # half - shut - shut - half
     return pose, close
 
 
