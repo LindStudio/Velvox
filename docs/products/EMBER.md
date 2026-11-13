@@ -1,6 +1,19 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
-## STAND 2026-11-12 – HIER WEITERMACHEN
+## STAND 2026-11-13 – HIER WEITERMACHEN
+Jakob verglich EMBER mit FabFilter Pro-DS (gleiche Vocal, gleiche Fenstergröße): Schrift unlesbar, im Delta hört man
+die Stimme. Erledigt (feature/ember-deesser, installiert mit Lizenz AN aus `build-licence`, nicht gepusht):
+- **Smart-Gate neu** (`EmberEngine.h`): Index = 5-ms-RMS über 4 kHz gegen Stimmkörper 150 Hz–3 kHz, Gewicht 0 bei
+  −1 dB, 1 bei +5 dB; das Gewicht schaltet die fertig geglättete Reduktion mit eigener 0,5/1-ms-Hüllkurve, das Release
+  reicht nie in den Vokal nach dem S. AUTO-Ziel 2,5–4,5 dB (war 1,5–3,5), Range 4–8 dB.
+- **Bench** `tools/bench/deess_bench.py <takes> <out>` rendert EMBER (AUTO) und Pro-DS (Standard, über den RefHost) und
+  misst mit `deess_metrics.py`. 9 Takes (`velvox-bench/2026-11-13/prods/takes`, inkl. Jakobs 3 Vocals), Mittel:
+  S −3,03 dB (Pro-DS −2,69), Vokale 0,00 dB, Delta-Reinheit 98,5 % (Pro-DS 98,7 %, vorher 87,6 %).
+- **Schrift 35 % größer** (`ui::setTextScale`, nur EMBER; Wortmarke bleibt gleich groß).
+- Hörvergleich für Jakob: Drive `Plugins/01 EMBER De-Esser/Hoertest/2026-11-13_vs_ProDS`.
+- 248 Checks grün (mit `EMBER_VOCALS`), pluginval 10 SUCCESS (`--skip-gui-tests`).
+
+## STAND 2026-11-12
 Erledigt (Branch feature/ember-deesser, nicht gepusht, nicht installiert):
 - Maskottchen-Speicher: Bilder werden erst beim Anzeigen dekodiert, geteilter Cache (f7e7dd1, 481 → 185 MB).
 - Lizenz eingebaut, Standard AUS (`-DEMBER_LICENSING=ON`), Lemon Squeezy TESTMODUS: Store 522230, Produkt 1522200,
