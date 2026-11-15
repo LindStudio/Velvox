@@ -454,27 +454,27 @@ namespace ember
         // ---- explanations (info card on hover)
         const auto amountText = tr ("Wie stark die S-Laute reduziert werden. 50 % = genau das, was Threshold und Range (oder AUTO) vorgeben, "
                                     "100 % = doppelt so viel, 0 % = aus.",
-                                    "How hard the S sounds are reduced. 50 % = exactly what threshold and range (or AUTO) set, "
+                                    "How hard the S sounds are reduced. 50 % = exactly what Threshold and Range (or AUTO) set, "
                                     "100 % = twice as much, 0 % = off.");
         amountBig.setDescription (amountText);
         amountK.setDescription (amountText);
         freqK.setDescription (tr ("Ab dieser Frequenz sucht der De-Esser nach S-Lauten und senkt nur diesen Bereich ab. "
                                   "Tiefe Stimmen um 5 kHz, hohe um 7–8 kHz. Auch im Spektrum mit der Maus ziehbar.",
                                   "From this frequency up the de-esser looks for S sounds and lowers only this range. "
-                                  "Low voices around 5 kHz, high voices around 7-8 kHz. Also draggable in the spectrum."));
+                                  "Low voices around 5 kHz, high voices around 7–8 kHz. Also draggable in the spectrum."));
         threshK.setDescription (tr ("Ab diesem S-Pegel greift der De-Esser ein. Tiefer = mehr S-Laute werden erfasst. "
                                     "Auch an der S-Pegel-Anzeige rechts ziehbar.",
                                     "The S level above which the de-esser steps in. Lower = more S sounds are caught. "
                                     "Also draggable on the S level meter on the right."));
-        rangeK.setDescription (tr ("So viel nimmt der De-Esser höchstens weg. 3–6 dB klingen natürlich, mehr kann lispeln lassen.",
-                                   "The most the de-esser ever removes. 3-6 dB sound natural, more can make the voice lisp."));
+        rangeK.setDescription (tr ("So viel nimmt der De-Esser höchstens weg. 4–8 dB klingen natürlich, deutlich mehr kann lispeln lassen.",
+                                   "The most the de-esser ever removes. 4–8 dB sound natural, much more can make the voice lisp."));
         attackK.setDescription (tr ("Wie schnell der De-Esser zupackt, wenn ein S beginnt.", "How fast the de-esser grabs when an S starts."));
         releaseK.setDescription (tr ("Wie schnell er nach dem S wieder loslässt. Kurz (30–40 ms) lässt den nächsten Vokal unberührt.",
-                                     "How fast it lets go after the S. Short (30-40 ms) leaves the next vowel untouched."));
-        lookK.setDescription (tr ("Der De-Esser sieht das S so viel früher kommen und erwischt auch den Anfang. "
-                                  "Die Latenz bleibt immer 5 ms.",
+                                     "How fast it lets go after the S. Short (30–40 ms) leaves the next vowel untouched."));
+        lookK.setDescription (tr ("So viel früher sieht der De-Esser das S kommen und erfasst auch dessen Anfang. "
+                                  "Die Latenz bleibt immer bei 5 ms.",
                                   "The de-esser sees the S coming this much earlier and also catches its start. "
-                                  "The latency always stays 5 ms."));
+                                  "The latency always stays at 5 ms."));
         mixK.setDescription (tr ("Anteil des bearbeiteten Signals. Unter 100 % bleibt etwas vom Original-S erhalten.",
                                  "Share of the processed signal. Below 100 % some of the original S remains."));
         outK.setDescription (tr ("Ausgangspegel nach dem De-Esser.", "Output level after the de-esser."));
@@ -500,13 +500,13 @@ namespace ember
                                           "The simple view: Ember, Amount, voice and Delta. Enough for most vocals."));
         addInfo (advancedBtn, "ADVANCED", tr ("Alle Regler, das Spektrum mit dem S-Bereich und die S-Pegel-Anzeige mit dem Threshold.",
                                               "Every control, the spectrum with the S range and the S level meter with the threshold."));
-        addInfo (autoBtn, "AUTO", tr ("Spiel deinen Gesang ab und klick auf AUTO. Ember hört etwa 12 Sekunden zu und stellt Frequenz, "
+        addInfo (autoBtn, "AUTO", tr ("Spiel deinen Gesang ab und klick auf AUTO. Ember hört bis zu 12 Sekunden Gesang zu (Pausen zählen nicht) und stellt Frequenz, "
                                       "Threshold und Range so ein, dass die S-Laute dezent leiser werden und die Vokale unberührt bleiben.",
-                                      "Play your vocal and click AUTO. Ember listens for about 12 seconds and sets frequency, "
+                                      "Play your vocal and click AUTO. Ember listens to up to 12 seconds of vocal (pauses don't count) and sets frequency, "
                                       "threshold and range so the S sounds get subtly quieter and the vowels stay untouched."));
         addInfo (bypassBtn, "BYPASS", tr ("Schaltet den De-Esser aus, um mit dem Original zu vergleichen. Die Latenz bleibt gleich.",
                                           "Switches the de-esser off to compare with the original. The latency stays the same."));
-        addInfo (menuBtn, tr ("Menü", "Menu"), tr ("Sprache, Handbuch und Informationen zu EMBER.", "Language, manual and about EMBER."));
+        addInfo (menuBtn, tr ("Menü", "Menu"), tr ("Sprache, Handbuch, Lizenz und Infos zu EMBER.", "Language, manual, licence and about EMBER."));
         addInfo (prevBtn, tr ("Voriges Preset", "Previous preset"), tr ("Lädt das vorige Preset.", "Loads the previous preset."));
         addInfo (nextBtn, tr ("Nächstes Preset", "Next preset"), tr ("Lädt das nächste Preset.", "Loads the next preset."));
         addInfo (presetBtn, "Preset", tr ("Werks-Presets und deine eigenen Presets. Ein * zeigt, dass du seit dem Laden etwas geändert hast.",
@@ -676,7 +676,7 @@ namespace ember
         infoPopup.setBounds (getLocalBounds());
         if (about != nullptr)
             about->setBounds (getLocalBounds());
-        licenceLock.setBounds (getLocalBounds());
+        licenceLock.setBounds (getLocalBounds().withTrimmedTop (60));   // the top bar (≡ menu) stays usable
     }
 
     void EmberPanel::setVoice (float hz)
@@ -716,7 +716,7 @@ namespace ember
         const auto users = userPresets();
         menu.addSectionHeader (tr ("Eigene Presets", "Your presets"));
         if (users.isEmpty())
-            menu.addItem (-1, tr ("(noch keine – mit SPEICHERN anlegen)", "(none yet - create one with SAVE)"), false);
+            menu.addItem (-1, tr ("(noch keine – mit SPEICHERN anlegen)", "(none yet – create one with SAVE)"), false);
         for (int i = 0; i < users.size(); ++i)
             menu.addItem (100 + i, users[i].getFileNameWithoutExtension(), true,
                           processor.getFactoryIndex() < 0 && processor.getPresetName() == users[i].getFileNameWithoutExtension());
@@ -784,18 +784,38 @@ namespace ember
         menu.addSeparator();
         menu.addItem (30, tr ("Über EMBER …", "About EMBER …"));
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (menuBtn),
-                            [this] (int id)
+                            [this, safe = juce::Component::SafePointer<EmberPanel> (this)] (int id)
                             {
+                                if (safe == nullptr || id == 0)
+                                    return;
                                 auto& lic = processor.getLicence();
                                 if (id == 40)
                                     vocalypse::ui::showActivationDialog (lic, getTopLevelComponent());
                                 else if (id == 41)
-                                    lic.deactivate ([] (bool ok, const juce::String& message)
+                                {
+                                    // one click would lock EMBER in every open project: ask first
+                                    juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                                                      .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                                                      .withTitle (tr ("Diesen Computer freigeben?", "Release this computer?"))
+                                                                      .withMessage (tr ("EMBER lässt danach alles unbearbeitet durch, bis du den Schlüssel wieder eingibst. "
+                                                                                        "So kannst du ihn auf einem anderen Computer aktivieren.",
+                                                                                        "EMBER then passes everything through unprocessed until you enter the key again. "
+                                                                                        "This lets you activate it on another computer."))
+                                                                      .withButton (tr ("Freigeben", "Release"))
+                                                                      .withButton (tr ("Abbrechen", "Cancel"))
+                                                                      .withAssociatedComponent (this),
+                                                                  [&lic, life = lic.lifetime()] (int result)
                                     {
-                                        if (message.isNotEmpty())
-                                            juce::AlertWindow::showMessageBoxAsync (ok ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon,
-                                                                                    tr ("Lizenz", "Licence"), message);
+                                        if (result != 1 || life.expired())
+                                            return;
+                                        lic.deactivate ([] (bool ok, const juce::String& message)
+                                        {
+                                            if (message.isNotEmpty())
+                                                juce::AlertWindow::showMessageBoxAsync (ok ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon,
+                                                                                        tr ("Lizenz", "Licence"), message);
+                                        });
                                     });
+                                }
                                 else if (id == 42)
                                     juce::URL (lic.buyUrl()).launchInDefaultBrowser();
                                 if (id >= 11 && id <= 13)
@@ -841,9 +861,11 @@ namespace ember
             autoBtn.setButtonText ("AUTO");
 
         const float hz = processor.state.getRawParameterValue (pid::freq)->load();
-        voiceLow.setToggleState (std::abs (hz - voiceLowHz) < 1.0f, juce::dontSendNotification);
-        voiceMid.setToggleState (std::abs (hz - voiceMidHz) < 1.0f, juce::dontSendNotification);
-        voiceHigh.setToggleState (std::abs (hz - voiceHighHz) < 1.0f, juce::dontSendNotification);
+        // the range the frequency lies in lights up - also after AUTO or a drag picked e.g. 7.3 kHz
+        const float lowMid = 0.5f * (voiceLowHz + voiceMidHz), midHigh = 0.5f * (voiceMidHz + voiceHighHz);
+        voiceLow.setToggleState (hz < lowMid, juce::dontSendNotification);
+        voiceMid.setToggleState (hz >= lowMid && hz < midHigh, juce::dontSendNotification);
+        voiceHigh.setToggleState (hz >= midHigh, juce::dontSendNotification);
         const bool hearing = processor.state.getRawParameterValue (pid::listen)->load() > 0.5f;
         listenBtn.setToggleState (hearing, juce::dontSendNotification);
         listenBtn.setColour (juce::TextButton::buttonOnColourId, look::accent);
@@ -872,6 +894,7 @@ namespace ember
         mi.hasSignal = in > 0.00316f;
         mi.autoListening = phase == Phase::listening || phase == Phase::analysing;
         mi.reductionDb = shownGr;
+        mi.hostStopped = processor.isHostStopped();
         mascot.setInput (mi);
 
         if (phase != lastPhase && (phase == Phase::done || phase == Phase::failed))
@@ -894,17 +917,22 @@ namespace ember
             text = processor.getAutoMessage();
             mascot.setBubble (phase == Phase::done ? tr ("Passt!", "Got it!") : tr ("Hmm …", "Hmm …"));
         }
+        else if (processor.getLicence().isLocked())
+        {
+            mascot.setBubble ({});
+            text = tr ("Ohne Lizenzschlüssel läuft dein Gesang unbearbeitet durch.", "Without a licence key your vocal passes through unprocessed.");
+        }
         else
         {
             mascot.setBubble (settings.wasAutoUsed() || bypassed ? juce::String() : tr ("Klick mich für AUTO!", "Click me for AUTO!"));
             if (bypassed)
-                text = tr ("Bypass: der De-Esser ist aus, das Signal läuft unbearbeitet durch.", "Bypass: the de-esser is off, the signal passes unprocessed.");
+                text = tr ("Bypass: Der De-Esser ist aus, das Signal läuft unbearbeitet durch.", "Bypass: the de-esser is off, the signal passes through unprocessed.");
             else if (advanced)
                 text = tr ("Fahr mit der Maus über einen Regler, um zu sehen, was er macht. Doppelklick setzt ihn zurück.",
                            "Hover over a control to see what it does. Double-click resets it.");
             else
-                text = tr ("Spiel deinen Gesang ab und klick auf Ember oder AUTO: Er stellt sich auf deine Stimme ein.",
-                           "Play your vocal and click Ember or AUTO: he sets himself up for your voice.");
+                text = tr ("Spiel deinen Gesang ab und klick auf Ember oder AUTO: Er stellt den De-Esser auf deine Stimme ein.",
+                           "Play your vocal and click Ember or AUTO: he tunes the de-esser to your voice.");
         }
         if (status.getText() != text)
             status.setText (text, juce::dontSendNotification);
@@ -941,6 +969,7 @@ namespace ember
 
     EmberEditor::~EmberEditor()
     {
+        settings->file().saveIfNeeded();   // the window size (not written on every resize step)
         panel.reset();
         setLookAndFeel (nullptr);
     }

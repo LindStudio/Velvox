@@ -157,10 +157,28 @@ namespace ember
 
     void Engine::setSettings (const Settings& s) noexcept
     {
+        const int previousMode = settings.mode;
         settings = s;
-        settings.freq = juce::jlimit (1000.0f, 20000.0f, s.freq);
-        settings.amount = juce::jlimit (0.0f, 1.0f, s.amount);
-        settings.lookaheadMs = juce::jlimit (0.0f, maxLookaheadMs, s.lookaheadMs);
+        // A non-finite value (hand-edited preset, corrupt project) falls back to the default instead of
+        // turning the filters into NaN and muting the plugin for good
+        const Settings d;
+        const auto finite = [] (float v, float fallback) { return std::isfinite (v) ? v : fallback; };
+        settings.thresholdDb = finite (s.thresholdDb, d.thresholdDb);
+        settings.rangeDb = finite (s.rangeDb, d.rangeDb);
+        settings.attackMs = finite (s.attackMs, d.attackMs);
+        settings.releaseMs = finite (s.releaseMs, d.releaseMs);
+        settings.mix = finite (s.mix, d.mix);
+        settings.outputDb = juce::jlimit (-48.0f, 24.0f, finite (s.outputDb, d.outputDb));
+        settings.freq = juce::jlimit (1000.0f, 20000.0f, finite (s.freq, d.freq));
+        settings.amount = juce::jlimit (0.0f, 1.0f, finite (s.amount, d.amount));
+        settings.lookaheadMs = juce::jlimit (0.0f, maxLookaheadMs, finite (s.lookaheadMs, d.lookaheadMs));
+        if (settings.mode != previousMode)
+        {
+            // Split <-> wideband: the shelf starts from a clean state (it froze while wideband ran)
+            shelf.reset();
+            shelfDb = 0.0f;
+            shelfStale = true;
+        }
         freq.setTargetValue (settings.freq);
         mixSm.setTargetValue (juce::jlimit (0.0f, 1.0f, settings.mix));
         outSm.setTargetValue (dbToGain (settings.outputDb));
@@ -264,7 +282,7 @@ namespace ember
             }
             else
             {
-                if (onGrid && (shelfStale || std::abs (envAt[0] - shelfDb) > 0.01f))
+                if (onGrid && (shelfStale || std::abs (envAt[0] - shelfDb) > 0.01f || (envAt[0] < 0.001f && shelfDb >= 0.001f)))
                 {
                     updateShelf (envAt[0]);
                     shelfStale = false;

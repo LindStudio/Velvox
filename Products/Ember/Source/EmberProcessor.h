@@ -62,6 +62,8 @@ namespace ember
         AutoCapture& getCapture() noexcept { return capture; }
 
         double getCurrentSampleRate() const noexcept { return currentRate; }
+        // The host's transport is stopped (only known once it has been seen playing; see processBlock)
+        bool isHostStopped() const noexcept { return hostStopped.load (std::memory_order_relaxed); }
 
         // ---- Presets and A/B (message thread) -----------------------------------------------
         void loadFactoryPreset (int index);
@@ -94,6 +96,7 @@ namespace ember
         AutoPhase autoPhase = AutoPhase::idle;
         AutoResult lastAuto;
         std::future<AutoResult> pending;
+        std::shared_ptr<std::atomic<bool>> autoCancel = std::make_shared<std::atomic<bool>> (false);
 
         int factoryIndex = 0;                      // -1 = user preset / AUTO result
         juce::String userPresetName;
@@ -102,6 +105,8 @@ namespace ember
         bool slotUsed[2] { false, false };
         int activeSlot = 0;
         double currentRate = 44100.0;
+        std::atomic<bool> hostStopped { false };
+        bool hostEverPlayed = false;               // audio thread only
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EmberAudioProcessor)
     };

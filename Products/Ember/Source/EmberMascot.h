@@ -32,6 +32,7 @@ namespace ember
         bool hasSignal = false;
         bool autoListening = false;
         float reductionDb = 0.0f;
+        bool hostStopped = false;        // the host's transport is stopped: he stops dancing at once
     };
 
     class MascotBrain

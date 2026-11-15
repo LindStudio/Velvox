@@ -54,7 +54,7 @@ namespace ember
     void apply (juce::AudioProcessorValueTreeState& state, const ParamValues& values)
     {
         for (const auto& [id, real] : withDefaults (state, values))
-            if (auto* p = state.getParameter (id))
+            if (auto* p = state.getParameter (id); p != nullptr && std::isfinite (real))
             {
                 p->beginChangeGesture();
                 p->setValueNotifyingHost (p->convertTo0to1 (real));
@@ -107,7 +107,11 @@ namespace ember
             return false;
         out.clear();
         for (auto* e : xml->getChildWithTagNameIterator ("Param"))
-            out[e->getStringAttribute ("id")] = (float) e->getDoubleAttribute ("value");
+        {
+            const auto v = (float) e->getDoubleAttribute ("value");
+            if (std::isfinite (v))   // "nan" / "inf" in a shared preset: that control keeps its default
+                out[e->getStringAttribute ("id")] = v;
+        }
         return true;
     }
 
@@ -141,7 +145,7 @@ namespace ember
     juce::String UserSettings::getLanguage() { return props->getValue ("language", "system"); }
     void UserSettings::setLanguage (const juce::String& l) { props->setValue ("language", l); props->saveIfNeeded(); }
     int UserSettings::getEditorWidth (int fallback) { return props->getIntValue ("editorWidth", fallback); }
-    void UserSettings::setEditorWidth (int w) { props->setValue ("editorWidth", w); props->saveIfNeeded(); }
+    void UserSettings::setEditorWidth (int w) { props->setValue ("editorWidth", w); }   // saved with the next change or on close
     bool UserSettings::wasAutoUsed() { return props->getBoolValue ("autoUsed", false); }
     void UserSettings::setAutoUsed() { props->setValue ("autoUsed", true); props->saveIfNeeded(); }
 }

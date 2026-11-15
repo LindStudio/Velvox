@@ -1,6 +1,25 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
 ## STAND 2026-11-15 – HIER WEITERMACHEN
+**Später am 15.11. – Politur** (Jakob: „poliere das gesamte plugin, alle meldungen, bugs, sicherheitslücken, popups“;
+VOCALYPSE gibt es nicht mehr, nur EMBER). Zwei unabhängige Code-Reviews (Audio/Logik, UI/Texte/Lizenz), Funde geprüft:
+- Ember tanzt nicht mehr bei Pause (Host-Transport; erst wenn der Host einmal „playing“ gemeldet hat). Stimmlage:
+  es leuchtet der Bereich, in dem die Frequenz liegt (auch nach AUTO).
+- Audio: NaN/inf aus Preset/Projekt schaltet nicht mehr dauerhaft stumm; AUTO-Puffer (30 s) erst bei erster
+  Nutzung; NaN-Blöcke nicht in die Analyse; Plugin schließen während der Analyse wartet nicht mehr; AUTO setzt
+  Attack/Lookahead/Mix/Output so, wie es gerechnet hat; Moduswechsel setzt den Shelf zurück; Shelf kehrt nach dem S
+  exakt zu 0 dB zurück; Preset-Namen mit Punkt; A/B beim Laden eines Zustands neu.
+- Lizenz: Schlüssel wird gesäubert (Leerzeichen/Umbrüche aus Mails); Wochenprüfung sperrt nur bei klarer Antwort
+  (2xx ungültig oder 404), nicht bei 429/5xx; fremder Schlüssel gibt seinen Aktivierungsplatz zurück + eigene
+  Meldung; Freigeben fragt nach und klappt auch, wenn die Aktivierung im Dashboard schon gelöscht ist; Dialoge
+  prüfen, ob der Manager noch lebt; Menü-Callback mit SafePointer; Sperrkarte liest die Datei neu (anderer
+  Prozess hat aktiviert), lässt die obere Leiste frei, Knopf „Schlüssel eingeben“, Statuszeile passend.
+- Texte DE/EN überarbeitet (Gedankenstriche, „E-Mail“, Range 4–8 dB, AUTO bis 12 s Gesang), Handbuch:
+  AUTO 2,5–4,5 dB und neuer Abschnitt „Aktivieren“ (2 Computer – Aktivierungslimit im LS-Produkt prüfen!).
+- 220 Checks (256 mit EMBER_VOCALS), pluginval 10 SUCCESS, installiert (Lizenz AN).
+- Vor dem Release: Live-Produkt-ID + Live-Checkout in `EmberLicence.h`, mit `-DEMBER_LICENSING=ON` bauen.
+- Unten in diesem Dokument sind ältere Abschnitte (AUTO 1,5–3,5 dB, Launen, 14 Tage Test) historisch.
+
 Jakob: „ember läuft nur über schlüssel, den schlüssel bekommt man nur per mail“ und „wir brauchen sleep, idle,
 zuhören und tanzen“; beim Tanzen waren an der Taille rote Blöcke zu sehen, wenn die Arme abstanden.
 - **Lizenz ohne Testzeit:** `licensing::Config` hat jetzt `trialDays` (VOCALYPSE 14, EMBER 0) und `freeKey`.

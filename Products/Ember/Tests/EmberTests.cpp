@@ -478,6 +478,70 @@ namespace
         check (c.isFull() && ! c.isCapturing(), "stops at 30 s");
     }
 
+    void testPolish()
+    {
+        Test t ("polish 2026-11-15: NaN settings, AUTO buffer on demand, mode switch");
+        const double fs = 48000.0;
+        const auto take = makeTake (fs, 1.0, -6.0f);
+        // non-finite settings fall back to defaults: the audio keeps flowing
+        {
+            Engine e;
+            Settings s;
+            s.freq = std::numeric_limits<float>::quiet_NaN();
+            s.thresholdDb = std::numeric_limits<float>::infinity();
+            s.mix = std::numeric_limits<float>::quiet_NaN();
+            e.setSettings (s);
+            e.prepare (fs, 256);
+            std::vector<float> y (take.x);
+            for (int start = 0; start + 256 <= (int) y.size(); start += 256)
+            {
+                float* ch[1] { y.data() + start };
+                e.process (ch, 1, 256);
+            }
+            float peak = 0.0f;
+            bool finite = true;
+            for (float v : y) { finite = finite && std::isfinite (v); peak = std::max (peak, std::abs (v)); }
+            check (finite && peak > 0.1f, "NaN settings: finite, not muted");
+        }
+        // the 30 s buffer exists only once AUTO is used
+        {
+            AutoCapture c;
+            c.prepare (fs);
+            check (! c.isFull() && c.getNumSamples() == 0, "prepared, no buffer yet");
+            c.start();
+            check (c.isCapturing(), "start makes the buffer");
+            std::vector<float> nanBlock (256, std::numeric_limits<float>::quiet_NaN());
+            const float* chN[1] { nanBlock.data() };
+            c.push (chN, 1, 256);
+            check (c.getNumSamples() == 0, "a NaN block is not captured");
+            const float* ch[1] { take.x.data() };
+            c.push (ch, 1, 4096);
+            check (c.getNumSamples() == 4096, "audio captured");
+        }
+        // split <-> wideband while S are reduced: no jump bigger than the signal itself makes
+        {
+            Engine e;
+            Settings s;
+            s.thresholdDb = -60.0f;
+            e.setSettings (s);
+            e.prepare (fs, 64);
+            std::vector<float> y (take.x);
+            for (int start = 0, blk = 0; start + 64 <= (int) y.size(); start += 64, ++blk)
+            {
+                if (blk % 40 == 0)
+                {
+                    s.mode = 1 - s.mode;
+                    e.setSettings (s);
+                }
+                float* ch[1] { y.data() + start };
+                e.process (ch, 1, 64);
+            }
+            bool finite = true;
+            for (float v : y) finite = finite && std::isfinite (v);
+            check (finite, "mode switching stays finite");
+        }
+    }
+
     void testLicence()
     {
         Test t ("licence: off by default, locked = unprocessed, key activates, own file");
@@ -561,6 +625,40 @@ namespace
         check (ok && lastUrl.endsWith ("/activate"), "key activates");
         check (m.status().access == lic::Access::licensed && ! m.isLocked(), "licensed -> unlocked");
         check (lic::readRecord (file, licenceConfig().identity).instanceId == "inst-1", "activation stored in EMBER's file");
+
+        // Polish 2026-11-15: pasted keys, the weekly check, releasing, a key of another product
+        check (lic::cleanKey (juce::String::fromUTF8 (" 38B1460A-5104\xc2\xa0\r\n-4067 ")) == "38B1460A-5104-4067", "pasted key cleaned");
+        {
+            const auto checkWith = [&] (int code, const char* body)
+            {
+                auto c = cfg;
+                c.now = [now, day] { return now + 8 * day; };   // the weekly check is due
+                c.transport = [code, body] (const juce::String&, const juce::StringPairArray&) -> std::pair<int, juce::String> { return { code, body }; };
+                lic::Manager later (c);   // checks in its constructor (synchronous here)
+                return later.status().access;
+            };
+            check (checkWith (429, R"({"error":"Too many requests"})") == lic::Access::licensed, "429 on the weekly check: stays activated");
+            check (checkWith (503, "") == lic::Access::licensed, "server down: stays activated");
+            check (checkWith (200, R"({"valid":false,"license_key":{"status":"disabled"}})") == lic::Access::locked, "clearly invalid: locked");
+        }
+        {
+            // a key of another product: refused, and the store gets its activation back
+            juce::StringArray calls;
+            auto c = cfg;
+            c.file = dir.getChildFile ("foreign.license");
+            c.transport = [&calls] (const juce::String& url, const juce::StringPairArray&) -> std::pair<int, juce::String>
+            {
+                calls.add (url.fromLastOccurrenceOf ("/", false, false));
+                return { 200, R"({"activated":true,"deactivated":true,"license_key":{"status":"active"},"instance":{"id":"x"},
+                                  "meta":{"store_id":522230,"product_id":999}})" };
+            };
+            lic::Manager other (c);
+            juce::String msg;
+            other.activate ("K-1", [&msg] (bool, const juce::String& m) { msg = m; });
+            check (other.status().access == lic::Access::locked, "foreign key refused");
+            check (calls.joinIntoString (",") == "activate,deactivate", "its activation is given back (got " + calls.joinIntoString (",") + ")");
+            check (msg.contains ("EMBER"), "own message for a foreign key");
+        }
         {
             EmberAudioProcessor p;
             p.setLicenceForTest (m);
@@ -721,6 +819,13 @@ namespace
         in.hasSignal = false;
         runFor (in, 3.0);
         check (b.getState() == MascotState::idle, "silence: idle");
+        in.hasSignal = true;
+        runFor (in, 2.5);
+        in.hostStopped = true;   // pause in the host (a reverb tail may still sound)
+        runFor (in, 0.1);
+        check (b.getState() == MascotState::idle, "host stopped: idle at once (Jakob: danced on in pause)");
+        in.hostStopped = false;
+        in.hasSignal = false;
 
         in.autoListening = true;
         runFor (in, 0.1);
@@ -986,6 +1091,17 @@ namespace
         check (p.loadUserPreset (dir.getChildFile (juce::String ("Mein Test") + presetExtension)), "load");
         near (readSettings (p.state).thresholdDb, -12.0, 0.05, "user preset value back");
         check (p.getPresetName() == "Mein Test" && ! p.isPresetModified(), "user preset name, not modified");
+
+        // Polish 2026-11-15: a dot in the name stays, a "nan" in a shared preset does not mute the plugin
+        check (p.saveUserPreset (dir.getChildFile ("Lead 1.5")) && dir.getChildFile (juce::String ("Lead 1.5") + presetExtension).existsAsFile(),
+               "a dot in the preset name is kept");
+        {
+            const auto bad = dir.getChildFile (juce::String ("Kaputt") + presetExtension);
+            bad.replaceWithText (R"(<EmberPreset><Param id="emFreq" value="nan"/><Param id="emThreshold" value="-20"/></EmberPreset>)");
+            check (p.loadUserPreset (bad), "corrupt preset still loads");
+            const auto s = readSettings (p.state);
+            check (std::isfinite (s.freq) && std::abs (s.thresholdDb + 20.0f) < 0.1f, "nan skipped, other values kept");
+        }
         dir.deleteRecursively();
 
         // bypass is never part of a preset
@@ -1053,6 +1169,33 @@ namespace
             ed->setSize (look::baseW * 3 / 2, look::baseH * 3 / 2);
             check (ed->getWidth() == look::baseW * 3 / 2, "resizes");
             check (ed->isAdvanced(), "view kept");
+        }
+        // The lock card (no key yet), both languages
+        if (snapshotDir != juce::File())
+        {
+            const auto lf = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember-lock-snap.license");
+            lf.deleteFile();
+            auto c = licenceConfig();
+            c.on = true;
+            c.asynchronous = false;
+            c.file = lf;
+            c.transport = [] (const juce::String&, const juce::StringPairArray&) -> std::pair<int, juce::String> { return { 0, {} }; };
+            vocalypse::licensing::Manager locked (c);
+            EmberAudioProcessor q;
+            q.setLicenceForTest (locked);
+            q.prepareToPlay (48000.0, 512);
+            for (auto lang : { vocalypse::i18n::Language::german, vocalypse::i18n::Language::english })
+            {
+                vocalypse::i18n::overrideSystemLanguage (lang);
+                std::unique_ptr<juce::AudioProcessorEditor> base (q.createEditor());
+                base->setSize (look::baseW, look::baseH);
+                auto* ed = dynamic_cast<EmberEditor*> (base.get());
+                const auto img = snapshot (*ed);
+                juce::PNGImageFormat png;
+                juce::FileOutputStream out (snapshotDir.getChildFile (juce::String ("locked_") + (lang == vocalypse::i18n::Language::german ? "de" : "en") + ".png"));
+                if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
+            }
+            lf.deleteFile();
         }
         vocalypse::i18n::overrideSystemLanguage (std::nullopt);
         check ((bool) p.state.state.getProperty ("advanced", false), "view stored in the state");
@@ -1241,6 +1384,7 @@ int main (int argc, char** argv)
     testBlockSizes();
     testCpu();
     testRobust();
+    testPolish();
     testAuto();
     testCapture();
     testProcessor();

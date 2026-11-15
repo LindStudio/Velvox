@@ -69,11 +69,12 @@ namespace ember
         MascotState wanted;
         if (in.bypass)                   wanted = MascotState::sleeping;
         else if (in.autoListening)       wanted = MascotState::listening;
-        else if (in.hasSignal || gr > 0.0f) wanted = MascotState::dancing;
+        else if (in.hostStopped)         wanted = MascotState::idle;
+        else if (in.hasSignal)           wanted = MascotState::dancing;
         else                             wanted = MascotState::idle;
 
         const bool immediate = wanted == MascotState::sleeping || wanted == MascotState::listening
-                            || state == MascotState::sleeping || state == MascotState::listening;
+                            || state == MascotState::sleeping || state == MascotState::listening || in.hostStopped;
         if (wanted == state)
         {
             pendingFor = 0.0;

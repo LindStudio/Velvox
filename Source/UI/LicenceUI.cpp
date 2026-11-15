@@ -14,18 +14,19 @@ namespace vocalypse::ui
     void showActivationDialog (licensing::Manager& m, juce::Component* over)
     {
         auto* w = new juce::AlertWindow (i18n::format (tr ("{0} aktivieren", "Activate {0}"), { m.productName() }),
-                                         m.freeKey() ? tr ("Kopier den Lizenzschlüssel aus der Mail von Lind Audio hier hinein.",
-                                                           "Paste the licence key from the Lind Audio mail here.")
-                                                     : tr ("Kopier den Lizenzschlüssel aus deiner Bestell-Mail hier hinein.",
-                                                           "Paste the licence key from your order mail here."),
+                                         m.freeKey() ? tr ("Kopier den Lizenzschlüssel aus der E-Mail von Lind Audio und füg ihn hier ein.",
+                                                           "Paste the licence key from the Lind Audio email here.")
+                                                     : tr ("Kopier den Lizenzschlüssel aus deiner Bestell-E-Mail und füg ihn hier ein.",
+                                                           "Paste the licence key from your order email here."),
                                          juce::MessageBoxIconType::NoIcon, over);
         w->addTextEditor ("key", {}, tr ("Lizenzschlüssel", "Licence key"));
         w->addButton (tr ("Aktivieren", "Activate"), 1, juce::KeyPress (juce::KeyPress::returnKey));
         w->addButton (tr ("Abbrechen", "Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
-        w->enterModalState (true, juce::ModalCallbackFunction::create ([w, &m] (int result)
+        // The window is its own desktop window: the plugin may close (and the Manager go) while it is open
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([w, &m, life = m.lifetime()] (int result)
         {
             const auto key = w->getTextEditorContents ("key");
-            if (result != 1)
+            if (result != 1 || life.expired())
                 return;
             m.activate (key, [] (bool ok, const juce::String& message)
             {
@@ -38,7 +39,7 @@ namespace vocalypse::ui
     LicenceLock::LicenceLock()
     {
         setVisible (false);
-        enterButton.setButtonText (tr ("Lizenzschlüssel eingeben", "Enter licence key"));
+        enterButton.setButtonText (tr ("Schlüssel eingeben", "Enter key"));
         enterButton.getProperties().set ("fire", true);
         enterButton.onClick = [this] { if (licence != nullptr) showActivationDialog (*licence, getTopLevelComponent()); };
         buyButton.onClick = [this] { if (licence != nullptr && licence->buyUrl().isNotEmpty()) juce::URL (licence->buyUrl()).launchInDefaultBrowser(); };
@@ -48,6 +49,7 @@ namespace vocalypse::ui
 
     LicenceLock::~LicenceLock()
     {
+        stopTimer();
         if (licence != nullptr)
             licence->removeChangeListener (this);
     }
@@ -73,13 +75,26 @@ namespace vocalypse::ui
         const bool show = licence != nullptr && licence->status().access == licensing::Access::locked;
         setVisible (show);
         if (show)
+        {
             toFront (false);
+            startTimer (1000);
+        }
+        else
+            stopTimer();
         repaint();
+    }
+
+    void LicenceLock::timerCallback()
+    {
+        if (licence == nullptr)
+            return;
+        licence->reloadIfChanged();   // may unlock: sync() runs through the change message
+        enterButton.setEnabled (! licence->isBusy());
     }
 
     juce::Rectangle<int> LicenceLock::cardBounds() const
     {
-        return getLocalBounds().withSizeKeepingCentre (440, 220);
+        return getLocalBounds().withSizeKeepingCentre (476, 220);
     }
 
     void LicenceLock::resized()
@@ -106,7 +121,7 @@ namespace vocalypse::ui
         const bool hadTrial = licence != nullptr && licence->trialDays() > 0;
         const bool free = licence != nullptr && licence->freeKey();
         const auto name = licence != nullptr ? licence->productName() : juce::String();
-        g.drawText (revoked    ? tr ("Lizenz nicht mehr gültig", "Licence no longer valid")
+        g.drawText (revoked    ? tr ("Schlüssel nicht mehr gültig", "Key no longer valid")
                     : hadTrial ? tr ("Die Testzeit ist vorbei", "The trial is over")
                                : i18n::format (tr ("{0} braucht einen Lizenzschlüssel", "{0} needs a licence key"), { name }),
                     r.removeFromTop (30.0f), juce::Justification::centredLeft, true);
@@ -115,15 +130,20 @@ namespace vocalypse::ui
         g.setFont (font (typesize::small));
         if (free && ! revoked)
             g.drawFittedText (i18n::format (tr ("{0} ist kostenlos. Klick auf „Gratis-Schlüssel holen“, gib deine E-Mail-Adresse ein "
-                                                "und kopier den Schlüssel aus der Mail hier hinein. Bis dahin geht deine Vocal unbearbeitet durch.",
-                                                "{0} is free. Click “Get free key”, enter your email address and paste the key from the "
-                                                "mail here. Until then your vocal passes through unprocessed."), { name }),
+                                                "und trag den Schlüssel aus der E-Mail unter „Schlüssel eingeben“ ein. Bis dahin läuft "
+                                                "dein Gesang unbearbeitet durch.",
+                                                "{0} is free. Click “Get free key”, enter your email address, then enter the key from "
+                                                "the email under “Enter key”. Until then your vocal passes through unprocessed."), { name }),
                               r.removeFromTop (80.0f).toNearestInt(), juce::Justification::topLeft, 4, 1.0f);
         else
-        g.drawFittedText (i18n::format (tr ("{0} lässt deine Vocal gerade unbearbeitet durch. Aktiviere es mit dem Schlüssel aus deiner "
-                                            "Bestell-Mail - deine Projekte und Einstellungen bleiben, wie sie sind.",
-                                            "{0} is passing your vocal through unprocessed. Activate it with the key from your order mail - "
-                                            "your projects and settings stay as they are."), { name }),
+        g.drawFittedText (free ? i18n::format (tr ("{0} lässt deinen Gesang gerade unbearbeitet durch. Gib deinen Schlüssel neu ein oder "
+                                                   "hol dir einen neuen – deine Projekte und Einstellungen bleiben, wie sie sind.",
+                                                   "{0} is passing your vocal through unprocessed. Enter your key again or get a new one – "
+                                                   "your projects and settings stay as they are."), { name })
+                               : i18n::format (tr ("{0} lässt deinen Gesang gerade unbearbeitet durch. Aktiviere es mit dem Schlüssel aus "
+                                                   "deiner Bestell-E-Mail – deine Projekte und Einstellungen bleiben, wie sie sind.",
+                                                   "{0} is passing your vocal through unprocessed. Activate it with the key from your order "
+                                                   "email – your projects and settings stay as they are."), { name }),
                           r.removeFromTop (80.0f).toNearestInt(), juce::Justification::topLeft, 4, 1.0f);
     }
 }

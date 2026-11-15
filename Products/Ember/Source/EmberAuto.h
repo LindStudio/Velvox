@@ -37,7 +37,9 @@ namespace ember
 
     // Analysis of a mono take. Needs at least ~3 s of voice and some S sounds.
     // smart = the engine's smart detection (default, as the plugin runs it); false = plain relative detection
-    AutoResult analyse (const float* mono, int numSamples, double sampleRate, bool smart = true);
+    // `cancel` (optional): set from another thread, the remaining renders are skipped (the result is then useless)
+    AutoResult analyse (const float* mono, int numSamples, double sampleRate, bool smart = true,
+                        const std::atomic<bool>* cancel = nullptr);
 
     // 2026-11-10 subtle (1.5-3.5 dB); 2026-11-13 Jakob: "mindestens genauso gut wie Pro-DS im S-Laute absenken".
     // Pro-DS at its default takes 1.3-4.1 dB (mean 2.7) off the S of our 9 bench takes; AUTO now 2.5 dB
@@ -58,7 +60,7 @@ namespace ember
     {
     public:
         void prepare (double sampleRate);
-        void start() noexcept;
+        void start();        // message thread: makes the buffer on first use
         void stop() noexcept;
         bool isCapturing() const noexcept { return state.load (std::memory_order_acquire) == capturing; }
 
@@ -68,7 +70,7 @@ namespace ember
         int getNumSamples() const noexcept { return count.load (std::memory_order_acquire); }
         double getSeconds() const noexcept { return fs > 0.0 ? getNumSamples() / fs : 0.0; }
         double getSampleRate() const noexcept { return fs; }
-        bool isFull() const noexcept { return getNumSamples() >= (int) buffer.size(); }
+        bool isFull() const noexcept { return ! buffer.empty() && getNumSamples() >= (int) buffer.size(); }
         const float* data() const noexcept { return buffer.data(); }
 
     private:

@@ -17,19 +17,25 @@ namespace vocalypse::licensing
 
         juce::String messageFor (const Reply& r)
         {
+            if (r.http >= 500)
+                return tr ("Der Lizenz-Server antwortet gerade nicht. Versuch es in ein paar Minuten noch einmal.",
+                           "The licence server is not responding right now. Try again in a few minutes.");
             if (! r.reached)
                 return tr ("Keine Verbindung zum Lizenz-Server. Prüf die Internetverbindung und versuch es noch einmal.",
                            "No connection to the licence server. Check the internet connection and try again.");
+            if (r.error == "key of another product")
+                return tr ("Dieser Schlüssel gehört zu einem anderen Produkt. Über „Gratis-Schlüssel holen“ bekommst du einen Schlüssel für EMBER.",
+                           "This key belongs to another product. Use “Get free key” to get a key for EMBER.");
             if (r.error.containsIgnoreCase ("activation limit"))
-                return tr ("Dieser Schlüssel ist schon auf der erlaubten Anzahl Computer aktiv. Gib ihn zuerst auf einem anderen Computer frei (Lizenz > Freigeben).",
-                           "This key is already active on the allowed number of computers. Release it on another computer first (Licence > Release).");
+                return tr ("Dieser Schlüssel ist schon auf der erlaubten Anzahl Computer aktiv. Gib ihn zuerst auf einem anderen Computer frei (≡ › Lizenz › Diesen Computer freigeben).",
+                           "This key is already active on the allowed number of computers. Release it on another computer first (≡ › Licence › Release this computer).");
             if (r.keyStatus == "expired")
                 return tr ("Dieser Schlüssel ist abgelaufen.", "This key has expired.");
             if (r.keyStatus == "disabled")
-                return tr ("Dieser Schlüssel wurde deaktiviert. Schreib uns, wenn das ein Fehler ist.",
-                           "This key has been disabled. Write to us if that is a mistake.");
-            return tr ("Dieser Schlüssel passt nicht. Kopier ihn genau so aus der Mail.",
-                       "This key does not work. Copy it exactly as it is in the mail.");
+                return tr ("Dieser Schlüssel wurde deaktiviert. Schreib uns an support@lind-audio.com, wenn das ein Fehler ist.",
+                           "This key has been disabled. Write to support@lind-audio.com if that is a mistake.");
+            return tr ("Dieser Schlüssel passt nicht. Kopier ihn genau so, wie er in der E-Mail steht.",
+                       "This key does not work. Copy it exactly as it appears in the email.");
         }
     }
 
@@ -65,6 +71,7 @@ namespace vocalypse::licensing
                       juce::int64 storeId, juce::int64 productId)
     {
         Reply r;
+        r.http = httpStatus;
         const auto v = juce::JSON::parse (json);
         // 4xx: the server answered (invalid key, limit reached ...); 0 / 5xx / no JSON: not reached
         r.reached = httpStatus >= 200 && httpStatus < 500 && v.isObject();
@@ -94,6 +101,11 @@ namespace vocalypse::licensing
         if (r.ok && (r.keyStatus == "disabled" || r.keyStatus == "expired"))
             r.ok = false;
         return r;
+    }
+
+    juce::String cleanKey (const juce::String& key)
+    {
+        return key.retainCharacters ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-");
     }
 
     juce::String signatureOf (const Record& r, const FileIdentity& id)
@@ -187,6 +199,7 @@ namespace vocalypse::licensing
             pool = std::make_unique<juce::ThreadPool> (juce::ThreadPoolOptions{}.withThreadName (cfg.productName + " licence").withNumberOfThreads (1));
 
         rec = readRecord (cfg.file, cfg.identity);
+        fileTime = cfg.file.getLastModificationTime();
         if (rec.firstRunMs <= 0)
         {
             rec.firstRunMs = cfg.now();
@@ -217,7 +230,25 @@ namespace vocalypse::licensing
     void Manager::store()
     {
         if (cfg.on)
+        {
             writeRecord (cfg.file, rec, cfg.identity);
+            fileTime = cfg.file.getLastModificationTime();
+        }
+    }
+
+    void Manager::reloadIfChanged()
+    {
+        if (! cfg.on || busy.load() || ! cfg.file.existsAsFile())
+            return;
+        const auto t = cfg.file.getLastModificationTime();
+        if (t == fileTime)
+            return;
+        fileTime = t;
+        const auto fresh = readRecord (cfg.file, cfg.identity);
+        if (fresh.key == rec.key && fresh.instanceId == rec.instanceId && fresh.revoked == rec.revoked)
+            return;
+        rec = fresh;
+        update();
     }
 
     void Manager::run (std::function<void()> job)
@@ -230,10 +261,15 @@ namespace vocalypse::licensing
 
     void Manager::activate (const juce::String& keyIn, Done done)
     {
-        const auto key = keyIn.trim();
-        if (! cfg.on || key.isEmpty() || busy.exchange (true))
+        const auto key = cleanKey (keyIn);
+        if (! cfg.on || key.isEmpty())
         {
-            if (done) done (false, tr ("Gib den Schlüssel aus der Bestell-Mail ein.", "Enter the key from the order mail."));
+            if (done) done (false, tr ("Gib den Schlüssel aus der E-Mail von Lind Audio ein.", "Enter the key from the Lind Audio email."));
+            return;
+        }
+        if (busy.exchange (true))
+        {
+            if (done) done (false, tr ("Einen Moment – die Aktivierung läuft noch.", "One moment – the activation is still running."));
             return;
         }
         juce::StringPairArray form;
@@ -248,6 +284,14 @@ namespace vocalypse::licensing
         {
             const auto [code, body] = transport (juce::String (apiBase) + "activate", form);
             const auto reply = parseReply (body, code, "activated", storeId, productId);
+            if (reply.error == "key of another product" && reply.instanceId.isNotEmpty())
+            {
+                // the store already counted this computer for that other product: give the slot back
+                juce::StringPairArray undo;
+                undo.set ("license_key", key);
+                undo.set ("instance_id", reply.instanceId);
+                transport (juce::String (apiBase) + "deactivate", undo);
+            }
             auto apply = [this, flag, reply, key, done]
             {
                 if (! *flag)
@@ -295,7 +339,8 @@ namespace vocalypse::licensing
                 if (! *flag)
                     return;
                 busy = false;
-                if (reply.ok)
+                // 404: the store no longer knows this activation (removed in the dashboard) - free it here as well
+                if (reply.ok || reply.http == 404)
                 {
                     const auto firstRun = rec.firstRunMs;
                     rec = {};
@@ -334,8 +379,11 @@ namespace vocalypse::licensing
                 if (! *flag)
                     return;
                 busy = false;
-                if (! reply.reached)
-                    return;   // offline: stays activated, asked again next time
+                // Locked only by a clear answer: 2xx with valid = false, or 404 (key / activation unknown).
+                // Offline, 429 (too many requests), other 4xx and 5xx: stays activated, asked again next time.
+                const bool clearAnswer = (reply.http >= 200 && reply.http < 300) || reply.http == 404;
+                if (! reply.reached || ! clearAnswer)
+                    return;
                 rec.lastCheckMs = cfg.now();
                 rec.revoked = ! reply.ok;
                 store();
@@ -355,9 +403,9 @@ namespace vocalypse::licensing
                                                         { shortKey (rec.key), rec.customer.isNotEmpty() ? juce::String (", ") + rec.customer : juce::String() });
             case Access::trial:    return s.trialDaysLeft == 1 ? tr ("Testversion: noch 1 Tag", "Trial: 1 day left")
                                                                : i18n::format (tr ("Testversion: noch {0} Tage", "Trial: {0} days left"), { juce::String (s.trialDaysLeft) });
-            case Access::locked:   return rec.revoked ? tr ("Schlüssel ungültig - bitte neu aktivieren", "Key invalid - please activate again")
-                                                      : cfg.trialDays > 0 ? tr ("Testzeit vorbei - bitte aktivieren", "Trial over - please activate")
-                                                                          : tr ("Nicht aktiviert - bitte Schlüssel eingeben", "Not activated - please enter your key");
+            case Access::locked:   return rec.revoked ? tr ("Schlüssel ungültig – bitte neu aktivieren", "Key invalid – please activate again")
+                                                      : cfg.trialDays > 0 ? tr ("Testzeit vorbei – bitte aktivieren", "Trial over – please activate")
+                                                                          : tr ("Nicht aktiviert – bitte Schlüssel eingeben", "Not activated – please enter your key");
         }
         return {};
     }

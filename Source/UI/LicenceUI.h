@@ -6,12 +6,12 @@
 
 namespace vocalypse::ui
 {
-    // Asks for the key from the order mail and activates it (a small modal card)
+    // Asks for the key from the email and activates it (a small modal card)
     void showActivationDialog (licensing::Manager&, juce::Component* over);
 
     // Trial over / key invalid: covers the plugin, says why the vocal passes through unprocessed,
     // offers the key entry and the shop. Hidden whenever the licence is fine (or not checked at all).
-    class LicenceLock final : public juce::Component, private juce::ChangeListener
+    class LicenceLock final : public juce::Component, private juce::ChangeListener, private juce::Timer
     {
     public:
         LicenceLock();
@@ -23,6 +23,7 @@ namespace vocalypse::ui
 
     private:
         void changeListenerCallback (juce::ChangeBroadcaster*) override;
+        void timerCallback() override;
         void sync();
         juce::Rectangle<int> cardBounds() const;
 

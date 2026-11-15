@@ -54,12 +54,16 @@ namespace vocalypse::licensing
     {
         bool ok = false;            // activated / valid / deactivated
         bool reached = false;       // false: no network / server error - nothing is decided
+        int http = 0;               // the status code (0 = not reached)
         juce::String error, instanceId, customer, keyStatus;
     };
 
     // `okField`: "activated", "valid" or "deactivated". A key of another store / product is refused.
     Reply parseReply (const juce::String& json, int httpStatus, const juce::String& okField,
                       juce::int64 storeId, juce::int64 productId);
+
+    // A pasted key without what mail clients add (spaces, no-break spaces, line breaks, quotes)
+    juce::String cleanKey (const juce::String&);
 
     // Which product a licence file belongs to: the salt makes another product's file (or a hand-edited one) invalid
     struct FileIdentity
@@ -118,6 +122,11 @@ namespace vocalypse::licensing
         const juce::String& productName() const noexcept { return cfg.productName; }
         int trialDays() const noexcept { return cfg.trialDays; }
         bool freeKey() const noexcept { return cfg.freeKey; }
+        bool isBusy() const noexcept { return busy.load(); }
+        // Dialogs that outlive the window check this before they touch the Manager
+        std::weak_ptr<bool> lifetime() const { return alive; }
+        // Another process (a bridged plugin, a second host) may have activated: re-read the file if it changed
+        void reloadIfChanged();
 
     private:
         void store();
@@ -126,6 +135,7 @@ namespace vocalypse::licensing
 
         Config cfg;
         Record rec;
+        juce::Time fileTime;              // modification time of the file when last read / written
         std::atomic<bool> locked { false };
         std::atomic<bool> busy { false };
         std::shared_ptr<bool> alive = std::make_shared<bool> (true);

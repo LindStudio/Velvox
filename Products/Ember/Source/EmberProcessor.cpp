@@ -25,6 +25,7 @@ namespace ember
     EmberAudioProcessor::~EmberAudioProcessor()
     {
         stopTimer();
+        autoCancel->store (true);   // the pending analysis skips its remaining renders; ~future joins it quickly
     }
 
     bool EmberAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -55,6 +56,17 @@ namespace ember
         if (channels <= 0)
             return;
 
+        // Transport for Ember (Jakob 2026-11-15: he danced on in pause - FL keeps processing when stopped).
+        // Stopped only once the host has been seen playing: some hosts never report it, the standalone app
+        // has no play head.
+        if (auto* ph = getPlayHead())
+            if (const auto pos = ph->getPosition())
+            {
+                const bool playing = pos->getIsPlaying();
+                hostEverPlayed = hostEverPlayed || playing;
+                hostStopped.store (hostEverPlayed && ! playing, std::memory_order_relaxed);
+            }
+
         capture.push (buffer.getArrayOfReadPointers(), channels, buffer.getNumSamples());
         auto settings = params.read();
         if (licence->isLocked())
@@ -78,7 +90,9 @@ namespace ember
         if (xml == nullptr || ! xml->hasTagName (state.state.getType()))
             return;
         state.replaceState (juce::ValueTree::fromXml (*xml));
-        factoryIndex = (int) state.state.getProperty ("factoryPreset", 0);
+        factoryIndex = (int) state.state.getProperty ("factoryPreset", 0);   // never set = still the default preset
+        activeSlot = 0;                       // the slots held values from before this state
+        slotUsed[0] = slotUsed[1] = false;
         userPresetName = state.state.getProperty ("userPreset", juce::String()).toString();
         // replaceState leaves parameters that the saved state does not mention untouched and does not
         // always resend values; snap every parameter to the stored value (VOCALYPSE lesson 0.6.1)
@@ -120,7 +134,8 @@ namespace ember
 
     bool EmberAudioProcessor::saveUserPreset (const juce::File& file)
     {
-        const auto target = file.withFileExtension (presetExtension);
+        // "Lead 1.5" must not become "Lead 1.emberpreset" (and overwrite "Lead 1" without asking)
+        const auto target = file.hasFileExtension (presetExtension) ? file : file.getSiblingFile (file.getFileName() + presetExtension);
         if (! ember::saveUserPreset (target, ember::capture (state)))
             return false;
         factoryIndex = -1;
@@ -219,9 +234,10 @@ namespace ember
         std::vector<float> take (capture.data(), capture.data() + capture.getNumSamples());
         const double rate = capture.getSampleRate();
         autoPhase = AutoPhase::analysing;
-        pending = std::async (std::launch::async, [take = std::move (take), rate]
+        autoCancel = std::make_shared<std::atomic<bool>> (false);
+        pending = std::async (std::launch::async, [take = std::move (take), rate, cancel = autoCancel]
         {
-            return analyse (take.data(), (int) take.size(), rate);
+            return analyse (take.data(), (int) take.size(), rate, true, cancel.get());
         });
     }
 
@@ -265,6 +281,12 @@ namespace ember
         set (pid::threshold, r.thresholdDb);
         set (pid::range, r.rangeDb);
         set (pid::release, autoReleaseMs);
+        // AUTO measured with these; with other values its "S -x dB" would not hold
+        const Settings rendered;
+        set (pid::attack, rendered.attackMs);
+        set (pid::lookahead, rendered.lookaheadMs);
+        set (pid::mix, 100.0f);
+        set (pid::output, 0.0f);
         set (pid::amount, 50.0f);
         set (pid::mode, 0.0f);
         set (pid::detection, 0.0f);
@@ -282,7 +304,7 @@ namespace ember
         {
             case AutoPhase::idle: return {};
             case AutoPhase::listening:
-                return tr ("Ember hört zu … sing einfach weiter.", "Ember is listening … keep singing.");
+                return tr ("Ember hört zu … lass den Gesang weiterlaufen.", "Ember is listening … keep the vocal playing.");
             case AutoPhase::analysing:
                 return tr ("Ember probiert Einstellungen aus …", "Ember is trying settings …");
             case AutoPhase::done:

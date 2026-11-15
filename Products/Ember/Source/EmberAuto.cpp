@@ -18,7 +18,7 @@ namespace ember
         }
     }
 
-    AutoResult analyse (const float* mono, int numSamples, double fs, bool smart)
+    AutoResult analyse (const float* mono, int numSamples, double fs, bool smart, const std::atomic<bool>* cancel)
     {
         AutoResult r;
         r.seconds = fs > 0.0 ? numSamples / fs : 0.0;
@@ -190,6 +190,8 @@ namespace ember
         std::vector<float> y;
         const auto measure = [&] (float thr, float range)
         {
+            if (cancel != nullptr && cancel->load (std::memory_order_relaxed))
+                return Measured {};
             Settings st;
             st.freq = r.freq;
             st.thresholdDb = thr;
@@ -275,18 +277,25 @@ namespace ember
     // ------------------------------------------------------------- AutoCapture
     void AutoCapture::prepare (double sampleRate)
     {
-        if (sampleRate == fs && ! buffer.empty())
+        // The buffer (30 s, 6-23 MB) is made by start(), so instances that never use AUTO do not carry it
+        if (sampleRate == fs)
             return;
         state.store (idle, std::memory_order_release);
         fs = sampleRate;
-        buffer.assign ((size_t) (autoCapacitySeconds * sampleRate), 0.0f);
+        if (! buffer.empty())
+            buffer.assign ((size_t) (autoCapacitySeconds * sampleRate), 0.0f);
         count.store (0, std::memory_order_release);
     }
 
-    void AutoCapture::start() noexcept
+    void AutoCapture::start()
     {
-        if (buffer.empty())
+        if (fs <= 0.0)
             return;
+        if (buffer.size() != (size_t) (autoCapacitySeconds * fs))
+        {
+            state.store (idle, std::memory_order_release);   // the audio thread skips push() while idle
+            buffer.assign ((size_t) (autoCapacitySeconds * fs), 0.0f);
+        }
         count.store (0, std::memory_order_release);
         state.store (capturing, std::memory_order_release);
     }
@@ -304,7 +313,12 @@ namespace ember
         float peak = 0.0f;
         for (int ch = 0; ch < numChannels; ++ch)
             for (int i = 0; i < numSamples; ++i)
-                peak = std::max (peak, std::abs (channels[ch][i]));
+            {
+                const float v = channels[ch][i];
+                if (! std::isfinite (v))
+                    return;   // a broken block never reaches the analysis
+                peak = std::max (peak, std::abs (v));
+            }
         if (peak < 0.00316f)   // -50 dBFS: pauses are not part of the take
             return;
 
