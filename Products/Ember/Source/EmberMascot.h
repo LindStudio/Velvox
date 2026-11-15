@@ -1,7 +1,9 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <array>
 #include <map>
+#include <vector>
 #include <memory>
 
 // Ember, the imp of EMBER De-Esser.
@@ -11,55 +13,55 @@
 // otherwise with a vector placeholder, so the plugin is complete without art.
 namespace ember
 {
+    // Four moods only (Jakob 2026-11-15: "wir haben viel zu viele states"). The S EMBER takes away is no mood of
+    // its own: while he dances, every S is an accent - a snap and a spark at his hand, as strong as the reduction.
     enum class MascotState
     {
         sleeping,     // bypass
-        idle,         // no signal: smoke rings, tail wags
-        singing,      // signal, no S: bobs along
-        snapping,     // small reduction: ears twitch, snaps the S out of the air
-        fire,         // de-essing: spits fire, flame size = intensity (gain reduction)
-        overheated,   // too much (> 9 dB for a while): coughs, sweats, "Klingt gelispelt!"
-        listening,    // AUTO is listening: hand at the ear
-        proud         // AUTO finished: thumbs up
+        idle,         // no signal
+        dancing,      // signal: dances; S = accent (snap + spark)
+        listening     // AUTO is listening
     };
 
-    inline constexpr int numMascotStates = 8;
-    const char* mascotStateName (MascotState) noexcept;   // file prefix of the frames ("fire", "idle" ...)
+    inline constexpr int numMascotStates = 4;
+    const char* mascotStateName (MascotState) noexcept;   // file prefix of the frames ("dancing", "idle" ...)
 
     struct MascotInput
     {
         bool bypass = false;
         bool hasSignal = false;
         bool autoListening = false;
-        bool autoJustFinished = false;   // one tick: AUTO has just set the plugin up
         float reductionDb = 0.0f;
     };
 
     class MascotBrain
     {
     public:
-        // Thresholds (dB of gain reduction)
-        static constexpr float snapDb = 0.6f, fireDb = 1.5f, hotDb = 9.0f, coolDb = 7.0f;
-        // Fire stays while S keep coming: a phrase with an S every second or two is one fire, not fire-dance-fire
-        // (Jakob 2026-11-10: "wechselt oft zwischen tanzen und feuer, er soll bei einer pose bleiben").
-        // Back to dancing only after fireHoldS without any S; snapping likewise after snapHoldS.
-        static constexpr double hotAfterS = 0.4, coolAfterS = 0.8, proudForS = 2.5, fireHoldS = 4.0, snapHoldS = 2.5;
+        // Accent: an S starts when the reduction rises above accentDb (after it was below releaseDb), at most
+        // one per minAccentGapS. Too much (> hotDb for hotAfterS, until < coolDb for coolAfterS): "Klingt gelispelt!"
+        static constexpr float accentDb = 1.0f, releaseDb = 0.5f, hotDb = 9.0f, coolDb = 7.0f;
+        static constexpr double minAccentGapS = 0.15, accentDecayS = 0.35, hotAfterS = 0.4, coolAfterS = 0.8;
         // Calm (Jakob 2026-11-10: "Ember springt sehr viel herum"): a new mood must last debounceS, and a mood
-        // is shown at least minHoldS (bypass and AUTO switch at once)
+        // is shown at least minHoldS (bypass and AUTO switch at once). Short pauses in the vocal keep him dancing.
         static constexpr double debounceS = 0.25, minHoldS = 2.0;
 
         void update (const MascotInput& in, double dtSeconds) noexcept;
         MascotState getState() const noexcept { return state; }
-        float getIntensity() const noexcept { return intensity; }   // 0..1 (fire: reduction / 12 dB)
+        float getIntensity() const noexcept { return intensity; }      // 0..1, reduction / 12 dB (smoothed): the glow
+        float getAccent() const noexcept { return accent; }            // 1 at an S, falls to 0 in accentDecayS
+        float getAccentStrength() const noexcept { return strength; }  // 0.35..1 by the reduction of that S
+        int getAccentCount() const noexcept { return accents; }        // +1 per S (the view spawns sparks)
+        bool isHot() const noexcept { return hot; }
         double getTimeInState() const noexcept { return timeInState; }
 
     private:
         void setState (MascotState s) noexcept;
         MascotState state = MascotState::idle;
-        float intensity = 0.0f;
-        double timeInState = 0.0, hotFor = 0.0, coolFor = 0.0, proudLeft = 0.0, fireLeft = 0.0, snapLeft = 0.0, pendingFor = 0.0;
+        float intensity = 0.0f, accent = 0.0f, strength = 0.0f;
+        int accents = 0;
+        bool armed = true, hot = false;
+        double timeInState = 0.0, hotFor = 0.0, coolFor = 0.0, sinceAccent = 1.0, pendingFor = 0.0;
         MascotState pending = MascotState::idle;
-        bool hot = false;
     };
 
     // The clips of a mood: <state>_in_### (from the neutral pose into the mood, played once),
@@ -83,9 +85,9 @@ namespace ember
         juce::Image frame (MascotState s, MascotClip c, int index) const;   // message thread
         float fps (MascotState s) const noexcept;
         double duration (MascotState s, MascotClip c) const noexcept { return count (s, c) / (double) fps (s); }
-        // Where his mouth is in a frame, as a fraction of the (square) picture; (-1, -1) when mascot.json has none.
-        // The plugin draws the fire from there, as big as the reduction (the frames show only the pose).
-        juce::Point<float> mouth() const noexcept { return mouthFrac; }
+        // Where his hands are in dancing frame `index` (side 0 = left, 1 = right), as a fraction of the (square)
+        // picture; (-1, -1) when mascot.json has none. The S sparks fly from there.
+        juce::Point<float> hand (int index, int side) const noexcept;
         bool anyFrames() const noexcept { return ! frames.empty(); }
         void clear() { frames.clear(); }                                   // tests
         void add (MascotState s, MascotClip c, const juce::Image& img) { frames[key (s, c)].add ({ -1, img }); }   // tests
@@ -99,7 +101,7 @@ namespace ember
         std::map<int, juce::Array<Source>> frames;
         std::map<int, float> rates;
         float defaultFps = 24.0f;
-        juce::Point<float> mouthFrac { -1.0f, -1.0f };
+        std::vector<std::array<juce::Point<float>, 2>> hands;
         std::shared_ptr<FrameCache> cache;
     };
 
@@ -123,7 +125,9 @@ namespace ember
         MascotState getShownState() const noexcept { return shownState; }
         MascotClip getShownClip() const noexcept { return shownClip; }
         // Tests: one tick without the timer, and the frames to play
-        void stepForTest (double dt) { brain.update (input, dt); input.autoJustFinished = false; advanceClips (dt); }
+        void stepForTest (double dt) { brain.update (input, dt); advanceClips (dt); }
+        int getSparkCountForTest() const noexcept { return (int) particles.size(); }
+        void sparkForTest() { spawnSparks(); }
         MascotFrames& getFramesForTest() noexcept { return frames; }
         bool usesFrames() const noexcept { return frames.anyFrames(); }
 
@@ -132,17 +136,22 @@ namespace ember
         void advanceClips (double dt);
         void paintFrame (juce::Graphics&, juce::Rectangle<float> area, MascotState, MascotClip, double time, float alpha);
         void paintPlaceholder (juce::Graphics&, juce::Rectangle<float> area);
-        void paintFire (juce::Graphics&);
+        void paintSparks (juce::Graphics&);
+        void spawnSparks();
+        juce::Rectangle<float> frameBox() const;
+        float accentTilt() const noexcept;
         void paintBubble (juce::Graphics&, juce::Rectangle<float> area);
 
-        struct Particle { juce::Point<float> pos, vel; float life, size; bool smoke; };
+        enum class Kind { spark, letter, smoke };
+        struct Particle { juce::Point<float> pos, vel; float life, size; Kind kind; };
         std::vector<Particle> particles;
         juce::Random random;
         MascotBrain brain;
         MascotInput input;
         MascotFrames frames;
         juce::String bubble;
-        juce::Point<float> mouth;
+        juce::Point<float> mouth;   // placeholder only
+        int lastAccents = 0, accentSide = 1;
         // What is on screen (follows the brain through the in / loop / out clips)
         MascotState shownState = MascotState::idle;
         MascotClip shownClip = MascotClip::loop;

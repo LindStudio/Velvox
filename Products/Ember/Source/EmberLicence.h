@@ -22,6 +22,8 @@ namespace ember
         c.productName = "EMBER";   // file: %APPDATA%\Lind Audio\EMBER\EMBER.license
         c.identity = { "EMBER/Lnda/Embr/3f9a", "EmberLicence" };
         c.buyUrl = buyUrl;
+        c.trialDays = 0;      // Jakob 2026-11-15: EMBER only runs with a key ...
+        c.freeKey = true;     // ... which is free and comes by mail (mailing list)
         c.storeId = lemonStoreId;
         c.productId = lemonProductId;
         return c;

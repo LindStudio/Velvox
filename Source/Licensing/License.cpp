@@ -28,12 +28,12 @@ namespace vocalypse::licensing
             if (r.keyStatus == "disabled")
                 return tr ("Dieser Schlüssel wurde deaktiviert. Schreib uns, wenn das ein Fehler ist.",
                            "This key has been disabled. Write to us if that is a mistake.");
-            return tr ("Dieser Schlüssel passt nicht. Kopier ihn genau so aus der Bestell-Mail.",
-                       "This key does not work. Copy it exactly as it is in the order mail.");
+            return tr ("Dieser Schlüssel passt nicht. Kopier ihn genau so aus der Mail.",
+                       "This key does not work. Copy it exactly as it is in the mail.");
         }
     }
 
-    Status evaluate (const Record& r, juce::int64 nowMs, bool licensingOn) noexcept
+    Status evaluate (const Record& r, juce::int64 nowMs, bool licensingOn, int trialDaysAllowed) noexcept
     {
         Status s;
         if (! licensingOn)
@@ -48,7 +48,7 @@ namespace vocalypse::licensing
 
         const juce::int64 start = r.firstRunMs > 0 ? r.firstRunMs : nowMs;
         const juce::int64 used = juce::jmax ((juce::int64) 0, nowMs - start);
-        const juce::int64 left = trialDays * dayMs - used;
+        const juce::int64 left = juce::jmax (0, trialDaysAllowed) * dayMs - used;   // 0 days: locked at once
         if (left > 0)
         {
             s.access = Access::trial;
@@ -205,7 +205,7 @@ namespace vocalypse::licensing
 
     Status Manager::status() const
     {
-        return evaluate (rec, cfg.now(), cfg.on);
+        return evaluate (rec, cfg.now(), cfg.on, cfg.trialDays);
     }
 
     void Manager::update()
@@ -356,7 +356,8 @@ namespace vocalypse::licensing
             case Access::trial:    return s.trialDaysLeft == 1 ? tr ("Testversion: noch 1 Tag", "Trial: 1 day left")
                                                                : i18n::format (tr ("Testversion: noch {0} Tage", "Trial: {0} days left"), { juce::String (s.trialDaysLeft) });
             case Access::locked:   return rec.revoked ? tr ("Schlüssel ungültig - bitte neu aktivieren", "Key invalid - please activate again")
-                                                      : tr ("Testzeit vorbei - bitte aktivieren", "Trial over - please activate");
+                                                      : cfg.trialDays > 0 ? tr ("Testzeit vorbei - bitte aktivieren", "Trial over - please activate")
+                                                                          : tr ("Nicht aktiviert - bitte Schlüssel eingeben", "Not activated - please enter your key");
         }
         return {};
     }

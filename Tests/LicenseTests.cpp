@@ -59,6 +59,8 @@ public:
             expect (s.access == Access::trial);
             expectEquals (s.trialDaysLeft, 1);
             expect (evaluate (r, 1014 * day, true).access == Access::locked);
+            expect (evaluate (r, 1000 * day, true, 0).access == Access::locked, "0 trial days: locked from the first start");
+            expect (evaluate (r, 1000 * day + 3 * day, true, 7).trialDaysLeft == 4, "own trial length");
             r.firstRunMs = 0;
             expect (evaluate (r, 5, true).access == Access::trial, "no start stored: the trial starts now");
         }

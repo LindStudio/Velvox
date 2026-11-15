@@ -1,6 +1,26 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
-## STAND 2026-11-13 – HIER WEITERMACHEN
+## STAND 2026-11-15 – HIER WEITERMACHEN
+Jakob: „ember läuft nur über schlüssel, den schlüssel bekommt man nur per mail“ und „wir brauchen sleep, idle,
+zuhören und tanzen“; beim Tanzen waren an der Taille rote Blöcke zu sehen, wenn die Arme abstanden.
+- **Lizenz ohne Testzeit:** `licensing::Config` hat jetzt `trialDays` (VOCALYPSE 14, EMBER 0) und `freeKey`.
+  EMBER ist ohne Schlüssel ab dem ersten Start gesperrt (Audio unbearbeitet durch), die Sperrkarte sagt
+  „EMBER braucht einen Lizenzschlüssel“ und bietet „Gratis-Schlüssel holen“ (Checkout-Link) und „Lizenzschlüssel
+  eingeben“. Tests: EMBER „first start without key -> locked“, LicenseTests „0 trial days“.
+- **Maskottchen: nur noch 4 Stimmungen** `sleeping`, `idle`, `dancing`, `listening` (Feuer, Schnappen, Überhitzt,
+  Stolz entfernt). Jedes abgesenkte S ist ein **Akzent im Tanz**: kurzes Nicken/Einknicken zur Hand hin, Funken und
+  ein „S“ fliegen von der Hand weg (Stärke nach Reduktion; `MascotBrain::getAccent*`, ein Akzent pro S, frühestens
+  alle 0,15 s). Über 9 dB: nur noch die Sprechblase „Klingt gelispelt!“.
+- **Arme als eigene Ebenen** in `tools/mascot/puppet_ember.py` (unter `ARM_CUT` trennt die Kontur Arm und Bauch;
+  der Bauch behält die gemeinsame Linie) -> keine roten Blöcke mehr. Neuer Tanz (120 BPM, Arme abwechselnd raus).
+  `mascot.json` hat statt `mouth` jetzt `hands` (Handposition je Tanz-Bild). 156 Bilder, 4,9 MB.
+- Handbuch DE/EN, Shop-Text, Erklärkarte angepasst. Vorschau: Drive `Maskottchen/Animation/Puppe_Vorschau/
+  Tanz_mit_S-Funken_2026-11-15.mp4` (die alten 01–08-Vorschauen sind überholt).
+- 203 EMBER-Checks grün (Lizenz AN, `build-licence`). Nicht installiert (mit Lizenz AN und ohne Testzeit wäre
+  EMBER bei Jakob sofort gesperrt, bis er einen Test-Schlüssel aktiviert).
+- Offen: Website (`site_text.py` „moods“ zeigt noch fire/overheated-Bilder), Jakobs Urteil zum Tanz.
+
+## STAND 2026-11-13
 Jakob verglich EMBER mit FabFilter Pro-DS (gleiche Vocal, gleiche Fenstergröße): Schrift unlesbar, im Delta hört man
 die Stimme. Erledigt (feature/ember-deesser, installiert mit Lizenz AN aus `build-licence`, nicht gepusht):
 - **Smart-Gate neu** (`EmberEngine.h`): Index = 5-ms-RMS über 4 kHz gegen Stimmkörper 150 Hz–3 kHz, Gewicht 0 bei

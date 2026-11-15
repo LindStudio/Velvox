@@ -32,8 +32,13 @@ NECK = (512, 520)            # head pivot
 TAIL_BASE = (640, 770)
 EAR_L = (360, 375)           # ear bases (pivots)
 EAR_R = (668, 375)
-SHOULDER_L = (385, 545)
-SHOULDER_R = (640, 545)
+# arms (2026-11-15): own layers below ARM_CUT, where the outline separates them from the torso; they bend from
+# the cut (weight 0) to ARM_CUT + 70 (weight 1) around the shoulder points, hands at HAND_*
+ARM_CUT = 585
+SHOULDER_L = (363, 585)
+SHOULDER_R = (660, 585)
+HAND_L = (345, 722)
+HAND_R = (680, 722)
 
 
 def rot_inverse(px, py, c, deg):
@@ -92,9 +97,30 @@ class Puppet:
         # ears: outside the face
         self.w_ear_l = (1 - smoothstep(px, EAR_L[0] - 5, EAR_L[0] + 20)) * (1 - smoothstep(py, 410, 440)) * smoothstep(py, 260, 280)
         self.w_ear_r = smoothstep(px, EAR_R[0] - 20, EAR_R[0] + 5) * (1 - smoothstep(py, 410, 440)) * smoothstep(py, 260, 280)
-        # arms: outside the torso, from the shoulder down (the right hand stays clear of the tail box)
-        self.w_arm_l = (1 - smoothstep(px, SHOULDER_L[0] - 5, SHOULDER_L[0] + 15)) * smoothstep(py, 560, 600) * (1 - smoothstep(py, 760, 780))
-        self.w_arm_r = smoothstep(px, SHOULDER_R[0] - 15, SHOULDER_R[0] + 5) * smoothstep(py, 560, 600) * (1 - smoothstep(py, 760, 780)) * (1 - self.tail_mask)
+        # arms: their own layers (Jakob 2026-11-15: red blocks at the waist when the arms swung out - the old
+        # weight box turned torso pixels with the arm). Below ARM_CUT the dark outline separates arm and torso:
+        # each arm is the fill inside its outline plus its own side of the line; the torso keeps the shared line,
+        # so it still has an edge where the arm swings away.
+        lum = rgb @ np.array([0.3, 0.59, 0.11], np.float32)
+        below = py >= ARM_CUT
+        fill = (al > 0.5) & (lum >= 0.30) & below & (py < 800)
+        lab, n = ndimage.label(fill)
+        sizes = ndimage.sum(fill, lab, range(1, n + 1))
+        order = np.argsort(-sizes)
+        torso = lab == order[0] + 1
+        arms = sorted((lab == i + 1 for i in order[1:3]), key=lambda m: np.nonzero(m)[1].mean())   # left, right
+        d_t = ndimage.distance_transform_edt(~torso)
+        self.arm_layer, self.arm_rm = [], []
+        for m in arms:
+            d_a = ndimage.distance_transform_edt(~m)
+            near = (d_a <= 9) & ~tail
+            # at the cut the two overlap (layer from 8 px above, removal from 4 px below; the arm does not move
+            # there yet), so no soft seam lets the background through
+            layer = near & (d_a <= d_t + 1) & (py >= ARM_CUT - 8)
+            rm = near & (d_a + 1 < d_t) & (py >= ARM_CUT + 4)
+            self.arm_layer.append(ndimage.gaussian_filter(layer.astype(np.float32), 0.7) * (py >= ARM_CUT - 8))
+            self.arm_rm.append(ndimage.gaussian_filter(rm.astype(np.float32), 0.7) * (py >= ARM_CUT + 4))
+        self.w_arm = smoothstep(py, ARM_CUT, ARM_CUT + 70)
         self.w_belly = np.exp(-(((px - 512) / 150) ** 2 + ((py - 640) / 120) ** 2))
 
     def _eyes(self):
@@ -262,9 +288,9 @@ class Puppet:
 
         body = parts([(wt(self.w_head), NECK, pose.get('head', 0)),
                       (wt(self.w_ear_l), EAR_L, pose.get('ear_l', 0)),
-                      (wt(self.w_ear_r), EAR_R, pose.get('ear_r', 0)),
-                      (wt(self.w_arm_l), SHOULDER_L, pose.get('arm_l', 0)),
-                      (wt(self.w_arm_r), SHOULDER_R, pose.get('arm_r', 0))])
+                      (wt(self.w_ear_r), EAR_R, pose.get('ear_r', 0))])
+        wa = wt(self.w_arm)
+        arm_maps = [parts([(wa, SHOULDER_L, pose.get('arm_l', 0))]), parts([(wa, SHOULDER_R, pose.get('arm_r', 0))])]
         # the tail layer bends: the further out, the more it turns (two joints)
         wtl = wt(self.w_tail)
         tail = parts([(wtl, TAIL_BASE, pose.get('tail', 0) * 0.6), (wtl ** 2, TAIL_BASE, pose.get('tail', 0) * 0.4)])
@@ -280,9 +306,13 @@ class Puppet:
                              for c in range(4)], axis=2)
 
         t = self.tail_mask[..., None]
-        out_body = warp(pm * (1 - t), body)
+        rm = np.clip(self.arm_rm[0] + self.arm_rm[1], 0, 1)[..., None]
+        out_body = warp(pm * (1 - t) * (1 - rm), body)
         out_tail = warp(pm * t, tail)
         out = out_body + out_tail * (1 - out_body[..., 3:4])     # tail under the body
+        for mask, m in zip(self.arm_layer, arm_maps):              # arms over both
+            arm = warp(pm * mask[..., None], m)
+            out = arm + out * (1 - arm[..., 3:4])
         a = out[..., 3:4]
         out[..., :3] = np.where(a > 1e-4, out[..., :3] / np.maximum(a, 1e-4), 0)
         return out
@@ -342,10 +372,19 @@ MOUTH = (518, 470)
 
 def head_point(p, pose):
     """Where a point on the head ends up for this pose - effects follow the head."""
-    a = math.radians(pose.get('head', 0.0))
-    dx, dy = p[0] - NECK[0], p[1] - NECK[1]
-    x = NECK[0] + math.cos(a) * dx - math.sin(a) * dy
-    y = NECK[1] + math.sin(a) * dx + math.cos(a) * dy
+    return body_point(p, NECK, pose.get('head', 0.0), pose)
+
+
+def hand_point(side, pose):
+    """Where a hand ends up for this pose (side 0 = left, 1 = right) - the plugin's S sparks fly from there."""
+    return body_point((HAND_L, HAND_R)[side], (SHOULDER_L, SHOULDER_R)[side], pose.get(('arm_l', 'arm_r')[side], 0.0), pose)
+
+
+def body_point(p, pivot, deg, pose):
+    a = math.radians(deg)
+    dx, dy = p[0] - pivot[0], p[1] - pivot[1]
+    x = pivot[0] + math.cos(a) * dx - math.sin(a) * dy
+    y = pivot[1] + math.sin(a) * dx + math.cos(a) * dy
     sx, sy = body_scale(pose)
     x = FOOT[0] + (x - FOOT[0]) * sx
     y = FOOT[1] + (y - FOOT[1]) * sy
@@ -458,65 +497,21 @@ def idle(t, T):
     return pose, close, None
 
 
-def singing(t, T):
-    """Grooves along (120 BPM): bounces with squash and stretch, sways side to side, head bops, mouth sings,
-    eyes wander, notes rise."""
+def dancing(t, T):
+    """Signal (Jakob 2026-11-15: four moods only, he dances while the vocal plays): bounces on the beat
+    (120 BPM) with squash and stretch, steps from side to side, swings one arm out after the other and leans
+    with it, head bops, ears and tail swing. The S he takes away is drawn live by the plugin: a snap and a
+    spark at the hands (mascot.json "hands", per frame)."""
     beat = (t * 2.0) % 1.0
     up = math.sin(math.pi * beat)                                  # 0 on the beat, 1 between
-    land = max(0.0, 1.0 - beat / 0.18) if beat < 0.18 else 0.0     # squash just after the beat
-    pose = dict(bob=26.0 * up, squash=0.06 * land - 0.03 * up, lean=6.0 * cyc(t, T), head=9.0 * cyc(t, T, 0.1),
-                look=12.0 * cyc(t, T, 0.25), tail=26.0 * cyc(t, T / 2), ear_l=8.0 * cyc(t, T / 2), ear_r=-8.0 * cyc(t, T / 2),
-                arm_l=10.0 * cyc(t, T / 2), arm_r=-10.0 * cyc(t, T / 2), mouth=0.25 + 0.75 * up, breath=0.5)
-
-    def fx(f, pose):
-        for i in range(3):
-            ph = (t / T + i / 3.0) % 1.0
-            x = 720 + 35 * i + 30 * math.sin(2 * math.pi * ph * 1.5 + i)
-            y = 470 - 270 * ph
-            f.note(x, y, 30 + 6 * (i % 2), (255, 214, 140), 0.95 * math.sin(math.pi * ph))
-    return pose, 0.0, fx
-
-
-def snapping(t, T):
-    """A small S: ears shoot up, he leans in and snaps at it twice (chomp), eyes dart to it."""
-    snap1, snap2 = pulse(t, 0.15, 0.25), pulse(t, 0.55, 0.25)
-    snap = max(snap1, snap2)
-    alert = pulse(t, 0.0, 1.2)
-    pose = dict(lean=7.0 * alert, head=-10.0 * snap + 3.0 * alert, ear_l=22.0 * alert, ear_r=-22.0 * alert,
-                look=14.0 * alert, mouth=0.9 * snap, bob=10.0 * snap, squash=-0.03 * snap, tail=20.0 * cyc(t, T / 2),
-                arm_l=-8.0 * alert, arm_r=8.0 * alert, breath=0.6)
-    return pose, 0.0, None
-
-
-def fire(t, T):
-    """Spits fire. The plugin draws the flames from his mouth, as big as the reduction; here: leans back, head
-    back, chest puffed, mouth wide, shaking with the effort, tail up."""
-    tr = math.sin(2 * math.pi * t * 6.0)
-    pose = dict(lean=-6.0 + 1.5 * tr, head=-10.0 + 2.5 * tr, mouth=1.0, breath=2.2, squash=-0.02, bob=3.0 * tr,
-                tail=30.0 + 8.0 * cyc(t, T / 2), ear_l=-14.0, ear_r=14.0, look=10.0, arm_l=-14.0, arm_r=14.0)
-    return pose, 0.0, None
-
-
-def overheated(t, T):
-    """Too much: shakes all over, sweats, doubles over coughing puffs of smoke."""
-    tr = math.sin(2 * math.pi * t * 9.0)
-    cough = max(pulse(t, 0.3, 0.35), pulse(t, 1.3, 0.35))
-    pose = dict(lean=2.5 * tr + 10.0 * cough, head=1.5 * tr + 12.0 * cough, bob=-6.0 * cough, squash=0.07 * cough,
-                mouth=0.2 + 0.8 * cough, breath=0.8 - 0.8 * cough, tail=-18.0 + 6.0 * tr, ear_l=16.0, ear_r=-16.0,
-                look=-8.0, arm_l=6.0 * cough, arm_r=-6.0 * cough)
-
-    def fx(f, pose):
-        for px_, ph0 in ((405, 0.0), (630, 0.45), (380, 0.7)):
-            ph = (t / T + ph0) % 1.0
-            x, y = head_point((px_, 300 + 120 * ph), pose)
-            f.drop(x, y, 18, 0.95 * math.sin(math.pi * ph))
-        for at in (0.3, 1.3):
-            k = (t - at) / 0.9
-            if 0 <= k <= 1:
-                mx, my = head_point(MOUTH, pose)
-                for j in range(4):
-                    f.circle(mx + 30 + 110 * k + 26 * j, my - 10 - 70 * k - 12 * j, 16 + 34 * k + 6 * j, (175, 165, 165), 0.6 * (1 - k))
-    return pose, 0.0, fx
+    land = max(0.0, 1.0 - beat / 0.2) if beat < 0.2 else 0.0       # squash just after the beat
+    s = math.sin(2 * math.pi * t / 1.0)                            # one side per beat
+    a_l, a_r = ease(max(0.0, s)), ease(max(0.0, -s))
+    pose = dict(bob=22.0 * up, squash=0.06 * land - 0.025 * up, lean=-6.0 * s, head=5.0 * s + 4.0 * cyc(t, 0.5, 0.15),
+                look=10.0 * s, tail=24.0 * cyc(t, 1.0, 0.2), ear_l=7.0 * cyc(t, 0.5), ear_r=-7.0 * cyc(t, 0.5),
+                arm_l=(5.0 + 30.0 * a_l) - 6.0 * a_r, arm_r=-(5.0 + 30.0 * a_r) + 6.0 * a_l,   # + = left hand out
+                mouth=0.2 + 0.15 * up, breath=0.5)
+    return pose, min(1.0, 1.3 * pulse(t, 1.55, 0.36)), None
 
 
 def sleeping(t, T):
@@ -550,33 +545,11 @@ def listening(t, T):
     return pose, min(1.0, 1.3 * pulse(t, 1.4, 0.42)), fx
 
 
-def proud(t, T):
-    """AUTO is done: crouches, jumps for joy with his arms out, lands, chest out, sparkles."""
-    crouch = pulse(t, 0.0, 0.3)
-    hop = pulse(t, 0.25, 0.55)
-    land = pulse(t, 0.8, 0.25)
-    pose = dict(bob=70.0 * hop - 8.0 * land - 6.0 * crouch, squash=0.10 * crouch + 0.10 * land - 0.06 * hop,
-                breath=2.0, head=-8.0 * hop + 4.0 * math.sin(2 * math.pi * t / T), lean=-3.0 * hop,
-                mouth=0.7, tail=30.0 * cyc(t, T / 4), ear_l=-18.0 * hop, ear_r=18.0 * hop,
-                arm_l=-30.0 * hop, arm_r=30.0 * hop)
-
-    def fx(f, pose):
-        for i, (sx_, sy_) in enumerate(((320, 230), (710, 210), (770, 400), (260, 430))):
-            ph = (t * 1.5 + i * 0.27) % 1.0
-            x, y = head_point((sx_, sy_), pose)
-            f.star(x, y, 22 + 28 * math.sin(math.pi * ph), (255, 230, 150), math.sin(math.pi * ph))
-    return pose, 0.0, fx
-
-
 STATES = {
     'idle': (idle, 4.0),
-    'singing': (singing, 2.0),
-    'snapping': (snapping, 1.5),
-    'fire': (fire, 1.0),
-    'overheated': (overheated, 2.0),
+    'dancing': (dancing, 2.0),
     'sleeping': (sleeping, 4.0),
     'listening': (listening, 3.0),
-    'proud': (proud, 2.0),
 }
 
 
@@ -627,15 +600,18 @@ def main():
                        duration=int(1000 / FPS), loop=0, disposal=2)
         print(name, n, 'frames')
     if a.plugin:
-        # the fire leaves the open mouth of the fire pose (mid of its tremble)
-        pose, _, _ = fire(0.0, 1.0)
-        mx, my = frame_point(head_point((MOUTH[0], MOUTH[1] - 4), pose))
+        # where his hands are in every dancing frame: the plugin's S sparks fly from there
+        fn, T = STATES['dancing']
+        hands = []
+        for i in range(int(round(T * FPS))):
+            pose = fn(i / FPS, T)[0]
+            hands.append([[round(c, 1) for c in frame_point(hand_point(s, pose))] for s in (0, 1)])
         import json
         with open(os.path.join(os.path.dirname(os.path.abspath(a.out)), 'mascot.json'), 'w', encoding='utf-8') as fh:
-            json.dump({'fps': FPS, 'mouth': [round(mx, 1), round(my, 1), OUT],
+            json.dump({'fps': FPS, 'size': OUT, 'hands': hands,
                        '_source': 'tools/mascot/puppet_ember.py <Drive: Plugins/01 EMBER De-Esser/Embernew.png> '
-                                  'Products/Ember/Mascot/frames --plugin'}, fh, indent=2)
-        print('mascot.json: mouth', round(mx), round(my))
+                                  'Products/Ember/Mascot/frames --plugin'}, fh, indent=1)
+        print('mascot.json: hands for', len(hands), 'dancing frames')
 
 
 if __name__ == '__main__':

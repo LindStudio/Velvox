@@ -22,7 +22,7 @@
 
 ### Lern Ember kennen
 
-Ember ist ein kleiner roter Teufel und sitzt mitten im Plugin. Ohne Signal raucht er gemütlich, beim Singen tanzt er, bei Zischlauten speit er Feuer. Wird zu stark abgesenkt, überhitzt er und hustet „Sounds lispy!“ – so siehst du sofort, was mit deiner Stimme passiert, ohne auf Zahlen zu starren.
+Ember ist ein kleiner roter Teufel und sitzt mitten im Plugin. Läuft die Stimme, tanzt er mit, und jedes S, das EMBER absenkt, schnippt er als Funken weg. Wird zu stark abgesenkt, sagt er „Klingt gelispelt!“ – so siehst du sofort, was mit deiner Stimme passiert, ohne auf Zahlen zu starren.
 
 ### Systemvoraussetzungen
 
@@ -49,7 +49,7 @@ Ember ist ein kleiner roter Teufel und sitzt mitten im Plugin. Ohne Signal rauch
 
 ### Meet Ember
 
-Ember is a small red devil imp who lives in the middle of the plugin. With no signal he sits and smokes, while you sing he dances, and when sibilants hit he spits fire. Push the reduction too far and he overheats, coughing "Sounds lispy!" – so you see what is happening to your voice at a glance, without staring at numbers.
+Ember is a small red devil imp who lives in the middle of the plugin. While the vocal plays he dances along, and every S that EMBER reduces he flicks away as a spark. Push the reduction too far and he says "Sounds lispy!" – so you see what is happening to your voice at a glance, without staring at numbers.
 
 ### System requirements
 

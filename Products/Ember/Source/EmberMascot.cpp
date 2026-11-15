@@ -18,12 +18,8 @@ namespace ember
         {
             case MascotState::sleeping:   return "sleeping";
             case MascotState::idle:       return "idle";
-            case MascotState::singing:    return "singing";
-            case MascotState::snapping:   return "snapping";
-            case MascotState::fire:       return "fire";
-            case MascotState::overheated: return "overheated";
+            case MascotState::dancing:    return "dancing";
             case MascotState::listening:  return "listening";
-            case MascotState::proud:      return "proud";
         }
         return "idle";
     }
@@ -41,11 +37,8 @@ namespace ember
     void MascotBrain::update (const MascotInput& in, double dt) noexcept
     {
         timeInState += dt;
-        if (in.autoJustFinished)
-            proudLeft = proudForS;
-        proudLeft = std::max (0.0, proudLeft - dt);
 
-        // Overheat with hysteresis: in after hotAfterS above hotDb, out after coolAfterS below coolDb
+        // Too much with hysteresis: in after hotAfterS above hotDb, out after coolAfterS below coolDb
         const float gr = in.bypass ? 0.0f : in.reductionDb;
         hotFor = gr > hotDb ? hotFor + dt : 0.0;
         coolFor = gr < coolDb ? coolFor + dt : 0.0;
@@ -54,23 +47,32 @@ namespace ember
         if (hot && coolFor >= coolAfterS)
             hot = false;
 
-        // The flame stays a moment after the S, so a short S still shows a puff of fire
-        fireLeft = gr > fireDb ? fireHoldS : std::max (0.0, fireLeft - dt);
-        snapLeft = gr > snapDb ? snapHoldS : std::max (0.0, snapLeft - dt);
+        // One accent per S: rises above accentDb, re-armed once the reduction fell below releaseDb
+        sinceAccent += dt;
+        accent = std::max (0.0f, accent - (float) (dt / accentDecayS));
+        if (gr < releaseDb)
+            armed = true;
+        if (armed && gr > accentDb && sinceAccent >= minAccentGapS)
+        {
+            armed = false;
+            sinceAccent = 0.0;
+            accent = 1.0f;
+            strength = juce::jlimit (0.35f, 1.0f, 0.35f + gr / 8.0f);
+            ++accents;
+        }
+        else if (! armed && accent > 0.0f)
+            strength = std::max (strength, juce::jlimit (0.35f, 1.0f, 0.35f + gr / 8.0f));   // the S grows
+
         const float target = juce::jlimit (0.0f, 1.0f, gr / 12.0f);
         intensity += (target - intensity) * (target > intensity ? 0.6f : 0.15f);
 
         MascotState wanted;
         if (in.bypass)                   wanted = MascotState::sleeping;
         else if (in.autoListening)       wanted = MascotState::listening;
-        else if (proudLeft > 0.0)        wanted = MascotState::proud;
-        else if (hot)                    wanted = MascotState::overheated;
-        else if (fireLeft > 0.0)         wanted = MascotState::fire;
-        else if (snapLeft > 0.0)         wanted = MascotState::snapping;
-        else if (in.hasSignal)           wanted = MascotState::singing;
+        else if (in.hasSignal || gr > 0.0f) wanted = MascotState::dancing;
         else                             wanted = MascotState::idle;
 
-        const bool immediate = wanted == MascotState::sleeping || wanted == MascotState::listening || wanted == MascotState::proud
+        const bool immediate = wanted == MascotState::sleeping || wanted == MascotState::listening
                             || state == MascotState::sleeping || state == MascotState::listening;
         if (wanted == state)
         {
@@ -146,7 +148,7 @@ namespace ember
 
     MascotFrames::MascotFrames() : cache (acquireCache())
     {
-        // File names: <state>_<number>.png, e.g. fire_001.png ... (Products/Ember/Mascot/frames)
+        // File names: <state>_<number>.png, e.g. dancing_001.png ... (Products/Ember/Mascot/frames)
         for (int i = 0; i < EmberMascotData::namedResourceListSize; ++i)
         {
             const auto* resource = EmberMascotData::namedResourceList[i];
@@ -163,16 +165,25 @@ namespace ember
                     frames[key ((MascotState) s, clip)].add ({ i, {} });   // resources come sorted by name: 001, 002 ...
         }
 
-        // Optional frame rates: Mascot/mascot.json {"fps": 24, "states": {"fire": 30}}
+        // Mascot/mascot.json: {"fps": 12, "size": 600, "hands": [[[lx, ly], [rx, ry]] per dancing frame],
+        // optional "states": {"dancing": 24}}
         int size = 0;
         if (const char* json = EmberMascotData::getNamedResource ("mascot_json", size))
         {
             const auto v = juce::JSON::parse (juce::String::fromUTF8 (json, size));
             if (v.hasProperty ("fps"))
                 defaultFps = (float) (double) v["fps"];
-            // "mouth": [x, y, size] in frame pixels
-            if (auto* m = v["mouth"].getArray(); m != nullptr && m->size() == 3 && (double) (*m)[2] > 0.0)
-                mouthFrac = { (float) ((double) (*m)[0] / (double) (*m)[2]), (float) ((double) (*m)[1] / (double) (*m)[2]) };
+            const double frameSize = v.hasProperty ("size") ? (double) v["size"] : 0.0;
+            if (auto* list = v["hands"].getArray(); list != nullptr && frameSize > 0.0)
+                for (const auto& f : *list)
+                    if (auto* pair = f.getArray(); pair != nullptr && pair->size() == 2)
+                    {
+                        std::array<juce::Point<float>, 2> h;
+                        for (int s = 0; s < 2; ++s)
+                            if (auto* xy = (*pair)[s].getArray(); xy != nullptr && xy->size() == 2)
+                                h[(size_t) s] = { (float) ((double) (*xy)[0] / frameSize), (float) ((double) (*xy)[1] / frameSize) };
+                        hands.push_back (h);
+                    }
             if (auto* states = v["states"].getDynamicObject())
                 for (const auto& p : states->getProperties())
                     for (int s = 0; s < numMascotStates; ++s)
@@ -182,6 +193,13 @@ namespace ember
     }
 
     bool MascotFrames::has (MascotState s, MascotClip c) const noexcept { return count (s, c) > 0; }
+
+    juce::Point<float> MascotFrames::hand (int index, int side) const noexcept
+    {
+        if (hands.empty())
+            return { -1.0f, -1.0f };
+        return hands[(size_t) (((index % (int) hands.size()) + (int) hands.size()) % (int) hands.size())][(size_t) juce::jlimit (0, 1, side)];
+    }
 
     int MascotFrames::count (MascotState s, MascotClip c) const noexcept
     {
@@ -226,52 +244,83 @@ namespace ember
         constexpr double dt = 1.0 / 30.0;
         t += dt;
         brain.update (input, dt);
-        input.autoJustFinished = false;
         advanceClips (dt);
 
-        const auto st = brain.getState();
-        const float k = brain.getIntensity();
-        const bool fireNow = st == MascotState::fire || st == MascotState::overheated;
+        if (brain.getAccentCount() != lastAccents)
+        {
+            lastAccents = brain.getAccentCount();
+            if (brain.getState() == MascotState::dancing)
+                spawnSparks();
+        }
         const float scale = getHeight() / 300.0f;
-
-        // Fire comes from his mouth: the placeholder's, or the one mascot.json gives for the frames
-        const bool mouthKnown = ! frames.has (st) || (st == MascotState::fire && frames.mouth().x >= 0.0f);   // overheated frames cough smoke
-        if (frames.has (st) && mouthKnown)
+        if (! frames.has (brain.getState()))
         {
-            // the same box paintFrame draws the picture into (frames with motion are drawn untransformed)
-            const auto area = getLocalBounds().toFloat();
-            const float side = std::min (area.getWidth(), area.getHeight() * 1.1f);
-            const auto box = juce::Rectangle<float> (side, side).withCentre (area.getCentre()).withBottom (area.getBottom() + side * 0.04f);
-            mouth = { box.getX() + frames.mouth().x * side, box.getY() + frames.mouth().y * side };
-        }
-        if (fireNow && mouthKnown)
-        {
-            {
-                const int n = 1 + (int) (k * 10.0f);
-                for (int i = 0; i < n; ++i)
-                    particles.push_back ({ mouth, { (3.0f + random.nextFloat() * 3.0f + k * 6.0f) * scale,
-                                                    (random.nextFloat() - 0.5f) * (1.5f + k * 4.0f) * scale },
-                                           1.0f, (5.0f + random.nextFloat() * 5.0f + k * 9.0f) * scale, false });
-            }
-        }
-        if (! frames.has (st))
-        {
-            const bool smoky = st == MascotState::idle || st == MascotState::sleeping || st == MascotState::overheated;
-            if (smoky && random.nextFloat() < 0.06f)
-                particles.push_back ({ mouth.translated (-20.0f * scale, -30.0f * scale), { 0.3f * scale, -0.9f * scale }, 1.0f, 5.0f * scale, true });
+            const auto st = brain.getState();
+            if ((st == MascotState::idle || st == MascotState::sleeping) && random.nextFloat() < 0.06f)
+                particles.push_back ({ mouth.translated (-20.0f * scale, -30.0f * scale), { 0.3f * scale, -0.9f * scale }, 1.0f, 5.0f * scale, Kind::smoke });
         }
 
         for (auto& p : particles)
         {
             p.pos += p.vel;
-            p.vel.y -= p.smoke ? 0.01f : 0.05f * scale;
-            p.life -= p.smoke ? 0.012f : 0.045f;
+            switch (p.kind)
+            {
+                case Kind::smoke:  p.vel.y -= 0.01f;                          p.life -= 0.012f; break;
+                case Kind::spark:  p.vel *= 0.9f; p.vel.y += 0.12f * scale;    p.life -= 0.07f;  break;
+                case Kind::letter: p.vel *= 0.92f;                            p.life -= 0.05f;  break;
+            }
         }
         particles.erase (std::remove_if (particles.begin(), particles.end(), [] (const Particle& p) { return p.life <= 0.0f; }),
                          particles.end());
-        if (particles.size() > 600)
-            particles.erase (particles.begin(), particles.begin() + (long) (particles.size() - 600));
+        if (particles.size() > 200)
+            particles.erase (particles.begin(), particles.begin() + (long) (particles.size() - 200));
         repaint();
+    }
+
+    juce::Rectangle<float> MascotView::frameBox() const
+    {
+        // the box paintFrame draws the (square) picture into, anchored at the bottom centre
+        const auto area = getLocalBounds().toFloat();
+        const float side = std::min (area.getWidth(), area.getHeight() * 1.1f);
+        return juce::Rectangle<float> (side, side).withCentre (area.getCentre()).withBottom (area.getBottom() + side * 0.04f);
+    }
+
+    float MascotView::accentTilt() const noexcept
+    {
+        // the snap: a quick nod towards the hand that took the S
+        return (accentSide == 0 ? -1.0f : 1.0f) * 0.03f * brain.getAccent() * brain.getAccentStrength();
+    }
+
+    void MascotView::spawnSparks()
+    {
+        // From the hand that is further out in the frame on screen (the one he swings); the placeholder: its mouth
+        const float k = brain.getAccentStrength() > 0.0f ? brain.getAccentStrength() : 0.6f;
+        const auto box = frameBox();
+        juce::Point<float> at = mouth;
+        float dir = 1.0f;
+        if (frames.has (MascotState::dancing) && frames.hand (0, 0).x >= 0.0f)
+        {
+            const int index = (int) (clipTime * frames.fps (MascotState::dancing));
+            const auto l = frames.hand (index, 0), r = frames.hand (index, 1);
+            accentSide = std::abs (l.x - 0.5f) > std::abs (r.x - 0.5f) ? 0 : 1;
+            const auto h = accentSide == 0 ? l : r;
+            at = { box.getX() + h.x * box.getWidth(), box.getY() + h.y * box.getHeight() };
+            dir = accentSide == 0 ? -1.0f : 1.0f;
+        }
+        else
+            accentSide = 1 - accentSide;
+        const float scale = box.getWidth() / 600.0f;
+        const int n = 4 + (int) (k * 8.0f);
+        for (int i = 0; i < n; ++i)
+        {
+            const float a = juce::MathConstants<float>::pi * (-0.5f + dir * (0.15f + random.nextFloat() * 0.6f));
+            const float v = (4.0f + random.nextFloat() * 6.0f) * (0.6f + 0.6f * k) * scale;
+            particles.push_back ({ at, { std::cos (a) * v, std::sin (a) * v - 2.0f * scale }, 1.0f,
+                                   (3.5f + random.nextFloat() * 3.5f) * (0.7f + 0.5f * k) * scale, Kind::spark });
+        }
+        // the S itself, flicked away and gone
+        particles.push_back ({ at.translated (dir * 8.0f * scale, -10.0f * scale), { dir * 3.0f * scale, -3.5f * scale }, 1.0f,
+                               (38.0f + 20.0f * k) * scale, Kind::letter });
     }
 
     void MascotView::advanceClips (double dt)
@@ -341,15 +390,15 @@ namespace ember
             if (fade < 1.0f && frames.has (previousState) && previousState != shownState)
                 paintFrame (g, area, previousState, previousClip, previousTime + fadeTime, 1.0f - fade);
             paintFrame (g, area, shownState, shownClip, clipTime, fade);
-            paintFire (g);
+            paintSparks (g);
         }
         else
         {
             paintPlaceholder (g, area);
-            paintFire (g);
+            paintSparks (g);
         }
 
-        if (bubble.isNotEmpty() || st == MascotState::overheated)
+        if (bubble.isNotEmpty() || (brain.isHot() && st == MascotState::dancing))
             paintBubble (g, area);
     }
 
@@ -364,10 +413,11 @@ namespace ember
         const bool still = n == 1 && clip == MascotClip::loop;   // one picture per mood: the motion comes from here
 
         // Fit the (square) picture into the area, anchored at its bottom centre
-        const float side = std::min (area.getWidth(), area.getHeight() * 1.1f);
-        auto box = juce::Rectangle<float> (side, side).withCentre (area.getCentre()).withBottom (area.getBottom() + side * 0.04f);
+        juce::ignoreUnused (area);
+        const auto box = frameBox();
+        const float side = box.getWidth();
 
-        const float tt = (float) time, k = brain.getIntensity();
+        const float tt = (float) time;
         float dx = 0.0f, dy = 0.0f, rot = 0.0f, sx = 1.0f, sy = 1.0f;
         if (still)
         {
@@ -375,21 +425,19 @@ namespace ember
             {
                 // Small, slow motion only: breathing and a gentle sway (calm, Jakob 2026-11-10)
                 case MascotState::idle:       sy = 1.0f + 0.008f * std::sin (tt * 1.8f); sx = 2.0f - sy; break;
-                case MascotState::singing:    rot = 0.015f * std::sin (tt * 2.6f); sy = 1.0f + 0.006f * std::sin (tt * 5.2f); break;
-                case MascotState::snapping:   sy = 1.0f + 0.01f * std::sin (tt * 6.0f); break;
-                case MascotState::fire:
-                {
-                    // a slight tremble that grows a little with the reduction, and he swells a bit
-                    const float shake = (0.0015f + 0.003f * k) * side;
-                    dx = std::sin (tt * 21.0f) * shake;
-                    sx = sy = 1.0f + 0.025f * k;
-                    break;
-                }
-                case MascotState::overheated: dx = std::sin (tt * 17.0f) * side * 0.003f; break;
+                case MascotState::dancing:    rot = 0.015f * std::sin (tt * 2.6f); sy = 1.0f + 0.006f * std::sin (tt * 5.2f); break;
                 case MascotState::sleeping:   sy = 1.0f + 0.012f * std::sin (tt * 1.1f); break;
                 case MascotState::listening:  rot = -0.02f + 0.008f * std::sin (tt * 1.4f); break;
-                case MascotState::proud:      dy = -std::abs (std::sin (tt * 3.0f)) * side * 0.012f * (float) std::max (0.0, 1.0 - time / 1.5); break;
             }
+        }
+        if (st == MascotState::dancing)
+        {
+            // the S accent: a quick snap - he dips a little and nods towards the hand
+            const float a = brain.getAccent() * brain.getAccentStrength();
+            sy *= 1.0f - 0.03f * a;
+            sx *= 1.0f + 0.015f * a;
+            rot += accentTilt();
+            dy += 0.01f * a * side;
         }
 
         const auto anchor = box.getCentre().withY (box.getBottom() - side * 0.12f);
@@ -397,10 +445,6 @@ namespace ember
                                     .scaled (sx, sy)
                                     .rotated (rot)
                                     .translated (anchor.x + dx, anchor.y + dy);
-
-        if (frames.mouth().x >= 0.0f && alpha >= 0.5f)
-            mouth = juce::Point<float> (box.getX() + frames.mouth().x * box.getWidth(),
-                                        box.getY() + frames.mouth().y * box.getHeight()).transformedBy (transform);
 
         juce::Graphics::ScopedSaveState save (g);
         g.addTransform (transform);
@@ -415,7 +459,7 @@ namespace ember
         const float s = std::min (area.getWidth() * 0.9f, area.getHeight()) / 300.0f;   // design units: 300 high
         const float cx = area.getX() + area.getWidth() * (compact ? 0.42f : 0.38f);
         const bool asleep = st == MascotState::sleeping;
-        const bool moving = st == MascotState::singing || st == MascotState::fire || st == MascotState::snapping;
+        const bool moving = st == MascotState::dancing;
         const float bob = asleep ? std::sin ((float) t * 1.2f) * 1.5f : std::sin ((float) t * (moving ? 6.0f : 2.0f)) * (moving ? 5.0f : 3.0f);
         const float cy = area.getCentreY() + 10.0f * s + bob * s;
         const auto P = [&] (float x, float y) { return juce::Point<float> (cx + x * s, cy + y * s); };
@@ -455,7 +499,7 @@ namespace ember
         // Head + ears
         g.setGradientFill (skin);
         g.fillEllipse (juce::Rectangle<float> (150 * s, 135 * s).withCentre (P (0, -18)));
-        const float twitch = st == MascotState::snapping ? std::sin ((float) t * 40.0f) * 4.0f : 0.0f;
+        const float twitch = st == MascotState::dancing ? brain.getAccent() * 6.0f : 0.0f;
         const bool earUp = st == MascotState::listening;
         for (float side : { -1.0f, 1.0f })
         {
@@ -481,10 +525,10 @@ namespace ember
         }
         else
         {
-            const bool squint = st == MascotState::overheated;
+            const bool squint = brain.isHot();
             const bool blink = std::fmod (t, 4.0) < 0.12;
             const float eyeH = blink ? 2.0f : (squint ? 8.0f : 14.0f);
-            const float look = st == MascotState::fire || st == MascotState::snapping ? 4.0f : std::sin ((float) t * 0.7f) * 3.0f;
+            const float look = std::sin ((float) t * 0.7f) * 3.0f;
             for (float side : { -1.0f, 1.0f })
             {
                 g.setColour (eye);
@@ -494,18 +538,17 @@ namespace ember
             }
             // Brows
             juce::Path brows;
-            const float angry = st == MascotState::fire ? 6.0f : 0.0f;
-            brows.startNewSubPath (P (-46, -60 + (st == MascotState::overheated ? -6.0f : 0.0f)));
+            const float angry = 6.0f * brain.getAccent();
+            brows.startNewSubPath (P (-46, -60 + (brain.isHot() ? -6.0f : 0.0f)));
             brows.lineTo (P (-14, -52 + angry));
-            brows.startNewSubPath (P (46, -60 + (st == MascotState::overheated ? -6.0f : 0.0f)));
+            brows.startNewSubPath (P (46, -60 + (brain.isHot() ? -6.0f : 0.0f)));
             brows.lineTo (P (14, -52 + angry));
             g.setColour (juce::Colour (0xff3a0d08));
             g.strokePath (brows, juce::PathStrokeType (5.0f * s, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
-        // Mouth: open with the flame, a grin otherwise
-        const float open = st == MascotState::fire || st == MascotState::overheated ? 0.4f + 0.6f * brain.getIntensity()
-                         : st == MascotState::snapping ? 0.35f : st == MascotState::singing ? 0.25f + 0.15f * std::sin ((float) t * 8.0f) : 0.0f;
+        // Mouth: a grin, open while he dances
+        const float open = st == MascotState::dancing ? 0.25f + 0.15f * std::sin ((float) t * 8.0f) : 0.0f;
         juce::Path m;
         m.startNewSubPath (P (10, 8));
         m.quadraticTo (P (60, 4), P (78, 2 - open * 14));
@@ -519,15 +562,12 @@ namespace ember
         g.fillPath (fang);
         mouth = P (78, 8);
 
-        // AUTO: hand at the ear / proud: thumbs up
-        if (st == MascotState::listening || st == MascotState::proud)
+        // AUTO: hand at the ear
+        if (st == MascotState::listening)
         {
             g.setGradientFill (skin);
-            const auto hand = st == MascotState::listening ? P (-104, -36) : P (92, 40 - std::abs (std::sin ((float) t * 5.0f)) * 8.0f);
+            const auto hand = P (-104, -36);
             g.fillEllipse (juce::Rectangle<float> (30 * s, 26 * s).withCentre (hand));
-            if (st == MascotState::proud)
-                g.fillRoundedRectangle (juce::Rectangle<float> (10 * s, 22 * s).withCentre (hand.translated (0, -20 * s)), 5 * s);
-            else
             {
                 g.setColour (vocalypse::ui::colours::textSoft.withAlpha (0.7f));
                 for (int i = 0; i < 3; ++i)
@@ -540,36 +580,43 @@ namespace ember
             }
         }
 
-        // Sweat drops
-        if (st == MascotState::overheated)
-        {
-            g.setColour (sweat);
-            for (int i = 0; i < 2; ++i)
-            {
-                const float y = -70.0f + (float) std::fmod (t * 60.0 + i * 40.0, 60.0);
-                g.fillEllipse (juce::Rectangle<float> (8 * s, 14 * s).withCentre (P (i == 0 ? -70.0f : 62.0f, y)));
-            }
-        }
     }
 
-    void MascotView::paintFire (juce::Graphics& g)
+    void MascotView::paintSparks (juce::Graphics& g)
     {
         for (const auto& p : particles)
         {
             const float a = juce::jlimit (0.0f, 1.0f, p.life);
-            if (p.smoke)
+            switch (p.kind)
             {
-                g.setColour (juce::Colour (0xffa09696).withAlpha (a * 0.45f));
-                const float r = p.size + (1.0f - a) * 14.0f;
-                g.fillEllipse (p.pos.x - r, p.pos.y - r, r * 2, r * 2);
-                continue;
+                case Kind::smoke:
+                {
+                    g.setColour (juce::Colour (0xffa09696).withAlpha (a * 0.45f));
+                    const float r = p.size + (1.0f - a) * 14.0f;
+                    g.fillEllipse (p.pos.x - r, p.pos.y - r, r * 2, r * 2);
+                    break;
+                }
+                case Kind::spark:
+                {
+                    const float r = p.size * (0.5f + 0.5f * a);
+                    juce::ColourGradient glow (juce::Colour (0xfffff3c4).withAlpha (a), p.pos,
+                                               juce::Colour (0xffff6a1e).withAlpha (0.0f), p.pos.translated (r * 2.2f, 0), true);
+                    g.setGradientFill (glow);
+                    g.fillEllipse (p.pos.x - r * 2.2f, p.pos.y - r * 2.2f, r * 4.4f, r * 4.4f);
+                    g.setColour (juce::Colour (0xfffffbe8).withAlpha (a));
+                    g.fillEllipse (p.pos.x - r * 0.6f, p.pos.y - r * 0.6f, r * 1.2f, r * 1.2f);
+                    break;
+                }
+                case Kind::letter:
+                {
+                    // pops up, then breaks into nothing: the S he took away
+                    const float pop = a > 0.8f ? (1.0f - a) / 0.2f : 1.0f;
+                    g.setFont (vocalypse::ui::display (p.size * (0.7f + 0.3f * pop), true));
+                    g.setColour (juce::Colour (0xffffd27a).withAlpha (a * a));
+                    g.drawText ("S", juce::Rectangle<float> (p.size * 2.0f, p.size * 2.0f).withCentre (p.pos), juce::Justification::centred, false);
+                    break;
+                }
             }
-            const float r = p.size * (0.6f + a * 0.6f);
-            juce::ColourGradient fire (juce::Colour (0xffffe678).withAlpha (a), p.pos,
-                                       juce::Colour (0xffff280a).withAlpha (0.0f), p.pos.translated (r, 0), true);
-            fire.addColour (0.5, juce::Colour (0xffff6e1e).withAlpha (a * 0.7f));
-            g.setGradientFill (fire);
-            g.fillEllipse (p.pos.x - r, p.pos.y - r, r * 2, r * 2);
         }
     }
 

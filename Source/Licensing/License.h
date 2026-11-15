@@ -12,7 +12,8 @@
 // (EMBER: -DEMBER_LICENSING=ON, Products/Ember/Source/EmberLicence.h) use the same code.
 //
 // Rules (docs/LICENSING.md):
-//   - 14 days trial from the first start on a computer, everything works.
+//   - 14 days trial from the first start on a computer, everything works (Config::trialDays;
+//     EMBER: 0 = a key is needed from the first start - it is free and comes by mail).
 //   - Activation: the key from the order mail; Lemon Squeezy counts the computers (activation limit).
 //   - Activated stays activated offline. Online it is checked again at most once a week, in the
 //     background; only an explicit "invalid / disabled / expired" from the store locks it again.
@@ -46,7 +47,7 @@ namespace vocalypse::licensing
         bool checkDue = false;   // an activated key should be confirmed online again
     };
 
-    Status evaluate (const Record&, juce::int64 nowMs, bool licensingOn) noexcept;
+    Status evaluate (const Record&, juce::int64 nowMs, bool licensingOn, int trialDaysAllowed = trialDays) noexcept;
 
     // One answer of the License API (activate / validate / deactivate)
     struct Reply
@@ -81,6 +82,8 @@ namespace vocalypse::licensing
         juce::String productName = "VOCALYPSE";   // in messages, the computer's name at the store, the default file
         FileIdentity identity;
         juce::String buyUrl;              // the shop / checkout page
+        int trialDays = licensing::trialDays;   // 0: no trial, locked until a key is activated
+        bool freeKey = false;             // the key costs nothing (checkout sends it by mail): "get free key", not "buy"
         juce::File file;                  // default: <app data>/Lind Audio/<productName>/<productName>.license
         Transport transport;              // default: internetTransport()
         std::function<juce::int64()> now; // default: current time
@@ -113,6 +116,8 @@ namespace vocalypse::licensing
         juce::String describe() const;    // one line for the settings sheet
         const juce::String& buyUrl() const noexcept { return cfg.buyUrl; }
         const juce::String& productName() const noexcept { return cfg.productName; }
+        int trialDays() const noexcept { return cfg.trialDays; }
+        bool freeKey() const noexcept { return cfg.freeKey; }
 
     private:
         void store();

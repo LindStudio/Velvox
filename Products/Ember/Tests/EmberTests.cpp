@@ -520,6 +520,16 @@ namespace
         lic::Manager m (cfg);
         check (m.status().access == lic::Access::locked && m.isLocked(), "trial over -> locked");
 
+        // Jakob 2026-11-15: no trial - a first start without a key is locked at once, the shop link gets a free key
+        {
+            const auto fresh = dir.getChildFile ("fresh.license");
+            auto c = cfg;
+            c.file = fresh;
+            lic::Manager first (c);
+            check (licenceConfig().trialDays == 0 && licenceConfig().freeKey, "EMBER: no trial, free key");
+            check (first.status().access == lic::Access::locked && first.isLocked(), "first start without key -> locked");
+        }
+
         const double fs = 48000.0;
         const auto take = makeTake (fs, 1.0, -6.0f);   // loud S: processed audio clearly differs
         const auto runProcessor = [&] (EmberAudioProcessor& p)
@@ -642,7 +652,7 @@ namespace
 
     void testMascot()
     {
-        Test t ("mascot states");
+        Test t ("mascot: four moods, an accent per S (Jakob 2026-11-15)");
         MascotBrain b;
         const double dt = 1.0 / 30.0;
         const auto runFor = [&] (MascotInput in, double seconds) { for (double s = 0; s < seconds; s += dt) b.update (in, dt); };
@@ -651,70 +661,71 @@ namespace
         check (b.getState() == MascotState::idle, "idle without signal");
         in.hasSignal = true;
         runFor (in, 2.5);
-        check (b.getState() == MascotState::singing, "singing");
-        in.reductionDb = 1.0f;
-        runFor (in, 2.5);
-        check (b.getState() == MascotState::snapping, "snapping");
-        in.reductionDb = 5.0f;
-        runFor (in, 2.5);
-        check (b.getState() == MascotState::fire, "fire");
-        check (b.getIntensity() > 0.3f, "fire intensity follows GR");
+        check (b.getState() == MascotState::dancing, "dancing");
+
+        // S: he keeps dancing, every S is one accent
+        {
+            const int before = b.getAccentCount();
+            int changes = 0;
+            auto last = b.getState();
+            for (int i = 0; i < 600; ++i)   // 20 s, a 0.17 s S every 1.5 s
+            {
+                in.reductionDb = (i % 45) < 5 ? 3.0f : 0.0f;
+                b.update (in, dt);
+                if (b.getState() != last) { ++changes; last = b.getState(); }
+            }
+            check (changes == 0 && b.getState() == MascotState::dancing, "S do not change the mood");
+            check (b.getAccentCount() - before == 14, "one accent per S (got " + juce::String (b.getAccentCount() - before) + ")");
+        }
+        // a long S is one accent, it decays; a louder S is a stronger accent
+        {
+            MascotBrain c;
+            MascotInput s;
+            s.hasSignal = true;
+            for (double x = 0; x < 2.5; x += dt) c.update (s, dt);
+            s.reductionDb = 2.0f;
+            c.update (s, dt);
+            check (c.getAccent() > 0.9f && c.getAccentCount() == 1, "accent at the S");
+            const float soft = c.getAccentStrength();
+            for (double x = 0; x < 1.0; x += dt) c.update (s, dt);
+            check (c.getAccentCount() == 1 && c.getAccent() == 0.0f, "a held S is one accent, then it fades");
+            s.reductionDb = 0.0f;
+            c.update (s, dt);
+            s.reductionDb = 8.0f;
+            for (int i = 0; i < 6; ++i) c.update (s, dt);
+            check (c.getAccentCount() == 2 && c.getAccentStrength() > soft + 0.3f, "a louder S: a stronger accent");
+            // flicker within minAccentGapS is not a new S
+            s.reductionDb = 0.0f; c.update (s, dt);
+            s.reductionDb = 3.0f; c.update (s, dt);
+            const int n = c.getAccentCount();
+            s.reductionDb = 0.0f; c.update (s, dt);
+            s.reductionDb = 3.0f; c.update (s, dt);
+            check (c.getAccentCount() == n, "no accent within 0.15 s of the last");
+        }
+
         in.reductionDb = 11.0f;
-        runFor (in, 2.5);
-        check (b.getState() == MascotState::overheated, "overheated after a while above 9 dB");
+        runFor (in, 1.0);
+        check (b.isHot() && b.getState() == MascotState::dancing, "too much: hot (bubble), still dancing");
         in.reductionDb = 0.0f;
         runFor (in, 0.3);
-        check (b.getState() == MascotState::overheated, "stays hot a moment");
-        runFor (in, 2.5);
-        check (b.getState() == MascotState::fire, "then keeps the fire pose for a while");
-        runFor (in, 7.0);
-        check (b.getState() == MascotState::singing, "back to dancing after 4 s without S");
+        check (b.isHot(), "stays hot a moment");
+        runFor (in, 1.0);
+        check (! b.isHot(), "then cools down");
 
-        // A sung phrase: an S every 1.5 s for 20 s -> one fire, no fire-dance-fire
-        {
-            MascotBrain c;
-            MascotInput ph;
-            ph.hasSignal = true;
-            for (double s = 0; s < 3.0; s += dt) c.update (ph, dt);
-            int changes = 0;
-            auto last = c.getState();
-            for (int i = 0; i < 600; ++i)   // 20 s
-            {
-                ph.reductionDb = (i % 45) < 5 ? 3.0f : 0.0f;   // 0.17 s S every 1.5 s
-                c.update (ph, dt);
-                if (c.getState() != last) { ++changes; last = c.getState(); }
-            }
-            check (changes == 1 && c.getState() == MascotState::fire,
-                   "S every 1.5 s: one change into fire and stays (got " + juce::String (changes) + ")");
-        }
+        // Calm: short gaps in the vocal keep him dancing
+        in.hasSignal = false;
+        runFor (in, 0.2);
+        in.hasSignal = true;
+        runFor (in, 0.2);
+        check (b.getState() == MascotState::dancing, "a breath does not stop the dance");
+        in.hasSignal = false;
+        runFor (in, 3.0);
+        check (b.getState() == MascotState::idle, "silence: idle");
 
-        // Calm: a GR that flickers every 100 ms does not make him flicker
-        {
-            MascotBrain c;
-            MascotInput fl;
-            fl.hasSignal = true;
-            for (double s = 0; s < 1.5; s += dt) c.update (fl, dt);
-            int changes = 0;
-            auto last = c.getState();
-            for (int i = 0; i < 90; ++i)   // 3 s
-            {
-                fl.reductionDb = (i / 3) % 2 == 0 ? 2.5f : 0.0f;
-                c.update (fl, dt);
-                if (c.getState() != last) { ++changes; last = c.getState(); }
-            }
-            check (changes <= 3, "flickering GR: at most 3 mood changes in 3 s (got " + juce::String (changes) + ")");
-        }
         in.autoListening = true;
         runFor (in, 0.1);
         check (b.getState() == MascotState::listening, "listening");
         in.autoListening = false;
-        in.autoJustFinished = true;
-        b.update (in, dt);
-        in.autoJustFinished = false;
-        runFor (in, 1.0);
-        check (b.getState() == MascotState::proud, "proud after AUTO");
-        runFor (in, 2.0);
-        check (b.getState() != MascotState::proud, "proud ends");
         in.bypass = true;
         runFor (in, 0.1);
         check (b.getState() == MascotState::sleeping, "sleeping on bypass");
@@ -724,35 +735,36 @@ namespace
 
     void testMascotClips()
     {
-        Test t ("mascot clips: out of the old mood, into the new one, then its loop");
+        Test t ("mascot clips: out of the old mood, into the new one, then its loop; sparks at an S");
         MascotView view;
         view.setSize (500, 400);
         auto& f = view.getFramesForTest();
         f.clear();
         juce::Image img (juce::Image::ARGB, 8, 8, true);
         const auto addN = [&] (MascotState s, MascotClip c, int n) { for (int i = 0; i < n; ++i) f.add (s, c, img); };
-        addN (MascotState::singing, MascotClip::loop, 24);
-        addN (MascotState::singing, MascotClip::out, 12);    // 0.5 s at 24 fps
-        addN (MascotState::fire, MascotClip::in, 12);
-        addN (MascotState::fire, MascotClip::loop, 24);
+        addN (MascotState::idle, MascotClip::loop, 24);
+        addN (MascotState::idle, MascotClip::out, 12);       // 0.5 s at 24 fps
+        addN (MascotState::dancing, MascotClip::in, 12);
+        addN (MascotState::dancing, MascotClip::loop, 24);
         const double dt = 1.0 / 30.0;
         MascotInput in;
-        in.hasSignal = true;
         view.setInput (in);
         for (int i = 0; i < 60; ++i) view.stepForTest (dt);
-        check (view.getShownState() == MascotState::singing && view.getShownClip() == MascotClip::loop, "singing loop");
-        in.reductionDb = 5.0f;
+        check (view.getShownState() == MascotState::idle && view.getShownClip() == MascotClip::loop, "idle loop");
+        in.hasSignal = true;
         view.setInput (in);
         bool sawOut = false, sawIn = false;
         for (int i = 0; i < 180; ++i)
         {
             view.stepForTest (dt);
-            sawOut = sawOut || (view.getShownState() == MascotState::singing && view.getShownClip() == MascotClip::out);
-            sawIn = sawIn || (view.getShownState() == MascotState::fire && view.getShownClip() == MascotClip::in);
+            sawOut = sawOut || (view.getShownState() == MascotState::idle && view.getShownClip() == MascotClip::out);
+            sawIn = sawIn || (view.getShownState() == MascotState::dancing && view.getShownClip() == MascotClip::in);
         }
-        check (sawOut, "played singing_out");
-        check (sawIn, "played fire_in");
-        check (view.getShownState() == MascotState::fire && view.getShownClip() == MascotClip::loop, "ends in the fire loop");
+        check (sawOut, "played idle_out");
+        check (sawIn, "played dancing_in");
+        check (view.getShownState() == MascotState::dancing && view.getShownClip() == MascotClip::loop, "ends in the dancing loop");
+        view.sparkForTest();
+        check (view.getSparkCountForTest() >= 5, "an S throws sparks and the S");
     }
 
     void testMascotFrames (const juce::File& snapshotDir)
@@ -799,12 +811,11 @@ namespace
         // One picture per mood, as the plugin shows it (500 x 400)
         const std::pair<const char*, MascotInput> moods[] {
             { "idle", {} },
-            { "singing", { false, true, false, false, 0.0f } },
-            { "snapping", { false, true, false, false, 0.8f } },
-            { "fire", { false, true, false, false, 8.0f } },
-            { "overheated", { false, true, false, false, 12.0f } },
-            { "sleeping", { true, false, false, false, 0.0f } },
-            { "listening", { false, true, true, false, 0.0f } },
+            { "dancing", { false, true, false, 0.0f } },
+            { "dancing_s", { false, true, false, 6.0f } },
+            { "lispy", { false, true, false, 12.0f } },
+            { "sleeping", { true, false, false, 0.0f } },
+            { "listening", { false, true, true, 0.0f } },
         };
         snapshotDir.createDirectory();
         for (const auto& [name, in] : moods)
@@ -823,18 +834,21 @@ namespace
             juce::FileOutputStream out (snapshotDir.getChildFile (juce::String ("mascot_") + name + ".png"));
             if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
 
-            // the live fire (drawn by the view, not in the pictures): 3 s at 12 pictures/s (preview video)
-            if (juce::String (name) == "fire")
-                for (int k = 1; k <= 36; ++k)
+            // the live S sparks (drawn by the view, not in the pictures): 4 s at 24 pictures/s, an S every 0.75 s
+            if (juce::String (name) == "dancing_s")
+                for (int k = 1; k <= 96; ++k)
                 {
-                    juce::MessageManager::getInstance()->runDispatchLoopUntil (83);
+                    auto pulse = in;
+                    pulse.reductionDb = (k % 18) < 4 ? 2.0f + (float) (k % 36) / 6.0f : 0.0f;
+                    view.setInput (pulse);
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (42);
                     juce::Image seq (juce::Image::ARGB, 500, 400, true);
                     {
                         juce::Graphics g (seq);
                         g.fillAll (juce::Colour (0xff05060a));
                         view.paintEntireComponent (g, true);
                     }
-                    juce::FileOutputStream o2 (snapshotDir.getChildFile ("mascot_fire_" + juce::String (k).paddedLeft ('0', 3) + ".png"));
+                    juce::FileOutputStream o2 (snapshotDir.getChildFile ("mascot_dance_" + juce::String (k).paddedLeft ('0', 3) + ".png"));
                     if (o2.openedOk()) { o2.setPosition (0); o2.truncate(); png.writeImageToStream (seq, o2); }
                 }
         }

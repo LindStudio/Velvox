@@ -14,8 +14,10 @@ namespace vocalypse::ui
     void showActivationDialog (licensing::Manager& m, juce::Component* over)
     {
         auto* w = new juce::AlertWindow (i18n::format (tr ("{0} aktivieren", "Activate {0}"), { m.productName() }),
-                                         tr ("Kopier den Lizenzschlüssel aus deiner Bestell-Mail hier hinein.",
-                                             "Paste the licence key from your order mail here."),
+                                         m.freeKey() ? tr ("Kopier den Lizenzschlüssel aus der Mail von Lind Audio hier hinein.",
+                                                           "Paste the licence key from the Lind Audio mail here.")
+                                                     : tr ("Kopier den Lizenzschlüssel aus deiner Bestell-Mail hier hinein.",
+                                                           "Paste the licence key from your order mail here."),
                                          juce::MessageBoxIconType::NoIcon, over);
         w->addTextEditor ("key", {}, tr ("Lizenzschlüssel", "Licence key"));
         w->addButton (tr ("Aktivieren", "Activate"), 1, juce::KeyPress (juce::KeyPress::returnKey));
@@ -58,7 +60,8 @@ namespace vocalypse::ui
         if (licence != nullptr)
         {
             licence->addChangeListener (this);
-            buyButton.setButtonText (i18n::format (tr ("{0} kaufen", "Buy {0}"), { licence->productName() }));
+            buyButton.setButtonText (licence->freeKey() ? tr ("Gratis-Schlüssel holen", "Get free key")
+                                                        : i18n::format (tr ("{0} kaufen", "Buy {0}"), { licence->productName() }));
         }
         sync();
     }
@@ -100,12 +103,23 @@ namespace vocalypse::ui
         g.setColour (colours::text);
         g.setFont (font (typesize::heading + 1.5f, true));
         const bool revoked = licence != nullptr && licence->record().revoked;
-        g.drawText (revoked ? tr ("Lizenz nicht mehr gültig", "Licence no longer valid") : tr ("Die Testzeit ist vorbei", "The trial is over"),
+        const bool hadTrial = licence != nullptr && licence->trialDays() > 0;
+        const bool free = licence != nullptr && licence->freeKey();
+        const auto name = licence != nullptr ? licence->productName() : juce::String();
+        g.drawText (revoked    ? tr ("Lizenz nicht mehr gültig", "Licence no longer valid")
+                    : hadTrial ? tr ("Die Testzeit ist vorbei", "The trial is over")
+                               : i18n::format (tr ("{0} braucht einen Lizenzschlüssel", "{0} needs a licence key"), { name }),
                     r.removeFromTop (30.0f), juce::Justification::centredLeft, true);
         r.removeFromTop (8.0f);
         g.setColour (colours::textDim);
         g.setFont (font (typesize::small));
-        const auto name = licence != nullptr ? licence->productName() : juce::String();
+        if (free && ! revoked)
+            g.drawFittedText (i18n::format (tr ("{0} ist kostenlos. Klick auf „Gratis-Schlüssel holen“, gib deine E-Mail-Adresse ein "
+                                                "und kopier den Schlüssel aus der Mail hier hinein. Bis dahin geht deine Vocal unbearbeitet durch.",
+                                                "{0} is free. Click “Get free key”, enter your email address and paste the key from the "
+                                                "mail here. Until then your vocal passes through unprocessed."), { name }),
+                              r.removeFromTop (80.0f).toNearestInt(), juce::Justification::topLeft, 4, 1.0f);
+        else
         g.drawFittedText (i18n::format (tr ("{0} lässt deine Vocal gerade unbearbeitet durch. Aktiviere es mit dem Schlüssel aus deiner "
                                             "Bestell-Mail - deine Projekte und Einstellungen bleiben, wie sie sind.",
                                             "{0} is passing your vocal through unprocessed. Activate it with the key from your order mail - "
