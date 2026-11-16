@@ -13,12 +13,13 @@ namespace ember
 {
     // Polar organisation "Lind Audio" and product "EMBER De-Esser" (Jakob 2026-11-16). A key carries no product
     // id, only its licence-key benefit: polarBenefitId (empty = not checked, any key of the organisation works).
-    // SANDBOX (sandbox.polar.sh, 2026-11-16): the live account gets its own ids -> replace all three + polarSandbox = false
-    inline constexpr bool polarSandbox = true;
-    inline constexpr const char* polarOrganizationId = "406e9435-111f-4a64-af63-0ca5a5b2aba2";
-    inline constexpr const char* polarProductId = "5c48f7e6-e680-4a23-8007-1054bc0871c7";   // for the checkout link
-    inline constexpr const char* polarBenefitId = "dc8884ec-f532-492d-ac7d-58e64a2b5ec3";  // "EMBER De-Esser Product Key", 2 computers
-    inline constexpr const char* buyUrl = "https://lind-audio.com";   // TODO: Polar checkout link
+    // LIVE polar.sh (2026-11-16, read from the checkout). Sandbox for tests: org 406e9435-111f-4a64-af63-0ca5a5b2aba2,
+    // product 5c48f7e6-e680-4a23-8007-1054bc0871c7, benefit dc8884ec-f532-492d-ac7d-58e64a2b5ec3 (polarSandbox = true).
+    inline constexpr bool polarSandbox = false;
+    inline constexpr const char* polarOrganizationId = "afc3b14c-70ab-4a83-8cdb-8ca87e5e4e3e";
+    inline constexpr const char* polarProductId = "5f4d00a0-7c91-4a34-b45c-20aa06a9cae1";
+    inline constexpr const char* polarBenefitId = "33f1506b-bbd2-42f5-b02c-0d202c8ea392";  // "EMBER De-Esser Product Key"
+    inline constexpr const char* buyUrl = "https://buy.polar.sh/polar_cl_IWDxw3tiibYfyuhNsWcYeE7hGhj45VuDLXzmi1XSKYM";
 
     inline vocalypse::licensing::Config licenceConfig()
     {
