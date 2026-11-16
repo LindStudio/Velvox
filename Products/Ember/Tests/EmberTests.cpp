@@ -575,11 +575,17 @@ namespace
         cfg.file = file;
         cfg.asynchronous = false;
         cfg.now = [now] { return now; };
-        cfg.transport = [&lastUrl] (const juce::String& url, const juce::StringPairArray&) -> std::pair<int, juce::String>
+        // a Polar activation of a key of Jakob's organisation (benefit as configured, or any if none is set)
+        const auto polarActivated = [] (const char* activation, const char* org = polarOrganizationId)
+        {
+            return juce::String (R"({"id":")") + activation + R"(","label":"PC","license_key":{"status":"granted",)"
+                   + R"("organization_id":")" + org + R"(","benefit_id":")" + juce::String (polarBenefitId)
+                   + R"(","customer":{"name":"Jakob"}}})";
+        };
+        cfg.transport = [&lastUrl, polarActivated] (const juce::String& url, const juce::var&) -> std::pair<int, juce::String>
         {
             lastUrl = url;
-            return { 200, R"({"activated":true,"license_key":{"status":"active"},"instance":{"id":"inst-1"},
-                              "meta":{"store_id":522230,"product_id":1522200,"customer_name":"Jakob"}})" };
+            return { 200, polarActivated ("inst-1") };
         };
         lic::Manager m (cfg);
         check (m.status().access == lic::Access::locked && m.isLocked(), "trial over -> locked");
@@ -633,30 +639,32 @@ namespace
             {
                 auto c = cfg;
                 c.now = [now, day] { return now + 8 * day; };   // the weekly check is due
-                c.transport = [code, body] (const juce::String&, const juce::StringPairArray&) -> std::pair<int, juce::String> { return { code, body }; };
+                c.transport = [code, body] (const juce::String&, const juce::var&) -> std::pair<int, juce::String> { return { code, body }; };
                 lic::Manager later (c);   // checks in its constructor (synchronous here)
                 return later.status().access;
             };
             check (checkWith (429, R"({"error":"Too many requests"})") == lic::Access::licensed, "429 on the weekly check: stays activated");
             check (checkWith (503, "") == lic::Access::licensed, "server down: stays activated");
-            check (checkWith (200, R"({"valid":false,"license_key":{"status":"disabled"}})") == lic::Access::locked, "clearly invalid: locked");
+            check (checkWith (404, R"({"error":"ResourceNotFound","detail":"Not found"})") == lic::Access::locked, "revoked key (404): locked");
+            check (checkWith (200, (juce::String (R"({"status":"revoked","organization_id":")") + polarOrganizationId + R"("})").toRawUTF8())
+                       == lic::Access::locked, "clearly invalid: locked");
         }
         {
-            // a key of another product: refused, and the store gets its activation back
+            // a key of another organisation: refused, and the store gets its activation back
             juce::StringArray calls;
             auto c = cfg;
             c.file = dir.getChildFile ("foreign.license");
-            c.transport = [&calls] (const juce::String& url, const juce::StringPairArray&) -> std::pair<int, juce::String>
+            c.transport = [&calls, polarActivated] (const juce::String& url, const juce::var& json) -> std::pair<int, juce::String>
             {
-                calls.add (url.fromLastOccurrenceOf ("/", false, false));
-                return { 200, R"({"activated":true,"deactivated":true,"license_key":{"status":"active"},"instance":{"id":"x"},
-                                  "meta":{"store_id":522230,"product_id":999}})" };
+                calls.add (url.fromLastOccurrenceOf ("/", false, false) + (json.hasProperty ("activation_id") ? ":" + json["activation_id"].toString() : ""));
+                return url.endsWith ("deactivate") ? std::pair<int, juce::String> { 204, {} }
+                                                   : std::pair<int, juce::String> { 200, polarActivated ("x", "00000000-0000-4000-8000-000000000000") };
             };
             lic::Manager other (c);
             juce::String msg;
             other.activate ("K-1", [&msg] (bool, const juce::String& m) { msg = m; });
             check (other.status().access == lic::Access::locked, "foreign key refused");
-            check (calls.joinIntoString (",") == "activate,deactivate", "its activation is given back (got " + calls.joinIntoString (",") + ")");
+            check (calls.joinIntoString (",") == "activate,deactivate:x", "its activation is given back (got " + calls.joinIntoString (",") + ")");
             check (msg.contains ("EMBER"), "own message for a foreign key");
         }
         {
@@ -669,13 +677,23 @@ namespace
             check (maxDiffDelayed (y, take.x, p.getLatencySamples(), (int) (fs * 0.1)) > 1.0e-3f, "licensed: processed again");
         }
 
-        // a key of another product is refused once the ids are set
-        const auto reply = lic::parseReply (R"({"activated":true,"license_key":{"status":"active"},"instance":{"id":"x"},
-                                                "meta":{"store_id":1,"product_id":99}})", 200, "activated", 1, 2);
-        check (! reply.ok, "key of another product refused");
+        // Polar answers (2026-11-16): benefit check, 403 limit, 204 release, 422 malformed
+        {
+            const auto act = R"({"id":"a1","license_key":{"status":"granted","organization_id":"o","benefit_id":"b1","customer":{"name":"J"}}})";
+            check (lic::parseReply (act, 200, lic::Call::activate, "o", "b1").ok, "own benefit accepted");
+            check (lic::parseReply (act, 200, lic::Call::activate, "o", {}).instanceId == "a1", "activation id read");
+            check (! lic::parseReply (act, 200, lic::Call::activate, "o", "b2").ok, "key of another benefit refused");
+            const auto limit = lic::parseReply (R"({"error":"NotPermitted","detail":"License key activation limit reached"})", 403, lic::Call::activate, "o", {});
+            check (limit.reached && ! limit.ok && limit.detail.contains ("limit"), "403 limit read");
+            check (lic::parseReply ({}, 204, lic::Call::deactivate, {}, {}).ok, "204 released");
+            const auto val = lic::parseReply (R"({"status":"granted","organization_id":"o","benefit_id":"b1","activation":{"id":"a1"}})", 200, lic::Call::validate, "o", "b1");
+            check (val.ok && val.instanceId == "a1", "validate granted");
+            check (! lic::parseReply (R"({"detail":[{"msg":"bad"}]})", 422, lic::Call::validate, "o", {}).ok, "422 not ok");
+            check (lic::cleanKey ("EMBER_38B1460A-5104 ") == "EMBER_38B1460A-5104", "prefixed key kept");
+        }
         dir.deleteRecursively();
 
-        // Optional: the real Lemon Squeezy API with a test-mode key (never stored in the repo):
+        // Optional: the real Polar API with a key of Jakob's organisation (never stored in the repo):
         //   set EMBER_LICENCE_TEST_KEY=<key>  ->  activate, weekly re-check, release
         const auto realKey = juce::SystemStats::getEnvironmentVariable ("EMBER_LICENCE_TEST_KEY", {});
         if (realKey.isNotEmpty())
@@ -689,14 +707,14 @@ namespace
             lic::Manager lm (live);
             bool done = false; juce::String message;
             lm.activate (realKey, [&] (bool r, const juce::String& m) { done = r; message = m; });
-            std::printf ("    Lemon Squeezy activate: %s (%s)\n", done ? "ok" : "FAILED", message.toRawUTF8());
-            check (done && lm.status().access == lic::Access::licensed, "real key activates (store + product match)");
+            std::printf ("    Polar activate: %s (%s)\n", done ? "ok" : "FAILED", message.toRawUTF8());
+            check (done && lm.status().access == lic::Access::licensed, "real key activates (organisation + benefit match)");
             clock += 8 * day;                               // a week later: re-check online
             lm.checkIfDue();
             check (lm.status().access == lic::Access::licensed && ! lm.record().revoked, "weekly re-check: still valid");
             bool released = false;
             lm.deactivate ([&] (bool r, const juce::String& m) { released = r; message = m; });
-            std::printf ("    Lemon Squeezy deactivate: %s (%s)\n", released ? "ok" : "FAILED", message.toRawUTF8());
+            std::printf ("    Polar deactivate: %s (%s)\n", released ? "ok" : "FAILED", message.toRawUTF8());
             check (released, "release frees the activation again");
             dir.deleteRecursively();
         }
@@ -1179,7 +1197,7 @@ namespace
             c.on = true;
             c.asynchronous = false;
             c.file = lf;
-            c.transport = [] (const juce::String&, const juce::StringPairArray&) -> std::pair<int, juce::String> { return { 0, {} }; };
+            c.transport = [] (const juce::String&, const juce::var&) -> std::pair<int, juce::String> { return { 0, {} }; };
             vocalypse::licensing::Manager locked (c);
             EmberAudioProcessor q;
             q.setLicenceForTest (locked);

@@ -159,9 +159,14 @@ gelispelt!“), sleeping (Bypass), listening (AUTO hört zu), proud (AUTO fertig
 zeichnet das Plugin einen Vektor-Teufel als Platzhalter. Bilder: `Products/Ember/Mascot/frames/<stimmung>_001.png …`
 
 ## Lizenz (2026-11-12, eingebaut, noch AUS)
+**2026-11-16: Anbieter jetzt Polar.sh** (Lemon Squeezy nimmt keine neuen Stores mehr, Jakobs Antrag abgelehnt).
+Polar-Kundenportal-API ohne Geheimnis im Plugin (`/v1/customer-portal/license-keys/activate|validate|deactivate`,
+JSON). Organisation 406e9435-…, Produkt 5c48f7e6-… in `EmberLicence.h`; offen: Benefit-ID (Prüfung „richtiges
+Produkt“), Sandbox ja/nein (`polarSandbox`), Checkout-Link (`buyUrl`), Testschlüssel. Beim Lizenz-Benefit MUSS ein
+Aktivierungs-Limit gesetzt sein, sonst lehnt Polar „activate“ mit 403 ab.
 Gleiches Modul und gleiche Regeln wie VOCALYPSE (`docs/LICENSING.md`): 14 Tage Test, Schlüssel aus der Bestell-Mail,
 2 Computer, offline bleibt aktiviert, gesperrt = Audio läuft wie im Bypass durch (gleiche Latenz).
-- Werte: `Products/Ember/Source/EmberLicence.h` (`lemonStoreId`, `lemonProductId`, `buyUrl`). Datei
+- Werte: `Products/Ember/Source/EmberLicence.h` (`polarOrganizationId`, `polarBenefitId`, `buyUrl`). Datei
   `%APPDATA%\Lind Audio\EMBER\EMBER.license`, eigene Signatur (eine VOCALYPSE-Datei gilt nicht).
 - Einschalten: `cmake -S . -B build -DEMBER_LICENSING=ON`, bauen, EmberTests, pluginval, Testschlüssel aktivieren.
 - Oberfläche: ≡ > Lizenz (Status, Schlüssel eingeben, Computer freigeben, Kaufen); Sperrkarte über dem Panel

@@ -8,7 +8,14 @@ namespace vocalypse::licensing
     namespace
     {
         constexpr juce::int64 dayMs = 24LL * 60 * 60 * 1000;
-        constexpr const char* apiBase = "https://api.lemonsqueezy.com/v1/licenses/";
+
+        juce::var jsonBody (std::initializer_list<std::pair<const char*, juce::String>> fields)
+        {
+            auto* o = new juce::DynamicObject();
+            for (const auto& [name, value] : fields)
+                o->setProperty (name, value);
+            return juce::var (o);
+        }
 
         juce::String shortKey (const juce::String& key)
         {
@@ -26,12 +33,13 @@ namespace vocalypse::licensing
             if (r.error == "key of another product")
                 return tr ("Dieser Schlüssel gehört zu einem anderen Produkt. Über „Gratis-Schlüssel holen“ bekommst du einen Schlüssel für EMBER.",
                            "This key belongs to another product. Use “Get free key” to get a key for EMBER.");
-            if (r.error.containsIgnoreCase ("activation limit"))
+            if (r.http == 403 && r.detail.containsIgnoreCase ("limit"))
                 return tr ("Dieser Schlüssel ist schon auf der erlaubten Anzahl Computer aktiv. Gib ihn zuerst auf einem anderen Computer frei (≡ › Lizenz › Diesen Computer freigeben).",
                            "This key is already active on the allowed number of computers. Release it on another computer first (≡ › Licence › Release this computer).");
             if (r.keyStatus == "expired")
                 return tr ("Dieser Schlüssel ist abgelaufen.", "This key has expired.");
-            if (r.keyStatus == "disabled")
+            // Polar: 403 = revoked, disabled or expired (the limit is handled above)
+            if (r.keyStatus == "disabled" || r.keyStatus == "revoked" || r.http == 403)
                 return tr ("Dieser Schlüssel wurde deaktiviert. Schreib uns an support@lind-audio.com, wenn das ein Fehler ist.",
                            "This key has been disabled. Write to support@lind-audio.com if that is a mistake.");
             return tr ("Dieser Schlüssel passt nicht. Kopier ihn genau so, wie er in der E-Mail steht.",
@@ -67,45 +75,66 @@ namespace vocalypse::licensing
         return s;
     }
 
-    Reply parseReply (const juce::String& json, int httpStatus, const juce::String& okField,
-                      juce::int64 storeId, juce::int64 productId)
+    Reply parseReply (const juce::String& json, int httpStatus, Call call,
+                      const juce::String& organizationId, const juce::String& benefitId)
     {
+        // Polar customer-portal licence API (docs: polar.sh/docs/api-reference/customer-portal/license-keys):
+        //   activate   200 {id (activation), license_key:{status, organization_id, benefit_id, customer:{name}}}
+        //   validate   200 {status, organization_id, benefit_id, customer:{name}, activation:{id}}
+        //   deactivate 204 (no body)
+        //   errors     403 {error:"NotPermitted", detail} (revoked / disabled / expired / activation limit),
+        //              404 {error:"ResourceNotFound"} (unknown key or activation), 422 (malformed request)
         Reply r;
         r.http = httpStatus;
         const auto v = juce::JSON::parse (json);
+        const bool success = httpStatus >= 200 && httpStatus < 300;
         // 4xx: the server answered (invalid key, limit reached ...); 0 / 5xx / no JSON: not reached
-        r.reached = httpStatus >= 200 && httpStatus < 500 && v.isObject();
+        r.reached = httpStatus >= 200 && httpStatus < 500 && (v.isObject() || (success && json.trim().isEmpty()));
         if (! r.reached)
             return r;
 
-        r.error = v.getProperty ("error", {}).toString();
-        if (const auto key = v.getProperty ("license_key", {}); key.isObject())
-            r.keyStatus = key.getProperty ("status", {}).toString();
-        if (const auto inst = v.getProperty ("instance", {}); inst.isObject())
-            r.instanceId = inst.getProperty ("id", {}).toString();
-        const auto meta = v.getProperty ("meta", {});
-        if (meta.isObject())
-            r.customer = meta.getProperty ("customer_name", {}).toString();
-
-        r.ok = (bool) v.getProperty (juce::Identifier (okField), false);
-        if (r.ok && meta.isObject())
+        if (! success)
         {
-            const auto store = (juce::int64) meta.getProperty ("store_id", 0);
-            const auto product = (juce::int64) meta.getProperty ("product_id", 0);
-            if ((storeId != 0 && store != storeId) || (productId != 0 && product != productId))
+            r.error = v.getProperty ("error", {}).toString();
+            if (const auto d = v.getProperty ("detail", {}); d.isString())
+                r.detail = d.toString();
+            return r;
+        }
+        if (call == Call::deactivate)
+        {
+            r.ok = true;
+            return r;
+        }
+
+        const auto key = call == Call::activate ? v.getProperty ("license_key", {}) : v;
+        if (! key.isObject())
+            return r;
+        r.keyStatus = key.getProperty ("status", {}).toString();
+        if (const auto customer = key.getProperty ("customer", {}); customer.isObject())
+            r.customer = customer.getProperty ("name", {}).toString();
+        if (call == Call::activate)
+            r.instanceId = v.getProperty ("id", {}).toString();
+        else if (const auto act = v.getProperty ("activation", {}); act.isObject())
+            r.instanceId = act.getProperty ("id", {}).toString();
+
+        r.ok = r.keyStatus == "granted" && (call == Call::validate || r.instanceId.isNotEmpty());
+        if (r.ok)
+        {
+            const auto org = key.getProperty ("organization_id", {}).toString();
+            const auto benefit = key.getProperty ("benefit_id", {}).toString();
+            if ((organizationId.isNotEmpty() && org != organizationId) || (benefitId.isNotEmpty() && benefit != benefitId))
             {
                 r.ok = false;
                 r.error = "key of another product";
             }
         }
-        if (r.ok && (r.keyStatus == "disabled" || r.keyStatus == "expired"))
-            r.ok = false;
         return r;
     }
 
     juce::String cleanKey (const juce::String& key)
     {
-        return key.retainCharacters ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-");
+        // Polar keys: UUID, optionally with a prefix such as EMBER_
+        return key.retainCharacters ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_");
     }
 
     juce::String signatureOf (const Record& r, const FileIdentity& id)
@@ -162,15 +191,12 @@ namespace vocalypse::licensing
 
     Transport internetTransport()
     {
-        return [] (const juce::String& url, const juce::StringPairArray& form) -> std::pair<int, juce::String>
+        return [] (const juce::String& url, const juce::var& json) -> std::pair<int, juce::String>
         {
-            juce::String body;
-            for (int i = 0; i < form.size(); ++i)
-                body << (i > 0 ? "&" : "") << juce::URL::addEscapeChars (form.getAllKeys()[i], true)
-                     << "=" << juce::URL::addEscapeChars (form.getAllValues()[i], true);
+            const auto body = juce::JSON::toString (json, true);
             int status = 0;
             const auto options = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
-                                     .withExtraHeaders ("Accept: application/json\r\nContent-Type: application/x-www-form-urlencoded")
+                                     .withExtraHeaders ("Accept: application/json\r\nContent-Type: application/json")
                                      .withConnectionTimeoutMs (8000)
                                      .withStatusCode (&status)
                                      .withHttpRequestCmd ("POST");
@@ -272,25 +298,21 @@ namespace vocalypse::licensing
             if (done) done (false, tr ("Einen Moment – die Aktivierung läuft noch.", "One moment – the activation is still running."));
             return;
         }
-        juce::StringPairArray form;
-        form.set ("license_key", key);
-        form.set ("instance_name", juce::SystemStats::getComputerName().isNotEmpty() ? juce::SystemStats::getComputerName() : cfg.productName);
+        const auto form = jsonBody ({ { "key", key }, { "organization_id", cfg.organizationId },
+                                      { "label", juce::SystemStats::getComputerName().isNotEmpty() ? juce::SystemStats::getComputerName() : cfg.productName } });
 
         auto transport = cfg.transport;
-        const auto storeId = cfg.storeId, productId = cfg.productId;
+        const auto api = cfg.apiBase, org = cfg.organizationId, benefit = cfg.benefitId;
         const bool async = pool != nullptr;
         auto flag = alive;
-        run ([this, flag, async, transport, form, key, storeId, productId, done]
+        run ([this, flag, async, transport, form, key, api, org, benefit, done]
         {
-            const auto [code, body] = transport (juce::String (apiBase) + "activate", form);
-            const auto reply = parseReply (body, code, "activated", storeId, productId);
+            const auto [code, body] = transport (api + "activate", form);
+            const auto reply = parseReply (body, code, Call::activate, org, benefit);
             if (reply.error == "key of another product" && reply.instanceId.isNotEmpty())
             {
                 // the store already counted this computer for that other product: give the slot back
-                juce::StringPairArray undo;
-                undo.set ("license_key", key);
-                undo.set ("instance_id", reply.instanceId);
-                transport (juce::String (apiBase) + "deactivate", undo);
+                transport (api + "deactivate", jsonBody ({ { "key", key }, { "organization_id", org }, { "activation_id", reply.instanceId } }));
             }
             auto apply = [this, flag, reply, key, done]
             {
@@ -324,16 +346,15 @@ namespace vocalypse::licensing
             if (done) done (false, {});
             return;
         }
-        juce::StringPairArray form;
-        form.set ("license_key", rec.key);
-        form.set ("instance_id", rec.instanceId);
+        const auto form = jsonBody ({ { "key", rec.key }, { "organization_id", cfg.organizationId }, { "activation_id", rec.instanceId } });
         auto transport = cfg.transport;
+        const auto api = cfg.apiBase;
         const bool async = pool != nullptr;
         auto flag = alive;
-        run ([this, flag, async, transport, form, done]
+        run ([this, flag, async, transport, form, api, done]
         {
-            const auto [code, body] = transport (juce::String (apiBase) + "deactivate", form);
-            const auto reply = parseReply (body, code, "deactivated", 0, 0);
+            const auto [code, body] = transport (api + "deactivate", form);
+            const auto reply = parseReply (body, code, Call::deactivate, {}, {});
             auto apply = [this, flag, reply, done]
             {
                 if (! *flag)
@@ -363,17 +384,15 @@ namespace vocalypse::licensing
     {
         if (! cfg.on || ! status().checkDue || busy.exchange (true))
             return;
-        juce::StringPairArray form;
-        form.set ("license_key", rec.key);
-        form.set ("instance_id", rec.instanceId);
+        const auto form = jsonBody ({ { "key", rec.key }, { "organization_id", cfg.organizationId }, { "activation_id", rec.instanceId } });
         auto transport = cfg.transport;
-        const auto storeId = cfg.storeId, productId = cfg.productId;
+        const auto api = cfg.apiBase, org = cfg.organizationId, benefit = cfg.benefitId;
         const bool async = pool != nullptr;
         auto flag = alive;
-        run ([this, flag, async, transport, form, storeId, productId]
+        run ([this, flag, async, transport, form, api, org, benefit]
         {
-            const auto [code, body] = transport (juce::String (apiBase) + "validate", form);
-            const auto reply = parseReply (body, code, "valid", storeId, productId);
+            const auto [code, body] = transport (api + "validate", form);
+            const auto reply = parseReply (body, code, Call::validate, org, benefit);
             auto apply = [this, flag, reply]
             {
                 if (! *flag)

@@ -14,10 +14,9 @@ namespace vocalypse::product
     inline constexpr const char* legacyPresetType = "VelvoxPreset";
     inline constexpr const char* legacySettingsName = "Velvox";
     inline constexpr const char* companyName = "Lind Audio";
-    // Shop / licence (Lemon Squeezy, docs/LICENSING.md). 0 = the key's store / product is not checked.
-    // Only used with -DVOCALYPSE_LICENSING=ON.
-    inline constexpr long long lemonStoreId = 0;
-    inline constexpr long long lemonProductId = 0;
+    // Shop / licence (Polar, docs/LICENSING.md). Empty = not checked. Only used with -DVOCALYPSE_LICENSING=ON.
+    inline constexpr const char* polarOrganizationId = "";
+    inline constexpr const char* polarBenefitId = "";
     inline constexpr const char* buyUrl = "https://lind-audio.com";
    #ifdef VOCALYPSE_VERSION_STRING
     inline constexpr const char* versionString = VOCALYPSE_VERSION_STRING;   // from CMake project(... VERSION)

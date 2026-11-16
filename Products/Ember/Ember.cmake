@@ -6,7 +6,7 @@
 # ---------------------------------------------------------------------------
 set(EMBER_VERSION 1.0.0)
 
-# Licence check (Lemon Squeezy): OFF until the shop ids are in Products/Ember/Source/EmberLicence.h
+# Licence check (Polar): OFF until the shop ids are in Products/Ember/Source/EmberLicence.h
 option(EMBER_LICENSING "EMBER: runs only with a (free) licence key from the mail" OFF)
 
 set(EMBER_SOURCES

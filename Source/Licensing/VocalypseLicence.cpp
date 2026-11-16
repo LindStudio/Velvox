@@ -11,8 +11,8 @@ namespace vocalypse::licensing
             Config c;
             c.productName = product::name;
             c.buyUrl = product::buyUrl;
-            c.storeId = product::lemonStoreId;
-            c.productId = product::lemonProductId;
+            c.organizationId = product::polarOrganizationId;
+            c.benefitId = product::polarBenefitId;
             return c;
         }
     }

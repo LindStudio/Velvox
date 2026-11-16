@@ -2,18 +2,22 @@
 
 #include "Licensing/License.h"
 
-// EMBER's licence (Lemon Squeezy, same rules as VOCALYPSE: docs/LICENSING.md). OFF unless CMake is run with
-// -DEMBER_LICENSING=ON. Jakob's values from the Lemon Squeezy dashboard go here (docs/products/EMBER.md
-// "Lizenz"); with the ids set, a key of another product (e.g. VOCALYPSE) is refused.
+// EMBER's licence (Polar.sh licence keys since 2026-11-16 - Lemon Squeezy took no new stores; same rules as
+// VOCALYPSE: docs/LICENSING.md). OFF unless CMake is run with -DEMBER_LICENSING=ON. Jakob's values from the
+// Polar dashboard go here (docs/products/EMBER.md "Lizenz"); keys of another organisation / benefit are refused.
 #ifndef EMBER_LICENSING
  #define EMBER_LICENSING 0
 #endif
 
 namespace ember
 {
-    inline constexpr long long lemonStoreId = 522230;      // Lemon Squeezy store "lindaudio" (2026-11-12)
-    inline constexpr long long lemonProductId = 1522200;   // EMBER De-Esser (test mode; the live copy gets a new id)
-    inline constexpr const char* buyUrl = "https://lindaudio.lemonsqueezy.com/checkout/buy/0cc81f7a-56f2-4444-bd83-5969eca82a9d";
+    // Polar organisation "Lind Audio" and product "EMBER De-Esser" (Jakob 2026-11-16). A key carries no product
+    // id, only its licence-key benefit: polarBenefitId (empty = not checked, any key of the organisation works).
+    inline constexpr bool polarSandbox = false;
+    inline constexpr const char* polarOrganizationId = "406e9435-111f-4a64-af63-0ca5a5b2aba2";
+    inline constexpr const char* polarProductId = "5c48f7e6-e680-4a23-8007-1054bc0871c7";   // for the checkout link
+    inline constexpr const char* polarBenefitId = "";
+    inline constexpr const char* buyUrl = "https://lind-audio.com";   // TODO: Polar checkout link
 
     inline vocalypse::licensing::Config licenceConfig()
     {
@@ -24,8 +28,9 @@ namespace ember
         c.buyUrl = buyUrl;
         c.trialDays = 0;      // Jakob 2026-11-15: EMBER only runs with a key ...
         c.freeKey = true;     // ... which is free and comes by mail (mailing list)
-        c.storeId = lemonStoreId;
-        c.productId = lemonProductId;
+        c.apiBase = polarSandbox ? vocalypse::licensing::polarSandboxApi : vocalypse::licensing::polarApi;
+        c.organizationId = polarOrganizationId;
+        c.benefitId = polarBenefitId;
         return c;
     }
 

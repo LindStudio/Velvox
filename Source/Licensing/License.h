@@ -6,15 +6,15 @@
 #include <functional>
 #include <memory>
 
-// Licence check (Lemon Squeezy License API), prepared 2026-11-03 - OFF until Jakob has a store:
-// configure with -DVOCALYPSE_LICENSING=ON and fill in the store / product ids in ProductInfo.h.
+// Licence check (Polar.sh licence keys, customer-portal API - no secret in the plugin), prepared 2026-11-03,
+// Lemon Squeezy until 2026-11-16 (LS stopped taking new stores). OFF unless -DVOCALYPSE_LICENSING=ON.
 // Product-neutral since 2026-11-12 (Config: name, file identity, shop link), so the single plugins
 // (EMBER: -DEMBER_LICENSING=ON, Products/Ember/Source/EmberLicence.h) use the same code.
 //
 // Rules (docs/LICENSING.md):
 //   - 14 days trial from the first start on a computer, everything works (Config::trialDays;
 //     EMBER: 0 = a key is needed from the first start - it is free and comes by mail).
-//   - Activation: the key from the order mail; Lemon Squeezy counts the computers (activation limit).
+//   - Activation: the key from the order mail; Polar counts the computers (activation limit on the benefit).
 //   - Activated stays activated offline. Online it is checked again at most once a week, in the
 //     background; only an explicit "invalid / disabled / expired" from the store locks it again.
 //   - Locked (trial over, no valid key): the plugin passes the vocal through unprocessed and shows
@@ -49,18 +49,20 @@ namespace vocalypse::licensing
 
     Status evaluate (const Record&, juce::int64 nowMs, bool licensingOn, int trialDaysAllowed = trialDays) noexcept;
 
-    // One answer of the License API (activate / validate / deactivate)
+    // One answer of the licence API (activate / validate / deactivate)
     struct Reply
     {
         bool ok = false;            // activated / valid / deactivated
         bool reached = false;       // false: no network / server error - nothing is decided
         int http = 0;               // the status code (0 = not reached)
-        juce::String error, instanceId, customer, keyStatus;
+        juce::String error, detail, instanceId, customer, keyStatus;
     };
 
-    // `okField`: "activated", "valid" or "deactivated". A key of another store / product is refused.
-    Reply parseReply (const juce::String& json, int httpStatus, const juce::String& okField,
-                      juce::int64 storeId, juce::int64 productId);
+    enum class Call { activate, validate, deactivate };
+
+    // A key of another organisation / benefit is refused (empty id = not checked).
+    Reply parseReply (const juce::String& json, int httpStatus, Call call,
+                      const juce::String& organizationId, const juce::String& benefitId);
 
     // A pasted key without what mail clients add (spaces, no-break spaces, line breaks, quotes)
     juce::String cleanKey (const juce::String&);
@@ -76,8 +78,11 @@ namespace vocalypse::licensing
     Record readRecord (const juce::File&, const FileIdentity& = {});   // missing / edited file: empty record
     bool writeRecord (const juce::File&, const Record&, const FileIdentity& = {});
 
-    // HTTP POST (form data) -> (status, body). Status 0 = not reached.
-    using Transport = std::function<std::pair<int, juce::String> (const juce::String& url, const juce::StringPairArray& form)>;
+    // HTTP POST (JSON body) -> (status, body). Status 0 = not reached.
+    using Transport = std::function<std::pair<int, juce::String> (const juce::String& url, const juce::var& json)>;
+
+    inline constexpr const char* polarApi = "https://api.polar.sh/v1/customer-portal/license-keys/";
+    inline constexpr const char* polarSandboxApi = "https://sandbox-api.polar.sh/v1/customer-portal/license-keys/";
     Transport internetTransport();
 
     struct Config
@@ -91,7 +96,9 @@ namespace vocalypse::licensing
         juce::File file;                  // default: <app data>/Lind Audio/<productName>/<productName>.license
         Transport transport;              // default: internetTransport()
         std::function<juce::int64()> now; // default: current time
-        juce::int64 storeId = 0, productId = 0;   // 0 = not checked
+        juce::String apiBase = polarApi;  // ends with "/"; + activate / validate / deactivate
+        juce::String organizationId;      // Polar organisation (required by the API)
+        juce::String benefitId;           // the licence-key benefit of this product; empty = not checked
         bool asynchronous = true;         // tests: false (the request runs inside the call)
     };
 

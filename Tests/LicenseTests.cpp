@@ -1,5 +1,5 @@
 // Licence check (Source/Licensing/License.h): trial, activation, weekly re-check, release - against a
-// fake Lemon Squeezy server, never the network.
+// fake Polar server, never the network.
 #include <juce_core/juce_core.h>
 #include "../Source/Licensing/License.h"
 
@@ -8,11 +8,10 @@ namespace
     using namespace vocalypse::licensing;
     constexpr juce::int64 day = 24LL * 60 * 60 * 1000;
 
-    juce::String activated (const juce::String& instance, int store = 7, int product = 42)
+    juce::String activated (const juce::String& instance, const juce::String& org = "org-7", const juce::String& benefit = "ben-42")
     {
-        return R"({"activated":true,"error":null,"license_key":{"id":1,"status":"active","key":"38b1460a-5104-4067-a91d-77b872934d51","activation_limit":2,"activation_usage":1},)"
-               R"("instance":{"id":")" + instance + R"(","name":"PC"},"meta":{"store_id":)" + juce::String (store)
-               + R"(,"product_id":)" + juce::String (product) + R"(,"customer_name":"Jakob"}})";
+        return R"({"id":")" + instance + R"(","label":"PC","license_key":{"status":"granted","organization_id":")" + org
+               + R"(","benefit_id":")" + benefit + R"(","customer":{"name":"Jakob"}}})";
     }
 
     struct FakeServer
@@ -22,9 +21,9 @@ namespace
         juce::StringArray calls;
         Transport transport()
         {
-            return [this] (const juce::String& url, const juce::StringPairArray& form) -> std::pair<int, juce::String>
+            return [this] (const juce::String& url, const juce::var& json) -> std::pair<int, juce::String>
             {
-                calls.add (url.fromLastOccurrenceOf ("/", false, false) + " " + form["license_key"] + " " + form["instance_id"]);
+                calls.add (url.fromLastOccurrenceOf ("/", false, false) + " " + json["key"].toString() + " " + json["activation_id"].toString());
                 return { status, body };
             };
         }
@@ -80,22 +79,22 @@ public:
 
         beginTest ("Server answers: activated, invalid key, limit, another product, disabled, no network");
         {
-            auto ok = parseReply (activated ("inst-1"), 200, "activated", 7, 42);
+            auto ok = parseReply (activated ("inst-1"), 200, Call::activate, "org-7", "ben-42");
             expect (ok.ok && ok.reached);
             expectEquals (ok.instanceId, juce::String ("inst-1"));
             expectEquals (ok.customer, juce::String ("Jakob"));
-            expect (parseReply (activated ("i"), 200, "activated", 0, 0).ok, "ids 0: not checked");
-            expect (! parseReply (activated ("i", 8), 200, "activated", 7, 42).ok, "key of another store");
-            expect (! parseReply (activated ("i", 7, 43), 200, "activated", 7, 42).ok, "key of another product");
+            expect (parseReply (activated ("i"), 200, Call::activate, {}, {}).ok, "ids empty: not checked");
+            expect (! parseReply (activated ("i", "org-8"), 200, Call::activate, "org-7", "ben-42").ok, "key of another organisation");
+            expect (! parseReply (activated ("i", "org-7", "ben-43"), 200, Call::activate, "org-7", "ben-42").ok, "key of another product");
 
-            const auto bad = parseReply (R"({"activated":false,"error":"license_key not found."})", 404, "activated", 7, 42);
+            const auto bad = parseReply (R"({"error":"ResourceNotFound","detail":"Not found"})", 404, Call::activate, "org-7", {});
             expect (bad.reached && ! bad.ok);
-            const auto limit = parseReply (R"({"activated":false,"error":"This license key has reached the activation limit."})", 400, "activated", 0, 0);
-            expect (limit.reached && ! limit.ok && limit.error.contains ("activation limit"));
-            const auto disabled = parseReply (R"({"valid":true,"error":null,"license_key":{"status":"disabled"},"meta":{}})", 200, "valid", 0, 0);
+            const auto limit = parseReply (R"({"error":"NotPermitted","detail":"License key activation limit reached"})", 403, Call::activate, {}, {});
+            expect (limit.reached && ! limit.ok && limit.detail.contains ("limit"));
+            const auto disabled = parseReply (R"({"status":"disabled","organization_id":"org-7"})", 200, Call::validate, {}, {});
             expect (disabled.reached && ! disabled.ok);
-            expect (! parseReply ({}, 0, "valid", 0, 0).reached, "no network");
-            expect (! parseReply ("<html>", 502, "valid", 0, 0).reached, "server error");
+            expect (! parseReply ({}, 0, Call::validate, {}, {}).reached, "no network");
+            expect (! parseReply ("<html>", 502, Call::validate, {}, {}).reached, "server error");
         }
 
         beginTest ("Stored record: signed; a hand-edited file loses the key, never restarts the trial");
@@ -122,7 +121,7 @@ public:
             c.file = tmp.getFile();
             c.transport = server.transport();
             c.now = [&now] { return now; };
-            c.storeId = 7; c.productId = 42;
+            c.organizationId = "org-7"; c.benefitId = "ben-42";
             c.asynchronous = false;
 
             auto m = std::make_unique<Manager> (c);
@@ -134,7 +133,7 @@ public:
             m = std::make_unique<Manager> (c);
             expect (m->isLocked(), "trial over: locked (the start was stored)");
 
-            server.body = R"({"activated":false,"error":"license_key not found."})"; server.status = 404;
+            server.body = R"({"error":"ResourceNotFound","detail":"Not found"})"; server.status = 404;
             bool result = true; juce::String message;
             m->activate ("wrong", [&] (bool ok, const juce::String& msg) { result = ok; message = msg; });
             expect (! result && message.isNotEmpty() && m->isLocked());
@@ -159,7 +158,7 @@ public:
             expect (! m->isLocked(), "offline: stays activated");
 
             // Online, the store refunded / disabled the key: locked
-            server.status = 404; server.body = R"({"valid":false,"error":"license_key not found."})";
+            server.status = 404; server.body = R"({"error":"ResourceNotFound","detail":"Not found"})";
             m->checkIfDue();
             expect (m->isLocked() && m->record().revoked);
 
@@ -167,7 +166,7 @@ public:
             server.status = 200; server.body = activated ("inst-10");
             m->activate ("KEY-1", nullptr);
             expect (! m->isLocked());
-            server.body = R"({"deactivated":true,"error":null,"license_key":{"status":"inactive"},"meta":{"store_id":7,"product_id":42}})";
+            server.status = 204; server.body = {};
             m->deactivate ([&] (bool ok, const juce::String&) { result = ok; });
             expect (result && m->isLocked() && m->record().key.isEmpty());
             expect (server.calls.getReference (server.calls.size() - 1) == "deactivate KEY-1 inst-10");
