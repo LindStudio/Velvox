@@ -13,10 +13,11 @@ namespace ember
 {
     // Polar organisation "Lind Audio" and product "EMBER De-Esser" (Jakob 2026-11-16). A key carries no product
     // id, only its licence-key benefit: polarBenefitId (empty = not checked, any key of the organisation works).
-    inline constexpr bool polarSandbox = false;
+    // SANDBOX (sandbox.polar.sh, 2026-11-16): the live account gets its own ids -> replace all three + polarSandbox = false
+    inline constexpr bool polarSandbox = true;
     inline constexpr const char* polarOrganizationId = "406e9435-111f-4a64-af63-0ca5a5b2aba2";
     inline constexpr const char* polarProductId = "5c48f7e6-e680-4a23-8007-1054bc0871c7";   // for the checkout link
-    inline constexpr const char* polarBenefitId = "";
+    inline constexpr const char* polarBenefitId = "dc8884ec-f532-492d-ac7d-58e64a2b5ec3";  // "EMBER De-Esser Product Key", 2 computers
     inline constexpr const char* buyUrl = "https://lind-audio.com";   // TODO: Polar checkout link
 
     inline vocalypse::licensing::Config licenceConfig()
