@@ -3,6 +3,7 @@
 //   EmberTests --render <wav> <dir>     AUTO on the take, then render: <name>_ember.wav, <name>_delta.wav + report
 //   EmberTests --snapshots <dir>        PNGs of SIMPLE and ADVANCED (both languages)
 //   EmberTests --marketing <take.wav> <dir>   website pictures (2x) of both views, captured at the strongest S
+//   EmberTests --mascot-loops <dir>            website loops of Ember (listening, dancing with/without S sparks, idle, lispy, sleeping), 2x
 //   env EMBER_VOCALS=<dir or ;-list>    also runs AUTO on these real takes (report + sanity checks)
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "EmberEngine.h"
@@ -1408,6 +1409,51 @@ namespace
         return 0;
     }
 
+    // Website loops of Ember as the plugin draws him (2x, 24 pictures/s, 4 s each, after a warm-up so no cross-fade
+    // is caught): listening (AUTO), dancing with the S sparks (an S every 0.75 s), dancing without S.
+    int mascotLoops (const juce::File& dir)
+    {
+        dir.createDirectory();
+        struct Loop { const char* name; MascotInput in; bool pulses; };
+        const Loop loops[] {
+            { "listening", { false, true, true, 0.0f }, false },
+            { "dance_s", { false, true, false, 0.0f }, true },
+            { "dance", { false, true, false, 0.0f }, false },
+            { "idle", {}, false },
+            { "lispy", { false, true, false, 12.0f }, false },
+            { "sleeping", { true, false, false, 0.0f }, false },
+        };
+        juce::PNGImageFormat png;
+        for (const auto& l : loops)
+        {
+            MascotView view;
+            view.setSize (480, 360);
+            view.setInput (l.in);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (3500);
+            for (int k = 1; k <= 96; ++k)
+            {
+                if (l.pulses)
+                {
+                    auto pulse = l.in;
+                    pulse.reductionDb = (k % 18) < 4 ? 4.0f + (float) (k % 36) / 6.0f : 0.0f;
+                    view.setInput (pulse);
+                }
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (42);
+                juce::Image img (juce::Image::ARGB, 960, 720, true);
+                {
+                    juce::Graphics g (img);
+                    g.fillAll (juce::Colour (0xff05060a));
+                    g.addTransform (juce::AffineTransform::scale (2.0f));
+                    view.paintEntireComponent (g, true);
+                }
+                juce::FileOutputStream out (dir.getChildFile (juce::String (l.name) + "_" + juce::String (k).paddedLeft ('0', 3) + ".png"));
+                if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
+            }
+            std::printf ("  %s: 96 pictures\n", l.name);
+        }
+        return 0;
+    }
+
     void testRealTakes()
     {
         const auto env = juce::SystemStats::getEnvironmentVariable ("EMBER_VOCALS", {});
@@ -1466,6 +1512,8 @@ int main (int argc, char** argv)
         return render (juce::File (args[1]), juce::File (args[2]));
     if (args.size() >= 3 && args[0] == "--marketing")
         return marketing (juce::File (args[1]), juce::File (args[2]));
+    if (args.size() >= 2 && args[0] == "--mascot-loops")
+        return mascotLoops (juce::File (args[1]));
 
     juce::File snapshotDir;
     if (args.size() >= 2 && args[0] == "--snapshots")
