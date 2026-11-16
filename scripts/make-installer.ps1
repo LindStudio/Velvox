@@ -1,8 +1,12 @@
 <#
   Builds the Windows installer of a single plugin (Release build, its tests, then Inno Setup).
 
-  Usage:  .\scripts\make-installer.ps1 [-Product Ember] [-SkipTests]
-  Output: build\installer\EMBER_De-Esser_<version>_Windows_Setup.exe
+  Usage:  .\scripts\make-installer.ps1 [-Product Ember] [-SkipTests] [-NoLicence]
+  Output: build-licence\installer\EMBER_De-Esser_<version>_Windows_Setup.exe
+
+  The installer is ALWAYS built with the licence check (-D<PRODUCT>_LICENSING=ON, folder build-licence) -
+  2026-11-16: the plain "build" folder has it OFF, an installer from there would run without a key.
+  -NoLicence: an internal test installer without the check (folder build, never upload that one).
 
   Needs Inno Setup 6 (winget install JRSoftware.InnoSetup --scope user). Not code-signed yet: Windows
   SmartScreen warns about unsigned installers - buy a code-signing certificate before selling.
@@ -11,12 +15,14 @@ param(
     [ValidateSet("Ember")]
     [string]$Product = "Ember",
     [string]$JuceDir = "$env:USERPROFILE\dev\JUCE-8.0.9",
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$NoLicence
 )
 
 $ErrorActionPreference = "Stop"
 $source = Split-Path -Parent $PSScriptRoot
-$build  = Join-Path $source "build"
+$licenceFlag = "-D$($Product.ToUpper())_LICENSING=$(if ($NoLicence) { 'OFF' } else { 'ON' })"
+$build  = Join-Path $source $(if ($NoLicence) { "build" } else { "build-licence" })
 
 $cmake = (Get-Command cmake -ErrorAction SilentlyContinue).Source
 if (-not $cmake) {
@@ -33,8 +39,11 @@ $cmakeFile = Join-Path $source "Products\$Product\$Product.cmake"
 $version = (Select-String -Path $cmakeFile -Pattern 'set\(\w+_VERSION ([0-9.]+)\)').Matches[0].Groups[1].Value
 Write-Host "$Product $version"
 
-& $cmake -S $source -B $build -G "Visual Studio 17 2022" -A x64 "-DJUCE_DIR=$($JuceDir -replace '\\','/')"
+& $cmake -S $source -B $build -G "Visual Studio 17 2022" -A x64 "-DJUCE_DIR=$($JuceDir -replace '\\','/')" $licenceFlag
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
+$cached = Select-String -Path (Join-Path $build "CMakeCache.txt") -Pattern "^$($Product.ToUpper())_LICENSING:BOOL=(\w+)"
+Write-Host "Licence check: $($cached.Matches[0].Groups[1].Value)"
+if (-not $NoLicence -and $cached.Matches[0].Groups[1].Value -ne "ON") { throw "Licence check is not ON - no installer" }
 & $cmake --build $build --config Release --target "${Product}_VST3" "${Product}_Standalone" "${Product}Tests" --parallel
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
