@@ -550,6 +550,14 @@ namespace
             EmberAudioProcessor p;
             check (p.getLicence().isOn() == (EMBER_LICENSING != 0), "build switch decides");
             check (p.getLicence().productName() == "EMBER" && p.getLicence().buyUrl().isNotEmpty(), "EMBER's name and shop");
+            // Polar 2026-11-16: German / English checkout by UI language
+            const auto before = vocalypse::i18n::current();
+            vocalypse::i18n::setCurrent (vocalypse::i18n::Language::german);
+            const auto de = p.getLicence().buyUrl();
+            vocalypse::i18n::setCurrent (vocalypse::i18n::Language::english);
+            const auto en = p.getLicence().buyUrl();
+            vocalypse::i18n::setCurrent (before);
+            check (de == buyUrlGerman && en == buyUrlEnglish, "checkout follows the UI language (" + de + " / " + en + ")");
         }
 
         const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember-licence-test");

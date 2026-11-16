@@ -412,6 +412,11 @@ namespace vocalypse::licensing
         });
     }
 
+    juce::String Manager::buyUrl() const
+    {
+        return cfg.buyUrlEnglish.isEmpty() ? cfg.buyUrl : tr (cfg.buyUrl, cfg.buyUrlEnglish);
+    }
+
     juce::String Manager::describe() const
     {
         const auto s = status();

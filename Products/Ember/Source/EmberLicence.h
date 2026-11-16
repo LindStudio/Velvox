@@ -17,9 +17,12 @@ namespace ember
     // product 5c48f7e6-e680-4a23-8007-1054bc0871c7, benefit dc8884ec-f532-492d-ac7d-58e64a2b5ec3 (polarSandbox = true).
     inline constexpr bool polarSandbox = false;
     inline constexpr const char* polarOrganizationId = "afc3b14c-70ab-4a83-8cdb-8ca87e5e4e3e";
-    inline constexpr const char* polarProductId = "5f4d00a0-7c91-4a34-b45c-20aa06a9cae1";
+    // Two products (German / English checkout fields), both carry the same licence-key benefit and download
+    inline constexpr const char* polarProductIdGerman = "a59af481-d515-4698-9f3f-617c6ad20922";
+    inline constexpr const char* polarProductIdEnglish = "5f4d00a0-7c91-4a34-b45c-20aa06a9cae1";
     inline constexpr const char* polarBenefitId = "33f1506b-bbd2-42f5-b02c-0d202c8ea392";  // "EMBER De-Esser Product Key"
-    inline constexpr const char* buyUrl = "https://buy.polar.sh/polar_cl_IWDxw3tiibYfyuhNsWcYeE7hGhj45VuDLXzmi1XSKYM";
+    inline constexpr const char* buyUrlGerman = "https://buy.polar.sh/polar_cl_YB5D9YWU8imT9rhOl2OWLysOhkCDCNhBocLg03I7c6D";
+    inline constexpr const char* buyUrlEnglish = "https://buy.polar.sh/polar_cl_IWDxw3tiibYfyuhNsWcYeE7hGhj45VuDLXzmi1XSKYM";
 
     inline vocalypse::licensing::Config licenceConfig()
     {
@@ -27,7 +30,8 @@ namespace ember
         c.on = EMBER_LICENSING != 0;
         c.productName = "EMBER";   // file: %APPDATA%\Lind Audio\EMBER\EMBER.license
         c.identity = { "EMBER/Lnda/Embr/3f9a", "EmberLicence" };
-        c.buyUrl = buyUrl;
+        c.buyUrl = buyUrlGerman;
+        c.buyUrlEnglish = buyUrlEnglish;
         c.trialDays = 0;      // Jakob 2026-11-15: EMBER only runs with a key ...
         c.freeKey = true;     // ... which is free and comes by mail (mailing list)
         c.apiBase = polarSandbox ? vocalypse::licensing::polarSandboxApi : vocalypse::licensing::polarApi;

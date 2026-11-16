@@ -90,7 +90,8 @@ namespace vocalypse::licensing
         bool on = enabledInBuild;
         juce::String productName = "VOCALYPSE";   // in messages, the computer's name at the store, the default file
         FileIdentity identity;
-        juce::String buyUrl;              // the shop / checkout page
+        juce::String buyUrl;              // the shop / checkout page (German UI; English too unless buyUrlEnglish is set)
+        juce::String buyUrlEnglish;       // the English checkout (EMBER: own Polar product with English fields)
         int trialDays = licensing::trialDays;   // 0: no trial, locked until a key is activated
         bool freeKey = false;             // the key costs nothing (checkout sends it by mail): "get free key", not "buy"
         juce::File file;                  // default: <app data>/Lind Audio/<productName>/<productName>.license
@@ -125,7 +126,7 @@ namespace vocalypse::licensing
         void checkIfDue();                // background re-check once a week
 
         juce::String describe() const;    // one line for the settings sheet
-        const juce::String& buyUrl() const noexcept { return cfg.buyUrl; }
+        juce::String buyUrl() const;      // the checkout for the current UI language
         const juce::String& productName() const noexcept { return cfg.productName; }
         int trialDays() const noexcept { return cfg.trialDays; }
         bool freeKey() const noexcept { return cfg.freeKey; }
