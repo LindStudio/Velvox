@@ -3,6 +3,7 @@
 //   EmberTests --render <wav> <dir>     AUTO on the take, then render: <name>_ember.wav, <name>_delta.wav + report
 //   EmberTests --snapshots <dir>        PNGs of SIMPLE and ADVANCED (both languages)
 //   EmberTests --marketing <take.wav> <dir>   website pictures (2x) of both views, captured at the strongest S
+//   EmberTests --rig <dir>                     the live rig (FIGUR_ANIMIEREN.md): rest pose + test poses as PNG, 600 px
 //   EmberTests --mascot-loops <dir>            website loops of Ember (listening, dancing with/without S sparks, idle, lispy, sleeping), 2x
 //   env EMBER_VOCALS=<dir or ;-list>    also runs AUTO on these real takes (report + sanity checks)
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -12,6 +13,7 @@
 #include "EmberProcessor.h"
 #include "EmberEditor.h"
 #include "EmberMascot.h"
+#include "EmberRig.h"
 #include "EmberPresets.h"
 #include "Text/I18n.h"
 
@@ -1437,6 +1439,78 @@ namespace
 
     // Website loops of Ember as the plugin draws him (2x, 24 pictures/s, 4 s each, after a warm-up so no cross-fade
     // is caught): listening (AUTO), dancing with the S sparks (an S every 0.75 s), dancing without S.
+    // The live rig: the rest pose and the test poses of FIGUR_ANIMIEREN.md section 5, rendered as the plugin draws
+    // them, on white (edges show), to compare with the browser prototype (Products/Ember/Mascot/live_v17)
+    struct RigShot { const char* name; RigPose pose; };
+    std::vector<RigShot> rigShots()
+    {
+        auto p = [] (std::function<void (RigPose&)> f) { RigPose r; f (r); return r; };
+        return {
+            { "rest", RigPose {} },
+            { "head_right_arms_out", p ([] (RigPose& r) { r.head = 12; r.headX = 9; r.armL = -40; r.armR = 40; r.earL = -28; r.earR = 28; r.tail = 28; }) },
+            { "head_left_arm_in", p ([] (RigPose& r) { r.head = -13; r.headX = -10; r.headY = 8; r.armR = 45; r.armL = 4; r.earL = 30; r.earR = -30; r.tail = -30; r.lean = -3; r.squash = 0.06f; }) },
+            { "eyes_half", p ([] (RigPose& r) { r.lid = 0.5f; r.browY = 3; r.browTilt = -3; }) },
+            { "eyes_shut", p ([] (RigPose& r) { r.lid = 1.0f; }) },
+            { "squint_cross_mouth", p ([] (RigPose& r) { r.lowLid = 0.55f; r.browY = 4; r.browTilt = 9; r.head = 10; r.headX = 8; r.mouth = 0.8f; }) },
+            { "look_corner", p ([] (RigPose& r) { r.lookX = 1; r.lookY = 1; r.pupil = 1.12f; r.browY = -6; r.browTilt = -4; }) },
+            { "mouth_wide", p ([] (RigPose& r) { r.mouth = 1.15f; r.mouthW = 0.8f; r.bob = -30; r.squash = -0.05f; r.armL = -42; r.armR = 42; }) },
+        };
+    }
+
+    int rigPictures (const juce::File& dir)
+    {
+        dir.createDirectory();
+        juce::PNGImageFormat png;
+        for (const auto& shot : rigShots())
+        {
+            juce::Image img (juce::Image::ARGB, 600, 600, true);
+            {
+                juce::Graphics g (img);
+                g.fillAll (juce::Colours::white);
+                RigRenderer r;
+                r.render (g, img.getBounds().toFloat(), shot.pose);
+            }
+            auto f = dir.getChildFile (juce::String (shot.name) + ".png");
+            f.deleteFile();
+            juce::FileOutputStream out (f);
+            png.writeImageToStream (img, out);
+        }
+        std::printf ("rig pictures: %s\n", dir.getFullPathName().toRawUTF8());
+        return 0;
+    }
+
+    void testRig()
+    {
+        currentTest = "rig";
+        const auto& rig = MascotRig::get();
+        check (rig.isValid(), "rig data loads (parts, rig.json, eyes)");
+        check (rig.parts.size() == 7 && rig.meshes.size() == 5, "7 parts, 5 meshes");
+        // the figure is drawn and sits inside the area; the plugin's size (~300 px) renders fast enough for 60 fps
+        juce::Image img (juce::Image::ARGB, 300, 300, true);
+        RigRenderer r;
+        RigPose moved; moved.head = 10; moved.armL = -30; moved.tail = 20; moved.lid = 0.5f; moved.mouth = 0.7f;
+        double worst = 0, sumRest = 0, sumMoved = 0;
+        for (int k = 0; k < 20; ++k)
+        {
+            img.clear (img.getBounds());
+            juce::Graphics g (img);
+            const auto t0 = juce::Time::getMillisecondCounterHiRes();
+            r.render (g, img.getBounds().toFloat(), (k % 2) ? moved : RigPose {});
+            const auto dt = juce::Time::getMillisecondCounterHiRes() - t0;
+            (k % 2 ? sumMoved : sumRest) += dt;
+            if (k >= 2) worst = std::max (worst, dt);       // the first frames build the caches
+        }
+        std::printf ("  rig: rest %.2f ms, moved %.2f ms on average\n", sumRest / 10.0, sumMoved / 10.0);
+        int opaque = 0;
+        for (int y = 0; y < 300; y += 3)
+            for (int x = 0; x < 300; x += 3)
+                opaque += img.getPixelAt (x, y).getAlpha() > 128 ? 1 : 0;
+        check (opaque > 1000 && opaque < 6000, "the figure covers a sensible part of the area (" + juce::String (opaque) + ")");
+        check (img.getPixelAt (2, 2).getAlpha() == 0, "nothing in the corner");
+        std::printf ("  rig: worst frame %.2f ms at 300 px\n", worst);
+        check (worst < 12.0, "a frame at 300 px renders in under 12 ms (" + juce::String (worst, 2) + " ms)");
+    }
+
     int mascotLoops (const juce::File& dir)
     {
         dir.createDirectory();
@@ -1538,6 +1612,8 @@ int main (int argc, char** argv)
         return render (juce::File (args[1]), juce::File (args[2]));
     if (args.size() >= 3 && args[0] == "--marketing")
         return marketing (juce::File (args[1]), juce::File (args[2]));
+    if (args.size() >= 2 && args[0] == "--rig")
+        return rigPictures (juce::File (args[1]));
     if (args.size() >= 2 && args[0] == "--mascot-loops")
         return mascotLoops (juce::File (args[1]));
 
@@ -1566,6 +1642,7 @@ int main (int argc, char** argv)
     testSIntoVowel();
     testPresets();
     testMascotClips();
+    testRig();
     testMascotFrames (snapshotDir);
     testEditor (snapshotDir);
     testRealTakes();

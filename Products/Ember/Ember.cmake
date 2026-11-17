@@ -14,6 +14,7 @@ set(EMBER_SOURCES
     Products/Ember/Source/EmberAuto.cpp
     Products/Ember/Source/EmberParams.cpp
     Products/Ember/Source/EmberMascot.cpp
+    Products/Ember/Source/EmberRig.cpp
     Products/Ember/Source/EmberPresets.cpp
     Products/Ember/Source/EmberProcessor.cpp
     Products/Ember/Source/EmberEditor.cpp
@@ -43,6 +44,13 @@ juce_add_binary_data(EmberMascotData
     HEADER_NAME EmberMascotData.h
     NAMESPACE EmberMascotData
     SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/Products/Ember/Mascot/mascot.json ${EMBER_MASCOT_FRAMES})
+
+# Ember as a live rig (2026-11-17): parts + rig.json from tools/mascot/export_plugin_rig.py (see FIGUR_ANIMIEREN.md)
+file(GLOB EMBER_RIG_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Products/Ember/Mascot/live/*")
+juce_add_binary_data(EmberRigData
+    HEADER_NAME EmberRigData.h
+    NAMESPACE EmberRigData
+    SOURCES ${EMBER_RIG_FILES})
 
 set(EMBER_DEFINITIONS
     JUCE_WEB_BROWSER=0
@@ -80,6 +88,7 @@ target_link_libraries(Ember
     PRIVATE
         VocalypseAssets
         EmberMascotData
+        EmberRigData
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
@@ -99,6 +108,7 @@ if(VOCALYPSE_BUILD_TESTS)
         PRIVATE
             VocalypseAssets
             EmberMascotData
+            EmberRigData
             juce::juce_audio_utils
             juce::juce_dsp
             juce::juce_recommended_config_flags
