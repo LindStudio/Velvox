@@ -2,6 +2,8 @@
 //   EmberTests                          all checks (exit code 1 on a failure)
 //   EmberTests --render <wav> <dir>     AUTO on the take, then render: <name>_ember.wav, <name>_delta.wav + report
 //   EmberTests --snapshots <dir>        PNGs of SIMPLE and ADVANCED (both languages)
+//   EmberTests --marketing <take.wav> <dir>   website pictures (2x) of both views, captured at the strongest S
+//   EmberTests --mascot-loops <dir>            website loops of Ember (listening, dancing with/without S sparks, idle, lispy, sleeping), 2x
 //   env EMBER_VOCALS=<dir or ;-list>    also runs AUTO on these real takes (report + sanity checks)
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "EmberEngine.h"
@@ -1338,6 +1340,146 @@ namespace
         return 0;
     }
 
+    // Website / marketing pictures: a real take runs through EMBER (AUTO set up on it), the editor is ticked like the
+    // real 30 fps timer, and both views are captured at 2x right at the strongest S, so spectrum, meters and Ember
+    // show the plugin at work instead of an empty window.
+    int marketing (const juce::File& in, const juce::File& dir)
+    {
+        double fs = 0.0;
+        auto take = loadWav (in, fs);
+        if (take == nullptr) { std::printf ("cannot read %s\n", in.getFullPathName().toRawUTF8()); return 1; }
+        // a dry take sits low; bring its peak to -1 dBFS so the spectrum fills the display as in a mix
+        if (const float peak = take->getMagnitude (0, take->getNumSamples()); peak > 0.0f)
+            take->applyGain (0.89f / peak);
+        const int n = take->getNumSamples(), block = 512;
+        const auto stereoBlock = [&] (juce::AudioBuffer<float>& buf, int start)
+        {
+            const int len = std::min (block, n - start);
+            buf.clear();
+            for (int ch = 0; ch < 2; ++ch)
+                buf.copyFrom (ch, 0, *take, std::min (ch, take->getNumChannels() - 1), start, len);
+        };
+        const auto setUp = [&] (EmberAudioProcessor& p)
+        {
+            p.prepareToPlay (fs, block);
+            p.startAuto();
+            juce::AudioBuffer<float> buf (2, block);
+            juce::MidiBuffer midi;
+            for (int s = 0; s + block <= std::min (n, (int) (fs * 13.0)); s += block) { stereoBlock (buf, s); p.processBlock (buf, midi); }
+            p.finishAuto();
+            p.waitForAuto();
+        };
+
+        // pass 1: where is the strongest reduction (after a few seconds, so the spectrum has filled)?
+        // SIMPLE is captured at the strongest S (Ember at work); ADVANCED at the loudest vowel right after a clear S,
+        // so the spectrum shows the whole voice while the reduction trace still shows the S
+        int bestStart = 0, vowelStart = 0;
+        {
+            EmberAudioProcessor p;
+            setUp (p);
+            juce::AudioBuffer<float> buf (2, block);
+            juce::MidiBuffer midi;
+            float best = 0.0f, bestVowel = 0.0f;
+            int lastS = -1000000;
+            for (int s = 0; s + block <= n; s += block)
+            {
+                stereoBlock (buf, s);
+                const float rms = buf.getRMSLevel (0, 0, block);
+                p.processBlock (buf, midi);
+                const float gr = p.engine.gainReductionDb.pull();
+                if (s <= (int) (fs * 4.0))
+                    continue;
+                if (gr > best) { best = gr; bestStart = s; }
+                if (gr >= 3.0f) lastS = s;
+                if (s - lastS < (int) (fs * 0.3) && gr < 0.5f && rms > bestVowel) { bestVowel = rms; vowelStart = s; }
+            }
+            if (vowelStart == 0) vowelStart = bestStart;
+            std::printf ("strongest reduction %.1f dB at %.2f s, vowel after an S at %.2f s (AUTO: %s)\n",
+                         best, bestStart / fs, vowelStart / fs, p.getAutoMessage().toRawUTF8());
+        }
+        // pass 2: play up to that moment with the editor running, then capture
+        dir.createDirectory();
+        UserSettings::useFileForTests (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_marketing.settings"));
+        juce::PNGImageFormat png;
+        for (auto lang : { vocalypse::i18n::Language::german, vocalypse::i18n::Language::english })
+            for (bool adv : { false, true })
+            {
+                vocalypse::i18n::overrideSystemLanguage (lang);
+                EmberAudioProcessor p;
+                setUp (p);
+                std::unique_ptr<juce::AudioProcessorEditor> base (p.createEditor());
+                auto* ed = dynamic_cast<EmberEditor*> (base.get());
+                if (ed == nullptr) return 1;
+                ed->setSize (look::baseW, look::baseH);
+                ed->setAdvanced (adv);
+                juce::AudioBuffer<float> buf (2, block);
+                juce::MidiBuffer midi;
+                const int target = adv ? vowelStart : bestStart;
+                const int from = std::max (0, target - (int) (fs * 3.0));
+                int sinceTick = 0;
+                for (int s = from; s <= target; s += block)
+                {
+                    stereoBlock (buf, s);
+                    p.processBlock (buf, midi);
+                    sinceTick += block;
+                    if (sinceTick >= (int) (fs / 30.0)) { sinceTick = 0; ed->tickForTest(); juce::MessageManager::getInstance()->runDispatchLoopUntil (1); }
+                }
+                for (int i = 0; i < 2; ++i) { ed->tickForTest(); juce::MessageManager::getInstance()->runDispatchLoopUntil (2); }
+                const auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
+                const auto name = juce::String (adv ? "advanced_" : "simple_") + (lang == vocalypse::i18n::Language::german ? "de" : "en") + "@2x.png";
+                juce::FileOutputStream out (dir.getChildFile (name));
+                if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
+                std::printf ("  %s %dx%d\n", name.toRawUTF8(), img.getWidth(), img.getHeight());
+            }
+        vocalypse::i18n::overrideSystemLanguage (std::nullopt);
+        return 0;
+    }
+
+    // Website loops of Ember as the plugin draws him (2x, 24 pictures/s, 4 s each, after a warm-up so no cross-fade
+    // is caught): listening (AUTO), dancing with the S sparks (an S every 0.75 s), dancing without S.
+    int mascotLoops (const juce::File& dir)
+    {
+        dir.createDirectory();
+        struct Loop { const char* name; MascotInput in; bool pulses; };
+        const Loop loops[] {
+            { "listening", { false, true, true, 0.0f }, false },
+            { "dance_s", { false, true, false, 0.0f }, true },
+            { "dance", { false, true, false, 0.0f }, false },
+            { "idle", {}, false },
+            { "lispy", { false, true, false, 12.0f }, false },
+            { "sleeping", { true, false, false, 0.0f }, false },
+        };
+        juce::PNGImageFormat png;
+        for (const auto& l : loops)
+        {
+            MascotView view;
+            view.setSize (480, 360);
+            view.setInput (l.in);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (3500);
+            for (int k = 1; k <= 96; ++k)
+            {
+                if (l.pulses)
+                {
+                    auto pulse = l.in;
+                    pulse.reductionDb = (k % 18) < 4 ? 4.0f + (float) (k % 36) / 6.0f : 0.0f;
+                    view.setInput (pulse);
+                }
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (42);
+                juce::Image img (juce::Image::ARGB, 960, 720, true);
+                {
+                    juce::Graphics g (img);
+                    g.fillAll (juce::Colour (0xff05060a));
+                    g.addTransform (juce::AffineTransform::scale (2.0f));
+                    view.paintEntireComponent (g, true);
+                }
+                juce::FileOutputStream out (dir.getChildFile (juce::String (l.name) + "_" + juce::String (k).paddedLeft ('0', 3) + ".png"));
+                if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
+            }
+            std::printf ("  %s: 96 pictures\n", l.name);
+        }
+        return 0;
+    }
+
     void testRealTakes()
     {
         const auto env = juce::SystemStats::getEnvironmentVariable ("EMBER_VOCALS", {});
@@ -1394,6 +1536,10 @@ int main (int argc, char** argv)
 
     if (args.size() >= 3 && args[0] == "--render")
         return render (juce::File (args[1]), juce::File (args[2]));
+    if (args.size() >= 3 && args[0] == "--marketing")
+        return marketing (juce::File (args[1]), juce::File (args[2]));
+    if (args.size() >= 2 && args[0] == "--mascot-loops")
+        return mascotLoops (juce::File (args[1]));
 
     juce::File snapshotDir;
     if (args.size() >= 2 && args[0] == "--snapshots")
