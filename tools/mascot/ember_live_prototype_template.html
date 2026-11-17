@@ -1,0 +1,755 @@
+<meta charset="utf-8">
+<title>Ember lebt</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Inter+Tight:wght@400;500;600&display=swap">
+<style>
+/* Layout: the plugin's mascot stage on the left, the simulated plugin / DAW controls on the right (stacked on phones) */
+:root {
+  --bg: #0b0c0f; --panel: #14161b; --panel-2: #1b1e25; --line: #2a2e38; --fg: #eef0f4; --muted: #9399a6;
+  --ember: #ff6a2b; --ember-soft: #ff8a4f; --on: #ffd2b8;
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --body: "Inter Tight", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--fg); }
+body { margin: 0; font: 15px/1.5 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 56px; display: grid; gap: 22px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 10px 24px; }
+h1 { margin: 0; font: 800 clamp(2rem, 5vw, 3.2rem)/0.95 var(--display); text-transform: uppercase; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); max-width: 56ch; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+
+.stage { position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+  background: #ffffff; aspect-ratio: 1 / 1; min-height: 0; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; touch-action: none; }
+.status { position: absolute; left: 14px; top: 12px; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; }
+.chip { font: 600 11px/1 var(--body); letter-spacing: .1em; text-transform: uppercase; padding: 6px 9px; border-radius: 999px;
+  background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.12); color: var(--muted); }
+.chip.hot { color: var(--on); border-color: rgba(255,138,79,.5); }
+.gr { position: absolute; right: 14px; top: 14px; bottom: 14px; width: 8px; border-radius: 4px; background: rgba(255,255,255,.07); overflow: hidden; pointer-events: none; }
+.gr i { position: absolute; left: 0; right: 0; top: 0; height: 0; background: linear-gradient(var(--ember), #ffb36b); border-radius: 4px; }
+.bubble { position: absolute; left: 0; top: 0; max-width: min(250px, 46%); padding: 10px 14px; border-radius: 14px;
+  background: #fff7f1; color: #2a0f12; font: 600 14px/1.35 var(--body); box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  pointer-events: none; opacity: 0; transform: translate(0, 6px) scale(.96); transform-origin: 0 100%;
+  transition: opacity .18s, transform .18s; }
+.bubble.on { opacity: 1; transform: none; }
+.bubble::after { content: ""; position: absolute; left: 16px; bottom: -7px; width: 14px; height: 14px; background: inherit;
+  transform: rotate(45deg); border-radius: 2px; }
+.hint { position: absolute; left: 14px; bottom: 12px; right: 40px; color: rgba(40,30,30,.55); font-size: 12.5px; pointer-events: none; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: grid; gap: 18px; align-content: start; }
+.group { display: grid; gap: 10px; }
+.group h2 { margin: 0; font: 600 11.5px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button.t { font: 600 14px/1 var(--body); color: var(--fg); background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 11px 14px; cursor: pointer; transition: border-color .15s, background .15s; }
+button.t:hover { border-color: #3d4250; }
+button.t[aria-pressed="true"] { background: #2a1710; border-color: var(--ember); color: var(--on); }
+button.t:focus-visible, input:focus-visible { outline: 2px solid var(--ember-soft); outline-offset: 2px; }
+label.sl { display: grid; grid-template-columns: 9.5em 1fr 3.4em; align-items: center; gap: 10px; color: var(--muted); font-size: 13.5px; }
+label.sl output { color: var(--fg); font-variant-numeric: tabular-nums; text-align: right; }
+input[type=range] { width: 100%; accent-color: var(--ember); min-width: 0; }
+.knobrow { display: flex; align-items: center; gap: 14px; }
+.knob { width: 68px; height: 68px; border-radius: 50%; position: relative; cursor: grab; touch-action: none; flex: none;
+  background: radial-gradient(circle at 50% 38%, #3a3f4b, #191b21 70%); border: 1px solid #3d4250; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+.knob::after { content: ""; position: absolute; left: 50%; top: 7px; width: 3px; height: 16px; margin-left: -1.5px; border-radius: 2px; background: var(--ember); transform-origin: 50% 27px; transform: rotate(var(--rot, 0deg)); }
+.knobrow p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.note { color: var(--muted); font-size: 13px; margin: 0; border-top: 1px solid var(--line); padding-top: 14px; }
+.note strong { color: var(--fg); font-weight: 600; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Ember lebt</h1>
+    <p>Prototyp: Ember aus deiner Zeichnung, live bewegt statt fertiger Schleifen. Beweg die Maus über die Bühne, starte den Song, dreh den Regler oder klick auf Ember.</p>
+  </header>
+  <div class="grid">
+    <div class="stage" id="stage">
+      <canvas id="cv" aria-label="Ember, das Maskottchen, animiert"></canvas>
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="ember-outline" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+        <feGaussianBlur id="ember-outline-blur" in="SourceAlpha" stdDeviation="4" result="b"/>
+        <feComponentTransfer in="b" result="t"><feFuncA type="linear" slope="16.7" intercept="-0.67"/></feComponentTransfer>
+        <feFlood flood-color="rgb(52,6,22)" result="c"/><feComposite in="c" in2="t" operator="in"/></filter></svg>
+      <div class="status"><span class="chip" id="chip-state">Wartet</span><span class="chip" id="chip-bpm">120 BPM</span></div>
+      <div class="gr" aria-hidden="true"><i id="gr"></i></div>
+      <div class="bubble" id="bubble" aria-live="polite"></div>
+      <div class="hint" id="hint">Klick auf Ember startet AUTO, wie im Plugin.</div>
+    </div>
+    <div class="panel">
+      <div class="group">
+        <h2>DAW</h2>
+        <div class="row">
+          <button class="t" id="b-play" aria-pressed="false">▶ Song abspielen</button>
+          <button class="t" id="b-bypass" aria-pressed="false">Bypass</button>
+          <button class="t" id="b-auto">AUTO</button>
+          <button class="t" id="b-talk">Ember spricht</button>
+        </div>
+        <label class="sl">Tempo <input id="r-bpm" type="range" min="70" max="170" value="120"><output id="o-bpm">120</output></label>
+      </div>
+      <div class="group">
+        <h2>Gesang</h2>
+        <label class="sl">S-Laute (Reduktion) <input id="r-red" type="range" min="0" max="14" step="0.5" value="5"><output id="o-red">5 dB</output></label>
+        <div class="row"><button class="t" id="b-s">Einzelnes S</button><button class="t" id="b-sing" aria-pressed="true">Gesang im Song</button></div>
+      </div>
+      <div class="group">
+        <h2>Plugin</h2>
+        <div class="knobrow"><div class="knob" id="knob" role="slider" tabindex="0" aria-label="Amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
+          <p>Amount: dreh den Regler, Ember schaut hin.</p></div>
+      </div>
+      <div class="group">
+        <h2>Augen</h2>
+        <div class="row" id="eye-variants"></div>
+      </div>
+      <p class="note"><strong>Was du hier siehst:</strong> deine echte Zeichnung, in Teile zerlegt (Kopf, Ohren, Arme, Körper, Schwanz, Pupillen). Lider und offener Mund werden passend dazugezeichnet. Fürs fertige Plugin bekommt Ember eigens gezeichnete Teile, dann gehen auch größere Gesten wie Hinsetzen oder Ohren zuhalten.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const RIG = __RIG__;
+const IMG = __IMAGES__;
+const EYES_ALL = __EYES__;   // vector eyes and brows, several designs (tools/mascot/eye_design.py)
+
+(() => {
+  const cv = document.getElementById('cv'), MAIN = cv.getContext('2d');
+  let ctx = MAIN;
+  // the figure is drawn into FIG first; one even, round outline is laid around its silhouette (OUT = the tinted copy)
+  const FIGC = document.createElement('canvas'), FIG = FIGC.getContext('2d');
+  const OUTC = document.createElement('canvas'), OUT = OUTC.getContext('2d');
+  const OUTLINE_W = 6.0;   // px in the picture's 1024 space (the drawing's own outline: 5-6 px)
+  const stage = document.getElementById('stage');
+  const $ = id => document.getElementById(id);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- parts
+  const parts = {};
+  let loaded = 0;
+  const names = Object.keys(IMG);
+  names.forEach(n => { const im = new Image(); im.onload = () => { loaded++; }; im.src = IMG[n]; parts[n] = im; });
+  const P = RIG.parts, J = RIG.joints;
+  const css = (c, a = 1) => `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${a})`;
+  const LINE = css(RIG.line);
+
+  // ---------- small physics: a damped spring per moving value
+  class Spring {
+    constructor(v = 0, k = 120, d = 14) { this.v = v; this.vel = 0; this.k = k; this.d = d; this.target = v; }
+    step(dt) { const a = this.k * (this.target - this.v) - this.d * this.vel; this.vel += a * dt; this.v += this.vel * dt; return this.v; }
+    kick(x) { this.vel += x; }
+  }
+  const S = {
+    head: new Spring(0, 90, 12), headX: new Spring(0, 90, 13), headY: new Spring(0, 110, 14),
+    earL: new Spring(0, 160, 7), earR: new Spring(0, 160, 7), tail: new Spring(0, 40, 4),
+    armL: new Spring(0, 70, 9), armR: new Spring(0, 70, 9),
+    lean: new Spring(0, 60, 10), bob: new Spring(0, 260, 22), squash: new Spring(0, 220, 24),
+    lookX: new Spring(0, 200, 22), lookY: new Spring(0, 200, 22),
+    lid: new Spring(0, 400, 30), lowLid: new Spring(0, 250, 25), mouth: new Spring(0, 900, 42), mouthW: new Spring(1, 260, 22), pupil: new Spring(1, 200, 18),
+    browY: new Spring(0, 160, 18), browTilt: new Spring(0, 160, 18),
+  };
+
+  // ---------- world state (what the plugin / DAW tells Ember)
+  const W = { playing: false, bypass: false, sing: true, bpm: 120, red: 5, auto: 0, autoPhase: '', proud: 0,
+              mouse: null, mouseT: -99, knobT: -99, eats: [], chompT: -99, mouthW: null, signal: 0, sTime: -99, sStrength: 0, hot: 0, silentFor: 0, sleepy: 0, asleep: false };
+  let t = 0, beatPhase = 0;
+
+  // ---------- sim of the vocal: phrases with syllables, S sounds inside phrases
+  let phraseT = 0, phraseOn = true, phraseLen = 3, nextS = 0.6;
+  function simVocal(dt) {
+    if (!W.playing || !W.sing || W.bypass) { W.signal += (0 - W.signal) * Math.min(1, dt * 10); return; }
+    phraseT += dt;
+    if (phraseT > phraseLen) { phraseT = 0; phraseOn = !phraseOn; phraseLen = phraseOn ? 2.2 + Math.random() * 2.5 : 0.5 + Math.random() * 0.9; }
+    const syll = 0.55 + 0.45 * Math.abs(Math.sin(t * 7.3 + Math.sin(t * 2.1)));
+    const target = phraseOn ? syll : 0;
+    W.signal += (target - W.signal) * Math.min(1, dt * 14);
+    if (phraseOn && W.red > 0.5) { nextS -= dt; if (nextS <= 0) { triggerS(W.red * (0.6 + Math.random() * 0.5)); nextS = 0.5 + Math.random() * 1.3; } }
+  }
+
+  // ---------- particles
+  const fx = [];
+  function spark(x, y, n, strength) {
+    for (let i = 0; i < n; i++) fx.push({ k: 'spark', x, y, vx: (Math.random() - 0.3) * 260 * strength, vy: -120 - Math.random() * 260 * strength, life: 0.5 + Math.random() * 0.4, age: 0, s: 5 + Math.random() * 7 * strength });
+  }
+  function puff(x, y) { fx.push({ k: 'puff', x, y, vx: (x < 512 ? -1 : 1) * (20 + Math.random() * 30), vy: -90 - Math.random() * 50, life: 1.4, age: 0, s: 16 + Math.random() * 8 }); }
+  function zz() { fx.push({ k: 'z', x: 640, y: 250, vx: 26 + Math.random() * 18, vy: -48, life: 2.6, age: 0, s: 30 + Math.random() * 16 }); }
+  function note() { fx.push({ k: 'note', x: 600 + Math.random() * 60, y: 430, vx: 40 + Math.random() * 40, vy: -80 - Math.random() * 40, life: 1.6, age: 0, s: 34, ch: Math.random() < .5 ? '♪' : '♫' }); }
+  // sound arriving at his right ear (drawn in head space, at the ear's tip as it bends)
+  const headFx = [];
+  function ring() { headFx.push({ age: 0, life: 0.9 }); }
+  function crumbs(x, y, n) { for (let i = 0; i < n; i++) fx.push({ k: 'crumb', x, y, vx: (Math.random() - 0.5) * 160, vy: -60 - Math.random() * 120, life: 0.5 + Math.random() * 0.3, age: 0, s: 3 + Math.random() * 3 }); }
+  function twinkle() { for (let i = 0; i < 7; i++) { const a = Math.random() * Math.PI * 2, r = 230 + Math.random() * 140; fx.push({ k: 'star', x: 512 + Math.cos(a) * r, y: 470 + Math.sin(a) * r * 0.85, vx: 0, vy: -20, life: 0.9 + Math.random() * 0.5, age: -Math.random() * 0.3, s: 12 + Math.random() * 10 }); } }
+
+  // ---------- events
+  function triggerS(db) {
+    if (W.bypass || W.asleep) return;
+    // (Jakob 2026-11-17: no fire) an S flies at Ember and he eats it: see chomp()
+    const strength = Math.min(1, db / 10);
+    W.eats.push({ age: 0, dur: 0.55 + Math.random() * 0.15, side: Math.random() < 0.5 ? -1 : 1, y0: 220 + Math.random() * 220,
+                  size: 54 + 46 * strength, spin: (Math.random() - 0.5) * 2.4, db, strength, x: 0, y: 0 });
+  }
+  function chomp(f) {
+    W.sTime = t; W.sStrength = f.strength; W.chompT = t;
+    const k = 0.45 + f.strength;
+    S.mouth.v = Math.min(S.mouth.v, 0.15); S.mouth.vel = -8;               // snap shut
+    S.headY.kick(90 * k); S.head.kick((Math.random() < .5 ? -1 : 1) * 14 * k); S.squash.kick(1.8 * k);
+    S.earL.kick(-70 * k); S.earR.kick(70 * k);
+    S.lowLid.v = Math.max(S.lowLid.v, 0.55);                                // pleased squint
+    if (W.mouthW) crumbs(W.mouthW.x, W.mouthW.y, 2 + Math.round(4 * f.strength));
+    if (f.db > 9) W.hot = Math.min(1, W.hot + 0.5);
+  }
+
+
+  // ---------- talking: the text types into a bubble while his mouth forms syllables (open + width per syllable),
+  // closes between words, the head nods on the beats of the sentence and one hand gestures once
+  const LINES = [
+    'Hey! Klick mich, dann stell ich mich auf deine Stimme ein.',
+    'Hör mal: Vokale bleiben, nur die Zischer sind weg.',
+    'Das S hab ich gefressen. Lecker.',
+    'Uff, zu viel! Dreh Amount etwas runter, sonst lispelt’s.',
+    'Fertig eingestellt. Jetzt klingt’s sauber.',
+  ];
+  let lineIdx = 0;
+  const bubble = document.getElementById('bubble');
+  W.talk = null;
+  function say(text) {
+    if (W.bypass) return;
+    wake();
+    W.talk = { text, shown: 0, t: 0, syl: 0, end: null, gesture: Math.random() < 0.5 ? 'l' : 'r', gT: 0.3 + Math.random() * 0.6 };
+    bubble.textContent = ''; bubble.classList.add('on');
+  }
+  function talkStep(dt) {
+    const k = W.talk; if (!k) return;
+    k.t += dt;
+    if (k.end === null) {
+      k.shown = Math.min(k.text.length, k.shown + dt * 24);
+      const n = Math.floor(k.shown);
+      if (bubble.textContent.length !== n) bubble.textContent = k.text.slice(0, n);
+      const ch = k.text[Math.max(0, n - 1)] || ' ';
+      k.syl -= dt;
+      if (/[\s,.!?:’]/.test(ch)) { S.mouth.target = 0.04; S.mouthW.target = 1; }
+      else {
+        if (k.syl <= 0) {
+          k.syl = 0.085 + Math.random() * 0.07;
+          k.open = 0.6 + Math.random() * 0.5; k.wide = 0.62 + Math.random() * 0.38;
+        }
+        // each syllable: open fast, then ease towards half closed
+        const phase = 1 - Math.max(0, k.syl) / 0.12;
+        S.mouth.target = k.open * (1 - 0.3 * phase); S.mouthW.target = k.wide;
+      }
+      if (n >= k.text.length) k.end = k.t;
+    } else {
+      S.mouth.target = 0; S.mouthW.target = 1;
+      if (k.t - k.end > 1.6) { W.talk = null; bubble.classList.remove('on'); }
+    }
+    // a calm nod and sway while he speaks (no spring kicks: he bounced like rubber)
+    S.headY.target += 2.2 * Math.sin(k.t * 7.0); S.head.target += 2.5 * Math.sin(k.t * 2.3) + 1.2 * Math.sin(k.t * 5.1);
+    // one gesture per line: a hand comes out and goes back
+    const g = Math.max(0, Math.sin(Math.min(1, Math.max(0, (k.t - k.gT) / 1.1)) * Math.PI));
+    if (k.gesture === 'l') S.armL.target = Math.min(S.armL.target, -26 * g); else S.armR.target = Math.max(S.armR.target, 26 * g);
+    S.lowLid.target = Math.max(S.lowLid.target, 0.12);
+    S.browY.target = -1.5 - 2.5 * Math.max(0, Math.sin(k.t * 4.3));   // brows talk along
+  }
+
+  function startAuto() {
+    if (W.bypass) { setBypass(false); }
+    wake(); W.auto = 4.2; W.autoPhase = 'listen'; W.proud = 0;
+    S.bob.kick(-140); S.squash.kick(-2);
+  }
+  function wake() {
+    if (W.asleep) { W.asleep = false; S.lid.v = 1; S.bob.kick(-260); S.earL.kick(-200); S.earR.kick(200); S.squash.kick(-3); }
+    W.silentFor = 0; W.sleepy = 0;
+  }
+  function poke() { wake(); }
+
+  // ---------- idle actions: never the same loop
+  let action = null, nextAction = 2.5;
+  const ACTIONS = {
+    lookAround: { len: 3.2, run(a, p) { const s = Math.sin(p * Math.PI * 2); S.head.target = s * 7; S.lookX.target = s * 1; S.lookY.target = -0.15; } },
+    earFlick: { len: 0.8, run(a, p) { if (!a.done && p > 0.1) { a.done = 1; (Math.random() < .5 ? S.earL : S.earR).kick((Math.random() < .5 ? -1 : 1) * 160); } } },
+    tailSwish: { len: 1.6, run(a, p) { S.tail.target = Math.sin(p * Math.PI * 3) * 22; } },
+    yawn: { len: 2.6, run(a, p) { const e = Math.sin(Math.min(1, p * 1.25) * Math.PI); S.mouth.target = e * 1.15; S.lid.target = Math.max(S.lid.target, e * 0.75); S.head.target = -e * 6; S.headY.target = -e * 8; S.armL.target = -e * 18; S.armR.target = e * 18; S.lean.target = -e * 1.5; } },
+    hop: { len: 0.9, run(a, p) { if (!a.done) { a.done = 1; S.squash.kick(1.4); setTimeout(() => S.bob.kick(-300), 120); } } },
+    smirk: { len: 1.8, run(a, p) { const e = Math.sin(p * Math.PI); S.lookX.target = 0.9; S.lookY.target = 0.2; S.head.target = 5 * e; S.lowLid.target = 0.25 * e; } },
+    stretch: { len: 2.4, run(a, p) { const e = Math.sin(p * Math.PI); S.armL.target = -38 * e; S.armR.target = 38 * e; S.squash.target = -0.05 * e; S.lid.target = Math.max(S.lid.target, 0.4 * e); } },
+  };
+  function pickAction() {
+    const pool = ['lookAround', 'lookAround', 'earFlick', 'earFlick', 'tailSwish', 'smirk', 'hop', 'stretch'];
+    if (W.sleepy > 0.3) pool.push('yawn', 'yawn', 'yawn'); else pool.push('yawn');
+    const k = pool[Math.floor(Math.random() * pool.length)];
+    action = { k, t: 0, ...ACTIONS[k] };
+  }
+
+  // ---------- blink
+  let nextBlink = 1.5, blinkT = -1, doubleBlink = false;
+
+  // ---------- the brain: one step
+  let mode = 'idle';
+  function brain(dt) {
+    simVocal(dt);
+    if (W.auto > 0) { W.auto -= dt; if (W.auto <= 0) { W.autoPhase = ''; W.proud = 2.2; S.bob.kick(-520); S.squash.kick(3); twinkle(); setTimeout(() => say(LINES[4]), 650); } }
+    if (W.proud > 0) W.proud -= dt;
+    W.hot = Math.max(0, W.hot - dt * 0.35);
+    const listening = W.playing && !W.bypass;
+    const active = listening || W.auto > 0 || W.proud > 0 || (t - W.mouseT) < 1.5 || (t - W.knobT) < 2;
+    if (W.bypass) mode = 'sleep';
+    else if (W.auto > 0) mode = 'auto';
+    else if (W.proud > 0) mode = 'proud';
+    else if (W.hot > 0.55 && listening) mode = 'hot';
+    else if (listening) mode = 'groove';
+    else mode = W.asleep ? 'sleep' : 'idle';
+
+    if (!active && !W.bypass) { W.silentFor += dt; W.sleepy = Math.min(1, Math.max(0, (W.silentFor - 14) / 14)); if (W.silentFor > 30 && !W.asleep) { W.asleep = true; } }
+    else if (active) { if (W.asleep && !W.bypass) wake(); W.silentFor = 0; W.sleepy = 0; }
+
+    // defaults every frame; modes and actions override
+    const breath = Math.sin(t * (mode === 'sleep' ? 1.3 : 2.1));
+    for (const k of ['head', 'headX', 'headY', 'armL', 'armR', 'lean', 'tail', 'earL', 'earR', 'mouth', 'lowLid']) S[k].target = 0;
+    S.lid.target = 0; S.pupil.target = 1; S.squash.target = -0.012 * breath; S.bob.target = 0;
+    S.tail.target = Math.sin(t * 1.1) * 8;
+    S.earL.target = Math.sin(t * 0.9) * 2; S.earR.target = -Math.sin(t * 0.9 + 1) * 2;
+    S.armL.target = 1.5 * breath; S.armR.target = -1.5 * breath;
+
+    // where he looks: the cursor, the knob, or straight ahead
+    let look = null;
+    if ((t - W.knobT) < 2 && W.knobPos) look = W.knobPos;
+    else if (W.mouse && (t - W.mouseT) < 3) look = W.mouse;
+    if (look && mode !== 'sleep') {
+      const dx = (look.x - 512) / 420, dy = (look.y - 380) / 420;
+      S.lookX.target = Math.max(-1, Math.min(1, dx)); S.lookY.target = Math.max(-1, Math.min(1, dy));
+      S.head.target += Math.max(-9, Math.min(9, dx * 10)); S.headX.target = Math.max(-10, Math.min(10, dx * 12));
+    } else { S.lookX.target = Math.sin(t * 0.37) * 0.25; S.lookY.target = 0.05; }
+
+    S.browY.target = 0; S.browTilt.target = 0;
+    if (mode === 'sleep') {
+      S.browY.target = 3; S.browTilt.target = -3;
+      S.lid.target = 1; S.head.target = 9; S.headY.target = 16 + 4 * breath; S.earL.target = 22; S.earR.target = -22;
+      S.squash.target = -0.022 * breath; S.tail.target = 4 * Math.sin(t * 0.5); S.mouth.target = 0.12 + 0.08 * breath;
+      if (Math.random() < dt * 0.55) zz();
+    } else if (mode === 'auto') {
+      // leans in and listens: head to the side, ear up, eyes wide, sound rings at the ear
+      S.head.target = 13; S.headX.target = 10; S.lean.target = 3; S.earR.target = -26; S.earL.target = 6;
+      S.browY.target = -6; S.browTilt.target = -4;                  // curious
+      S.pupil.target = 1.12; S.lookX.target = 0.7; S.lookY.target = -0.35; S.tail.target = Math.sin(t * 6) * 6;
+      S.armR.target = -8 + 4 * Math.sin(t * 3);
+      if (Math.random() < dt * 2.2) ring();
+    } else if (mode === 'proud') {
+      const e = Math.min(1, W.proud / 0.4);
+      S.armL.target = -34 * e; S.armR.target = 34 * e; S.mouth.target = 0.55; S.lowLid.target = 0.35; S.head.target = -4;
+      S.squash.target = 0.02; S.tail.target = 26 * Math.sin(t * 9);
+      S.browY.target = -4; S.browTilt.target = -2;
+    } else if (mode === 'hot') {
+      if (!W.talk && t - (W.hotSaidT || -99) > 12) { W.hotSaidT = t; say(LINES[3]); }
+      // too much reduction: shakes his head, squeezes his eyes, steam from the ears
+      S.head.target = 9 * Math.sin(t * 22); S.lowLid.target = 0.55; S.lid.target = 0.45; S.mouth.target = 0.35 + 0.15 * Math.sin(t * 30);
+      S.earL.target = 30; S.earR.target = -30; S.armL.target = -12; S.armR.target = 12; S.tail.target = 30 * Math.sin(t * 14);
+      S.browY.target = 4; S.browTilt.target = 9;                    // cross
+      if (Math.random() < dt * 7) puff(Math.random() < .5 ? 318 : 708, 262);
+    } else if (mode === 'groove') {
+      // on the beat of the song: bounce down on every beat, head nods, tail on the half beat, arms swing
+      const ph = beatPhase;                       // 0..1 per beat
+      const hit = Math.pow(1 - ph, 3);           // sharp on the beat, decays
+      const two = Math.sin((beatPhase + Math.floor(t * W.bpm / 60) % 2) * Math.PI);
+      S.bob.target = -14 * (1 - hit) ; S.squash.target = 0.035 * hit - 0.01;
+      S.head.target += 7 * Math.sin((t * W.bpm / 60) * Math.PI); S.headY.target = 6 * hit;
+      S.tail.target = 20 * Math.sin((t * W.bpm / 60) * Math.PI);
+      S.armL.target = -6 - 8 * two; S.armR.target = 6 + 8 * two;
+      S.earL.target = -6 * hit; S.earR.target = 6 * hit;
+      S.mouth.target = W.signal * 0.55 * (W.sing ? 1 : 0);   // sings along with the vocal
+      S.lowLid.target = 0.12; S.browY.target = -2 * hit;
+      if (W.signal > 0.6 && Math.random() < dt * 1.2) note();
+    }
+    if (mode === 'idle') {
+      if (W.sleepy > 0) { S.lid.target = Math.max(S.lid.target, 0.35 * W.sleepy + 0.25 * W.sleepy * (0.5 + 0.5 * Math.sin(t * 0.7))); S.headY.target += 8 * W.sleepy; S.head.target += 4 * W.sleepy; }
+      // no idle actions while he talks: each one was picked, kicked its springs and was cancelled again every frame
+      // (the rubber-ball bouncing Jakob saw)
+      if (!W.talk) nextAction -= dt;
+      if (!action && nextAction <= 0 && !W.talk) pickAction();
+      if (W.sleepy > 0) S.browY.target += 2 * W.sleepy;
+      if (action) { action.t += dt; const p = Math.min(1, action.t / action.len); action.run(action, p); if (p >= 1) { action = null; nextAction = 2 + Math.random() * 4; } }
+    } else action = null;
+
+    // S sounds: each one flies in; he watches it, opens wide just before, and chomps
+    for (let i = W.eats.length - 1; i >= 0; i--) { const f = W.eats[i]; f.age += dt; if (f.age >= f.dur) { W.eats.splice(i, 1); chomp(f); } }
+    if (W.eats.length && mode !== 'sleep') {
+      const f = W.eats[0], left = f.dur - f.age;
+      if (f.x || f.y) { S.lookX.target = Math.max(-1, Math.min(1, (f.x - 512) / 260)); S.lookY.target = Math.max(-1, Math.min(1, (f.y - 380) / 260)); }
+      if (left < 0.28) { S.mouth.target = Math.max(S.mouth.target, 1.1); S.pupil.target = 1.1; }
+    }
+    if (t - W.chompT < 0.16) S.mouth.target = 0;
+    if (t - W.chompT < 0.35) { S.lowLid.target = Math.max(S.lowLid.target, 0.5); S.browY.target = 3; S.browTilt.target = 6; }
+    if (W.eats.length && W.eats[0].dur - W.eats[0].age < 0.3) { S.browY.target = -5; S.browTilt.target = -3; }   // here it comes
+
+    // blinking (not while asleep); sometimes a double blink
+    if (mode !== 'sleep') {
+      nextBlink -= dt;
+      if (nextBlink <= 0 && blinkT < 0) { blinkT = 0; doubleBlink = Math.random() < 0.25; nextBlink = 1.6 + Math.random() * 4.2; }
+      if (blinkT >= 0) { blinkT += dt; const len = 0.16; const b = blinkT < len ? Math.sin(blinkT / len * Math.PI) : (doubleBlink && blinkT > 0.24 && blinkT < 0.24 + len ? Math.sin((blinkT - 0.24) / len * Math.PI) : 0);
+        S.lid.v = Math.max(S.lid.v, b); if (blinkT > (doubleBlink ? 0.45 : 0.2)) blinkT = -1; }
+    }
+    if (W.hover && mode === 'idle') { S.lowLid.target = Math.max(S.lowLid.target, 0.18); S.browY.target = -2.5; S.mouth.target = Math.max(S.mouth.target, 0.0); }
+    S.mouthW.target = 1;
+    if (W.talk && mode !== 'sleep') { action = null; talkStep(dt); }
+
+    for (const k in S) S[k].step(dt);
+    // secondary motion: head turns and body bounces drag the ears and the tail
+    S.earL.vel += -S.head.vel * 0.25 + S.bob.vel * 0.08; S.earR.vel += -S.head.vel * 0.25 - S.bob.vel * 0.08;
+    S.tail.vel += S.lean.vel * 0.6 - S.bob.vel * 0.05;
+  }
+
+  // ---------- drawing (all in the 1024 px space of the picture)
+  function rot(cx, cy, deg) { ctx.translate(cx, cy); ctx.rotate(deg * Math.PI / 180); ctx.translate(-cx, -cy); }
+  function part(n) { const p = P[n]; ctx.drawImage(parts[n], p.x, p.y, p.w, p.h); }
+
+  // A mesh part bends instead of turning: every grid point turns around the joint by (angle x its weight). The base
+  // (weight 0) stays on the body, the free end follows fully, the drawing in between stretches smoothly.
+  function meshPart(n, deg, post) {
+    const m = RIG.meshes[n], p = P[n], img = parts[n];
+    if (!m || (Math.abs(deg) < 0.05 && !post)) { part(n); return; }
+    const a = deg * Math.PI / 180, [cx, cy] = m.pivot, vx = [], vy = [];
+    for (let j = 0; j < m.rows; j++) for (let i = 0; i < m.cols; i++) {
+      const k = j * m.cols + i, x = m.x + i * m.step, y = m.y + j * m.step, t = a * m.w[k];
+      const c = Math.cos(t), s = Math.sin(t), dx = x - cx, dy = y - cy;
+      vx[k] = cx + c * dx - s * dy; vy[k] = cy + s * dx + c * dy;
+      if (post) { const q = post(vx[k], vy[k], y); vx[k] = q[0]; vy[k] = q[1]; }
+    }
+    let q = 0;
+    for (let j = 0; j < m.rows - 1; j++) for (let i = 0; i < m.cols - 1; i++, q++) {
+      if (!m.q[q]) continue;
+      const k0 = j * m.cols + i, k1 = k0 + 1, k2 = k0 + m.cols + 1, k3 = k0 + m.cols;
+      const sx = i2 => m.x + (i2 % m.cols) * m.step, sy = i2 => m.y + Math.floor(i2 / m.cols) * m.step;
+      tri(img, p, sx(k0), sy(k0), sx(k1), sy(k1), sx(k2), sy(k2), vx[k0], vy[k0], vx[k1], vy[k1], vx[k2], vy[k2]);
+      tri(img, p, sx(k0), sy(k0), sx(k2), sy(k2), sx(k3), sy(k3), vx[k0], vy[k0], vx[k2], vy[k2], vx[k3], vy[k3]);
+    }
+  }
+  // The neck (Jakob: "Nacken/Schulter passt nicht"): the drawing has no neck, so head and body are one bending
+  // sheet there. Above the mouth the head turns fully (weight 1); over chin, neck and the top of the shoulders the
+  // turn fades out smoothly to 0 - nothing hidden is ever uncovered, the neck bends with the head.
+  const NECK0 = 492, NECK1 = 582;
+  const neckW = y => { const u = Math.min(1, Math.max(0, (y - NECK0) / (NECK1 - NECK0))); return 1 - u * u * (3 - 2 * u); };
+  function neckD(x, y, w) {
+    const a = S.head.v * Math.PI / 180 * w, c = Math.cos(a), s = Math.sin(a), dx = x - J.neck[0], dy = y - J.neck[1];
+    return [J.neck[0] + c * dx - s * dy + S.headX.v * w, J.neck[1] + s * dx + c * dy + S.headY.v * w];
+  }
+  const headMoves = () => Math.abs(S.head.v) > 0.05 || Math.abs(S.headX.v) > 0.05 || Math.abs(S.headY.v) > 0.05;
+  // a band of a part (rows y0..y1 of the picture) as a grid that follows neckD
+  function bandMesh(n, y0, y1) {
+    const p = P[n], img = parts[n], st = 12;
+    const xs = []; for (let x = p.x - 2; x < p.x + p.w + st; x += st) xs.push(x);
+    const ys = []; for (let y = y0; y < y1; y += st) ys.push(y); ys.push(y1);
+    const V = ys.map(y => xs.map(x => neckD(x, y, neckW(y))));
+    for (let j = 0; j < ys.length - 1; j++) for (let i = 0; i < xs.length - 1; i++) {
+      const a = V[j][i], b = V[j][i + 1], c = V[j + 1][i + 1], d = V[j + 1][i];
+      tri(img, p, xs[i], ys[j], xs[i + 1], ys[j], xs[i + 1], ys[j + 1], a[0], a[1], b[0], b[1], c[0], c[1]);
+      tri(img, p, xs[i], ys[j], xs[i + 1], ys[j + 1], xs[i], ys[j + 1], a[0], a[1], c[0], c[1], d[0], d[1]);
+    }
+  }
+  const clipY = (above, y) => { ctx.beginPath(); if (above) ctx.rect(-2000, -2000, 5000, 2000 + y); else ctx.rect(-2000, y, 5000, 4000); ctx.clip(); };
+
+  // one textured triangle: clip to the (slightly grown) target, map the picture with the affine that takes the
+  // source corners to the target corners
+  function tri(img, p, u0, v0, u1, v1, u2, v2, x0, y0, x1, y1, x2, y2) {
+    const det = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0); if (!det) return;
+    const a = ((x1 - x0) * (v2 - v0) - (x2 - x0) * (v1 - v0)) / det, c = ((x2 - x0) * (u1 - u0) - (x1 - x0) * (u2 - u0)) / det;
+    const b = ((y1 - y0) * (v2 - v0) - (y2 - y0) * (v1 - v0)) / det, d = ((y2 - y0) * (u1 - u0) - (y1 - y0) * (u2 - u0)) / det;
+    const e = x0 - a * u0 - c * v0, f = y0 - b * u0 - d * v0;
+    const mx = (x0 + x1 + x2) / 3, my = (y0 + y1 + y2) / 3, G = 0.9;   // grow 0.9 px: no hairline between triangles
+    const g = (x, y) => { const l = Math.hypot(x - mx, y - my) || 1; return [x + (x - mx) / l * G, y + (y - my) / l * G]; };
+    const [ax, ay] = g(x0, y0), [bx, by] = g(x1, y1), [cx2, cy2] = g(x2, y2);
+    ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx2, cy2); ctx.closePath(); ctx.clip();
+    ctx.transform(a, b, c, d, e, f); ctx.drawImage(img, p.x, p.y, p.w, p.h); ctx.restore();
+  }
+
+  // Blink like a cartoon (Jakob: the sliding lid "sieht nicht gut aus"): the whole eye - yellow, outline and the thick
+  // lid stroke - squashes onto its lower lid line, skin measured around the eye fills in above it. Shut, the squashed
+  // outline is the lash line. A squint squashes it from below instead.
+  // Vector eyes and brows (Jakob 2026-11-17: the figure comes without them, "erstelle die Augen und Augenbrauen
+  // selbst"). Geometry from tools/mascot/eye_design.py (traced over the original drawing): per eye the opening between
+  // an upper and a lower curve, a thick upper lid stroke and a thin lower one, a slit pupil and a glint, a brow.
+  // Blinking moves the upper curve towards a meeting line, a squint the lower one; above / below them is the
+  // figure's own skin, so the animation has no seams.
+  const rgbc = (c, a = 1) => `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${a})`;
+  let EYES = EYES_ALL.variants[EYES_ALL.default], EC = EYES.colors;
+  function setEyes(name) { EYES = EYES_ALL.variants[name]; EC = EYES.colors;
+    document.querySelectorAll('[data-eyes]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.eyes === name))); }
+  function polyFill(xs, ya, yb, color) {
+    ctx.beginPath(); ctx.moveTo(xs[0], ya[0]);
+    for (let k = 1; k < xs.length; k++) ctx.lineTo(xs[k], ya[k]);
+    for (let k = xs.length - 1; k >= 0; k--) ctx.lineTo(xs[k], yb[k]);
+    ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+  }
+  function drawEyes() {
+    const c = Math.min(1, Math.max(0, S.lid.v)), lo = Math.min(1, Math.max(0, S.lowLid.v));
+    for (const e of EYES.eyes) {
+      const xs = e.x, n = xs.length, yt = e.top, ybt = e.bot;
+      const yl = [], yb = [], upT = [], loB = [], shade = [];
+      for (let k = 0; k < n; k++) {
+        const meet = yt[k] + 0.72 * (ybt[k] - yt[k]);
+        yl[k] = yt[k] + c * (meet - yt[k]) + lo * 0.1 * (ybt[k] - yt[k]);
+        yb[k] = Math.max(yl[k], ybt[k] - Math.max(c, lo) * (ybt[k] - meet));
+        upT[k] = yl[k] - e.up[k] * (1 - 0.5 * c);
+        loB[k] = yb[k] + e.low[k];
+        shade[k] = yl[k] + 0.22 * (yb[k] - yl[k]);
+      }
+      const cx = (xs[0] + xs[n - 1]) / 2;
+      if (c < 0.97) {
+        ctx.save();
+        ctx.beginPath(); ctx.moveTo(xs[0], yl[0]);
+        for (let k = 1; k < n; k++) ctx.lineTo(xs[k], yl[k]);
+        for (let k = n - 1; k >= 0; k--) ctx.lineTo(xs[k], yb[k]);
+        ctx.closePath(); ctx.clip();
+        let cy = 0; for (let k = 0; k < n; k++) cy += yt[k] + ybt[k]; cy = cy / (2 * n) + 3;
+        const R = (xs[n - 1] - xs[0]) * 0.55, g = ctx.createRadialGradient(cx, cy + 4, 2, cx, cy, R);
+        g.addColorStop(0, rgbc(EC.yellow_hi)); g.addColorStop(0.5, rgbc(EC.yellow)); g.addColorStop(1, rgbc(EC.yellow_lo));
+        ctx.fillStyle = g; ctx.fillRect(xs[0] - 2, cy - R, xs[n - 1] - xs[0] + 4, 2 * R);
+        polyFill(xs, yl, shade, rgbc(EC.shade, 0.45));
+        // the slit pupil (looks around) and the glint (moves a third as far)
+        const [pcx, pcy, hw, hh, sl] = e.pupil, sc = S.pupil.v;
+        const px = pcx + S.lookX.v * 12, py = pcy + S.lookY.v * 8;
+        ctx.beginPath();
+        for (let q = 0; q <= 40; q++) { const v = -1 + q / 20; const w = hw * sc * Math.pow(Math.max(0, 1 - v * v), 0.55); ctx.lineTo(px + sl * v * hh + w, py + v * hh * sc); }
+        for (let q = 40; q >= 0; q--) { const v = -1 + q / 20; const w = hw * sc * Math.pow(Math.max(0, 1 - v * v), 0.55); ctx.lineTo(px + sl * v * hh - w, py + v * hh * sc); }
+        ctx.closePath();
+        const pg = ctx.createLinearGradient(px, py - hh, px, py + hh); pg.addColorStop(0, rgbc(EC.pupil)); pg.addColorStop(1, rgbc(EC.pupil_rim));
+        ctx.fillStyle = pg; ctx.fill();
+        const [gx, gy, rx, ry] = e.glint;
+        ctx.beginPath(); ctx.ellipse(gx + S.lookX.v * 4, gy + S.lookY.v * 2.5, rx, ry, -0.3, 0, Math.PI * 2); ctx.fillStyle = rgbc(EC.glint); ctx.fill();
+        ctx.restore();
+      }
+      // the lid strokes follow the lids
+      polyFill(xs, yl.map(v => v + 1.2), upT, rgbc(EC.line));
+      polyFill(xs, yb.map(v => v - 0.6), loB, rgbc(EC.line));
+      if (e.tail) {
+        const [a, b, d] = e.tail, up_ = [], dn = [], tx = [];
+        for (let q = 0; q <= 20; q++) {
+          const u = q / 20, x = (1 - u) ** 2 * a[0] + 2 * (1 - u) * u * b[0] + u * u * d[0], y = (1 - u) ** 2 * a[1] + 2 * (1 - u) * u * b[1] + u * u * d[1];
+          const w = 3 * (1 - u) + 0.6; tx.push(x); up_.push(y - w / 2); dn.push(y + w / 2);
+        }
+        polyFill(tx, up_, dn, rgbc(EC.line));
+      }
+      // the brow: moves up / down and tilts (positive tilt = cross: the inner end goes down)
+      const B = e.brow, side = e.cx < 512 ? 1 : -1;
+      let bx = 0, by = 0; for (const p of B.line) { bx += p[0]; by += p[1]; } bx /= B.line.length; by /= B.line.length;
+      ctx.save(); ctx.translate(bx, by + S.browY.v); ctx.rotate(S.browTilt.v * Math.PI / 180 * side); ctx.translate(-bx, -by);
+      ctx.beginPath(); ctx.moveTo(B.up[0][0], B.up[0][1]);
+      for (const p of B.up) ctx.lineTo(p[0], p[1]);
+      for (let q = B.low.length - 1; q >= 0; q--) ctx.lineTo(B.low[q][0], B.low[q][1]);
+      ctx.closePath(); ctx.fillStyle = rgbc(EC.line); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // The open mouth (Jakob: "beim Sprechen passt's beim Mund nicht ganz"): it opens only on the middle of the smile
+  // line - the corners and the curl at his right stay as drawn - with the drawing's dark maroon inside, a tongue, a
+  // soft hint of teeth only when wide open, and a lower lip line as thin as the smile.
+  function drawMouth() {
+    const m = Math.max(0, S.mouth.v); if (m < 0.03) return;
+    const sm = RIG.smile, n = sm.pts.length, x0 = sm.x0, step = sm.step;
+    const i0 = Math.round(n * 0.06), i1 = Math.round(n * 0.8);          // before the curl
+    const wf = Math.max(0.55, Math.min(1, S.mouthW.v));
+    const mid = (i0 + i1) / 2, half = (i1 - i0) / 2;
+    const H = 30 * Math.min(1.25, m);
+    const X = i => x0 + (mid + (i - mid) * wf) * step;
+    const u = i => Math.max(0, 1 - Math.pow((i - mid) / half, 2));     // 0 at the corners, 1 in the middle
+    const top = i => sm.pts[Math.round(mid + (i - mid) * wf)] + (1 - wf) * 3 * u(i);
+    const bot = i => top(i) + H * Math.pow(u(i), 0.7);
+    const path = () => { ctx.beginPath(); ctx.moveTo(X(i0), top(i0)); for (let i = i0 + 1; i <= i1; i++) ctx.lineTo(X(i), top(i));
+      for (let i = i1; i >= i0; i--) ctx.lineTo(X(i), bot(i)); ctx.closePath(); };
+    ctx.save(); path();
+    const yT = top(Math.round(mid)), g = ctx.createLinearGradient(0, yT, 0, yT + H);
+    g.addColorStop(0, '#2c0610'); g.addColorStop(1, '#561019');
+    ctx.fillStyle = g; ctx.fill(); ctx.clip();
+    ctx.fillStyle = '#c94a4c'; ctx.beginPath(); ctx.ellipse(X(Math.round(mid + 0.15 * half)), yT + H * 1.08, 20 * wf, H * 0.5, 0, 0, Math.PI * 2); ctx.fill();   // tongue
+    if (m > 0.6) {   // a hint of upper teeth
+      ctx.fillStyle = `rgba(255,240,232,${Math.min(0.85, (m - 0.6) * 2.5)})`; ctx.beginPath();
+      for (let i = i0 + 3; i <= i1 - 3; i++) ctx.lineTo(X(i), top(i) - 1);
+      for (let i = i1 - 3; i >= i0 + 3; i--) ctx.lineTo(X(i), top(i) + 2.5 * u(i));
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    ctx.strokeStyle = LINE; ctx.lineWidth = 2.6; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(X(i0), top(i0)); for (let i = i0 + 1; i <= i1; i++) ctx.lineTo(X(i), bot(i)); ctx.stroke();
+  }
+
+
+  function drawFx(dt) {
+    for (let i = fx.length - 1; i >= 0; i--) {
+      const f = fx[i]; f.age += dt; if (f.age >= f.life) { fx.splice(i, 1); continue; } if (f.age < 0) continue;
+      const p = f.age / f.life;
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      if (f.k === 'spark') { f.vy += 520 * dt; ctx.fillStyle = `rgba(255,${Math.round(200 - 120 * p)},80,${1 - p})`; ctx.shadowColor = 'rgba(255,140,40,.9)'; ctx.shadowBlur = 14;
+        ctx.beginPath(); ctx.arc(f.x, f.y, f.s * (1 - p * 0.6), 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; }
+      else if (f.k === 'puff') {   // a soft wisp of steam: three blurred blobs that drift apart and fade
+        const a = 0.32 * Math.sin(Math.min(1, p * 1.6) * Math.PI * 0.5) * (1 - p);
+        for (let j = 0; j < 3; j++) {
+          const r = f.s * (0.7 + p * 1.5) * (1 - j * 0.18), x = f.x + (j - 1) * f.s * 0.7 * (0.4 + p) + Math.sin(f.age * 4 + j) * 4, y = f.y - j * f.s * 0.35;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(255,236,226,${a})`); g.addColorStop(0.55, `rgba(240,220,214,${a * 0.45})`); g.addColorStop(1, 'rgba(240,220,214,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        } }
+      else if (f.k === 'z') { ctx.fillStyle = `rgba(255,220,200,${Math.min(1, (1 - p) * 1.4)})`; ctx.font = `800 ${f.s}px Archivo, sans-serif`; ctx.fillText('Z', f.x + Math.sin(f.age * 3) * 8, f.y); }
+      else if (f.k === 'note') { ctx.fillStyle = `rgba(255,190,150,${1 - p})`; ctx.font = `${f.s}px serif`; ctx.fillText(f.ch, f.x + Math.sin(f.age * 5) * 10, f.y); }
+      else if (f.k === 'crumb') { f.vy += 600 * dt; ctx.fillStyle = `rgba(255,${Math.round(200 - 60 * p)},120,${1 - p})`; ctx.beginPath(); ctx.arc(f.x, f.y, f.s, 0, Math.PI * 2); ctx.fill(); }
+      else if (f.k === 'star') { const s = f.s * Math.sin(p * Math.PI); ctx.fillStyle = `rgba(255,236,190,${Math.sin(p * Math.PI)})`; ctx.beginPath();
+        for (let j = 0; j < 8; j++) { const r = j % 2 ? s * 0.28 : s, a = j * Math.PI / 4; ctx.lineTo(f.x + Math.cos(a) * r, f.y + Math.sin(a) * r); } ctx.closePath(); ctx.fill(); }
+    }
+  }
+
+  // fitting: the picture's 1024 space -> the canvas, Ember fills the stage height
+  let scale = 1, ox = 0, oy = 0, dpr = 1;
+  function fit() {
+    const r = stage.getBoundingClientRect(); dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+    scale = (r.height * 0.86) / 700; ox = r.width / 2 - 512 * scale; oy = r.height * 0.97 - (J.feet[1] + 8) * scale;
+  }
+  new ResizeObserver(fit).observe(stage); fit();
+  const toRig = (cx, cy) => ({ x: (cx - ox) / scale, y: (cy - oy) / scale });
+
+  function draw(dt) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    const F = J.feet;
+    // shadow on the floor
+    // squash and stretch stay subtle (Jakob: he crunched down and bounced like rubber)
+    const sq = Math.max(-0.05, Math.min(0.06, S.squash.v)), up = -S.bob.v;
+    ctx.save(); ctx.fillStyle = `rgba(0,0,0,${0.16 - Math.min(0.1, up / 1500)})`; ctx.beginPath();
+    ctx.ellipse(F[0], F[1] + 4, 175 * (1 + sq) * (1 - Math.min(0.3, up / 500)), 22, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    // warm glow when he works on an S
+    const glow = Math.max(0, 1 - (t - W.sTime) / 0.5) * W.sStrength + (mode === 'hot' ? 0.4 : 0);
+    if (glow > 0.01) { const g = ctx.createRadialGradient(512, 560, 40, 512, 560, 420); g.addColorStop(0, `rgba(255,110,40,${0.28 * glow})`); g.addColorStop(1, 'rgba(255,110,40,0)'); ctx.fillStyle = g; ctx.fillRect(0, 100, 1024, 900); }
+
+    // ---- the figure, into its own canvas
+    if (FIGC.width !== cv.width || FIGC.height !== cv.height) { FIGC.width = OUTC.width = cv.width; FIGC.height = OUTC.height = cv.height; }
+    ctx = FIG;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, FIGC.width, FIGC.height);
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.save();
+    // the whole body from the feet: lean, squash and stretch, bounce
+    ctx.translate(F[0], F[1]); ctx.rotate(S.lean.v * Math.PI / 180); ctx.scale(1 + sq * 0.6, 1 - sq); ctx.translate(-F[0], -F[1]);
+    ctx.translate(0, S.bob.v);
+    // tail (behind everything)
+    meshPart('tail', S.tail.v * 1.3);
+    // head space (ears behind the body / head)
+    const headT = () => { ctx.translate(S.headX.v, S.headY.v); rot(J.neck[0], J.neck[1], S.head.v); };
+    const clampE = v => Math.max(-30, Math.min(30, v));
+    ctx.save(); headT(); meshPart('ear_l', clampE(S.earL.v)); meshPart('ear_r', clampE(S.earR.v)); ctx.restore();
+    if (!headMoves()) part('body');
+    else { ctx.save(); clipY(false, NECK1 - 2); part('body'); ctx.restore(); bandMesh('body', P.body.y, NECK1); }
+    // arm values: negative = left arm out, positive = right arm out. They swing out freely, inwards only a little
+    // (the body's own shoulder lies under the arm).
+    const neckPost = headMoves() ? (x, y, yr) => neckD(x, y, neckW(yr)) : null;   // the shoulders bend with the neck
+    meshPart('arm_l', -Math.max(-48, Math.min(4, S.armL.v)), neckPost); meshPart('arm_r', -Math.max(-4, Math.min(48, S.armR.v)), neckPost);
+    if (headMoves()) { ctx.save(); headT(); clipY(true, NECK0 + 1); part('head'); ctx.restore(); bandMesh('head', NECK0, P.head.y + P.head.h); }
+    ctx.save(); headT(); if (!headMoves()) part('head'); drawEyes(); drawMouth();
+    { const tf = ctx.getTransform(); ctx = MAIN; ctx.save(); ctx.setTransform(tf); drawRings(dt); ctx.restore(); ctx = FIG; }   // no outline round the rings
+    { const sm = RIG.smile, n = sm.pts.length, mx = sm.x0 + (n >> 1) * sm.step, my = sm.pts[n >> 1] + 10;
+      const base = new DOMMatrix([dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy]);
+      const inv = base.inverse().multiply(ctx.getTransform());
+      const q = inv.transformPoint(new DOMPoint(mx, my)); W.mouthW = { x: q.x, y: q.y };
+      const b = inv.transformPoint(new DOMPoint(700, 205)); W.bubbleAt = { x: ox + b.x * scale, y: oy + b.y * scale }; }
+    ctx.restore();
+    ctx.restore();
+    // ---- outline: the silhouette grown by OUTLINE_W, round (blur + threshold = a round dilation), in the line colour,
+    // under the figure. Blur sigma R/1.5 crosses the threshold (0.04 .. 0.1) at about R outside the edge.
+    ctx = MAIN;
+    const R0 = OUTLINE_W * scale * dpr, sd = (R0 / 1.5).toFixed(2);
+    const blurEl = document.getElementById('ember-outline-blur');
+    if (blurEl.getAttribute('stdDeviation') !== sd) blurEl.setAttribute('stdDeviation', sd);
+    OUT.setTransform(1, 0, 0, 1, 0, 0); OUT.clearRect(0, 0, OUTC.width, OUTC.height);
+    OUT.filter = 'url(#ember-outline)'; OUT.drawImage(FIGC, 0, 0); OUT.filter = 'none';
+    MAIN.save(); MAIN.setTransform(1, 0, 0, 1, 0, 0);
+    MAIN.drawImage(OUTC, 0, 0);
+    MAIN.drawImage(FIGC, 0, 0);
+    MAIN.restore();
+    MAIN.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
+    drawEats();
+    drawFx(dt);
+    if (W.bubbleAt && bubble.classList.contains('on')) {
+      const r = stage.getBoundingClientRect(), bw = bubble.offsetWidth, bh = bubble.offsetHeight;
+      const x = Math.min(r.width - bw - 10, Math.max(10, W.bubbleAt.x)), y = Math.max(10, W.bubbleAt.y - bh);
+      bubble.style.left = x + 'px'; bubble.style.top = y + 'px';
+    }
+  }
+
+  function drawRings(dt) {
+    const m = RIG.meshes.ear_r, [pxv, pyv] = m.pivot, a = Math.max(-30, Math.min(30, S.earR.v)) * Math.PI / 180;
+    const tx = 742, ty = 308, dx = tx - pxv, dy = ty - pyv;
+    const ex = pxv + Math.cos(a) * dx - Math.sin(a) * dy - 6, ey = pyv + Math.sin(a) * dx + Math.cos(a) * dy + 30;
+    for (let i = headFx.length - 1; i >= 0; i--) {
+      const f = headFx[i]; f.age += dt; const p = f.age / f.life; if (p >= 1) { headFx.splice(i, 1); continue; }
+      const r = 10 + (1 - p) * 58, al = Math.sin(p * Math.PI) * 0.75;
+      ctx.strokeStyle = `rgba(255,214,186,${al})`; ctx.lineWidth = 5 - 2 * p; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(ex, ey, r, -0.75, 0.75); ctx.stroke();
+    }
+  }
+  // the S: bold, warm, outlined like the drawing; it arcs in from the side, spins, and shrinks into his mouth
+  function drawEats() {
+    if (!W.mouthW) return;
+    for (const f of W.eats) {
+      const p = Math.min(1, f.age / f.dur), e = Math.pow(p, 1.35);
+      const x0 = f.side < 0 ? 70 : 954, x1 = W.mouthW.x, y1 = W.mouthW.y, cx = (x0 + x1) / 2, cy = Math.min(f.y0, y1) - 140;
+      const x = (1 - e) * (1 - e) * x0 + 2 * (1 - e) * e * cx + e * e * x1, y = (1 - e) * (1 - e) * f.y0 + 2 * (1 - e) * e * cy + e * e * y1;
+      f.x = x; f.y = y;
+      const size = f.size * (1 - 0.65 * Math.max(0, (p - 0.78) / 0.22)) * Math.min(1, p * 6);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(f.spin * (1 - p));
+      ctx.font = `800 ${size}px Archivo, "Arial Black", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(255,140,60,.55)'; ctx.shadowBlur = 18;
+      ctx.lineJoin = 'round'; ctx.lineWidth = size * 0.14; ctx.strokeStyle = '#2a0a12'; ctx.strokeText('S', 0, 0);
+      ctx.shadowBlur = 0;
+      const g = ctx.createLinearGradient(0, -size / 2, 0, size / 2); g.addColorStop(0, '#ffe29a'); g.addColorStop(1, '#ff7a2e');
+      ctx.fillStyle = g; ctx.fillText('S', 0, 0);
+      ctx.restore();
+    }
+  }
+
+  // ---------- loop
+  let last = performance.now();
+  const chip = $('chip-state'), gr = $('gr');
+  const LABEL = { talk: 'Spricht', idle: 'Wartet', sleep: 'Bypass / schläft', auto: 'AUTO hört zu', proud: 'AUTO fertig', hot: 'Zu viel: über 9 dB', groove: 'Song läuft' };
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+    if (W.playing) beatPhase = (beatPhase + dt * W.bpm / 60) % 1;
+    if (loaded === names.length) { if (!window.__emberPose) brain(dt); draw(dt); }
+    let label = LABEL[mode] || ''; if (W.talk && mode !== 'sleep') label = LABEL.talk; if (mode === 'idle' && W.asleep) label = 'Eingeschlafen'; else if (mode === 'idle' && W.sleepy > 0.2) label = 'Wird müde';
+    if (chip.textContent !== label) chip.textContent = label;
+    chip.classList.toggle('hot', mode === 'hot');
+    const grv = Math.max(0, 1 - (t - W.sTime) / 0.35) * W.sStrength;
+    gr.style.height = (grv * 100).toFixed(1) + '%';
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  window.__ember = S;   // inspection: set window.__emberPose = true and S.<joint>.v by hand
+
+  // ---------- input
+  cv.addEventListener('pointermove', e => { const r = cv.getBoundingClientRect(); W.mouse = toRig(e.clientX - r.left, e.clientY - r.top); W.mouseT = t;
+    const m = W.mouse; W.hover = m.x > 320 && m.x < 720 && m.y > 160 && m.y < 860; });
+  cv.addEventListener('pointerleave', () => { W.hover = false; });
+  cv.addEventListener('click', e => { const r = cv.getBoundingClientRect(); const m = toRig(e.clientX - r.left, e.clientY - r.top);
+    if (m.x > 300 && m.x < 740 && m.y > 150 && m.y < 870) { startAuto(); $('hint').textContent = 'AUTO: Ember hört 4 Sekunden zu, dann ist er fertig.'; } else poke(); });
+  function setBypass(on) { W.bypass = on; $('b-bypass').setAttribute('aria-pressed', on); if (!on) wake(); }
+  $('b-play').addEventListener('click', e => { W.playing = !W.playing; e.currentTarget.setAttribute('aria-pressed', W.playing); e.currentTarget.textContent = W.playing ? '■ Song stoppen' : '▶ Song abspielen'; beatPhase = 0; wake(); });
+  $('b-bypass').addEventListener('click', () => setBypass(!W.bypass));
+  $('b-auto').addEventListener('click', startAuto);
+  for (const [name, v] of Object.entries(EYES_ALL.variants)) {
+    const b = document.createElement('button'); b.className = 't'; b.dataset.eyes = name; b.textContent = v.label;
+    b.addEventListener('click', () => setEyes(name)); $('eye-variants').appendChild(b);
+  }
+  setEyes(EYES_ALL.default);
+  $('b-talk').addEventListener('click', () => { say(LINES[lineIdx % 3]); lineIdx++; });
+  $('b-s').addEventListener('click', () => { wake(); triggerS(Math.max(2, W.red)); });
+  $('b-sing').addEventListener('click', e => { W.sing = !W.sing; e.currentTarget.setAttribute('aria-pressed', W.sing); });
+  $('r-bpm').addEventListener('input', e => { W.bpm = +e.target.value; $('o-bpm').textContent = W.bpm; $('chip-bpm').textContent = W.bpm + ' BPM'; });
+  $('r-red').addEventListener('input', e => { W.red = +e.target.value; $('o-red').textContent = W.red + ' dB'; });
+  // the knob: Ember looks at it while you turn it
+  const knob = $('knob'); let kv = 50, drag = null;
+  const knobLook = () => { const kr = knob.getBoundingClientRect(), r = cv.getBoundingClientRect(); W.knobPos = toRig(kr.left + kr.width / 2 - r.left, kr.top + kr.height / 2 - r.top); W.knobT = t; wake(); };
+  const setK = v => { kv = Math.max(0, Math.min(100, v)); knob.style.setProperty('--rot', (kv * 2.7 - 135) + 'deg'); knob.setAttribute('aria-valuenow', Math.round(kv)); knobLook(); };
+  knob.addEventListener('pointerdown', e => { drag = { y: e.clientY, v: kv }; knob.setPointerCapture(e.pointerId); });
+  knob.addEventListener('pointermove', e => { if (drag) setK(drag.v + (drag.y - e.clientY) * 0.6); });
+  knob.addEventListener('pointerup', () => { drag = null; });
+  knob.addEventListener('keydown', e => { if (e.key === 'ArrowUp' || e.key === 'ArrowRight') setK(kv + 4); if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') setK(kv - 4); });
+  setK(50); W.knobT = -99;
+})();
+</script>
