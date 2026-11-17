@@ -98,7 +98,8 @@ namespace ember
         MascotInput input;
         juce::String bubble;
         juce::Point<int> lastMouse;
-        double lastTick = 0;
+        double lastTick = 0, frameMs = 0;
+        int currentHz = 60;
         bool compact = false;
     };
 }

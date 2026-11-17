@@ -400,9 +400,11 @@ namespace ember
     void LiveMascotView::paint (juce::Graphics& g)
     {
         const auto area = stageArea();
-        float scale = juce::Component::getApproximateScaleFactorForComponent (this);
-        if (! (scale > 0.25f)) scale = 1.0f;          // no window (tests, offscreen): 1:1
-        scale = std::min (scale, 2.0f);              // a sharp figure, without paying for 3x / 4x screens
+        // drawn at the screen's real pixel density (Windows 125 / 150 / 200 %, editor zoom): he was drawn at 1x and
+        // the screen scaled him up, which looked pixelated (Jakob 2026-11-17)
+        float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+        if (! (scale > 0.25f)) scale = 1.0f;
+        scale = juce::jlimit (1.0f, 3.0f, scale);
         // the floor shadow
         const auto pose = brain.pose();
         {
@@ -413,7 +415,12 @@ namespace ember
             if (! renderer.getRigToArea().isIdentity())
                 g.fillEllipse (feet.x - w, feet.y - 22.0f * k, 2.0f * w, 44.0f * k);
         }
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
         renderer.render (g, area, pose, scale);
+        // a slow machine / huge screen: 30 frames a second instead of stuttering at 60
+        frameMs = frameMs * 0.9 + (juce::Time::getMillisecondCounterHiRes() - t0) * 0.1;
+        const int hz = frameMs > 14.0 ? 30 : (frameMs < 9.0 ? 60 : currentHz);
+        if (hz != currentHz) { currentHz = hz; startTimerHz (hz); }
         paintEffects (g);
         paintBubble (g);
     }

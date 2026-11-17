@@ -81,18 +81,30 @@ namespace ember
         // the picture -> area mapping of the last render (for effects that follow the figure)
         juce::AffineTransform getRigToArea() const noexcept { return rigToArea; }
 
+        // where the time of the last frame went (tests): drawing the figure, the outline, putting it on screen
+        double lastDrawMs = 0, lastOutlineMs = 0, lastCompositeMs = 0, lastFaceMs = 0;
+
     private:
         void drawFigure (juce::Graphics&, const RigPose&);
-        void drawPart (juce::Graphics&, const juce::String& name);
-        void drawMesh (juce::Graphics&, const juce::String& name, float degrees,
+        // a whole part (rows yFrom..yTo of the picture), into the figure's pixels like the meshes
+        void drawPart (const juce::String& name, const juce::AffineTransform& space, float yFrom = -1.0e6f, float yTo = 1.0e6f);
+        void drawMesh (juce::Graphics&, const juce::String& name, float degrees, const juce::AffineTransform& space,
                        std::function<juce::Point<float> (juce::Point<float> p, float restY)> post = {});
         void drawNeckBand (juce::Graphics&, const juce::String& name, float y0, float y1, const RigPose&);
+        // one textured triangle, drawn straight into the figure's pixels (the Graphics clip per triangle was too slow
+        // on 2x screens): bilinear sampling, top-left fill rule so neighbours tile without seams or overlap
+        void raster (const juce::Image& src, const juce::AffineTransform& space,
+                     juce::Point<float> s0, juce::Point<float> s1, juce::Point<float> s2,
+                     juce::Point<float> d0, juce::Point<float> d1, juce::Point<float> d2);
+        juce::AffineTransform base;                        // picture -> figure image pixels
+        juce::Image::BitmapData* pixels = nullptr;         // the figure's pixels while it is drawn
         void drawEyes (juce::Graphics&, const RigPose&);
         void drawMouth (juce::Graphics&, const RigPose&);
         void outline (const juce::Image& figure, float radiusPx, juce::Colour);   // -> ring
 
         juce::Image figure, ring;
-        std::vector<juce::uint8> alpha;
+        std::vector<float> dist, buf, z;     // the outline's distance transform
+        std::vector<int> v;
         // the parts pre-scaled to the current size (scaling the 1024 px parts every frame cost most of the time)
         const juce::Image& scaled (const juce::String& name);
         std::map<juce::String, juce::Image> scaledParts;

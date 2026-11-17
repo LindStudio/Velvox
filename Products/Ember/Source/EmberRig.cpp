@@ -1,6 +1,7 @@
 #include "EmberRig.h"
 #include "EmberRigData.h"
 #include <cmath>
+#include <cstring>
 
 // The drawing follows the browser prototype line by line (tools/mascot/ember_live_prototype_template.html, v17), so
 // the plugin shows exactly what Jakob approved there. Comments name the prototype's function where it helps.
@@ -53,24 +54,6 @@ namespace ember
 
         float smooth01 (float u) { u = juce::jlimit (0.0f, 1.0f, u); return u * u * (3.0f - 2.0f * u); }
 
-        // one textured triangle: clip to the target (grown 0.9 px so no hairline shows between triangles), map the
-        // picture with the affine that takes the source corners to the target corners (prototype: tri)
-        float triangleGrow = 0.9f;   // rig units; set per render so it is ~1.2 screen px
-
-        void triangle (juce::Graphics& g, const juce::Image& img, juce::Point<float> imgOrigin, float k,
-                       juce::Point<float> s0, juce::Point<float> s1, juce::Point<float> s2,
-                       juce::Point<float> d0, juce::Point<float> d1, juce::Point<float> d2)
-        {
-            const auto m = (d0 + d1 + d2) / 3.0f;
-            auto grow = [&] (juce::Point<float> p) { auto d = p - m; const float l = std::max (1.0e-3f, d.getDistanceFromOrigin()); return p + d * (triangleGrow / l); };
-            juce::Path t;
-            t.addTriangle (grow (d0), grow (d1), grow (d2));
-            const auto a = (s0 - imgOrigin) * k, b = (s1 - imgOrigin) * k, c = (s2 - imgOrigin) * k;   // into the scaled picture
-            const auto tf = juce::AffineTransform::fromTargetPoints (a.x, a.y, d0.x, d0.y, b.x, b.y, d1.x, d1.y, c.x, c.y, d2.x, d2.y);
-            juce::Graphics::ScopedSaveState save (g);
-            g.reduceClipRegion (t);
-            g.drawImageTransformed (img, tf);
-        }
     }
 
     // ------------------------------------------------------------------ rig data
@@ -162,6 +145,7 @@ namespace ember
 
         const int w = std::max (1, juce::roundToInt (area.getWidth() * displayScale));
         const int h = std::max (1, juce::roundToInt (area.getHeight() * displayScale));
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
         if (figure.getWidth() != w || figure.getHeight() != h)
         {
             // in memory, not on the GPU: the outline reads the figure's pixels every frame
@@ -178,16 +162,21 @@ namespace ember
                 scaledParts.clear();
                 scaledFor = s * displayScale;
             }
-            fg.addTransform (juce::AffineTransform::scale (s).translated (ox - area.getX(), oy - area.getY()).scaled (displayScale));
-            triangleGrow = std::max (0.9f, 1.2f / (s * displayScale));
+            base = juce::AffineTransform::scale (s).translated (ox - area.getX(), oy - area.getY()).scaled (displayScale);
+            fg.addTransform (base);
+            juce::Image::BitmapData data (figure, juce::Image::BitmapData::readWrite);   // a software image: drawn at once
+            pixels = &data;
             drawFigure (fg, pose);
+            pixels = nullptr;
         }
+        const auto t1 = juce::Time::getMillisecondCounterHiRes();
         outline (figure, outlineWidth * s * displayScale, juce::Colour (outlineColour));
-        // the outline (into 'ring'), then the figure over it
+        const auto t2 = juce::Time::getMillisecondCounterHiRes();
         juce::Graphics::ScopedSaveState keep (g);
         g.setOpacity (1.0f);      // images take the opacity of the last colour (the floor shadow's 28 % made him see-through)
-        g.drawImage (ring, area, juce::RectanglePlacement::stretchToFit);
-        g.drawImage (figure, area, juce::RectanglePlacement::stretchToFit);
+        g.drawImage (ring, area, juce::RectanglePlacement::stretchToFit);   // outline + figure, composed by outline()
+        const auto t3 = juce::Time::getMillisecondCounterHiRes();
+        lastDrawMs = t1 - t0; lastOutlineMs = t2 - t1; lastCompositeMs = t3 - t2;
     }
 
     juce::AffineTransform RigRenderer::bodyTransform (const RigPose& pose)
@@ -216,7 +205,7 @@ namespace ember
         juce::Graphics::ScopedSaveState body (g);
         g.addTransform (bodyTransform (pose));
 
-        drawMesh (g, "tail", pose.tail * 1.3f);
+        drawMesh (g, "tail", pose.tail * 1.3f, bodyTransform (pose));
 
         const auto headT = juce::AffineTransform::rotation (juce::degreesToRadians (pose.head), rig.neck.x, rig.neck.y)
                                .translated (pose.headX, pose.headY);
@@ -224,18 +213,15 @@ namespace ember
         {
             juce::Graphics::ScopedSaveState ears (g);
             g.addTransform (headT);
-            drawMesh (g, "ear_l", juce::jlimit (-30.0f, 30.0f, pose.earL));
-            drawMesh (g, "ear_r", juce::jlimit (-30.0f, 30.0f, pose.earR));
+            drawMesh (g, "ear_l", juce::jlimit (-30.0f, 30.0f, pose.earL), headTransform (pose));
+            drawMesh (g, "ear_r", juce::jlimit (-30.0f, 30.0f, pose.earR), headTransform (pose));
         }
+        const auto bodyT = bodyTransform (pose);
         if (! headMoves)
-            drawPart (g, "body");
+            drawPart ("body", bodyT);
         else
         {
-            {
-                juce::Graphics::ScopedSaveState below (g);
-                g.reduceClipRegion (juce::Rectangle<float> (-2000.0f, neck1 - 2.0f, 5000.0f, 4000.0f).toNearestIntEdges());
-                drawPart (g, "body");
-            }
+            drawPart ("body", bodyT, neck1 - 2.0f);
             drawNeckBand (g, "body", rig.part ("body").box.getY(), neck1, pose);
         }
 
@@ -249,26 +235,23 @@ namespace ember
                 auto q = rotateAround (p, rig.neck, juce::degreesToRadians (pose.head) * wN);
                 return q + juce::Point<float> (pose.headX * wN, pose.headY * wN);
             };
-        drawMesh (g, "arm_l", -juce::jlimit (-48.0f, 4.0f, pose.armL), neckPost);
-        drawMesh (g, "arm_r", -juce::jlimit (-4.0f, 48.0f, pose.armR), neckPost);
+        drawMesh (g, "arm_l", -juce::jlimit (-48.0f, 4.0f, pose.armL), bodyTransform (pose), neckPost);
+        drawMesh (g, "arm_r", -juce::jlimit (-4.0f, 48.0f, pose.armR), bodyTransform (pose), neckPost);
 
         if (headMoves)
         {
-            {
-                juce::Graphics::ScopedSaveState above (g);
-                g.addTransform (headT);
-                g.reduceClipRegion (juce::Rectangle<float> (-2000.0f, -2000.0f, 5000.0f, 2000.0f + neck0 + 1.0f).toNearestIntEdges());
-                drawPart (g, "head");
-            }
+            drawPart ("head", headTransform (pose), -1.0e6f, neck0 + 1.0f);
             const auto& hb = rig.part ("head").box;
             drawNeckBand (g, "head", neck0, hb.getBottom(), pose);
         }
         juce::Graphics::ScopedSaveState face (g);
         g.addTransform (headT);
         if (! headMoves)
-            drawPart (g, "head");
+            drawPart ("head", headTransform (pose));
+        const auto te = juce::Time::getMillisecondCounterHiRes();
         drawEyes (g, pose);
         drawMouth (g, pose);
+        lastFaceMs = juce::Time::getMillisecondCounterHiRes() - te;
     }
 
     const juce::Image& RigRenderer::scaled (const juce::String& name)
@@ -282,19 +265,24 @@ namespace ember
         return scaledParts[name] = juce::SoftwareImageType().convert (p.image).rescaled (w, h, juce::Graphics::highResamplingQuality);
     }
 
-    void RigRenderer::drawPart (juce::Graphics& g, const juce::String& name)
+    void RigRenderer::drawPart (const juce::String& name, const juce::AffineTransform& space, float yFrom, float yTo)
     {
         const auto& p = MascotRig::get().part (name);
         if (! p.image.isValid())
             return;
         const auto& img = scaled (name);
-        g.drawImageTransformed (img, juce::AffineTransform::scale (p.box.getWidth() / (float) img.getWidth(), p.box.getHeight() / (float) img.getHeight())
-                                         .translated (p.box.getX(), p.box.getY()));
+        const float k = (float) img.getWidth() / p.box.getWidth();
+        const float t = std::max (p.box.getY(), yFrom), b = std::min (p.box.getBottom(), yTo);
+        if (b <= t)
+            return;
+        const juce::Point<float> a (p.box.getX(), t), c (p.box.getRight(), b), tr (c.x, a.y), bl (a.x, c.y), o (p.box.getX(), p.box.getY());
+        raster (img, space, (a - o) * k, (tr - o) * k, (c - o) * k, a, tr, c);
+        raster (img, space, (a - o) * k, (c - o) * k, (bl - o) * k, a, c, bl);
     }
 
     // A mesh part bends instead of turning: every grid point turns around the joint by (angle x its weight); the base
     // stays, the free end follows fully (prototype: meshPart)
-    void RigRenderer::drawMesh (juce::Graphics& g, const juce::String& name, float degrees,
+    void RigRenderer::drawMesh (juce::Graphics& g, const juce::String& name, float degrees, const juce::AffineTransform& space,
                                 std::function<juce::Point<float> (juce::Point<float>, float)> post)
     {
         const auto& rig = MascotRig::get();
@@ -304,7 +292,7 @@ namespace ember
             return;
         if (std::abs (degrees) < 0.05f && ! post)
         {
-            drawPart (g, name);
+            drawPart (name, space);
             return;
         }
         const float a = juce::degreesToRadians (degrees);
@@ -322,8 +310,8 @@ namespace ember
         const juce::Point<float> origin (p.box.getX(), p.box.getY());
         const auto& img = scaled (name);
         const float k = (float) img.getWidth() / p.box.getWidth();
-        // drawn on every 2nd grid point: a quarter of the triangles, the bend stays smooth
-        constexpr int S = 2;
+        // drawn on the full grid (the own rasterizer is fast enough)
+        constexpr int S = 1;
         auto hasPixels = [&] (int ix, int jy)
         {
             for (int b = jy; b < std::min (jy + S, m->rows - 1); ++b)
@@ -345,9 +333,78 @@ namespace ember
                            k3 = (size_t) (jy1 * m->cols + ix), k2 = (size_t) (jy1 * m->cols + ix1);
                 auto src = [&] (size_t k) { return juce::Point<float> (m->x + (float) (k % (size_t) m->cols) * m->step,
                                                                       m->y + (float) (k / (size_t) m->cols) * m->step); };
-                triangle (g, img, origin, k, src (k0), src (k1), src (k2), v[k0], v[k1], v[k2]);
-                triangle (g, img, origin, k, src (k0), src (k2), src (k3), v[k0], v[k2], v[k3]);
+                raster (img, space, (src (k0) - origin) * k, (src (k1) - origin) * k, (src (k2) - origin) * k, v[k0], v[k1], v[k2]);
+                raster (img, space, (src (k0) - origin) * k, (src (k2) - origin) * k, (src (k3) - origin) * k, v[k0], v[k2], v[k3]);
             }
+    }
+
+    void RigRenderer::raster (const juce::Image& srcImage, const juce::AffineTransform& space,
+                              juce::Point<float> s0, juce::Point<float> s1, juce::Point<float> s2,
+                              juce::Point<float> d0, juce::Point<float> d1, juce::Point<float> d2)
+    {
+        if (pixels == nullptr)
+            return;
+        const auto toPx = space.followedBy (base);
+        d0 = d0.transformedBy (toPx); d1 = d1.transformedBy (toPx); d2 = d2.transformedBy (toPx);
+        float area2 = (d1.x - d0.x) * (d2.y - d0.y) - (d2.x - d0.x) * (d1.y - d0.y);
+        if (std::abs (area2) < 1.0e-6f)
+            return;
+        if (area2 < 0) { std::swap (d1, d2); std::swap (s1, s2); }
+        // pixel (centre) -> source picture
+        const auto toSrc = juce::AffineTransform::fromTargetPoints (d0.x, d0.y, s0.x, s0.y, d1.x, d1.y, s1.x, s1.y, d2.x, d2.y, s2.x, s2.y);
+        auto& dst = *pixels;
+        const int x0 = std::max (0, (int) std::floor (std::min ({ d0.x, d1.x, d2.x })));
+        const int x1 = std::min (dst.width - 1, (int) std::ceil (std::max ({ d0.x, d1.x, d2.x })));
+        const int y0 = std::max (0, (int) std::floor (std::min ({ d0.y, d1.y, d2.y })));
+        const int y1 = std::min (dst.height - 1, (int) std::ceil (std::max ({ d0.y, d1.y, d2.y })));
+        // edge functions; top-left rule on ties so shared edges are drawn exactly once
+        auto edge = [] (juce::Point<float> a, juce::Point<float> b, float px, float py) { return (b.x - a.x) * (py - a.y) - (b.y - a.y) * (px - a.x); };
+        auto topLeft = [] (juce::Point<float> a, juce::Point<float> b) { return (a.y == b.y && b.x < a.x) || b.y < a.y; };
+        const bool tl0 = topLeft (d1, d2), tl1 = topLeft (d2, d0), tl2 = topLeft (d0, d1);
+        const juce::Image::BitmapData src (srcImage, juce::Image::BitmapData::readOnly);
+        const int sw = src.width, sh = src.height;
+        // edges and source position change linearly along a row: added up per pixel instead of worked out again
+        const float e0x = -(d2.y - d1.y), e1x = -(d0.y - d2.y), e2x = -(d1.y - d0.y);
+        const float sxx = toSrc.mat00, syx = toSrc.mat10;
+        for (int y = y0; y <= y1; ++y)
+        {
+            auto* row = reinterpret_cast<juce::PixelARGB*> (dst.getLinePointer (y));
+            const float py = (float) y + 0.5f, px0 = (float) x0 + 0.5f;
+            float w0 = edge (d1, d2, px0, py), w1 = edge (d2, d0, px0, py), w2 = edge (d0, d1, px0, py);
+            auto sp = juce::Point<float> (px0, py).transformedBy (toSrc) - juce::Point<float> (0.5f, 0.5f);
+            for (int x = x0; x <= x1; ++x, w0 += e0x, w1 += e1x, w2 += e2x, sp.x += sxx, sp.y += syx)
+            {
+                if (! ((w0 > 0 || (w0 == 0 && tl0)) && (w1 > 0 || (w1 == 0 && tl1)) && (w2 > 0 || (w2 == 0 && tl2))))
+                    continue;
+                // bilinear sample of the (premultiplied) source, in integer weights
+                const int ix = (int) std::floor (sp.x), iy = (int) std::floor (sp.y);
+                if (ix < -1 || iy < -1 || ix >= sw || iy >= sh)
+                    continue;
+                const int fx = (int) ((sp.x - (float) ix) * 256.0f), fy = (int) ((sp.y - (float) iy) * 256.0f);
+                juce::uint32 acc[4] = { 0, 0, 0, 0 };
+                auto add = [&] (int sx, int sy, int wgt)
+                {
+                    if (sx < 0 || sy < 0 || sx >= sw || sy >= sh || wgt == 0)
+                        return;
+                    const auto& q = reinterpret_cast<const juce::PixelARGB*> (src.getLinePointer (sy))[sx];
+                    acc[0] += (juce::uint32) (q.getAlpha() * wgt); acc[1] += (juce::uint32) (q.getRed() * wgt);
+                    acc[2] += (juce::uint32) (q.getGreen() * wgt); acc[3] += (juce::uint32) (q.getBlue() * wgt);
+                };
+                add (ix, iy, (256 - fx) * (256 - fy));
+                add (ix + 1, iy, fx * (256 - fy));
+                add (ix, iy + 1, (256 - fx) * fy);
+                add (ix + 1, iy + 1, fx * fy);
+                const juce::uint32 a = acc[0] >> 16;
+                if (a == 0)
+                    continue;
+                auto& o = row[x];
+                const juce::uint32 inv = 255 - std::min<juce::uint32> (255, a);     // "over", premultiplied
+                o.setARGB ((juce::uint8) std::min<juce::uint32> (255, a + ((o.getAlpha() * inv + 127) / 255)),
+                           (juce::uint8) std::min<juce::uint32> (255, (acc[1] >> 16) + ((o.getRed() * inv + 127) / 255)),
+                           (juce::uint8) std::min<juce::uint32> (255, (acc[2] >> 16) + ((o.getGreen() * inv + 127) / 255)),
+                           (juce::uint8) std::min<juce::uint32> (255, (acc[3] >> 16) + ((o.getBlue() * inv + 127) / 255)));
+            }
+        }
     }
 
     // The neck: the drawing has none, so head and body are one bending sheet there (prototype: bandMesh / neckD)
@@ -375,8 +432,8 @@ namespace ember
             for (size_t i = 0; i + 1 < xs.size(); ++i)
             {
                 const juce::Point<float> a (xs[i], ys[j]), b (xs[i + 1], ys[j]), c (xs[i + 1], ys[j + 1]), d (xs[i], ys[j + 1]);
-                triangle (g, img, origin, k, a, b, c, neckD (a), neckD (b), neckD (c));
-                triangle (g, img, origin, k, a, c, d, neckD (a), neckD (c), neckD (d));
+                raster (img, bodyTransform (pose), (a - origin) * k, (b - origin) * k, (c - origin) * k, neckD (a), neckD (b), neckD (c));
+                raster (img, bodyTransform (pose), (a - origin) * k, (c - origin) * k, (d - origin) * k, neckD (a), neckD (c), neckD (d));
             }
     }
 
@@ -535,51 +592,114 @@ namespace ember
 
     // ONE outline of even width with round ends around the assembled figure (prototype: blur + threshold filter):
     // the figure's alpha grown by a disc of radiusPx (anti-aliased), in the outline colour, into 'ring'
+    // ONE outline of even width with round ends around the assembled figure (prototype: blur + threshold): the
+    // exact distance of every pixel to the figure (Felzenszwalb's separable distance transform, two passes over the
+    // pixels, only inside the figure's box + the radius), the outline where that distance is under radiusPx,
+    // anti-aliased over one pixel. In the same pass the figure goes over it, so one picture goes to the screen.
+    // (2026-11-17: the disc of taps cost 12 ms on a 2x screen.)
     void RigRenderer::outline (const juce::Image& fig, float radiusPx, juce::Colour colour)
     {
         const int w = fig.getWidth(), h = fig.getHeight();
-        alpha.resize ((size_t) (w * h));
-        {
-            const juce::Image::BitmapData src (fig, juce::Image::BitmapData::readOnly);
-            for (int y = 0; y < h; ++y)
-            {
-                auto* line = reinterpret_cast<const juce::PixelARGB*> (src.getLinePointer (y));
-                for (int x = 0; x < w; ++x)
-                    alpha[(size_t) (y * w + x)] = line[x].getAlpha();
-            }
-        }
-        // the disc, anti-aliased at its rim (weights 0..256)
-        struct Tap { int dx, dy, weight; };
-        std::vector<Tap> taps;
-        const int r = (int) std::ceil (radiusPx + 1.0f);
-        for (int dy = -r; dy <= r; ++dy)
-            for (int dx = -r; dx <= r; ++dx)
-            {
-                const float wgt = juce::jlimit (0.0f, 1.0f, radiusPx + 0.5f - std::sqrt ((float) (dx * dx + dy * dy)));
-                if (wgt > 0.0f && (dx != 0 || dy != 0))
-                    taps.push_back ({ dx, dy, juce::roundToInt (wgt * 256.0f) });
-            }
-        const juce::Image::BitmapData dst (ring, juce::Image::BitmapData::writeOnly);
-        const auto c = colour.getPixelARGB();
+        const juce::Image::BitmapData src (fig, juce::Image::BitmapData::readOnly);
+        // the figure's box
+        int bx0 = w, by0 = h, bx1 = -1, by1 = -1;
         for (int y = 0; y < h; ++y)
         {
-            auto* out = reinterpret_cast<juce::PixelARGB*> (dst.getLinePointer (y));
+            auto* line = reinterpret_cast<const juce::PixelARGB*> (src.getLinePointer (y));
             for (int x = 0; x < w; ++x)
+                if (line[x].getAlpha() >= 128)
+                {
+                    bx0 = std::min (bx0, x); bx1 = std::max (bx1, x); by0 = std::min (by0, y); by1 = std::max (by1, y);
+                }
+        }
+        const juce::Image::BitmapData dst (ring, juce::Image::BitmapData::writeOnly);
+        for (int y = 0; y < h; ++y)
+            std::memset (dst.getLinePointer (y), 0, (size_t) w * sizeof (juce::PixelARGB));
+        if (bx1 < 0)
+            return;
+        const int m = (int) std::ceil (radiusPx) + 3;
+        const int x0 = std::max (0, bx0 - m), x1 = std::min (w - 1, bx1 + m), y0 = std::max (0, by0 - m), y1 = std::min (h - 1, by1 + m);
+        // on 2x screens (a wide outline) the distance is worked out on a half-size grid and interpolated: a quarter of
+        // the work, the edge stays smooth because a distance field interpolates well
+        const int q = radiusPx >= 5.0f ? 2 : 1;
+        const int W = (x1 - x0) / q + 2, H = (y1 - y0) / q + 2;
+        constexpr float inf = 1.0e12f;
+        dist.assign ((size_t) (W * H), inf);
+        for (int y = y0; y <= y1; ++y)
+        {
+            auto* line = reinterpret_cast<const juce::PixelARGB*> (src.getLinePointer (y));
+            for (int x = x0; x <= x1; ++x)
+                if (line[x].getAlpha() >= 128)
+                    dist[(size_t) (((y - y0) / q) * W + (x - x0) / q)] = 0.0f;
+        }
+        // 1D squared distance transform (lower envelope of parabolas)
+        auto edt1 = [this] (float* f, int n, int stride)
+        {
+            buf.resize ((size_t) n); v.resize ((size_t) n); z.resize ((size_t) n + 1);
+            for (int q = 0; q < n; ++q) buf[(size_t) q] = f[q * stride];
+            int k = 0; v[0] = 0; z[0] = -inf; z[1] = inf;
+            for (int q = 1; q < n; ++q)
             {
-                int v = alpha[(size_t) (y * w + x)];
-                if (v < 255)
-                    for (const auto& t : taps)
-                    {
-                        const int xx = x + t.dx, yy = y + t.dy;
-                        if (xx < 0 || yy < 0 || xx >= w || yy >= h)
-                            continue;
-                        v = std::max (v, (alpha[(size_t) (yy * w + xx)] * t.weight) >> 8);
-                        if (v >= 255)
-                            break;
-                    }
-                juce::PixelARGB px = c;
-                px.multiplyAlpha (v);          // premultiplied
-                out[x] = px;
+                float sx;
+                while (true)
+                {
+                    const int r = v[(size_t) k];
+                    sx = ((buf[(size_t) q] + (float) (q * q)) - (buf[(size_t) r] + (float) (r * r))) / (2.0f * (float) (q - r));
+                    if (sx <= z[(size_t) k] && k > 0) { --k; continue; }
+                    break;
+                }
+                if (sx <= z[(size_t) k]) { v[0] = q; z[0] = -inf; z[1] = inf; k = 0; continue; }
+                ++k; v[(size_t) k] = q; z[(size_t) k] = sx; z[(size_t) k + 1] = inf;
+            }
+            k = 0;
+            for (int q = 0; q < n; ++q)
+            {
+                while (z[(size_t) k + 1] < (float) q) ++k;
+                const int r = v[(size_t) k];
+                f[q * stride] = (float) ((q - r) * (q - r)) + buf[(size_t) r];
+            }
+        };
+        for (int x = 0; x < W; ++x) edt1 (dist.data() + x, H, W);
+        for (int y = 0; y < H; ++y) edt1 (dist.data() + y * W, W, 1);
+        for (auto& d2 : dist) d2 = std::sqrt (d2);      // once per cell, not four times per pixel
+        const float far = (radiusPx + 1.0f) / (float) q + 1.5f;
+
+        const auto c = colour.getPixelARGB();
+        for (int y = y0; y <= y1; ++y)
+        {
+            auto* out = reinterpret_cast<juce::PixelARGB*> (dst.getLinePointer (y));
+            auto* fp = reinterpret_cast<const juce::PixelARGB*> (src.getLinePointer (y));
+            for (int x = x0; x <= x1; ++x)
+            {
+                if (fp[x].getAlpha() == 255) { out[x] = fp[x]; continue; }
+                if (dist[(size_t) (((y - y0) / q) * W + (x - x0) / q)] > far) { out[x] = fp[x]; continue; }
+                float d;
+                if (q == 1)
+                    d = dist[(size_t) ((y - y0) * W + (x - x0))];
+                else
+                {
+                    // bilinear in the half-size grid, cell centres at (i + 0.5) * q
+                    const float gx = ((float) (x - x0) + 0.5f) / (float) q - 0.5f, gy = ((float) (y - y0) + 0.5f) / (float) q - 0.5f;
+                    const int ix = juce::jlimit (0, W - 2, (int) std::floor (gx)), iy = juce::jlimit (0, H - 2, (int) std::floor (gy));
+                    const float fx = juce::jlimit (0.0f, 1.0f, gx - (float) ix), fy = juce::jlimit (0.0f, 1.0f, gy - (float) iy);
+                    auto at = [&] (int a, int b) { return dist[(size_t) (b * W + a)]; };
+                    d = (at (ix, iy) * (1 - fx) + at (ix + 1, iy) * fx) * (1 - fy) + (at (ix, iy + 1) * (1 - fx) + at (ix + 1, iy + 1) * fx) * fy;
+                    d = std::max (0.0f, d * (float) q - 0.5f * (float) q);   // grid units -> pixels, a cell is "inside" up to its edge
+                }
+                const int a = juce::jlimit (0, 255, juce::roundToInt ((radiusPx + 0.5f - d) * 255.0f));
+                const auto& f = fp[x];
+                if (f.getAlpha() == 255 || a == 0)
+                {
+                    out[x] = f;
+                    continue;
+                }
+                juce::PixelARGB o = c;
+                o.multiplyAlpha (a);
+                const int inv = 255 - f.getAlpha();           // the figure over the outline, premultiplied
+                out[x].setARGB ((juce::uint8) (f.getAlpha() + ((o.getAlpha() * inv + 127) / 255)),
+                                (juce::uint8) (f.getRed() + ((o.getRed() * inv + 127) / 255)),
+                                (juce::uint8) (f.getGreen() + ((o.getGreen() * inv + 127) / 255)),
+                                (juce::uint8) (f.getBlue() + ((o.getBlue() * inv + 127) / 255)));
             }
         }
     }

@@ -1576,6 +1576,23 @@ namespace
             if (k >= 2) worst = std::max (worst, dt);       // the first frames build the caches
         }
         std::printf ("  rig: rest %.2f ms, moved %.2f ms on average\n", sumRest / 10.0, sumMoved / 10.0);
+        // the editor's real stage (402 px) on a 2x screen: drawn at full pixel density
+        {
+            juce::Image big (juce::Image::ARGB, 804, 804, true, juce::SoftwareImageType());   // the screen's pixels
+            RigRenderer r2;
+            double sumR = 0, sumM = 0;
+            for (int k = 0; k < 12; ++k)
+            {
+                juce::Graphics g (big);
+                g.addTransform (juce::AffineTransform::scale (2.0f));
+                const auto t0 = juce::Time::getMillisecondCounterHiRes();
+                r2.render (g, { 0.0f, 0.0f, 402.0f, 402.0f }, (k % 2) ? moved : RigPose {}, 2.0f);
+                if (k >= 2) ((k % 2) ? sumM : sumR) += juce::Time::getMillisecondCounterHiRes() - t0;
+            }
+            std::printf ("  rig: 402 px stage at 2x: rest %.2f ms, moved %.2f ms (last: figure %.2f of it face %.2f, outline %.2f, onto screen %.2f)\n",
+                         sumR / 5.0, sumM / 5.0, r2.lastDrawMs, r2.lastFaceMs, r2.lastOutlineMs, r2.lastCompositeMs);
+            check (sumR / 5.0 < 16.0 && sumM / 5.0 < 16.0, "2x screen: under 16 ms a frame (60 fps)");
+        }
         int opaque = 0;
         for (int y = 0; y < 300; y += 3)
             for (int x = 0; x < 300; x += 3)
