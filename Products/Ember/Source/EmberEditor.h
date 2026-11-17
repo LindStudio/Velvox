@@ -2,6 +2,7 @@
 
 #include "EmberProcessor.h"
 #include "EmberMascot.h"
+#include "EmberLiveMascot.h"
 #include "EmberPresets.h"
 #include "UI/VocalypseLookAndFeel.h"
 #include "UI/Widgets.h"
@@ -127,7 +128,7 @@ namespace ember
         bool isAdvanced() const noexcept { return advanced; }
         void setAdvanced (bool);
         void tick() { timerCallback(); }
-        MascotView& getMascot() noexcept { return mascot; }
+        LiveMascotView& getMascot() noexcept { return mascot; }
 
     private:
         class AboutOverlay;
@@ -152,7 +153,7 @@ namespace ember
         juce::ShapeButton nextBtn { "next", juce::Colours::white, juce::Colours::white, juce::Colours::white };
         juce::TextButton presetBtn, saveBtn, slotA, slotB, slotCopy;
 
-        MascotView mascot;
+        LiveMascotView mascot;      // Ember as a live rig (2026-11-17); MascotView (frames) stays for its tests until step 6
         ReductionMeter meter;
         BandDisplay display;
         DetectorMeter detector;

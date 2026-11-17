@@ -14,6 +14,7 @@
 #include "EmberEditor.h"
 #include "EmberMascot.h"
 #include "EmberRig.h"
+#include "EmberLiveMascot.h"
 #include "EmberPresets.h"
 #include "Text/I18n.h"
 
@@ -1457,6 +1458,80 @@ namespace
         };
     }
 
+    // The live brain (step 3): what Ember does, without drawing
+    void testLiveBrain()
+    {
+        currentTest = "live brain";
+        auto run = [] (LiveBrain& b, MascotInput in, float seconds, std::function<void (MascotInput&, float)> each = {})
+        {
+            for (float t = 0; t < seconds; t += 1.0f / 60.0f)
+            {
+                if (each) each (in, t);
+                b.update (in, 1.0f / 60.0f, { 517, 466 });
+            }
+        };
+        {
+            LiveBrain b; MascotInput in; in.bypass = true;
+            run (b, in, 2.0f);
+            check (b.getMode() == LiveBrain::Mode::sleep && b.pose().lid > 0.9f, "bypass: he sleeps, eyes shut");
+        }
+        {
+            LiveBrain b; MascotInput in; in.hasSignal = true; in.bpm = 128;
+            float minBob = 0;
+            run (b, in, 3.0f, [&] (MascotInput&, float) { minBob = std::min (minBob, b.pose().bob); });
+            check (b.getMode() == LiveBrain::Mode::groove && minBob < -6.0f, "a vocal plays: he grooves (bounces " + juce::String (minBob, 1) + " px)");
+            in.hostStopped = true;
+            run (b, in, 0.2f);
+            check (b.getMode() != LiveBrain::Mode::groove, "the host stops: he stops at once");
+        }
+        {
+            LiveBrain b; MascotInput in; in.hasSignal = true;
+            // an S every 0.6 s: 6 dB for 80 ms
+            run (b, in, 4.0f, [] (MascotInput& m, float t) { m.reductionDb = std::fmod (t, 0.6f) < 0.08f ? 6.0f : 0.0f; });
+            check (b.eatenCount() >= 4, "every S flies in and he eats it (" + juce::String (b.eatenCount()) + " in 4 s)");
+        }
+        {
+            LiveBrain b; MascotInput in; in.hasSignal = true; in.reductionDb = 12.0f;
+            run (b, in, 2.0f);
+            check (b.getMode() == LiveBrain::Mode::hot, "over 9 dB for a while: too much");
+        }
+        {
+            LiveBrain b; MascotInput in; in.autoListening = true;
+            run (b, in, 1.0f);
+            check (b.getMode() == LiveBrain::Mode::listen && b.pose().head > 6.0f, "AUTO: he leans in and listens");
+            in.autoListening = false;
+            run (b, in, 0.5f);
+            check (b.getMode() == LiveBrain::Mode::proud, "AUTO done: proud");
+        }
+        {
+            LiveBrain b; MascotInput in;
+            b.say ("Hallo du, ich bin Ember.");
+            float maxMouth = 0, minBob = 0;
+            run (b, in, 1.5f, [&] (MascotInput&, float) { maxMouth = std::max (maxMouth, b.pose().mouth); minBob = std::min (minBob, b.pose().bob); });
+            check (maxMouth > 0.5f, "talking opens the mouth (" + juce::String (maxMouth, 2) + ")");
+            check (minBob > -3.0f, "talking does not bounce him (" + juce::String (minBob, 1) + " px)");
+        }
+        {
+            LiveBrain b; MascotInput in;
+            run (b, in, 40.0f);
+            check (b.getMode() == LiveBrain::Mode::sleep, "nothing happens for 40 s: he falls asleep");
+        }
+        {
+            LiveMascotView v;
+            v.setSize (520, 402);
+            v.setVisible (true);
+            for (int k = 0; k < 30; ++k) v.stepForTest (1.0f / 60.0f);
+            juce::Image img (juce::Image::ARGB, 520, 402, true, juce::SoftwareImageType());
+            {
+                juce::Graphics g (img);
+                v.paint (g);
+            }
+            int opaque = 0;
+            for (int y = 0; y < 402; y += 4) for (int x = 0; x < 520; x += 4) opaque += img.getPixelAt (x, y).getAlpha() > 128;
+            check (opaque > 800, "the view draws him (" + juce::String (opaque) + ")");
+        }
+    }
+
     int rigPictures (const juce::File& dir)
     {
         dir.createDirectory();
@@ -1643,6 +1718,7 @@ int main (int argc, char** argv)
     testPresets();
     testMascotClips();
     testRig();
+    testLiveBrain();
     testMascotFrames (snapshotDir);
     testEditor (snapshotDir);
     testRealTakes();

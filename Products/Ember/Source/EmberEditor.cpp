@@ -518,8 +518,8 @@ namespace ember
                                                              "Compare two settings: A and B each keep one setting. Switch, listen, keep the better one."));
         addInfo (slotB, tr ("Vergleich B", "Compare B"), tr ("Beim ersten Klick startet B als Kopie von A.", "On the first click B starts as a copy of A."));
         addInfo (slotCopy, tr ("Kopieren", "Copy"), tr ("Kopiert die aktive Einstellung in den anderen Speicher.", "Copies the active setting into the other slot."));
-        addInfo (mascot, "Ember", tr ("Ember zeigt, was der De-Esser tut: Er tanzt zur Stimme, jeder Funke an seiner Hand ist ein abgesenktes S. Klick auf ihn startet AUTO.",
-                                      "Ember shows what the de-esser does: he dances to the vocal, every spark at his hand is a reduced S. Click him to start AUTO."));
+        addInfo (mascot, "Ember", tr ("Ember zeigt, was der De-Esser tut: Er tanzt zur Stimme, und jedes S, das abgesenkt wird, fliegt ihm zu und er frisst es. Klick auf ihn startet AUTO.",
+                                      "Ember shows what the de-esser does: he dances to the vocal, and every S that is reduced flies to him and he eats it. Click him to start AUTO."));
         addInfo (meter, "Gain Reduction", tr ("Wie viel gerade weggenommen wird, in dB.", "How much is being removed right now, in dB."));
         addInfo (voiceLow, tr ("Tiefe Stimme", "Low voice"), tr ("S-Bereich ab 5 kHz, für tiefe und männliche Stimmen.", "S range from 5 kHz, for low and male voices."));
         addInfo (voiceMid, tr ("Mittlere Stimme", "Mid voice"), tr ("S-Bereich ab 6,5 kHz, passt für die meisten Stimmen.", "S range from 6.5 kHz, fits most voices."));
@@ -895,6 +895,7 @@ namespace ember
         mi.autoListening = phase == Phase::listening || phase == Phase::analysing;
         mi.reductionDb = shownGr;
         mi.hostStopped = processor.isHostStopped();
+        mi.bpm = processor.getHostBpm();
         mascot.setInput (mi);
 
         if (phase != lastPhase && (phase == Phase::done || phase == Phase::failed))

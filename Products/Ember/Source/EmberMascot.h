@@ -33,6 +33,7 @@ namespace ember
         bool autoListening = false;
         float reductionDb = 0.0f;
         bool hostStopped = false;        // the host's transport is stopped: he stops dancing at once
+        float bpm = 0.0f;                // the host's tempo (0 = unknown: 120)
     };
 
     class MascotBrain

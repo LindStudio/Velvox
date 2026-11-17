@@ -65,6 +65,8 @@ namespace ember
                 const bool playing = pos->getIsPlaying();
                 hostEverPlayed = hostEverPlayed || playing;
                 hostStopped.store (hostEverPlayed && ! playing, std::memory_order_relaxed);
+                if (const auto bpm = pos->getBpm())
+                    hostBpm.store ((float) *bpm, std::memory_order_relaxed);
             }
 
         capture.push (buffer.getArrayOfReadPointers(), channels, buffer.getNumSamples());

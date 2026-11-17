@@ -74,6 +74,10 @@ namespace ember
         static constexpr float outlineWidth = 6.0f;                 // px in the 1024 space (the drawing's own: 5-6)
         static constexpr juce::uint32 outlineColour = 0xff340616;   // the drawing's outline maroon
 
+        // picture -> picture: where a point of the head (face, ear, mouth) is in this pose; and of the body
+        static juce::AffineTransform headTransform (const RigPose&);
+        static juce::AffineTransform bodyTransform (const RigPose&);
+
         // the picture -> area mapping of the last render (for effects that follow the figure)
         juce::AffineTransform getRigToArea() const noexcept { return rigToArea; }
 

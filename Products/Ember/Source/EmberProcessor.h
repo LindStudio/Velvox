@@ -64,6 +64,7 @@ namespace ember
         double getCurrentSampleRate() const noexcept { return currentRate; }
         // The host's transport is stopped (only known once it has been seen playing; see processBlock)
         bool isHostStopped() const noexcept { return hostStopped.load (std::memory_order_relaxed); }
+        float getHostBpm() const noexcept { return hostBpm.load (std::memory_order_relaxed); }
 
         // ---- Presets and A/B (message thread) -----------------------------------------------
         void loadFactoryPreset (int index);
@@ -106,6 +107,7 @@ namespace ember
         int activeSlot = 0;
         double currentRate = 44100.0;
         std::atomic<bool> hostStopped { false };
+        std::atomic<float> hostBpm { 0.0f };        // for Ember's dancing (0 = unknown)
         bool hostEverPlayed = false;               // audio thread only
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EmberAudioProcessor)

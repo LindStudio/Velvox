@@ -164,8 +164,9 @@ namespace ember
         const int h = std::max (1, juce::roundToInt (area.getHeight() * displayScale));
         if (figure.getWidth() != w || figure.getHeight() != h)
         {
-            figure = juce::Image (juce::Image::ARGB, w, h, true);
-            ring = juce::Image (juce::Image::ARGB, w, h, true);
+            // in memory, not on the GPU: the outline reads the figure's pixels every frame
+            figure = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
+            ring = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
         }
         else
             figure.clear (figure.getBounds());
@@ -183,22 +184,37 @@ namespace ember
         }
         outline (figure, outlineWidth * s * displayScale, juce::Colour (outlineColour));
         // the outline (into 'ring'), then the figure over it
+        juce::Graphics::ScopedSaveState keep (g);
+        g.setOpacity (1.0f);      // images take the opacity of the last colour (the floor shadow's 28 % made him see-through)
         g.drawImage (ring, area, juce::RectanglePlacement::stretchToFit);
         g.drawImage (figure, area, juce::RectanglePlacement::stretchToFit);
+    }
+
+    juce::AffineTransform RigRenderer::bodyTransform (const RigPose& pose)
+    {
+        const auto F = MascotRig::get().feet;
+        const float sq = juce::jlimit (-0.05f, 0.06f, pose.squash);
+        return juce::AffineTransform::translation (0.0f, pose.bob)
+                   .translated (-F.x, -F.y)
+                   .scaled (1.0f + sq * 0.6f, 1.0f - sq)
+                   .rotated (juce::degreesToRadians (pose.lean))
+                   .translated (F.x, F.y);
+    }
+
+    juce::AffineTransform RigRenderer::headTransform (const RigPose& pose)
+    {
+        const auto& rig = MascotRig::get();
+        return juce::AffineTransform::rotation (juce::degreesToRadians (pose.head), rig.neck.x, rig.neck.y)
+                   .translated (pose.headX, pose.headY)
+                   .followedBy (bodyTransform (pose));
     }
 
     // The whole figure in the picture's space (prototype: draw)
     void RigRenderer::drawFigure (juce::Graphics& g, const RigPose& pose)
     {
         const auto& rig = MascotRig::get();
-        const auto F = rig.feet;
-        const float sq = juce::jlimit (-0.05f, 0.06f, pose.squash);
         juce::Graphics::ScopedSaveState body (g);
-        g.addTransform (juce::AffineTransform::translation (0.0f, pose.bob)
-                            .translated (-F.x, -F.y)
-                            .scaled (1.0f + sq * 0.6f, 1.0f - sq)
-                            .rotated (juce::degreesToRadians (pose.lean))
-                            .translated (F.x, F.y));
+        g.addTransform (bodyTransform (pose));
 
         drawMesh (g, "tail", pose.tail * 1.3f);
 
@@ -263,7 +279,7 @@ namespace ember
         const auto& p = MascotRig::get().part (name);
         const int w = std::max (1, juce::roundToInt (p.box.getWidth() * scaledFor));
         const int h = std::max (1, juce::roundToInt (p.box.getHeight() * scaledFor));
-        return scaledParts[name] = p.image.rescaled (w, h, juce::Graphics::highResamplingQuality);
+        return scaledParts[name] = juce::SoftwareImageType().convert (p.image).rescaled (w, h, juce::Graphics::highResamplingQuality);
     }
 
     void RigRenderer::drawPart (juce::Graphics& g, const juce::String& name)
