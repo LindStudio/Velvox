@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include "EmberEngine.h"
 #include <atomic>
 #include <vector>
 
@@ -40,6 +41,11 @@ namespace ember
     // `cancel` (optional): set from another thread, the remaining renders are skipped (the result is then useless)
     AutoResult analyse (const float* mono, int numSamples, double sampleRate, bool smart = true,
                         const std::atomic<bool>* cancel = nullptr);
+    // The same, measured with the user's own settings (mode, Amount, detection, attack, lookahead): AUTO only
+    // searches frequency, threshold and range (release is part of its recipe, autoReleaseMs) and leaves the rest as
+    // the user set it. Mix, output, listen and bypass of `base` are ignored (the de-esser itself is measured).
+    AutoResult analyse (const float* mono, int numSamples, double sampleRate, const Settings& base,
+                        const std::atomic<bool>* cancel = nullptr);
 
     // 2026-11-10 subtle (1.5-3.5 dB); 2026-11-13 Jakob: "mindestens genauso gut wie Pro-DS im S-Laute absenken".
     // Pro-DS at its default takes 1.3-4.1 dB (mean 2.7) off the S of our 9 bench takes; AUTO now 2.5 dB
@@ -52,8 +58,11 @@ namespace ember
     inline constexpr float autoMinRangeDb = 4.0f, autoMaxRangeDb = 8.0f;
     inline constexpr float autoReleaseMs = 35.0f;          // lets go before the next vowel
     inline constexpr float autoCornerRatio = 0.8f, autoMinCornerHz = 5000.0f, autoMaxCornerHz = 9500.0f;
-    inline constexpr double autoMinSeconds = 3.0;          // finish button works from here
+    inline constexpr double autoMinSeconds = 3.0;          // the least voice AUTO can work with
     inline constexpr double autoEnoughSeconds = 12.0;      // stops on its own after this much voice
+    inline constexpr double autoQuietSeconds = 4.0;        // no new voice for this long: done (enough heard) / "press play"
+    // Below this Amount AUTO cannot reach its target (Amount scales every reduction): it sets 50 % (and says so)
+    inline constexpr float autoMinAmount = 0.25f;
     inline constexpr double autoCapacitySeconds = 30.0;
 
     class AutoCapture

@@ -87,9 +87,11 @@ namespace ember
         std::function<void()> onClick;
 
         void paint (juce::Graphics&) override;
+        // Only a click on Ember himself starts AUTO (not the empty stage around him); a double-click counts once
         void mouseUp (const juce::MouseEvent&) override;
-        void mouseEnter (const juce::MouseEvent&) override { brain.setHover (true); }
-        void mouseExit (const juce::MouseEvent&) override { brain.setHover (false); }
+        void mouseMove (const juce::MouseEvent&) override;
+        void mouseExit (const juce::MouseEvent&) override;
+        bool hitsFigure (juce::Point<float>) const;   // on his drawn pixels (a few px around them count)
 
         LiveBrain& getBrain() noexcept { return brain; }
         void stepForTest (float dt) { tick (dt); }
@@ -116,7 +118,7 @@ namespace ember
 
         LiveBrain brain;
         RigRenderer renderer;                 // only under renderLock
-        juce::CriticalSection renderLock, frameLock;
+        mutable juce::CriticalSection renderLock, frameLock;
         juce::Image frames[2];                // frameLock guards which one is shown
         int front = -1;
         juce::Rectangle<float> frontArea;     // the view's bounds the frame was drawn for

@@ -768,7 +768,7 @@ namespace
         const auto s = readSettings (p.state);
         near (s.freq, p.getLastAuto().freq, 15.0, "freq applied");
         near (s.thresholdDb, p.getLastAuto().thresholdDb, 0.1, "threshold applied");
-        check (s.mode == 0 && s.smart && std::abs (s.amount - 0.5f) < 1e-3f, "split, smart, Amount 50 %");
+        check (s.mode == 1 && s.smart && std::abs (s.amount - 0.5f) < 1e-3f, "mode kept (wideband), smart, Amount 50 %");
         check (p.getAutoMessage().isNotEmpty(), "message");
 
         juce::AudioProcessor::BusesLayout mono, stereo, mixed;
@@ -1164,6 +1164,184 @@ namespace
         check (users.isEmpty() ? p.getFactoryIndex() == 0 : p.getFactoryIndex() == -1, "next after the last factory preset");
     }
 
+    // Usability review 2026-11-19: AUTO keeps the user's settings and leaves "before" on A, listening is no setting,
+    // AUTO waits for audio and finishes on its own, undo / redo
+    void testUsability()
+    {
+        Test t ("usability: AUTO keeps settings + before on A, listen is no setting, AUTO without audio, undo");
+        const auto setReal = [] (EmberAudioProcessor& p, const char* id, float v)
+        {
+            if (auto* prm = p.state.getParameter (id))
+            {
+                prm->beginChangeGesture();
+                prm->setValueNotifyingHost (prm->convertTo0to1 (v));
+                prm->endChangeGesture();
+            }
+        };
+        const auto real = [] (EmberAudioProcessor& p, const char* id) { return p.state.getRawParameterValue (id)->load(); };
+        const auto take = makeTake (48000.0, 13.0);
+        const auto feed = [&take] (EmberAudioProcessor& p, double fromS, double toS)
+        {
+            juce::AudioBuffer<float> buf (2, 512);
+            juce::MidiBuffer midi;
+            for (int start = (int) (fromS * 48000.0); start + 512 <= std::min ((int) take.x.size(), (int) (toS * 48000.0)); start += 512)
+            {
+                for (int ch = 0; ch < 2; ++ch)
+                    buf.copyFrom (ch, 0, take.x.data() + start, 512);
+                p.processBlock (buf, midi);
+            }
+        };
+
+        // AUTO: only frequency, threshold, range and release; mode, output, mix, Amount, times stay; before on A
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            setReal (p, pid::mode, 1.0f);
+            setReal (p, pid::output, 3.0f);
+            setReal (p, pid::mix, 80.0f);
+            setReal (p, pid::amount, 70.0f);
+            setReal (p, pid::attack, 1.0f);
+            setReal (p, pid::lookahead, 1.0f);
+            setReal (p, pid::threshold, -20.0f);
+            setReal (p, pid::listen, 2.0f);
+            p.startAuto();
+            feed (p, 0.0, 13.0);
+            p.finishAuto();
+            p.waitForAuto();
+            check (p.getAutoPhase() == EmberAudioProcessor::AutoPhase::done, "AUTO done");
+            const auto& r = p.getLastAuto();
+            near (real (p, pid::mode), 1.0, 0.01, "mode kept (wideband)");
+            near (real (p, pid::output), 3.0, 0.05, "output kept");
+            near (real (p, pid::mix), 80.0, 0.1, "mix kept");
+            near (real (p, pid::amount), 70.0, 0.1, "Amount kept");
+            near (real (p, pid::attack), 1.0, 0.02, "attack kept");
+            near (real (p, pid::lookahead), 1.0, 0.02, "lookahead kept");
+            near (real (p, pid::threshold), r.thresholdDb, 0.1, "threshold from AUTO");
+            near (real (p, pid::release), autoReleaseMs, 0.5, "release from AUTO");
+            check (real (p, pid::listen) < 0.5f, "AUTO switches listening off");
+            // wideband dips the whole voice: the vowel next to each S keeps AUTO gentler there (it says what it does)
+            check (r.expectedReductionDb > 0.3f && r.vowelReductionDb <= autoVowelMaxDb + 0.05f && r.mixedReductionDb <= autoMixedMaxDb + 0.05f,
+                   "measured in wideband at 70 %: S down " + juce::String (r.expectedReductionDb, 2) + " dB, vowels "
+                   + juce::String (r.vowelReductionDb, 2) + " dB");
+            check (p.getActiveSlot() == 1 && p.isShowingAutoResult(), "AUTO result on B (active)");
+            check (p.getAutoMessage().contains ("A"), "the message says where before is");
+            p.switchSlot (0);
+            near (real (p, pid::threshold), -20.0, 0.05, "A: the settings from before");
+            near (real (p, pid::freq), 6500.0, 1.0, "A: frequency from before");
+            check (p.getPresetName() == presetName (factoryPresets()[0]) && ! p.isShowingAutoResult(), "A: preset name from before");
+            p.switchSlot (1);
+            near (real (p, pid::threshold), r.thresholdDb, 0.1, "B: AUTO again");
+            check (p.isShowingAutoResult(), "B: still the AUTO setting");
+            setReal (p, pid::range, 10.0f);
+            check (! p.isShowingAutoResult(), "an edit ends the AUTO result");
+        }
+        // Amount 70 %: AUTO measures with the Amount as it is, so the S lose about as much as at 50 % (a higher threshold)
+        {
+            Settings at50, at70;
+            at70.amount = 0.7f;
+            const auto r50 = analyse (take.x.data(), (int) take.x.size(), 48000.0, at50);
+            const auto r70 = analyse (take.x.data(), (int) take.x.size(), 48000.0, at70);
+            check (std::abs (r70.expectedReductionDb - r50.expectedReductionDb) < 0.5f && r70.thresholdDb >= r50.thresholdDb
+                       && r70.vowelReductionDb <= autoVowelMaxDb + 0.05f,
+                   "70 %: S down " + juce::String (r70.expectedReductionDb, 2) + " dB (50 %: " + juce::String (r50.expectedReductionDb, 2)
+                       + " dB), threshold " + juce::String (r70.thresholdDb, 1) + " (50 %: " + juce::String (r50.thresholdDb, 1) + ")");
+        }
+        // Amount too low to work with: AUTO sets 50 % and says so
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            setReal (p, pid::amount, 10.0f);
+            p.startAuto();
+            feed (p, 0.0, 13.0);
+            p.finishAuto();
+            p.waitForAuto();
+            check (p.didAutoRaiseAmount() && std::abs (real (p, pid::amount) - 50.0f) < 0.1f, "Amount 10 % -> 50 %");
+            check (p.getAutoMessage().contains ("Amount"), "and the message says so");
+        }
+
+        // Listening (Delta / S range) is not part of presets, A/B, "modified" or a reopened project
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.loadFactoryPreset (0);
+            setReal (p, pid::listen, 2.0f);
+            check (! p.isPresetModified(), "Delta does not mark the preset modified");
+            check (capture (p.state).count (pid::listen) == 0, "not captured");
+            p.switchSlot (1);
+            p.switchSlot (0);
+            near (real (p, pid::listen), 2.0, 0.01, "A/B keeps listening as it is");
+            p.loadFactoryPreset (3);
+            near (real (p, pid::listen), 2.0, 0.01, "a preset does not switch listening");
+            juce::MemoryBlock mb;
+            p.getStateInformation (mb);
+            EmberAudioProcessor q;
+            q.setStateInformation (mb.getData(), (int) mb.getSize());
+            check (real (q, pid::listen) < 0.5f, "a project reopens with listening off");
+        }
+
+        // Locked: AUTO does not run (the audio passes through unprocessed)
+        {
+            const auto lf = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember-ux-lock.license");
+            lf.deleteFile();
+            auto c = licenceConfig();
+            c.on = true;
+            c.asynchronous = false;
+            c.file = lf;
+            c.transport = [] (const juce::String&, const juce::var&) -> std::pair<int, juce::String> { return { 0, {} }; };
+            vocalypse::licensing::Manager locked (c);
+            EmberAudioProcessor p;
+            p.setLicenceForTest (locked);
+            p.prepareToPlay (48000.0, 512);
+            p.startAuto();
+            check (p.getAutoPhase() == EmberAudioProcessor::AutoPhase::idle, "locked: AUTO does not start");
+            lf.deleteFile();
+        }
+
+        // AUTO without audio: "press play" after a few seconds; after enough voice and a stop it finishes by itself
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.startAuto();
+            p.updateAuto (0.0);
+            p.updateAuto (2.0);
+            check (! p.isAutoWaitingForAudio(), "2 s: still just listening");
+            p.updateAuto (autoQuietSeconds + 0.5);
+            check (p.isAutoWaitingForAudio() && p.getAutoMessage().contains ("Play"), "no audio: press play");
+            check (p.getAutoPhase() == EmberAudioProcessor::AutoPhase::listening, "and it keeps listening");
+            feed (p, 0.0, 5.5);
+            p.updateAuto (6.0);
+            check (! p.isAutoWaitingForAudio() && p.getAutoPhase() == EmberAudioProcessor::AutoPhase::listening, "voice: listening");
+            p.updateAuto (6.0 + autoQuietSeconds + 0.1);
+            check (p.getAutoPhase() == EmberAudioProcessor::AutoPhase::analysing, "enough voice, then the transport stopped: done by itself");
+            p.waitForAuto();
+            check (p.getAutoPhase() == EmberAudioProcessor::AutoPhase::done, "and applied");
+        }
+
+        // Undo / redo: an edit = one step, the same control again right away = the same step, a preset = one step
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            check (! p.canUndo() && ! p.undo(), "nothing to undo yet");
+            setReal (p, pid::threshold, -40.0f);
+            setReal (p, pid::threshold, -45.0f);
+            setReal (p, pid::freq, 8000.0f);
+            check (p.canUndo(), "can undo");
+            check (p.undo(), "undo");
+            near (real (p, pid::freq), 6500.0, 1.0, "frequency back");
+            near (real (p, pid::threshold), -45.0, 0.05, "threshold still changed");
+            check (p.undo(), "undo again");
+            near (real (p, pid::threshold), -30.0, 0.05, "both threshold moves were one step");
+            check (p.canRedo() && p.redo(), "redo");
+            near (real (p, pid::threshold), -45.0, 0.05, "threshold redone");
+            p.loadFactoryPreset (8);
+            p.undo();
+            near (real (p, pid::threshold), -45.0, 0.05, "preset undone in one step");
+            near (real (p, pid::freq), 6500.0, 1.0, "frequency too");
+            setReal (p, pid::listen, 2.0f);
+            check (p.undo() && real (p, pid::listen) > 1.5f, "listening is no undo step");
+        }
+    }
+
     void testEditor (const juce::File& snapshotDir)
     {
         Test t ("editor: both views, scaling, languages");
@@ -1185,6 +1363,14 @@ namespace
                 ed->setAdvanced (adv);
                 const auto img = snapshot (*ed);
                 check (img.isValid() && img.getWidth() == look::baseW, "snapshot " + juce::String (adv ? "advanced" : "simple"));
+                if (! adv)
+                {
+                    // only Ember himself starts AUTO, not the empty stage around him (review 2026-11-19)
+                    auto& m = ed->getPanel().getMascot();
+                    check (! m.hitsFigure ({ 6.0f, 6.0f }) && ! m.hitsFigure ({ (float) m.getWidth() - 6.0f, (float) m.getHeight() * 0.5f }),
+                           "a click beside Ember is no AUTO");
+                    check (m.hitsFigure (m.getLocalBounds().getCentre().toFloat()), "a click on Ember is");
+                }
                 if (snapshotDir != juce::File())
                 {
                     snapshotDir.createDirectory();
@@ -1839,6 +2025,7 @@ int main (int argc, char** argv)
     testSmart();
     testSIntoVowel();
     testPresets();
+    testUsability();
     testMascotClips();
     testRig();
     testLiveBrain();

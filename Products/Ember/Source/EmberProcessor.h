@@ -53,12 +53,23 @@ namespace ember
         bool pollAuto();     // message thread: applies a finished analysis; true when it did
         void waitForAuto();  // tests: blocks until the analysis is applied
         void cancelAuto();
+        // Timer step (10 Hz; tests call it with their own clock): finishes on its own after autoEnoughSeconds of voice,
+        // or once at least autoMinSeconds were heard and then nothing new for autoQuietSeconds (playback stopped)
+        void updateAuto (double nowSeconds);
+        // Listening, but nothing new heard for a while (no audio playing): the editor says "press play"
+        double getAutoQuietSeconds() const noexcept { return autoPhase == AutoPhase::listening ? autoNow - autoLastGrowth : 0.0; }
+        bool isAutoWaitingForAudio() const noexcept;
+        // The AUTO result is still what is set (nothing changed since, the other slot holds the settings from before)
+        bool isShowingAutoResult() const;
         AutoPhase getAutoPhase() const noexcept { return autoPhase; }
         double getAutoProgress() const noexcept;   // 0..1 while listening
         const AutoResult& getLastAuto() const noexcept { return lastAuto; }
         juce::String getAutoMessage() const;       // in the interface language
-        // Applies an analysis result to the parameters (one host gesture per parameter)
+        // Applies an analysis result to the parameters (one host gesture per parameter): frequency, threshold, range,
+        // release (and Amount when it was too low to work with); mode, mix, output, detection and the times stay.
+        // The settings from before go to slot A, the result to slot B (active): A/B is the comparison and the undo.
         void applyAuto (const AutoResult&);
+        bool didAutoRaiseAmount() const noexcept { return autoRaisedAmount; }
         AutoCapture& getCapture() noexcept { return capture; }
 
         double getCurrentSampleRate() const noexcept { return currentRate; }
@@ -79,6 +90,13 @@ namespace ember
         void switchSlot (int slot);                // stores the current values in the active slot, loads the other
         void copyActiveToOther();
 
+        // ---- Undo / redo of the settings (message thread). Every edit in the editor (a host gesture) is one step;
+        // AUTO and loading a preset are one step each. Listen and bypass are not part of it.
+        bool undo();
+        bool redo();
+        bool canUndo() const;
+        bool canRedo() const noexcept { return ! redoSteps.empty(); }
+
         static constexpr const char* stateType = "EmberState";
 
         // ---- Licence: locked (trial over / key invalid) = the audio passes through as in bypass -------------
@@ -87,6 +105,20 @@ namespace ember
 
     private:
         void timerCallback() override;
+        void setListenOff();
+        void beginUndoStep (int parameterIndex);   // remembers the values before an edit
+        struct UndoListener;
+        struct UndoGroup;                          // edits inside one step (AUTO, presets, A/B, undo itself)
+
+        // A slot remembers which preset its values came from
+        struct Slot
+        {
+            ParamValues values, presetValues;
+            int factoryIndex = 0;
+            juce::String userPresetName;
+        };
+        Slot currentSlot() const;
+        void restoreSlot (const Slot&);
 
         juce::SharedResourcePointer<EmberLicence> sharedLicence;
         vocalypse::licensing::Manager* licence = &sharedLicence.getObject();
@@ -102,13 +134,22 @@ namespace ember
         int factoryIndex = 0;                      // -1 = user preset / AUTO result
         juce::String userPresetName;
         ParamValues presetValues;                  // what the loaded preset set (for "modified")
-        ParamValues slots[2];
+        Slot slots[2];
         bool slotUsed[2] { false, false };
         int activeSlot = 0;
         double currentRate = 44100.0;
         std::atomic<bool> hostStopped { false };
         std::atomic<float> hostBpm { 0.0f };        // for Ember's dancing (0 = unknown)
         bool hostEverPlayed = false;               // audio thread only
+        double autoNow = 0.0, autoLastGrowth = 0.0;
+        int autoLastSamples = 0;
+        bool autoRaisedAmount = false;
+        Settings autoBase;                         // the settings AUTO measured with
+
+        std::vector<ParamValues> undoSteps, redoSteps;
+        int undoGroupDepth = 0, lastUndoParam = -1;
+        double lastUndoTime = 0.0;
+        std::unique_ptr<UndoListener> undoListener;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EmberAudioProcessor)
     };

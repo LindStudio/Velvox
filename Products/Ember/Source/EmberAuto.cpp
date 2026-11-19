@@ -20,6 +20,13 @@ namespace ember
 
     AutoResult analyse (const float* mono, int numSamples, double fs, bool smart, const std::atomic<bool>* cancel)
     {
+        Settings base;
+        base.smart = smart;
+        return analyse (mono, numSamples, fs, base, cancel);
+    }
+
+    AutoResult analyse (const float* mono, int numSamples, double fs, const Settings& base, const std::atomic<bool>* cancel)
+    {
         AutoResult r;
         r.seconds = fs > 0.0 ? numSamples / fs : 0.0;
         if (mono == nullptr || fs <= 0.0 || r.seconds < autoMinSeconds)
@@ -192,12 +199,15 @@ namespace ember
         {
             if (cancel != nullptr && cancel->load (std::memory_order_relaxed))
                 return Measured {};
-            Settings st;
+            Settings st = base;   // the user's mode, Amount, detection, attack and lookahead
             st.freq = r.freq;
             st.thresholdDb = thr;
             st.rangeDb = range;
             st.releaseMs = autoReleaseMs;
-            st.smart = smart;
+            st.mix = 1.0f;
+            st.outputDb = 0.0f;
+            st.listen = 0;
+            st.bypass = false;
             Engine e;
             e.setSettings (st);
             e.prepare (fs, 4096);
@@ -265,7 +275,9 @@ namespace ember
 
         // Range: room for the strong S of this take, never more than autoMaxRangeDb
         const auto atThr = measure (r.thresholdDb, searchRange);
-        r.rangeDb = juce::jlimit (autoMinRangeDb, autoMaxRangeDb, std::round (percentile (atThr.sFrames, 0.9f) + 1.0f));
+        // (the measured reduction is the range-capped one times Amount: back to range units)
+        const float amountScale = juce::jlimit (0.1f, 2.0f, base.amount * 2.0f);
+        r.rangeDb = juce::jlimit (autoMinRangeDb, autoMaxRangeDb, std::round (percentile (atThr.sFrames, 0.9f) / amountScale + 1.0f));
         const auto final = measure (r.thresholdDb, r.rangeDb);
         r.expectedReductionDb = final.sRed;
         r.vowelReductionDb = final.vRed;

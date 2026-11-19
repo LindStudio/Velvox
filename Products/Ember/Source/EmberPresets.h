@@ -19,7 +19,10 @@ namespace ember
     const std::vector<FactoryPreset>& factoryPresets();
     juce::String presetName (const FactoryPreset&);   // in the interface language
 
-    // Every parameter except bypass (presets never switch the plugin off)
+    // Bypass and listen (Delta / S range) are tools, not settings: presets, A/B, undo and the "modified" marker
+    // never touch them (a preset never switches the plugin off or loads "only the S")
+    bool isSetting (const juce::String& parameterId);
+    // Every setting (see isSetting)
     ParamValues capture (const juce::AudioProcessorValueTreeState&);
     // Sets every parameter (missing ones to default) as host gestures
     void apply (juce::AudioProcessorValueTreeState&, const ParamValues&);

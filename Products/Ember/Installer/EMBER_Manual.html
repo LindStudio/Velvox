@@ -84,7 +84,7 @@
 <ol>
   <li><strong>Insert:</strong> Load EMBER as an insert on your vocal or speech track.</li>
   <li><strong>AUTO:</strong> Play the vocal and click <strong>AUTO</strong> (or click Ember). Ember listens and sets frequency, threshold and range for you.</li>
-  <li><strong>Check:</strong> Press <strong>DELTA</strong> to hear only what is removed – that should be sibilants only. Adjust <strong>Amount</strong> if needed.</li>
+  <li><strong>Check:</strong> Press <strong>DELTA</strong> to hear only what is removed – that should be S sounds only. Adjust <strong>Amount</strong> if needed.</li>
 </ol>
 
 <h2 id="simple">2. SIMPLE view</h2>
@@ -94,15 +94,16 @@
   <tr><td>Amount</td><td>How strongly EMBER works. 50 % is exactly what threshold and range set, 100 % is twice that, 0 % turns processing off.</td></tr>
   <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets where the S range starts: from 5 kHz (LOW), 6.5 kHz (MID) or 8 kHz (HIGH).</td></tr>
   <tr><td>DELTA</td><td>Hear only what is removed.</td></tr>
-  <tr><td>Gain reduction meter</td><td>Shows the current reduction from 0 to 12 dB.</td></tr>
+  <tr><td>REDUCTION</td><td>Shows how much quieter the S sounds are right now (0 to −12 dB, gain reduction).</td></tr>
 </table>
 
 <h2 id="advanced">3. ADVANCED view</h2>
 <p>ADVANCED gives you access to every parameter.</p>
 <h3>Displays</h3>
 <ul>
-  <li><strong>Spectrum:</strong> The red S range shows where EMBER works. Drag its edge to set the frequency. The reduction history runs along the top.</li>
-  <li><strong>S LEVEL</strong> (right): level in the S band. The red line is the threshold; you can drag it. A grey bar means Smart detection hears no sibilant at the moment.</li>
+  <li><strong>Spectrum:</strong> The red S range shows where EMBER works. Drag its red edge to set the frequency (Shift = fine, wheel = step). The axis shows 1 to 20 kHz. The reduction history runs along the top.</li>
+  <li><strong>REDUCTION:</strong> How much is being removed right now, in dB.</li>
+  <li><strong>S LEVEL</strong> (right): level in the S range. The red line is the threshold; you can drag it (Shift = fine, wheel = step). A grey bar means Smart detection hears no S sound at the moment.</li>
 </ul>
 <h3>Controls</h3>
 <table>
@@ -111,48 +112,50 @@
   <tr><td>Threshold</td><td>−60 to 0 dB</td><td>S-band level above which reduction starts.</td></tr>
   <tr><td>Range</td><td>0–24 dB</td><td>Maximum reduction.</td></tr>
   <tr><td>Amount</td><td>0–100 %</td><td>Strength: 50 % = what threshold and range set, 100 % = twice, 0 % = off.</td></tr>
-  <tr><td>Attack</td><td>0.1–20 ms</td><td>How fast EMBER reacts to a sibilant.</td></tr>
+  <tr><td>Attack</td><td>0.1–20 ms</td><td>How fast EMBER reacts to an S sound.</td></tr>
   <tr><td>Release</td><td>10–400 ms</td><td>How fast the reduction recovers afterwards.</td></tr>
-  <tr><td>Lookahead</td><td>0–5 ms</td><td>How far EMBER looks ahead to catch sibilants right at their start. Latency stays at 5 ms regardless.</td></tr>
+  <tr><td>Lookahead</td><td>0–5 ms</td><td>How far EMBER looks ahead to catch S sounds right at their start. Latency stays at 5 ms regardless.</td></tr>
   <tr><td>Mix</td><td>0–100 %</td><td>Blend of processed and unprocessed signal.</td></tr>
   <tr><td>Output</td><td>±12 dB</td><td>Output level.</td></tr>
   <tr><td>Mode: Split</td><td></td><td>Only the range above the frequency gets quieter (dynamic high shelf).</td></tr>
   <tr><td>Mode: Wideband</td><td></td><td>The whole voice dips briefly.</td></tr>
-  <tr><td>Detection: Smart</td><td></td><td>Default and recommended. Reacts only when a real sibilant sounds (see <a href="#smart">section 5</a>).</td></tr>
+  <tr><td>Detection: Smart</td><td></td><td>Default and recommended. Reacts only when a real S sound is there (see <a href="#smart">section 5</a>).</td></tr>
   <tr><td>Detection: Relative</td><td></td><td>The S is measured against the loudness of the voice – quiet and loud parts are treated alike.</td></tr>
   <tr><td>Detection: Absolute</td><td></td><td>Fixed level, classic behaviour.</td></tr>
   <tr><td>Listen: Off</td><td></td><td>Normal output.</td></tr>
-  <tr><td>Listen: S band</td><td></td><td>Hear only the S band, the range EMBER is watching.</td></tr>
+  <tr><td>Listen: S range</td><td></td><td>Hear only the S range, the range EMBER is watching.</td></tr>
   <tr><td>Listen: Delta</td><td></td><td>Hear only what is removed.</td></tr>
 </table>
 
 <h2 id="auto">4. AUTO</h2>
 <p>Play the vocal and click <strong>AUTO</strong> or click Ember.</p>
 <ul>
-  <li>Ember listens to about 12 seconds of singing (pauses are skipped, up to 30 seconds), holding his hand to his ear. <strong>DONE</strong> ends listening early, from 3 seconds on.</li>
+  <li>Ember listens to about 12 seconds of singing (pauses are skipped, up to 30 seconds), holding his hand to his ear. He finishes on his own – also when you stop playback after at least 3 seconds of singing. <strong>CANCEL</strong> stops him. If no sound arrives, Ember tells you to press play.</li>
   <li>EMBER then tries settings by rendering the take:
     <ul>
       <li>The frequency is set just below the strongest S (between 5 and 9.5 kHz).</li>
       <li>Threshold and Range are set so that S sounds lose 2.5 to 4.5 dB, depending on how harsh they are.</li>
       <li>Vowels stay untouched (0.1 dB or less).</li>
       <li>Release is set to 35 ms.</li>
+      <li>Everything else stays as you set it (mode, detection, Amount, attack, lookahead, mix, output) – AUTO measures with it. Only an Amount below 25 % is set to 50 %.</li>
     </ul>
   </li>
+  <li>Your previous setting is then on <strong>A</strong>, the AUTO result on <strong>B</strong>. Click A to take AUTO back, or compare both.</li>
 </ul>
 <p>The result is subtle by design. If you want more, raise Amount.</p>
 <p>If EMBER finds too few S sounds, a message asks you to play a part with many S, Z or Sh sounds. Then start AUTO again.</p>
 
 <h2 id="smart">5. Smart detection explained simply</h2>
 <p>A classic de-esser reacts to anything that is loud in the high frequencies. That includes bright vowels, air in the voice and breaths – the voice then sounds dull or lispy.</p>
-<p>Smart detection therefore compares the S band with the body of the voice (250 Hz to 3 kHz). Only when the S band clearly stands out relative to the body is it a real sibilant, and EMBER steps in. Bright vowels, air and breaths stay untouched.</p>
-<p>You can see this in the S LEVEL meter: when the bar is grey, Smart detection hears no sibilant.</p>
+<p>Smart detection therefore compares the S range with the body of the voice (250 Hz to 3 kHz). Only when the S range clearly stands out relative to the body is it a real S sound, and EMBER steps in. Bright vowels, air and breaths stay untouched.</p>
+<p>You can see this in the S LEVEL meter: when the bar is grey, Smart detection hears no S sound.</p>
 
 <h2 id="moods">6. Ember's moods</h2>
 <table>
   <tr><th>Ember …</th><th>means</th></tr>
   <tr><td>stands still</td><td>No signal.</td></tr>
   <tr><td>dances</td><td>Someone is singing or speaking.</td></tr>
-  <tr><td>snaps while dancing, a spark and an "S" fly off</td><td>EMBER is reducing a sibilant. The stronger the reduction, the bigger the spark.</td></tr>
+  <tr><td>snaps while dancing, a spark and an "S" fly off</td><td>EMBER is reducing an S sound. The stronger the reduction, the bigger the spark.</td></tr>
   <tr><td>says "Sounds lispy!"</td><td>Reduction has been above 9 dB for a while. The voice may lisp – lower Range or Amount.</td></tr>
   <tr><td>sleeps</td><td>Bypass is on.</td></tr>
   <tr><td>tilts his head and listens</td><td>AUTO is listening.</td></tr>
@@ -180,7 +183,7 @@
 <ul>
   <li>Start with <strong>AUTO</strong> and work from there.</li>
   <li>3 to 6 dB of range sounds natural. More can make the voice lisp.</li>
-  <li>Use <strong>DELTA</strong>: you should hear only sibilants. If you hear vowels or parts of words, lower Range or Amount, or raise the frequency.</li>
+  <li>Use <strong>DELTA</strong>: you should hear only S sounds. If you hear vowels or parts of words, lower Range or Amount, or raise the frequency.</li>
   <li>For speech, try <strong>Wideband</strong> mode.</li>
   <li>Put EMBER after EQ or compression that boosts the highs, and before reverb and delay.</li>
 </ul>

@@ -768,9 +768,52 @@ namespace ember
         g.drawFittedText (text, box.reduced (11, 8).toNearestInt(), juce::Justification::topLeft, 4);
     }
 
+    bool LiveMascotView::hitsFigure (juce::Point<float> p) const
+    {
+        {
+            // the figure alone (the frame also holds the wall and the seal); 8 px around his outline still count.
+            // If the drawing thread is busy with it right now: the ellipse below.
+            const juce::ScopedTryLock rl (renderLock);
+            const auto area = stageArea();
+            if (rl.isLocked() && figure.isValid() && ! area.isEmpty())
+            {
+                const auto& img = figure;
+                const float sx = (float) img.getWidth() / area.getWidth(), sy = (float) img.getHeight() / area.getHeight();
+                for (float dy = -8.0f; dy <= 8.0f; dy += 4.0f)
+                    for (float dx = -8.0f; dx <= 8.0f; dx += 4.0f)
+                    {
+                        const int x = (int) ((p.x + dx - area.getX()) * sx), y = (int) ((p.y + dy - area.getY()) * sy);
+                        if (juce::isPositiveAndBelow (x, img.getWidth()) && juce::isPositiveAndBelow (y, img.getHeight())
+                            && img.getPixelAt (x, y).getAlpha() > 40)
+                            return true;
+                    }
+                return false;
+            }
+        }
+        // nothing drawn yet: an ellipse around where he stands
+        const auto toPicture = toStage().inverted();
+        const auto q = p.transformedBy (toPicture);
+        const float nx = (q.x - 512.0f) / 300.0f, ny = (q.y - 520.0f) / 370.0f;
+        return nx * nx + ny * ny <= 1.0f;
+    }
+
+    void LiveMascotView::mouseMove (const juce::MouseEvent& e)
+    {
+        const bool on = hitsFigure (e.position);
+        brain.setHover (on);
+        setMouseCursor (on ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    }
+
+    void LiveMascotView::mouseExit (const juce::MouseEvent&)
+    {
+        brain.setHover (false);
+        setMouseCursor (juce::MouseCursor::NormalCursor);
+    }
+
     void LiveMascotView::mouseUp (const juce::MouseEvent& e)
     {
-        if (e.mouseWasClicked() && onClick)
+        // the second click of a double-click would start and at once cancel AUTO
+        if (e.mouseWasClicked() && e.getNumberOfClicks() == 1 && hitsFigure (e.position) && onClick)
         {
             brain.wake();
             onClick();

@@ -8,6 +8,28 @@ namespace ember
     using vocalypse::i18n::format;
     using vocalypse::i18n::number;
 
+    // Every edit in the editor starts with a host gesture: that is where the values before it are remembered
+    struct EmberAudioProcessor::UndoListener final : juce::AudioProcessorParameter::Listener
+    {
+        explicit UndoListener (EmberAudioProcessor& p) : owner (p) {}
+        void parameterValueChanged (int, float) override {}
+        void parameterGestureChanged (int index, bool starting) override
+        {
+            if (! starting || ! juce::MessageManager::existsAndIsCurrentThread())
+                return;
+            if (auto* p = dynamic_cast<juce::RangedAudioParameter*> (owner.getParameters()[index]); p != nullptr && isSetting (p->getParameterID()))
+                owner.beginUndoStep (index);   // bypass and listening are no undo steps
+        }
+        EmberAudioProcessor& owner;
+    };
+
+    struct EmberAudioProcessor::UndoGroup
+    {
+        explicit UndoGroup (EmberAudioProcessor& p) : owner (p) { ++owner.undoGroupDepth; }
+        ~UndoGroup() { --owner.undoGroupDepth; }
+        EmberAudioProcessor& owner;
+    };
+
     EmberAudioProcessor::EmberAudioProcessor()
         : AudioProcessor (BusesProperties()
                               .withInput ("Input", juce::AudioChannelSet::stereo(), true)
@@ -16,6 +38,9 @@ namespace ember
     {
         bypassParam = state.getParameter (pid::bypass);
         presetValues = ember::capture (state);
+        undoListener = std::make_unique<UndoListener> (*this);
+        for (auto* p : getParameters())
+            p->addListener (undoListener.get());
         engine.prepare (currentRate, 512);
         capture.prepare (currentRate);
         setLatencySamples (engine.getLatencySamples());
@@ -26,6 +51,8 @@ namespace ember
     {
         stopTimer();
         autoCancel->store (true);   // the pending analysis skips its remaining renders; ~future joins it quickly
+        for (auto* p : getParameters())
+            p->removeListener (undoListener.get());
     }
 
     bool EmberAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -91,10 +118,13 @@ namespace ember
         auto xml = getXmlFromBinary (data, sizeInBytes);
         if (xml == nullptr || ! xml->hasTagName (state.state.getType()))
             return;
+        const UndoGroup group (*this);
         state.replaceState (juce::ValueTree::fromXml (*xml));
         factoryIndex = (int) state.state.getProperty ("factoryPreset", 0);   // never set = still the default preset
         activeSlot = 0;                       // the slots held values from before this state
         slotUsed[0] = slotUsed[1] = false;
+        undoSteps.clear();
+        redoSteps.clear();
         userPresetName = state.state.getProperty ("userPreset", juce::String()).toString();
         // replaceState leaves parameters that the saved state does not mention untouched and does not
         // always resend values; snap every parameter to the stored value (VOCALYPSE lesson 0.6.1)
@@ -102,6 +132,8 @@ namespace ember
             if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
                 if (auto* raw = state.getRawParameterValue (rp->getParameterID()))
                     rp->setValueNotifyingHost (rp->convertTo0to1 (raw->load()));
+        // Delta / S range listening is a tool, not a setting: a project never reopens listening to the S alone
+        setListenOff();
         // a project reopens as it was saved: the restored values count as the preset's
         presetValues = ember::capture (state);
     }
@@ -112,6 +144,8 @@ namespace ember
         const auto& list = factoryPresets();
         if (! juce::isPositiveAndBelow (index, (int) list.size()))
             return;
+        beginUndoStep (-1);
+        const UndoGroup group (*this);
         ember::apply (state, list[(size_t) index].values);
         factoryIndex = index;
         userPresetName = {};
@@ -125,6 +159,8 @@ namespace ember
         ParamValues v;
         if (! ember::loadUserPreset (file, v))
             return false;
+        beginUndoStep (-1);
+        const UndoGroup group (*this);
         ember::apply (state, v);
         factoryIndex = -1;
         userPresetName = file.getFileNameWithoutExtension();
@@ -184,18 +220,36 @@ namespace ember
     }
 
     // -------------------------------------------------------------------- A/B
+    EmberAudioProcessor::Slot EmberAudioProcessor::currentSlot() const
+    {
+        return { ember::capture (state), presetValues, factoryIndex, userPresetName };
+    }
+
+    void EmberAudioProcessor::restoreSlot (const Slot& s)
+    {
+        {
+            const UndoGroup group (*this);   // switching back is the way back, not an undo step
+            ember::apply (state, s.values);
+        }
+        presetValues = s.presetValues;
+        factoryIndex = s.factoryIndex;
+        userPresetName = s.userPresetName;
+        state.state.setProperty ("factoryPreset", factoryIndex, nullptr);
+        state.state.setProperty ("userPreset", userPresetName, nullptr);
+    }
+
     void EmberAudioProcessor::switchSlot (int slot)
     {
         if (slot == activeSlot || ! juce::isPositiveAndBelow (slot, 2))
             return;
-        slots[activeSlot] = ember::capture (state);
+        slots[activeSlot] = currentSlot();
         slotUsed[activeSlot] = true;
         activeSlot = slot;
         if (slotUsed[slot])
-            ember::apply (state, slots[slot]);
+            restoreSlot (slots[slot]);
         else
         {
-            slots[slot] = ember::capture (state);   // first visit: B starts as a copy of A
+            slots[slot] = currentSlot();   // first visit: B starts as a copy of A
             slotUsed[slot] = true;
         }
     }
@@ -203,16 +257,123 @@ namespace ember
     void EmberAudioProcessor::copyActiveToOther()
     {
         const int other = 1 - activeSlot;
-        slots[other] = ember::capture (state);
+        slots[other] = currentSlot();
         slotUsed[other] = true;
+    }
+
+    // ------------------------------------------------------------------- undo
+    void EmberAudioProcessor::beginUndoStep (int parameterIndex)
+    {
+        if (undoGroupDepth > 0)
+            return;
+        const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        // the same control again within a second (mouse wheel, a second drag): still the same step
+        const bool sameEdit = parameterIndex >= 0 && parameterIndex == lastUndoParam && now - lastUndoTime < 1.0;
+        lastUndoParam = parameterIndex;
+        lastUndoTime = now;
+        if (sameEdit)
+            return;
+        auto values = ember::capture (state);
+        if (! undoSteps.empty() && undoSteps.back() == values)
+            return;   // the edit before changed nothing
+        redoSteps.clear();
+        undoSteps.push_back (std::move (values));
+        if (undoSteps.size() > 100)
+            undoSteps.erase (undoSteps.begin());
+    }
+
+    bool EmberAudioProcessor::canUndo() const
+    {
+        const auto now = ember::capture (state);
+        for (const auto& step : undoSteps)
+            if (step != now)
+                return true;
+        return false;
+    }
+
+    bool EmberAudioProcessor::undo()
+    {
+        const auto now = ember::capture (state);
+        while (! undoSteps.empty() && undoSteps.back() == now)
+            undoSteps.pop_back();   // an edit that changed nothing
+        if (undoSteps.empty())
+            return false;
+        redoSteps.push_back (now);
+        const auto target = undoSteps.back();
+        undoSteps.pop_back();
+        {
+            const UndoGroup group (*this);
+            ember::apply (state, target);
+        }
+        lastUndoParam = -1;
+        return true;
+    }
+
+    bool EmberAudioProcessor::redo()
+    {
+        if (redoSteps.empty())
+            return false;
+        undoSteps.push_back (ember::capture (state));
+        const auto target = redoSteps.back();
+        redoSteps.pop_back();
+        {
+            const UndoGroup group (*this);
+            ember::apply (state, target);
+        }
+        lastUndoParam = -1;
+        return true;
+    }
+
+    void EmberAudioProcessor::setListenOff()
+    {
+        if (auto* p = state.getParameter (pid::listen); p != nullptr && p->getValue() > 0.0f)
+        {
+            const UndoGroup group (*this);
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (0.0f);
+            p->endChangeGesture();
+        }
     }
 
     // ------------------------------------------------------------------- AUTO
     void EmberAudioProcessor::startAuto()
     {
+        if (licence->isLocked())
+            return;   // the audio passes through unprocessed: AUTO would claim a result nobody hears
         capture.prepare (currentRate);
         capture.start();
         autoPhase = AutoPhase::listening;
+        autoNow = autoLastGrowth = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        autoLastSamples = 0;
+    }
+
+    void EmberAudioProcessor::updateAuto (double nowSeconds)
+    {
+        if (autoPhase != AutoPhase::listening)
+            return;
+        if (nowSeconds < autoNow)
+            autoLastGrowth = nowSeconds;   // another clock (tests)
+        autoNow = nowSeconds;
+        if (const int samples = capture.getNumSamples(); samples != autoLastSamples)
+        {
+            autoLastSamples = samples;
+            autoLastGrowth = nowSeconds;
+        }
+        const double seconds = capture.getSeconds();
+        if (seconds >= autoEnoughSeconds || ! capture.isCapturing())
+            finishAuto();
+        else if (seconds >= autoMinSeconds && nowSeconds - autoLastGrowth >= autoQuietSeconds)
+            finishAuto();   // playback stopped (or a long break) after enough voice: work with what is there
+    }
+
+    bool EmberAudioProcessor::isAutoWaitingForAudio() const noexcept
+    {
+        return autoPhase == AutoPhase::listening && getAutoQuietSeconds() >= autoQuietSeconds && capture.getSeconds() < autoMinSeconds;
+    }
+
+    bool EmberAudioProcessor::isShowingAutoResult() const
+    {
+        return autoPhase == AutoPhase::done && factoryIndex < 0 && userPresetName.isEmpty() && ! isPresetModified();
     }
 
     void EmberAudioProcessor::cancelAuto()
@@ -237,9 +398,14 @@ namespace ember
         const double rate = capture.getSampleRate();
         autoPhase = AutoPhase::analysing;
         autoCancel = std::make_shared<std::atomic<bool>> (false);
-        pending = std::async (std::launch::async, [take = std::move (take), rate, cancel = autoCancel]
+        // measured with the user's own mode, Amount, detection and times (only an Amount too low to work with is raised)
+        autoBase = readSettings (state);
+        autoRaisedAmount = autoBase.amount < autoMinAmount;
+        if (autoRaisedAmount)
+            autoBase.amount = 0.5f;
+        pending = std::async (std::launch::async, [take = std::move (take), rate, base = autoBase, cancel = autoCancel]
         {
-            return analyse (take.data(), (int) take.size(), rate, true, cancel.get());
+            return analyse (take.data(), (int) take.size(), rate, base, cancel.get());
         });
     }
 
@@ -270,6 +436,10 @@ namespace ember
 
     void EmberAudioProcessor::applyAuto (const AutoResult& r)
     {
+        // before: what was set when AUTO finished (goes to slot A)
+        const auto before = currentSlot();
+        beginUndoStep (-1);
+        const UndoGroup group (*this);
         const auto set = [this] (const char* id, float realValue)
         {
             if (auto* p = state.getParameter (id))
@@ -283,21 +453,22 @@ namespace ember
         set (pid::threshold, r.thresholdDb);
         set (pid::range, r.rangeDb);
         set (pid::release, autoReleaseMs);
-        // AUTO measured with these; with other values its "S -x dB" would not hold
-        const Settings rendered;
-        set (pid::attack, rendered.attackMs);
-        set (pid::lookahead, rendered.lookaheadMs);
-        set (pid::mix, 100.0f);
-        set (pid::output, 0.0f);
-        set (pid::amount, 50.0f);
-        set (pid::mode, 0.0f);
-        set (pid::detection, 0.0f);
+        // Mode, detection, attack, lookahead and Amount were measured as they are (analyse with the user's settings);
+        // mix and output only scale what comes out. Only an Amount too low to reach anything is raised.
+        if (autoRaisedAmount)
+            set (pid::amount, autoBase.amount * 100.0f);
         set (pid::listen, 0.0f);
         factoryIndex = -1;
         userPresetName = {};
         presetValues = ember::capture (state);
         state.state.setProperty ("factoryPreset", -1, nullptr);
         state.state.setProperty ("userPreset", juce::String(), nullptr);
+
+        // A = before, B = AUTO (active): one click on A takes AUTO back, A/B compares the two
+        slots[0] = before;
+        slots[1] = currentSlot();
+        slotUsed[0] = slotUsed[1] = true;
+        activeSlot = 1;
     }
 
     juce::String EmberAudioProcessor::getAutoMessage() const
@@ -306,7 +477,11 @@ namespace ember
         {
             case AutoPhase::idle: return {};
             case AutoPhase::listening:
-                return tr ("Ember hört zu … lass den Gesang weiterlaufen.", "Ember is listening … keep the vocal playing.");
+                if (isAutoWaitingForAudio())
+                    return tr ("Ember hört nichts. Drück Play in deiner DAW, damit er deinen Gesang hört.",
+                               "Ember can't hear anything. Press play in your DAW so he hears your vocal.");
+                return tr ("Ember hört zu … lass den Gesang weiterlaufen, er ist von selbst fertig.",
+                           "Ember is listening … keep the vocal playing, he finishes on his own.");
             case AutoPhase::analysing:
                 return tr ("Ember probiert Einstellungen aus …", "Ember is trying settings …");
             case AutoPhase::done:
@@ -314,7 +489,9 @@ namespace ember
                 const auto khz = number (lastAuto.freq / 1000.0, 1);
                 return format (tr ("Eingestellt: ab {0} kHz, S-Laute −{1} dB, Vokale bleiben unberührt.",
                                    "Set: from {0} kHz, S sounds −{1} dB, vowels stay untouched."),
-                               { khz, number (lastAuto.expectedReductionDb, 1) });
+                               { khz, number (lastAuto.expectedReductionDb, 1) })
+                       + (autoRaisedAmount ? tr (" Amount stand zu tief und ist jetzt 50 %.", " Amount was too low and is now 50 %.") : juce::String())
+                       + tr (" Vorher liegt auf A.", " Before is on A.");
             }
             case AutoPhase::failed:
                 if (lastAuto.status == AutoResult::Status::noSibilance)
@@ -328,10 +505,7 @@ namespace ember
     void EmberAudioProcessor::timerCallback()
     {
         pollAuto();
-        if (autoPhase != AutoPhase::listening)
-            return;
-        if (capture.getSeconds() >= autoEnoughSeconds || ! capture.isCapturing())
-            finishAuto();
+        updateAuto (juce::Time::getMillisecondCounterHiRes() * 0.001);
     }
 
     juce::AudioProcessorEditor* EmberAudioProcessor::createEditor()
