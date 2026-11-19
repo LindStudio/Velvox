@@ -1363,6 +1363,14 @@ namespace
                 ed->setAdvanced (adv);
                 const auto img = snapshot (*ed);
                 check (img.isValid() && img.getWidth() == look::baseW, "snapshot " + juce::String (adv ? "advanced" : "simple"));
+                if (! adv)
+                {
+                    // only Ember himself starts AUTO, not the empty stage around him (review 2026-11-19)
+                    auto& m = ed->getPanel().getMascot();
+                    check (! m.hitsFigure ({ 6.0f, 6.0f }) && ! m.hitsFigure ({ (float) m.getWidth() - 6.0f, (float) m.getHeight() * 0.5f }),
+                           "a click beside Ember is no AUTO");
+                    check (m.hitsFigure (m.getLocalBounds().getCentre().toFloat()), "a click on Ember is");
+                }
                 if (snapshotDir != juce::File())
                 {
                     snapshotDir.createDirectory();

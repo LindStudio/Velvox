@@ -28,7 +28,7 @@ namespace ember
         inline constexpr int baseW = 900, baseH = 600;
     }
 
-    // Vertical gain-reduction meter (dB from the top) with a numeric read-out
+    // Vertical gain-reduction meter (dB from the top) with a numeric read-out ("ABSENKUNG" / "REDUCTION")
     class ReductionMeter final : public juce::Component
     {
     public:
@@ -51,38 +51,51 @@ namespace ember
         void mouseDrag (const juce::MouseEvent&) override;
         void mouseUp (const juce::MouseEvent&) override;
         void mouseDoubleClick (const juce::MouseEvent&) override;
+        void mouseMove (const juce::MouseEvent&) override;
+        void mouseExit (const juce::MouseEvent&) override;
+        void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
         static constexpr float minDb = -60.0f, maxDb = 0.0f;
     private:
         juce::Rectangle<float> barArea() const;
         float yFor (float db) const;
         float dbFor (float y) const;
+        bool nearHandle (juce::Point<float>) const;   // only the threshold line is grabbed (a click elsewhere does nothing)
         EmberAudioProcessor& processor;
         float level = -100.0f, hold = -100.0f, weight = 0.0f;
-        bool dragging = false;
+        float lastDragY = 0.0f, dragDb = 0.0f;   // the value follows unrounded while dragging
+        bool dragging = false, hover = false;
     };
 
-    // ADVANCED display: input / output spectrum, the S band (drag its edge = frequency), reduction history
+    // ADVANCED display: input / output spectrum (zoomed to minHz..maxHz, where the frequency is set), the S range
+    // (drag its edge = frequency), reduction history
     class BandDisplay final : public juce::Component
     {
     public:
         BandDisplay (EmberAudioProcessor&, vocalypse::ui::SpectrumSource&);
         void paint (juce::Graphics&) override;
-        void resized() override { spectrum.setBounds (getLocalBounds()); }
+        void paintOverChildren (juce::Graphics&) override;
+        void resized() override;
         void mouseDown (const juce::MouseEvent&) override;
         void mouseDrag (const juce::MouseEvent&) override;
         void mouseUp (const juce::MouseEvent&) override;
         void mouseDoubleClick (const juce::MouseEvent&) override;
+        void mouseMove (const juce::MouseEvent&) override;
+        void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
         void pushReduction (float db);
+        void setHasSignal (bool);   // no audio for a while: a hint instead of an empty black box
         void refresh() { spectrum.refresh(); repaint(); }
         float xForHz (float hz) const;
         float hzForX (float x) const;
+        bool nearHandle (juce::Point<float>) const;   // only the edge is grabbed (a click elsewhere does nothing)
+        static constexpr float minHz = 1000.0f, maxHz = 20000.0f;
 
     private:
         EmberAudioProcessor& processor;
         vocalypse::ui::SpectrumView spectrum;
         std::array<float, 240> history {};
         int head = 0;
-        bool dragging = false;
+        float lastDragX = 0.0f, dragHz = 0.0f;
+        bool dragging = false, hasSignal = true;
     };
 
     class EmberPanel;
@@ -129,6 +142,7 @@ namespace ember
         void setAdvanced (bool);
         void tick() { timerCallback(); }
         LiveMascotView& getMascot() noexcept { return mascot; }
+        bool keyPressed (const juce::KeyPress&) override;   // Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo
 
     private:
         class AboutOverlay;
@@ -147,14 +161,21 @@ namespace ember
         std::function<void (juce::String)> onLanguage;
         vocalypse::ui::SpectrumSource spectrumSource;
 
-        juce::TextButton simpleBtn, advancedBtn, autoBtn, bypassBtn;
+        // AUTO: while listening it stays "cancel" and shows the progress as a bar along its bottom edge
+        struct AutoButton final : juce::TextButton
+        {
+            float progress = -1.0f;   // < 0: no bar
+            void paintButton (juce::Graphics&, bool highlighted, bool down) override;
+        };
+        juce::TextButton simpleBtn, advancedBtn, bypassBtn;
+        AutoButton autoBtn;
         juce::ShapeButton menuBtn { "menu", juce::Colours::white, juce::Colours::white, juce::Colours::white };
         juce::ShapeButton prevBtn { "prev", juce::Colours::white, juce::Colours::white, juce::Colours::white };
         juce::ShapeButton nextBtn { "next", juce::Colours::white, juce::Colours::white, juce::Colours::white };
         juce::TextButton presetBtn, saveBtn, slotA, slotB, slotCopy;
 
         LiveMascotView mascot;      // Ember as a live rig (2026-11-17); MascotView (frames) stays for its tests until step 6
-        ReductionMeter meter;
+        ReductionMeter meter, advancedMeter;
         BandDisplay display;
         DetectorMeter detector;
 
@@ -177,7 +198,7 @@ namespace ember
         std::unique_ptr<juce::FileChooser> chooser;
         bool advanced = false;
         EmberAudioProcessor::AutoPhase lastPhase = EmberAudioProcessor::AutoPhase::idle;
-        double messageUntil = 0.0;
+        double messageUntil = 0.0, lastSignal = -1.0e9;
         float shownGr = 0.0f;
     };
 }
