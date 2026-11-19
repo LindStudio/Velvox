@@ -114,6 +114,8 @@ namespace ember
         for (auto& d : audioDelay)
             d.assign ((size_t) delaySize, 0.0f);
         envDelay.assign ((size_t) delaySize, 0.0f);
+        rawEnvDelay.assign ((size_t) delaySize, 0.0f);
+        wDelay.assign ((size_t) delaySize, 0.0f);
         for (int ch = 0; ch < maxChannels; ++ch)
         {
             dryScratch[ch].assign ((size_t) subBlock, 0.0f);
@@ -146,6 +148,8 @@ namespace ember
         for (auto& d : audioDelay)
             std::fill (d.begin(), d.end(), 0.0f);
         std::fill (envDelay.begin(), envDelay.end(), 0.0f);
+        std::fill (rawEnvDelay.begin(), rawEnvDelay.end(), 0.0f);
+        std::fill (wDelay.begin(), wDelay.end(), 0.0f);
         writePos = 0;
         gridPhase = 0;
         shelfStale = false;
@@ -186,14 +190,17 @@ namespace ember
         attackCoeff = timeConstantCoeff (std::max (0.01f, settings.attackMs), fs);
         releaseCoeff = timeConstantCoeff (std::max (1.0f, settings.releaseMs), fs);
         riseCoeff = timeConstantCoeff (smartRiseMs, fs);
-        fallCoeff = timeConstantCoeff (smartFallMs, fs);
+        fallCoeff = timeConstantCoeff (settings.expGateFallMs, fs);
     }
 
     void Engine::updateShelf (float reductionDb) noexcept
     {
         shelfDb = reductionDb;
         const double f = juce::jlimit (1000.0, fs * 0.45, (double) freq.getCurrentValue());
-        shelf.setCoeffs (design::highShelf (fs, f, shelfQ, -reductionDb));
+        if (settings.expShape == 1)
+            shelf.setCoeffs (design::peak (fs, juce::jlimit (1000.0, fs * 0.45, (double) settings.expBellHz), settings.expBellQ, -reductionDb));
+        else
+            shelf.setCoeffs (design::highShelf (fs, f, shelfQ, -reductionDb));
     }
 
     void Engine::process (float* const* channels, int numChannels, int numSamples) noexcept
@@ -262,12 +269,21 @@ namespace ember
                 envDb = target + coeff * (envDb - target);
                 weightSm = smartWeight + (smartWeight > weightSm ? riseCoeff : fallCoeff) * (weightSm - smartWeight);
                 envDelay[(size_t) writePos] = envDb * weightSm;
+                rawEnvDelay[(size_t) writePos] = envDb;
+                wDelay[(size_t) writePos] = weightSm;
 
                 const int readAudio = (writePos - latency + delaySize) % delaySize;
                 const int readEnv = (writePos - envLag + delaySize) % delaySize;
                 for (int ch = 0; ch < numChannels; ++ch)
                     dryScratch[ch][(size_t) k] = audioDelay[(size_t) ch][(size_t) readAudio];
                 envAt[k] = envDelay[(size_t) readEnv];
+                if (settings.expGateLeadMs != 0.0f)
+                {
+                    // AUDIT: the smart weight read earlier (it lags the S onset by its 5 ms RMS), kept open to the later of both
+                    const int lead = std::min (envLag, (int) std::lround (std::abs (settings.expGateLeadMs) * 0.001 * fs));
+                    const int readW = (writePos - envLag + lead + delaySize) % delaySize;
+                    envAt[k] = rawEnvDelay[(size_t) readEnv] * (settings.expGateLeadMs < 0.0f ? wDelay[(size_t) readW] : std::max (wDelay[(size_t) readEnv], wDelay[(size_t) readW]));
+                }
                 blockMaxEnv = std::max (blockMaxEnv, envAt[k]);
                 writePos = (writePos + 1) % delaySize;
             }

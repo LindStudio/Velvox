@@ -33,6 +33,9 @@ namespace ember
         bool smart = true;           // only where the S band outweighs the body of the voice (relative implied)
         int listen = 0;              // 0 = off, 1 = S band (detector band), 2 = delta (what is removed)
         bool bypass = false;
+        // AUDIT experiments (audit/ember-sound only): 0 = shelf (as shipped), 1 = bell at expBellHz
+        int expShape = 0;
+        float expBellHz = 8000.0f, expBellQ = 1.0f, expGateFallMs = 1.0f, expGateLeadMs = 0.0f;
     };
 
     inline constexpr float maxLookaheadMs = 5.0f;
@@ -117,7 +120,7 @@ namespace ember
 
         // Delay lines: audio (per channel) and the reduction envelope
         std::array<std::vector<float>, maxChannels> audioDelay;
-        std::vector<float> envDelay;
+        std::vector<float> envDelay, rawEnvDelay, wDelay;
         int writePos = 0, delaySize = 1, gridPhase = 0;
         bool shelfStale = false;
         std::vector<float> dryScratch[maxChannels], wetScratch[maxChannels];
