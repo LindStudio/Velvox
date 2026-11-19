@@ -248,39 +248,31 @@ Zwei Wege, die gleich aussehen:
 
 ---
 
-## Hier weitermachen (Stand 17.11.2026, Abend)
+## Hier weitermachen (Stand 19.11.2026)
 
-**Wo der Code liegt:** Repo `velvox`, Zweig **`feature/ember-live-mascot`** (letzter Commit „sharp on high-DPI
-screens“). Auf Drive: `_git-backup/velvox.bundle` (enthält auch alle Zweige vom anderen PC) und die Quellkopie unter
-`Products/Ember/Source`. Testbuild zum Ausprobieren: `Plugins/01 EMBER De-Esser/Testbuild_Ember_lebt/` (ohne
-Lizenzprüfung).
+**Wo der Code liegt:** Repo `velvox`, Zweig **`feature/ember-live-mascot`** (Commit 223955b, "Merge feature/ember-ux").
+Drive: `_git-backup/velvox.bundle`, Quellkopie, Testbuild `Plugins/01 EMBER De-Esser/Testbuild_Siegel_2026-11-19/`.
+Stand vor dem Höllen-Design: Markierung `ember-vor-hoelle` (Testbuild `Testbuild_vor_Hoelle_2026-11-19/`).
 
-Auf einem anderen PC holen:
-```
-cd %USERPROFILE%\dev\velvox
-git fetch "G:\Meine Ablage\MUSIC\Plugin\_git-backup\velvox.bundle" feature/ember-live-mascot:feature/ember-live-mascot
-git worktree add ..\velvox-wt\ember-live feature/ember-live-mascot
-```
-Bauen (Visual Studio 2022 Build Tools, JUCE 8.0.9):
-`cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DJUCE_DIR=%USERPROFILE%/dev/JUCE-8.0.9`, dann
-`cmake --build build --config Release --target EmberTests Ember_Standalone Ember_VST3`.
-Tests: `build\EmberTests_artefacts\Release\EmberTests.exe` (246 grün), Posen als Bilder: `EmberTests.exe --rig <ordner>`.
+**Erledigt am 19.11.:**
+- Schritt 5: Ember zeichnet in eigenem Thread, Gesicht zwischengespeichert, 30 Bilder/s wenn nicht im Vordergrund;
+  `EmberTests --bench` misst CPU mit 1/2/4/8 Fenstern (Audio, UI-Thread, Prozess, Zeit pro Bildteil); pluginval 10 ok.
+- Design "Siegel" (Jakobs Wahl, Entwurf https://claude.ai/artifact/2DbiyZf8V7SpKonaiNKYNf): pinker Bodenkreis unter
+  Ember, schwebende Runen, Feuerschalen, Gewölbe, Runenrand, Lichtwelle bei jedem geschluckten S, Mini-Siegel auf
+  dem Amount-Regler, Leuchten am Mund. Code: `EmberSeal.h/.cpp`, `LiveMascotView::renderFrame`, `SealOverlay`.
+- Usability-Test umgesetzt (Zweig feature/ember-ux, eingemischt): AUTO mit Vorher auf A, keine heimlichen Resets,
+  Klick nur auf Ember, Abbrechen bleibt Abbrechen, Hinweis ohne Ton, Delta nicht gespeichert, Lizenzkarte,
+  Spektrum 1-20 kHz, ABSENKUNG-Anzeige, Strg+Z. 296 Tests grün.
+- Klang-Test: Bericht `~/dev/velvox-wt/ember-sound-audit/EMBER_KLANG_TEST.md` (Zweig audit/ember-sound, nicht committet).
 
-**Erledigt:**
-- Schritt 1: Rig-Daten im Plugin, `RigRenderer` zeichnet jede Pose (`EmberRig.h/.cpp`).
-- Schritt 2 + 3: Verhalten (`LiveBrain`) und Anzeige (`LiveMascotView`) in `EmberLiveMascot.h/.cpp`; das Plugin-Fenster
-  zeigt den lebenden Ember; Tempo der DAW kommt an (`MascotInput::bpm`).
-- Scharf auf Bildschirmen mit 125–200 % (zeichnet in echter Pixeldichte), 2×: 12–13,5 ms pro Bild, sonst ~3 ms; fällt
-  bei langsamen Rechnern auf 30 Bilder/s zurück.
-- Jakob hat den Stand im Plugin freigegeben („passt“).
-
-**Offen (nächste Schritte):**
-1. Schritt 5: CPU mit mehreren Instanzen messen, pluginval, in FL Studio / Ableton / Reaper testen.
-2. Schritt 6: alte Bildfolgen entfernen (`Products/Ember/Mascot/frames`, `MascotView`, `MascotFrames`, ihre Tests),
-   Plugin wird kleiner.
-3. Falls Ember bei 3× / großem Fenster weich wird: Teile in doppelter Auflösung (2048) neu schneiden.
-4. Danach: Zweig in den EMBER-Hauptzweig (`feature/ember-deesser`) übernehmen, Installer neu bauen.
+**Offen:**
+1. Jakobs Feedback zum Siegel im Plugin.
+2. Klang: AUTO robuster (S-Frequenz, Schwelle nicht bis -60 dB), Stimmlage-Knöpfe ziehen die Schwelle mit; danach
+   Glockenfilter im Split-Modus statt offenem Höhenregal (Hörvergleich gegen Pro-DS).
+3. CPU: mit Siegel ~82 % eines Kerns bei 60 Bildern/s (1 Fenster, 125 %); nächster Schritt wäre Zeichnen über die GPU.
+4. Schritt 6: alte Bildfolgen entfernen; Test in FL Studio / Ableton / Reaper; dann in `feature/ember-deesser`
+   übernehmen und Installer neu bauen.
 
 **Wichtig beim Sichern:** `scripts/backup-to-drive.ps1` schreibt das Bundle mit allen Zweigen *dieses* PCs. Vorher die
-Zweige vom Drive-Bundle holen (`git fetch <bundle> "+refs/*:refs/drive-backup-all/*"`), sonst gehen Zweige vom anderen
-PC im Bundle verloren.
+Zweige vom Drive-Bundle holen (`git fetch <bundle> "+refs/heads/*:refs/drive-backup-all/*"`), sonst gehen Zweige vom
+anderen PC im Bundle verloren.
