@@ -64,6 +64,12 @@ namespace vocalypse::ui
             licence->addChangeListener (this);
             buyButton.setButtonText (licence->freeKey() ? tr ("Gratis-Schlüssel holen", "Get free key")
                                                         : i18n::format (tr ("{0} kaufen", "Buy {0}"), { licence->productName() }));
+            // a free product: nobody has a key at the first start, so getting one is the main button (EMBER review 2026-11-19)
+            const bool getFirst = licence->freeKey();
+            buyButton.getProperties().set ("fire", getFirst);
+            enterButton.getProperties().set ("fire", ! getFirst);
+            resized();
+            repaint();
         }
         sync();
     }
@@ -100,9 +106,13 @@ namespace vocalypse::ui
     void LicenceLock::resized()
     {
         auto r = cardBounds().reduced (pad).removeFromBottom (34);
-        enterButton.setBounds (r.removeFromLeft (r.getWidth() / 2 - 6));
+        // the main button (fire) on the left
+        const bool getFirst = licence != nullptr && licence->freeKey();
+        auto& first = getFirst ? buyButton : enterButton;
+        auto& second = getFirst ? enterButton : buyButton;
+        first.setBounds (r.removeFromLeft (r.getWidth() / 2 - 6));
         r.removeFromLeft (12);
-        buyButton.setBounds (r);
+        second.setBounds (r);
     }
 
     void LicenceLock::paint (juce::Graphics& g)
