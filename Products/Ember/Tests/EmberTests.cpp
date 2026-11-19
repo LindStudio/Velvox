@@ -1532,16 +1532,18 @@ namespace
         }
     }
 
-    int rigPictures (const juce::File& dir)
+    int rigPictures (const juce::File& dir, bool transparent = false)
     {
         dir.createDirectory();
+        const int size = transparent ? 1200 : 600;   // transparent: for mockups / marketing, twice the size
         juce::PNGImageFormat png;
         for (const auto& shot : rigShots())
         {
-            juce::Image img (juce::Image::ARGB, 600, 600, true);
+            juce::Image img (juce::Image::ARGB, size, size, true);
             {
                 juce::Graphics g (img);
-                g.fillAll (juce::Colours::white);
+                if (! transparent)
+                    g.fillAll (juce::Colours::white);
                 RigRenderer r;
                 r.render (g, img.getBounds().toFloat(), shot.pose);
             }
@@ -1801,7 +1803,7 @@ int main (int argc, char** argv)
     if (args.size() >= 3 && args[0] == "--marketing")
         return marketing (juce::File (args[1]), juce::File (args[2]));
     if (args.size() >= 2 && args[0] == "--rig")
-        return rigPictures (juce::File (args[1]));
+        return rigPictures (juce::File (args[1]), args.size() >= 3 && args[2] == "transparent");
     if (args.size() >= 1 && args[0] == "--bench")
         return bench (args.size() >= 2 ? juce::jmax (2, args[1].getIntValue()) : 8);
     if (args.size() >= 2 && args[0] == "--mascot-loops")
