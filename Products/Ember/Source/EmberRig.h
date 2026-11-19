@@ -77,7 +77,10 @@ namespace ember
         void renderInto (juce::Image& target, juce::Rectangle<float> area, const RigPose&, float displayScale);
 
         // picture -> area: where the figure sits in an area (the same as getRigToArea() after a render)
-        static juce::AffineTransform fitTransform (juce::Rectangle<float> area);
+        // height = share of the area's height the figure fills, feet = where his feet stand (share from the top);
+        // the plain stage uses 0.86 / 0.97, the seal stage lifts him so the circle fits under his feet
+        static juce::AffineTransform fitTransform (juce::Rectangle<float> area, float height = 0.86f, float feet = 0.97f);
+        float fitHeight = 0.86f, fitFeet = 0.97f;   // used by render / renderInto
 
         static constexpr float outlineWidth = 6.0f;                 // px in the 1024 space (the drawing's own: 5-6)
         static constexpr juce::uint32 outlineColour = 0xff340616;   // the drawing's outline maroon

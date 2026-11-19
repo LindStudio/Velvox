@@ -16,6 +16,7 @@ set(EMBER_SOURCES
     Products/Ember/Source/EmberMascot.cpp
     Products/Ember/Source/EmberRig.cpp
     Products/Ember/Source/EmberLiveMascot.cpp
+    Products/Ember/Source/EmberSeal.cpp
     Products/Ember/Source/EmberPresets.cpp
     Products/Ember/Source/EmberProcessor.cpp
     Products/Ember/Source/EmberEditor.cpp

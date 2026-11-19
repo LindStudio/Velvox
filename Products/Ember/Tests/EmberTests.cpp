@@ -1772,6 +1772,8 @@ static int bench (int seconds)
                 loop.procs.push_back (procs.back().get());
             }
             juce::MessageManager::getInstance()->runDispatchLoopUntil (1500);   // settle (first decode, window creation)
+            LiveMascotView::benchFigureMs = 0; LiveMascotView::benchFloorMs = 0; LiveMascotView::benchRunesMs = 0;
+            LiveMascotView::benchComposeMs = 0; LiveMascotView::benchFrames = 0;
             loop.startThread (juce::Thread::Priority::highest);
             const double m0 = emberThreadCpuMs(), p0 = emberProcessCpuMs(), w0 = juce::Time::getMillisecondCounterHiRes();
             juce::MessageManager::getInstance()->runDispatchLoopUntil (seconds * 1000);
@@ -1781,6 +1783,10 @@ static int bench (int seconds)
             std::printf ("  %4.0fx  %4d | %7.2f %%    %6.2f ms   | %6.1f %% (%4.1f %% per editor) | %6.1f %%\n", scale, count,
                          100.0 * loop.cpuMs.load() / std::max (1.0, audioWall), loop.worstBlockMs.load(),
                          100.0 * ui / wall, 100.0 * ui / wall / count, 100.0 * all / wall);
+            if (const int fr = LiveMascotView::benchFrames.load(); fr > 0)
+                std::printf ("            per frame: figure %.2f, seal floor %.2f, runes+fire %.2f, rest %.2f ms (%d frames)\n",
+                             LiveMascotView::benchFigureMs.load() / fr, LiveMascotView::benchFloorMs.load() / fr,
+                             LiveMascotView::benchRunesMs.load() / fr, LiveMascotView::benchComposeMs.load() / fr, fr);
             eds.clear();
             for (auto& p : procs) p->releaseResources();
         }

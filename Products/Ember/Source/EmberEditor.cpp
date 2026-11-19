@@ -65,6 +65,83 @@ namespace ember
         }
     }
 
+    // ================================================================ look
+    void EmberLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& background, bool highlighted, bool down)
+    {
+        if (! (bool) b.getProperties().getWithDefault ("fire", false))
+        {
+            VocalypseLookAndFeel::drawButtonBackground (g, b, background, highlighted, down);
+            return;
+        }
+        auto r = b.getLocalBounds().toFloat().reduced (0.5f);
+        const float corner = juce::jmin (8.0f, r.getHeight() * 0.3f), a = b.isEnabled() ? 1.0f : 0.35f;
+        if (b.isEnabled())
+        {
+            g.setColour (seal::pink.withAlpha (highlighted ? 0.34f : 0.2f));
+            g.fillRoundedRectangle (r.expanded (2.5f), corner + 2.5f);
+        }
+        juce::ColourGradient fill (seal::pinkLight.withAlpha (a), r.getX(), r.getY(), juce::Colour (0xffd8124e).withAlpha (a), r.getRight(), r.getBottom(), false);
+        fill.addColour (0.45, seal::pink.withAlpha (a));
+        g.setGradientFill (fill);
+        g.fillRoundedRectangle (r, corner);
+        g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha ((down ? 0.0f : (highlighted ? 0.28f : 0.14f)) * a), r.getX(), r.getY(),
+                                                 juce::Colours::white.withAlpha (0.0f), r.getX(), r.getCentreY(), false));
+        g.fillRoundedRectangle (r, corner);
+    }
+
+    // ================================================================ seal overlay
+    void SealOverlay::repaintEdges (juce::Rectangle<float> r, float w)
+    {
+        const auto o = r.expanded (w).getSmallestIntegerContainer();
+        const int k = (int) std::ceil (w * 2.0f);
+        repaint (o.withHeight (k));
+        repaint (o.withTop (o.getBottom() - k));
+        repaint (o.withWidth (k));
+        repaint (o.withLeft (o.getRight() - k));
+    }
+
+    void SealOverlay::update (const seal::Scene& s, bool simpleView, juce::Rectangle<float> knobArea, std::vector<juce::Rectangle<float>> plateAreas)
+    {
+        const bool surge = scene.sinceS < 1.2f || s.sinceS < 1.2f;
+        scene = s;
+        simple = simpleView;
+        knob = knobArea;
+        plates = std::move (plateAreas);
+        if (++ticks % 2 == 0)   // the border and the knob's seal move slowly: 15 frames a second are enough
+        {
+            repaintEdges (getLocalBounds().toFloat().reduced (6.0f), 7.0f);
+            if (simple && ! knob.isEmpty())
+                repaint (knob.expanded (4.0f).getSmallestIntegerContainer());
+        }
+        if (surge)
+            for (auto& r : plates)
+                repaintEdges (r, 8.0f);
+    }
+
+    void SealOverlay::paint (juce::Graphics& g)
+    {
+        const float scale = juce::jlimit (1.0f, 3.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+        borderRunes.setScale (scale);
+        sealRunes.setScale (scale);
+        seal::drawRuneBorder (g, borderRunes, getLocalBounds().toFloat(), scene);
+        if (simple && ! knob.isEmpty())
+            seal::drawMiniSeal (g, sealRunes, knob.getCentre(), knob.getWidth() * 0.5f, scene);
+        // the wave of light through the panels, one after the other
+        if (scene.on)
+            for (size_t i = 0; i < plates.size(); ++i)
+            {
+                const float u = (scene.sinceS - 0.07f * (float) i) / 0.8f;
+                if (u < 0.0f || u >= 1.0f)
+                    continue;
+                const float a = 1.0f - u;
+                const auto r = plates[i];
+                g.setColour (seal::pink.withAlpha (0.18f * a));
+                g.drawRoundedRectangle (r.expanded (3.0f), 14.0f, 6.0f);
+                g.setColour (seal::pinkLight.withAlpha (0.85f * a));
+                g.drawRoundedRectangle (r, 12.0f, 1.4f);
+            }
+    }
+
     // ================================================================ meters
     void ReductionMeter::paint (juce::Graphics& g)
     {
@@ -407,6 +484,7 @@ namespace ember
 
         // ---- SIMPLE
         mascot.onClick = [this] { autoClicked(); };
+        mascot.setSealStage (true);
         addChildComponent (mascot);
         addChildComponent (meter);
         amountBig.setHero (true);
@@ -535,6 +613,7 @@ namespace ember
                                                           "How loud the S sounds are right now. Above the red line (threshold) they are reduced. "
                                                           "Grey = Smart hears no sibilant. Drag the line = threshold."));
 
+        addAndMakeVisible (sealOverlay);
         addChildComponent (infoPopup);
         about = std::make_unique<AboutOverlay>();
         addChildComponent (*about);
@@ -568,17 +647,45 @@ namespace ember
         infoPopup.hide();
     }
 
+    std::vector<juce::Rectangle<float>> EmberPanel::plates() const
+    {
+        using F = juce::Rectangle<float>;
+        if (advanced)
+            return { F (0, 0, 900, 60), F (24, 68, 852, 32), F (12, 108, 876, 484) };
+        return { F (0, 0, 900, 60), F (24, 68, 852, 32), F (548, 112, 336, 410), F (16, 528, 868, 58) };
+    }
+
     void EmberPanel::paint (juce::Graphics& g)
     {
-        g.fillAll (c::windowBg);
+        // the chamber: the back wall of the seal (Jakob 2026-11-19), cached per size and screen density
+        const float scale = juce::jlimit (1.0f, 3.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+        const int cw = juce::roundToInt ((float) getWidth() * scale), ch = juce::roundToInt ((float) getHeight() * scale);
+        if (chamber.getWidth() != cw || chamber.getHeight() != ch)
+        {
+            chamber = juce::Image (juce::Image::RGB, juce::jmax (1, cw), juce::jmax (1, ch), false);
+            juce::Graphics cg (chamber);
+            cg.addTransform (juce::AffineTransform::scale (scale));
+            seal::drawChamber (cg, getLocalBounds().toFloat(), juce::Rectangle<float> (28.0f, 116.0f, 520.0f, 402.0f));
+            // Ember's stage gets its piece of the wall and paints it itself (opaque: nothing underneath is redrawn)
+            const auto mb = mascot.getBounds().toFloat();
+            const auto px = juce::Rectangle<float> (mb.getX() * scale, mb.getY() * scale, mb.getWidth() * scale, mb.getHeight() * scale)
+                                .getSmallestIntegerContainer().getIntersection (chamber.getBounds());
+            mascot.setBackdrop (chamber.getClippedImage (px), scale);
+        }
+        g.drawImage (chamber, getLocalBounds().toFloat());
         auto r = getLocalBounds().toFloat();
-        g.setGradientFill (juce::ColourGradient (look::accent.withAlpha (0.13f), 0.0f, 0.0f,
-                                                 look::accent.withAlpha (0.0f), r.getWidth() * 0.65f, r.getHeight() * 0.8f, true));
-        g.fillRect (r);
+
+        // glass plates the controls sit on (the wall shows through)
+        for (auto p : plates())
+        {
+            const bool header = p.getY() < 1.0f;
+            g.setGradientFill (juce::ColourGradient (juce::Colour (0xe0140610), 0, p.getY(), juce::Colour (0xeb080308), 0, p.getBottom(), false));
+            if (header) g.fillRect (p); else g.fillRoundedRectangle (p, 12.0f);
+            g.setColour (look::accent.withAlpha (0.28f));
+            if (header) g.fillRect (p.getX(), p.getBottom() - 1.0f, p.getWidth(), 1.0f); else g.drawRoundedRectangle (p, 12.0f, 1.0f);
+        }
 
         auto top = r.removeFromTop (60.0f);
-        g.setColour (c::borderSoft);
-        g.fillRect (top.getX(), top.getBottom() - 1.0f, top.getWidth(), 1.0f);
 
         auto brand = top.reduced (24.0f, 10.0f).removeFromLeft (360.0f);
         g.setFont (ui::display (30.0f / emberTextScale, true).withExtraKerningFactor (0.06f));   // the wordmark keeps its size
@@ -592,12 +699,6 @@ namespace ember
         g.setColour (c::textFaint);
         g.drawText (utf8 ("LIND AUDIO"), sub, juce::Justification::topLeft);
 
-        // preset bar backing
-        g.setColour (c::control);
-        g.fillRoundedRectangle (juce::Rectangle<float> (24.0f, 68.0f, 852.0f, 32.0f), 7.0f);
-
-        g.setColour (c::border);
-        g.drawRoundedRectangle (juce::Rectangle<float> (12.0f, 108.0f, 876.0f, 484.0f), ui::radius::panel, 1.0f);
     }
 
     void EmberPanel::resized() { layout(); }
@@ -674,6 +775,7 @@ namespace ember
             status.setBounds (R (40, 528, 820, 50));
         }
         infoPopup.setBounds (getLocalBounds());
+        sealOverlay.setBounds (getLocalBounds());
         if (about != nullptr)
             about->setBounds (getLocalBounds());
         licenceLock.setBounds (getLocalBounds().withTrimmedTop (60));   // the top bar (≡ menu) stays usable
@@ -939,6 +1041,20 @@ namespace ember
             status.setText (text, juce::dontSendNotification);
 
         meter.setValue (shownGr);
+        {
+            const double nowS = juce::Time::getMillisecondCounterHiRes() * 0.001;
+            sealClock += lastTickS > 0.0 ? juce::jmin (0.1, nowS - lastTickS) : 0.0;
+            lastTickS = nowS;
+            seal::Scene sc;
+            sc.t = sealClock;
+            sc.sinceS = advanced ? 99.0f : mascot.secondsSinceSwallow();
+            sc.heat = shownGr / 9.0f;
+            sc.on = ! bypassed;
+            // the small seal sits on the Amount knob's cap
+            const auto kb = amountBig.getBounds().toFloat();
+            const auto knobArea = juce::Rectangle<float> (92.0f, 92.0f).withCentre ({ kb.getCentreX(), kb.getY() + 90.0f });
+            sealOverlay.update (sc, ! advanced, knobArea, plates());
+        }
         if (advanced)
         {
             spectrumSource.update (processor.getCurrentSampleRate());
@@ -991,7 +1107,7 @@ namespace ember
         rebuildPanel();
     }
 
-    void EmberEditor::paint (juce::Graphics& g) { g.fillAll (c::windowBg); }
+    void EmberEditor::paint (juce::Graphics& g) { g.fillAll (seal::wall); }
 
     void EmberEditor::resized()
     {

@@ -371,7 +371,7 @@ namespace ember
                     view.job.pending = false;
                 }
                 if (j.pending)
-                    view.renderFrame (j.pose, j.area, j.scale);
+                    view.renderFrame (j.pose, j.area, j.scale, j.scene);
             }
         }
         LiveMascotView& view;
@@ -398,7 +398,7 @@ namespace ember
             --showingViews;
     }
 
-    void LiveMascotView::renderFrame (const RigPose& pose, juce::Rectangle<float> area, float scale)
+    void LiveMascotView::renderFrame (const RigPose& pose, juce::Rectangle<float> bounds, float scale, const seal::Scene& sc)
     {
         const juce::ScopedLock rl (renderLock);
         int back;
@@ -407,13 +407,135 @@ namespace ember
             back = front == 0 ? 1 : 0;       // never the one paint() may be showing
         }
         const auto t0 = juce::Time::getMillisecondCounterHiRes();
-        renderer.renderInto (frames[back], area, pose, scale);
+        // the square stage inside the view holds the figure; the frame covers the whole view (the seal is wider)
+        const auto area = bounds.withSizeKeepingCentre (std::min (bounds.getWidth(), bounds.getHeight()), bounds.getHeight());
+        renderer.renderInto (figure, area, pose, scale);
+        const auto tFig = juce::Time::getMillisecondCounterHiRes();
+        double floorMs = 0, runesMs = 0;
+        const int w = std::max (1, juce::roundToInt (bounds.getWidth() * scale)), h = std::max (1, juce::roundToInt (bounds.getHeight() * scale));
+        auto& out = frames[back];
+        if (out.getWidth() != w || out.getHeight() != h)
+            out = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
+        else
+            out.clear (out.getBounds());
+        {
+            juce::Graphics g (out);
+            if (backdrop.isValid())
+            {
+                if (backdrop.getWidth() == w && backdrop.getHeight() == h)
+                    g.drawImageAt (backdrop, 0, 0);
+                else
+                    g.drawImage (backdrop, juce::Rectangle<float> (0.0f, 0.0f, (float) w, (float) h));
+            }
+            juce::Graphics::ScopedSaveState scaled (g);
+            g.addTransform (juce::AffineTransform::scale (scale));
+            const auto toArea = RigRenderer::fitTransform (area, renderer.fitHeight, renderer.fitFeet);
+            const auto feet = juce::Point<float> (512.0f, 859.0f).transformedBy (toArea);
+            const float rx = bounds.getWidth() * 0.46f, ry = rx * 0.2f;
+            const juce::Point<float> centre (bounds.getCentreX(), feet.y + 2.0f);
+            if (sealStage)
+            {
+                runeAtlas.setScale (scale);
+                const auto tb = juce::Time::getMillisecondCounterHiRes();
+                seal::drawBrazier (g, { bounds.getX() + 24.0f, bounds.getY() + 72.0f }, sc, 1);
+                seal::drawBrazier (g, { bounds.getRight() - 28.0f, bounds.getY() + 72.0f }, sc, 2);
+                runesMs += juce::Time::getMillisecondCounterHiRes() - tb;
+                const auto tf = juce::Time::getMillisecondCounterHiRes();
+                const bool fresh = floorLayer.getWidth() != w || floorLayer.getHeight() != h;
+                if (fresh || frameCount++ % 4 == 0)
+                {
+                    if (fresh)
+                        floorLayer = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
+                    else
+                        floorLayer.clear (floorLayer.getBounds());
+                    juce::Graphics fg (floorLayer);
+                    fg.addTransform (juce::AffineTransform::scale (scale));
+                    seal::drawFloor (fg, centre, rx, ry, sc);
+                }
+                {
+                    juce::Graphics::ScopedSaveState px (g);
+                    g.setOrigin (0, 0);
+                    g.addTransform (juce::AffineTransform::scale (1.0f / scale));   // back to pixels: a plain copy
+                    g.drawImageAt (floorLayer, 0, 0);
+                }
+                seal::drawFloorLive (g, centre, rx, ry, sc);
+                floorMs += juce::Time::getMillisecondCounterHiRes() - tf;
+                const auto tr = juce::Time::getMillisecondCounterHiRes();
+                seal::drawFloatingRunes (g, runeAtlas, centre, rx, ry, sc, false);
+                runesMs += juce::Time::getMillisecondCounterHiRes() - tr;
+            }
+            // the floor shadow under his feet
+            const float up = -pose.bob, k = area.getHeight() * renderer.fitHeight / 700.0f;
+            const float sw = 175.0f * k * (1.0f + juce::jlimit (-0.05f, 0.06f, pose.squash)) * (1.0f - std::min (0.3f, up / 500.0f));
+            g.setColour (juce::Colours::black.withAlpha (0.28f - std::min (0.15f, up / 1000.0f)));
+            g.fillEllipse (feet.x - sw, feet.y - 22.0f * k, 2.0f * sw, 44.0f * k);
+            g.setOpacity (1.0f);   // images take the opacity of the last colour (the shadow's 28 % made him see-through)
+            {
+                // the figure was drawn at exactly this pixel size: copied, not resampled
+                juce::Graphics::ScopedSaveState px (g);
+                g.addTransform (juce::AffineTransform::scale (1.0f / scale));
+                g.drawImageAt (figure, juce::roundToInt (area.getX() * scale), juce::roundToInt (area.getY() * scale));
+            }
+            if (sealStage)
+            {
+                const auto tr = juce::Time::getMillisecondCounterHiRes();
+                seal::drawFloatingRunes (g, runeAtlas, centre, rx, ry, sc, true);
+                runesMs += juce::Time::getMillisecondCounterHiRes() - tr;
+            }
+        }
+        {
+            const auto tEnd = juce::Time::getMillisecondCounterHiRes();
+            benchFigureMs = benchFigureMs.load() + (tFig - t0);
+            benchFloorMs = benchFloorMs.load() + floorMs;
+            benchRunesMs = benchRunesMs.load() + runesMs;
+            benchComposeMs = benchComposeMs.load() + (tEnd - tFig - floorMs - runesMs);
+            ++benchFrames;
+        }
         const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
         renderMs = renderMs.load() == 0 ? ms : renderMs.load() * 0.9 + ms * 0.1;
         const juce::ScopedLock fl (frameLock);
         front = back;
-        frontArea = area;
+        frontArea = bounds;
         frontScale = scale;
+    }
+
+    void LiveMascotView::setBackdrop (const juce::Image& wall, float scale)
+    {
+        {
+            const juce::ScopedLock rl (renderLock);
+            backdrop = wall.isValid() ? juce::SoftwareImageType().convert (wall) : juce::Image();
+            backdropScale = scale;
+            const juce::ScopedLock fl (frameLock);
+            front = -1;
+        }
+        setOpaque (backdrop.isValid());
+        repaint();
+    }
+
+    void LiveMascotView::setSealStage (bool on)
+    {
+        const juce::ScopedLock rl (renderLock);
+        sealStage = on;
+        // on the seal he stands a little higher and smaller, so the circle fits under his feet
+        renderer.fitHeight = on ? 0.80f : 0.86f;
+        renderer.fitFeet = on ? 0.86f : 0.97f;
+        const juce::ScopedLock fl (frameLock);
+        front = -1;
+    }
+
+    juce::AffineTransform LiveMascotView::toStage() const
+    {
+        return RigRenderer::fitTransform (stageArea(), sealStage ? 0.80f : 0.86f, sealStage ? 0.86f : 0.97f);
+    }
+
+    seal::Scene LiveMascotView::scene() const
+    {
+        seal::Scene sc;
+        sc.t = clock;
+        sc.sinceS = sinceSwallow;
+        sc.heat = heat;
+        sc.on = ! input.bypass;
+        return sc;
     }
 
     // 60 frames a second while he is the one being looked at; 30 when the host's window is not in front, the cursor
@@ -466,7 +588,7 @@ namespace ember
             return;
         updateRate();
         // he looks at the cursor (or the knob being turned) when it moves anywhere in the window
-        const auto toArea = RigRenderer::fitTransform (stageArea());
+        const auto toArea = toStage();
         const auto mouse = getMouseXYRelative();
         if (mouse != lastMouse && getTopLevelComponent() != nullptr
             && getTopLevelComponent()->getLocalBounds().contains (getTopLevelComponent()->getLocalPoint (this, mouse)))
@@ -475,7 +597,7 @@ namespace ember
         tick (dt);
         {
             const juce::ScopedLock fl (frameLock);
-            job = { brain.pose(), stageArea(), screenScale, true };
+            job = { brain.pose(), getLocalBounds().toFloat(), screenScale, scene(), true };
         }
         drawer->wake.signal();
         repaint();
@@ -485,6 +607,15 @@ namespace ember
     {
         const auto mouth = mouthRest.transformedBy (RigRenderer::headTransform (brain.pose()));
         brain.update (input, dt, mouth);
+        clock += dt;
+        sinceSwallow += dt;
+        if (brain.eatenCount() != lastEaten)
+        {
+            if (brain.eatenCount() > lastEaten)
+                sinceSwallow = 0.0f;
+            lastEaten = brain.eatenCount();
+        }
+        heat += ((input.bypass ? 0.0f : input.reductionDb / 9.0f) - heat) * std::min (1.0f, dt * 6.0f);
     }
 
     void LiveMascotView::paint (juce::Graphics& g)
@@ -497,15 +628,8 @@ namespace ember
         float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
         if (! (scale > 0.25f)) scale = 1.0f;
         scale = juce::jlimit (1.0f, 3.0f, scale);
-        // the floor shadow
         const auto pose = brain.pose();
-        {
-            const auto feet = juce::Point<float> (512.0f, 859.0f).transformedBy (RigRenderer::fitTransform (area));
-            const float up = -pose.bob, k = area.getHeight() * 0.86f / 700.0f;
-            const float w = 175.0f * k * (1.0f + juce::jlimit (-0.05f, 0.06f, pose.squash)) * (1.0f - std::min (0.3f, up / 500.0f));
-            g.setColour (juce::Colours::black.withAlpha (0.28f - std::min (0.15f, up / 1000.0f)));
-            g.fillEllipse (feet.x - w, feet.y - 22.0f * k, 2.0f * w, 44.0f * k);
-        }
+        const auto bounds = getLocalBounds().toFloat();
         // off screen (snapshots, tests) or nothing fitting drawn yet (first frame, new size, other screen): drawn here
         // and now; otherwise the drawing thread's newest frame
         const bool onScreen = getPeer() != nullptr;
@@ -514,16 +638,16 @@ namespace ember
         bool fits;
         {
             const juce::ScopedLock fl (frameLock);
-            fits = front >= 0 && frontArea == area && frontScale == scale;
+            fits = front >= 0 && frontArea == bounds && frontScale == scale;
         }
         if (! onScreen || ! fits)
-            renderFrame (pose, area, scale);
+            renderFrame (pose, bounds, scale, scene());
         {
             const juce::ScopedLock fl (frameLock);
             if (front >= 0)
             {
                 juce::Graphics::ScopedSaveState keep (g);
-                g.setOpacity (1.0f);   // images take the opacity of the last colour (the shadow's 28 % made him see-through)
+                g.setOpacity (1.0f);
                 g.drawImage (frames[front], frontArea, juce::RectanglePlacement::stretchToFit);
             }
         }
@@ -534,7 +658,7 @@ namespace ember
     // the S, notes, Z, steam, crumbs, sound rings (prototype: drawEats / drawFx / drawRings)
     void LiveMascotView::paintEffects (juce::Graphics& g)
     {
-        const auto toArea = RigRenderer::fitTransform (stageArea());
+        const auto toArea = toStage();
         const float k = std::sqrt (std::abs (toArea.getDeterminant()));
         const auto pose = brain.pose();
         const auto mouth = mouthRest.transformedBy (RigRenderer::headTransform (pose));
@@ -554,8 +678,19 @@ namespace ember
             const auto tf = juce::AffineTransform::translation (-bb.getCentreX(), -bb.getCentreY()).rotated (e.spin * (1 - p)).translated (at);
             g.setColour (juce::Colour (0xff2a0a12));
             g.strokePath (s, juce::PathStrokeType (size * 0.14f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded), tf);
-            g.setGradientFill (juce::ColourGradient (juce::Colour (0xffffe29a), at.x, at.y - size / 2, juce::Colour (0xffff7a2e), at.x, at.y + size / 2, false));
+            g.setGradientFill (sealStage ? juce::ColourGradient (seal::pinkLight.brighter (0.3f), at.x, at.y - size / 2, seal::pink, at.x, at.y + size / 2, false)
+                                          : juce::ColourGradient (juce::Colour (0xffffe29a), at.x, at.y - size / 2, juce::Colour (0xffff7a2e), at.x, at.y + size / 2, false));
             g.fillPath (s, tf);
+        }
+        // he swallowed an S: a small pink glow at his mouth (Jakob 2026-11-19)
+        if (sealStage && sinceSwallow < 0.5f && ! input.bypass)
+        {
+            const float u = sinceSwallow / 0.5f, r = (18.0f + 46.0f * u) * k * 1.6f;
+            const auto m = mouth.transformedBy (toArea);
+            g.setGradientFill (juce::ColourGradient (seal::pinkLight.withAlpha (0.85f * (1.0f - u)), m.x, m.y, seal::pink.withAlpha (0.0f), m.x + r, m.y, true));
+            g.fillEllipse (m.x - r, m.y - r * 0.8f, 2.0f * r, 1.6f * r);
+            g.setColour (seal::pinkLight.withAlpha (0.7f * (1.0f - u)));
+            g.drawEllipse (m.x - r * 0.9f, m.y - r * 0.55f, 1.8f * r, 1.1f * r, 1.6f);
         }
         const auto headT = RigRenderer::headTransform (pose);
         for (const auto& f : brain.effects())
@@ -566,7 +701,7 @@ namespace ember
                 case LiveBrain::Fx::crumb:
                 {
                     const auto at = f.pos.transformedBy (toArea);
-                    g.setColour (juce::Colour::fromFloatRGBA (1.0f, (200.0f - 60.0f * p) / 255.0f, 120.0f / 255.0f, 1 - p));
+                    g.setColour (sealStage ? seal::pinkLight.interpolatedWith (seal::pink, p).withAlpha (1 - p) : juce::Colour::fromFloatRGBA (1.0f, (200.0f - 60.0f * p) / 255.0f, 120.0f / 255.0f, 1 - p));
                     g.fillEllipse (at.x - f.size * k, at.y - f.size * k, 2 * f.size * k, 2 * f.size * k);
                     break;
                 }
@@ -612,7 +747,7 @@ namespace ember
         if (text.isEmpty())
             return;
         const auto anchor = juce::Point<float> (700.0f, 205.0f).transformedBy (RigRenderer::headTransform (brain.pose()))
-                                                               .transformedBy (RigRenderer::fitTransform (stageArea()));
+                                                               .transformedBy (toStage());
         const float fontH = juce::jlimit (11.0f, 15.0f, getHeight() * 0.04f);
         const juce::Font font (juce::FontOptions (fontH, juce::Font::bold));
         juce::GlyphArrangement ga;

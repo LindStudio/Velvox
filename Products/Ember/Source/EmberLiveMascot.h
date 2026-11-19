@@ -2,6 +2,7 @@
 
 #include "EmberMascot.h"
 #include "EmberRig.h"
+#include "EmberSeal.h"
 
 // Ember lives in the plugin (2026-11-17, step 3 of FIGUR_ANIMIEREN.md section 6): the behaviour of the approved
 // browser prototype (v17), ported to C++, drawing with RigRenderer. Same interface as the old MascotView (input,
@@ -76,6 +77,13 @@ namespace ember
         void setInput (const MascotInput& in) { input = in; }
         void setBubble (const juce::String& text);      // a new text: Ember says it
         void setCompact (bool c) { compact = c; }
+        // The pink seal stage (2026-11-19): Ember stands on the summoning circle, its letters float round him.
+        // Off = the plain stage (tests, old look).
+        void setSealStage (bool on);
+        float secondsSinceSwallow() const noexcept { return sinceSwallow; }   // the window's wave of light follows this
+        // The wall behind the stage (the window's background cut to this view, in screen pixels at that scale). With
+        // it the view paints every pixel itself (opaque), so the window does not redraw underneath 60 times a second.
+        void setBackdrop (const juce::Image& wall, float scale);
         std::function<void()> onClick;
 
         void paint (juce::Graphics&) override;
@@ -86,18 +94,23 @@ namespace ember
         LiveBrain& getBrain() noexcept { return brain; }
         void stepForTest (float dt) { tick (dt); }
         static inline std::atomic<bool> alwaysInFront { false };   // EmberTests --bench: as if the cursor were on him
+        // EmberTests --bench: where a frame's time goes (ms, summed over all frames): figure, seal floor, runes + braziers, the rest
+        static inline std::atomic<double> benchFigureMs { 0 }, benchFloorMs { 0 }, benchRunesMs { 0 }, benchComposeMs { 0 };
+        static inline std::atomic<int> benchFrames { 0 };
 
     private:
         void timerCallback() override;
         void tick (float dt);
         juce::Rectangle<float> stageArea() const;
+        juce::AffineTransform toStage() const;   // picture -> view, with this stage's fit
+        seal::Scene scene() const;
         void paintEffects (juce::Graphics&);
         void paintBubble (juce::Graphics&);
 
         // Drawing the figure costs 3-15 ms a frame; on the message thread (the host's whole UI) that made the DAW
         // stutter with two or three windows open (bench 2026-11-19). The figure is drawn on a thread of its own into
         // one of two images; paint() only puts the newest finished one on the screen.
-        void renderFrame (const RigPose&, juce::Rectangle<float> area, float scale);   // any thread
+        void renderFrame (const RigPose&, juce::Rectangle<float> bounds, float scale, const seal::Scene&);   // any thread
         void updateRate();
         struct Drawer;
 
@@ -106,9 +119,15 @@ namespace ember
         juce::CriticalSection renderLock, frameLock;
         juce::Image frames[2];                // frameLock guards which one is shown
         int front = -1;
-        juce::Rectangle<float> frontArea;
+        juce::Rectangle<float> frontArea;     // the view's bounds the frame was drawn for
         float frontScale = 0;
-        struct Job { RigPose pose; juce::Rectangle<float> area; float scale = 1; bool pending = false; } job;   // frameLock
+        struct Job { RigPose pose; juce::Rectangle<float> area; float scale = 1; seal::Scene scene; bool pending = false; } job;   // frameLock
+        juce::Image figure;                   // the figure alone (drawing thread / renderLock), composed into a frame
+        juce::Image floorLayer;               // the seal on the floor, renewed every fourth frame (it turns slowly)
+        juce::Image backdrop;                 // renderLock
+        float backdropScale = 0.0f;
+        seal::RuneAtlas runeAtlas { seal::pinkLight };
+        int frameCount = 0;
         std::atomic<double> renderMs { 0 };
         std::unique_ptr<Drawer> drawer;
 
@@ -117,6 +136,10 @@ namespace ember
         juce::Point<int> lastMouse;
         double lastTick = 0, lastActive = -1.0e9;
         float screenScale = 1;                // the screen's pixel density, from the last paint
+        bool sealStage = false;
+        int lastEaten = 0;
+        float sinceSwallow = 99.0f, heat = 0.0f;
+        double clock = 0;
         int currentHz = 60;
         bool compact = false, counted = false;
     };

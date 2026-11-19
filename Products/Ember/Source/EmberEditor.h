@@ -22,9 +22,10 @@ namespace ember
 {
     namespace look
     {
-        inline const juce::Colour accent { 0xffff3b1f };      // Glutrot (plan 2026-11-10)
-        inline const juce::Colour accentSoft { 0xffff7a4a };
-        inline const juce::Colour glow { 0xffffb21f };
+        // pink seal (Jakob 2026-11-19; was Glutrot 0xffff3b1f / glow 0xffffb21f)
+        inline const juce::Colour accent { 0xffff3a6e };
+        inline const juce::Colour accentSoft { 0xffff7aa0 };
+        inline const juce::Colour glow { 0xffffbed7 };
         inline constexpr int baseW = 900, baseH = 600;
     }
 
@@ -87,6 +88,33 @@ namespace ember
 
     class EmberPanel;
 
+    // EMBER's own look on top of the shared one: the "fire" action button (AUTO) burns pink like the seal
+    class EmberLookAndFeel final : public vocalypse::ui::VocalypseLookAndFeel
+    {
+    public:
+        void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& background,
+                                   bool highlighted, bool down) override;
+    };
+
+    // The window's part of the seal, on top of the controls (clicks pass through): runes running round the edge,
+    // a wave of pink light through the panels when Ember swallows an S, a small seal turning on the Amount knob.
+    // Repaints only those strips, so the controls underneath are not redrawn every frame.
+    class SealOverlay final : public juce::Component
+    {
+    public:
+        SealOverlay() { setInterceptsMouseClicks (false, false); }
+        void update (const seal::Scene& scene, bool simple, juce::Rectangle<float> knob, std::vector<juce::Rectangle<float>> plates);
+        void paint (juce::Graphics&) override;
+    private:
+        void repaintEdges (juce::Rectangle<float>, float width);
+        seal::Scene scene;
+        seal::RuneAtlas borderRunes { seal::pink }, sealRunes { seal::pinkLight };
+        bool simple = true;
+        int ticks = 0;
+        juce::Rectangle<float> knob;
+        std::vector<juce::Rectangle<float>> plates;
+    };
+
     class EmberEditor final : public juce::AudioProcessorEditor
     {
     public:
@@ -108,7 +136,7 @@ namespace ember
         static void applyLanguage (const juce::String& preference);
 
         EmberAudioProcessor& processor;
-        vocalypse::ui::VocalypseLookAndFeel lnf;
+        EmberLookAndFeel lnf;
         juce::SharedResourcePointer<UserSettings> settings;
         std::unique_ptr<EmberPanel> panel;
     };
@@ -154,6 +182,10 @@ namespace ember
         juce::TextButton presetBtn, saveBtn, slotA, slotB, slotCopy;
 
         LiveMascotView mascot;      // Ember as a live rig (2026-11-17); MascotView (frames) stays for its tests until step 6
+        SealOverlay sealOverlay;
+        juce::Image chamber;        // the back wall, drawn once per size
+        double sealClock = 0.0, lastTickS = 0.0;
+        std::vector<juce::Rectangle<float>> plates() const;
         ReductionMeter meter;
         BandDisplay display;
         DetectorMeter detector;

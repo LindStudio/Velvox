@@ -135,12 +135,12 @@ namespace ember
     }
 
     // ------------------------------------------------------------------ renderer
-    juce::AffineTransform RigRenderer::fitTransform (juce::Rectangle<float> area)
+    juce::AffineTransform RigRenderer::fitTransform (juce::Rectangle<float> area, float height, float feet)
     {
         // fit (prototype: fit): the figure is 86 % of the area's height (700 px of the picture), feet at the bottom
         const auto& rig = MascotRig::get();
-        const float s = area.getHeight() * 0.86f / 700.0f;
-        const float ox = area.getCentreX() - 512.0f * s, oy = area.getY() + area.getHeight() * 0.97f - (rig.feet.y + 8.0f) * s;
+        const float s = area.getHeight() * height / 700.0f;
+        const float ox = area.getCentreX() - 512.0f * s, oy = area.getY() + area.getHeight() * feet - (rig.feet.y + 8.0f) * s;
         return juce::AffineTransform::scale (s).translated (ox, oy);
     }
 
@@ -161,7 +161,7 @@ namespace ember
         const auto& rig = MascotRig::get();
         if (! rig.isValid() || area.isEmpty())
             return;
-        rigToArea = fitTransform (area);
+        rigToArea = fitTransform (area, fitHeight, fitFeet);
         const float s = rigToArea.mat00, ox = rigToArea.mat02, oy = rigToArea.mat12;
 
         const int w = std::max (1, juce::roundToInt (area.getWidth() * displayScale));

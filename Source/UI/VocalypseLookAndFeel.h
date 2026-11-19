@@ -4,7 +4,7 @@
 
 namespace vocalypse::ui
 {
-    class VocalypseLookAndFeel final : public juce::LookAndFeel_V4
+    class VocalypseLookAndFeel : public juce::LookAndFeel_V4
     {
     public:
         VocalypseLookAndFeel();
