@@ -26,12 +26,17 @@ namespace ember
         return vocalypse::i18n::tr (p.nameDe, p.nameEn);
     }
 
+    bool isSetting (const juce::String& id)
+    {
+        return id != pid::bypass && id != pid::listen;
+    }
+
     ParamValues capture (const juce::AudioProcessorValueTreeState& state)
     {
         ParamValues v;
         for (auto* p : state.processor.getParameters())
             if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
-                if (rp->getParameterID() != pid::bypass)
+                if (isSetting (rp->getParameterID()))
                     v[rp->getParameterID()] = rp->convertFrom0to1 (rp->getValue());
         return v;
     }
@@ -43,7 +48,7 @@ namespace ember
             if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
             {
                 const auto id = rp->getParameterID();
-                if (id == pid::bypass)
+                if (! isSetting (id))
                     continue;
                 const auto it = values.find (id);
                 all[id] = it != values.end() ? it->second : rp->convertFrom0to1 (rp->getDefaultValue());
