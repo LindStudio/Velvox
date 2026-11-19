@@ -85,7 +85,7 @@
 <ol>
   <li><strong>Einfügen:</strong> Lade EMBER als Insert auf deine Gesangs- oder Sprachspur.</li>
   <li><strong>AUTO:</strong> Spiel den Gesang ab und klicke auf <strong>AUTO</strong> (oder direkt auf Ember). Ember hört zu und stellt Frequenz, Threshold und Range für dich ein.</li>
-  <li><strong>Nachhören:</strong> Drück <strong>DELTA</strong>, um nur das Entfernte zu hören – das sollten ausschließlich Zischlaute sein. Passe bei Bedarf <strong>Amount</strong> an.</li>
+  <li><strong>Nachhören:</strong> Drück <strong>DELTA</strong>, um nur das Entfernte zu hören – das sollten ausschließlich S-Laute sein. Passe bei Bedarf <strong>Amount</strong> an.</li>
 </ol>
 
 <h2 id="simple">2. Ansicht SIMPLE</h2>
@@ -95,65 +95,68 @@
   <tr><td>Amount</td><td>Wie stark EMBER eingreift. 50 % entspricht genau dem, was Threshold und Range vorgeben, 100 % der doppelten Wirkung, 0 % schaltet die Bearbeitung ab.</td></tr>
   <tr><td>Stimmlage: TIEF / MITTEL / HOCH</td><td>Legt fest, wo der S-Bereich beginnt: ab 5 kHz (TIEF), 6,5 kHz (MITTEL) oder 8 kHz (HOCH).</td></tr>
   <tr><td>DELTA</td><td>Du hörst nur, was entfernt wird.</td></tr>
-  <tr><td>Gain-Reduction-Anzeige</td><td>Zeigt die aktuelle Absenkung von 0 bis 12 dB.</td></tr>
+  <tr><td>ABSENKUNG</td><td>Zeigt, wie viel leiser die S-Laute gerade werden (0 bis −12 dB, Gain Reduction).</td></tr>
 </table>
 
 <h2 id="advanced">3. Ansicht ADVANCED</h2>
 <p>ADVANCED gibt dir Zugriff auf alle Parameter.</p>
 <h3>Anzeigen</h3>
 <ul>
-  <li><strong>Spektrum:</strong> Der rot markierte S-Bereich zeigt, wo EMBER arbeitet. Zieh an seiner Kante, um die Frequenz einzustellen. Oben läuft der Verlauf der Absenkung mit.</li>
-  <li><strong>S-PEGEL</strong> (rechts): Pegel im S-Band. Die rote Linie ist der Threshold; du kannst sie mit der Maus verschieben. Ein grauer Balken bedeutet: Die Smart-Erkennung hört gerade keinen Zischlaut.</li>
+  <li><strong>Spektrum:</strong> Der rot markierte S-Bereich zeigt, wo EMBER arbeitet. Zieh an seiner roten Kante, um die Frequenz einzustellen (Shift = fein, Mausrad = Schritt). Die Achse zeigt 1 bis 20 kHz. Oben läuft der Verlauf der Absenkung mit.</li>
+  <li><strong>ABSENKUNG:</strong> Wie viel gerade weggenommen wird, in dB.</li>
+  <li><strong>S-PEGEL</strong> (rechts): Pegel im S-Bereich. Die rote Linie ist der Threshold; du kannst sie mit der Maus verschieben (Shift = fein, Mausrad = Schritt). Ein grauer Balken bedeutet: Die Smart-Erkennung hört gerade keinen S-Laut.</li>
 </ul>
 <h3>Regler und Schalter</h3>
 <table>
   <tr><th>Regler</th><th>Bereich</th><th>Funktion</th></tr>
   <tr><td>Frequenz</td><td>2–16 kHz</td><td>Untere Grenze des S-Bereichs.</td></tr>
-  <tr><td>Threshold</td><td>−60 bis 0 dB</td><td>Ab diesem Pegel im S-Band beginnt die Absenkung.</td></tr>
+  <tr><td>Threshold</td><td>−60 bis 0 dB</td><td>Ab diesem Pegel im S-Bereich beginnt die Absenkung.</td></tr>
   <tr><td>Range</td><td>0–24 dB</td><td>Maximale Absenkung.</td></tr>
   <tr><td>Amount</td><td>0–100 %</td><td>Stärke der Wirkung: 50 % = was Threshold und Range einstellen, 100 % = doppelt, 0 % = aus.</td></tr>
-  <tr><td>Attack</td><td>0,1–20 ms</td><td>Wie schnell EMBER auf einen Zischlaut reagiert.</td></tr>
+  <tr><td>Attack</td><td>0,1–20 ms</td><td>Wie schnell EMBER auf einen S-Laut reagiert.</td></tr>
   <tr><td>Release</td><td>10–400 ms</td><td>Wie schnell die Absenkung danach wieder zurückgeht.</td></tr>
-  <tr><td>Lookahead</td><td>0–5 ms</td><td>Wie weit EMBER vorausschaut, um Zischlaute schon an ihrem Anfang zu erfassen. Die Latenz bleibt dabei immer 5 ms.</td></tr>
+  <tr><td>Lookahead</td><td>0–5 ms</td><td>Wie weit EMBER vorausschaut, um S-Laute schon an ihrem Anfang zu erfassen. Die Latenz bleibt dabei immer 5 ms.</td></tr>
   <tr><td>Mix</td><td>0–100 %</td><td>Mischung aus bearbeitetem und unbearbeitetem Signal.</td></tr>
   <tr><td>Output</td><td>±12 dB</td><td>Ausgangspegel.</td></tr>
   <tr><td>Modus: Split</td><td></td><td>Nur der Bereich oberhalb der Frequenz wird leiser (dynamisches High-Shelf).</td></tr>
   <tr><td>Modus: Breitband</td><td></td><td>Die ganze Stimme wird kurz abgesenkt.</td></tr>
-  <tr><td>Erkennung: Smart</td><td></td><td>Standard und empfohlen. Reagiert nur, wenn wirklich ein Zischlaut erklingt (siehe <a href="#smart">Abschnitt 5</a>).</td></tr>
+  <tr><td>Erkennung: Smart</td><td></td><td>Standard und empfohlen. Reagiert nur, wenn wirklich ein S-Laut erklingt (siehe <a href="#smart">Abschnitt 5</a>).</td></tr>
   <tr><td>Erkennung: Relativ</td><td></td><td>Das S wird im Verhältnis zur Lautheit der Stimme gemessen – leise und laute Stellen werden gleich behandelt.</td></tr>
   <tr><td>Erkennung: Absolut</td><td></td><td>Fester Pegel, klassisches Verhalten.</td></tr>
   <tr><td>Abhören: Aus</td><td></td><td>Normales Ausgangssignal.</td></tr>
-  <tr><td>Abhören: S-Band</td><td></td><td>Du hörst nur das S-Band, also den Bereich, den EMBER überwacht.</td></tr>
+  <tr><td>Abhören: S-Bereich</td><td></td><td>Du hörst nur den S-Bereich, also den Bereich, den EMBER überwacht.</td></tr>
   <tr><td>Abhören: Delta</td><td></td><td>Du hörst nur, was entfernt wird.</td></tr>
 </table>
 
 <h2 id="auto">4. AUTO</h2>
 <p>Spiel den Gesang ab und klicke auf <strong>AUTO</strong> oder auf Ember.</p>
 <ul>
-  <li>Ember hört etwa 12 Sekunden Gesang zu (Pausen werden übersprungen, maximal 30 Sekunden). Ember hält dabei die Hand ans Ohr. Mit <strong>DONE</strong> kannst du das Zuhören nach frühestens 3 Sekunden beenden.</li>
+  <li>Ember hört etwa 12 Sekunden Gesang zu (Pausen werden übersprungen, maximal 30 Sekunden). Ember hält dabei die Hand ans Ohr. Er ist von selbst fertig – auch wenn du die Wiedergabe nach mindestens 3 Sekunden Gesang anhältst. Ein Klick auf <strong>ABBRECHEN</strong> bricht ab. Kommt kein Ton an, sagt Ember dir, dass du Play drücken sollst.</li>
   <li>Danach probiert EMBER Einstellungen aus, indem es die Aufnahme durchrechnet:
     <ul>
       <li>Die Frequenz wird knapp unter das stärkste S gelegt (zwischen 5 und 9,5 kHz).</li>
-      <li>Threshold und Range werden so gesetzt, dass Zischlaute je nach Schärfe um 2,5 bis 4,5 dB leiser werden.</li>
+      <li>Threshold und Range werden so gesetzt, dass S-Laute je nach Schärfe um 2,5 bis 4,5 dB leiser werden.</li>
       <li>Vokale bleiben unberührt (höchstens 0,1 dB).</li>
       <li>Release wird auf 35 ms gesetzt.</li>
+      <li>Alles andere bleibt, wie du es eingestellt hast (Modus, Erkennung, Amount, Attack, Lookahead, Mix, Output) – AUTO misst damit. Nur ein Amount unter 25 % wird auf 50 % gesetzt.</li>
     </ul>
   </li>
+  <li>Deine Einstellung von vorher liegt danach auf <strong>A</strong>, das AUTO-Ergebnis auf <strong>B</strong>. Klick auf A, um AUTO zurückzunehmen, oder vergleiche beide.</li>
 </ul>
 <p>Das Ergebnis ist bewusst dezent. Wenn du mehr Wirkung möchtest, erhöhe Amount.</p>
-<p>Findet EMBER zu wenige Zischlaute, erscheint ein Hinweis: Spiel dann eine Stelle mit vielen S-, Z- oder Sch-Lauten ab und starte AUTO erneut.</p>
+<p>Findet EMBER zu wenige S-Laute, erscheint ein Hinweis: Spiel dann eine Stelle mit vielen S-, Z- oder Sch-Lauten ab und starte AUTO erneut.</p>
 
 <h2 id="smart">5. Smart-Erkennung einfach erklärt</h2>
 <p>Ein klassischer De-Esser reagiert auf alles, was im Höhenbereich laut ist. Das trifft auch helle Vokale, Luft in der Stimme und Atemgeräusche – die Stimme klingt dann dumpf oder lispelt.</p>
-<p>Die Smart-Erkennung vergleicht deshalb das S-Band mit dem Körper der Stimme (250 Hz bis 3 kHz). Nur wenn das S-Band im Verhältnis deutlich hervorsticht, handelt es sich um einen echten Zischlaut, und EMBER greift ein. Helle Vokale, Luft und Atmer bleiben dadurch unberührt.</p>
-<p>In der S-LEVEL-Anzeige siehst du das direkt: Ist der Balken grau, hört die Smart-Erkennung gerade keinen Zischlaut.</p>
+<p>Die Smart-Erkennung vergleicht deshalb den S-Bereich mit dem Körper der Stimme (250 Hz bis 3 kHz). Nur wenn der S-Bereich im Verhältnis deutlich hervorsticht, handelt es sich um einen echten S-Laut, und EMBER greift ein. Helle Vokale, Luft und Atmer bleiben dadurch unberührt.</p>
+<p>In der S-LEVEL-Anzeige siehst du das direkt: Ist der Balken grau, hört die Smart-Erkennung gerade keinen S-Laut.</p>
 
 <h2 id="launen">6. Embers Launen</h2>
 <table>
   <tr><th>Ember …</th><th>bedeutet</th></tr>
   <tr><td>steht ruhig da</td><td>Kein Signal.</td></tr>
   <tr><td>tanzt</td><td>Es wird gesungen oder gesprochen.</td></tr>
-  <tr><td>schnippt beim Tanzen, ein Funke und ein „S“ fliegen weg</td><td>EMBER senkt gerade einen Zischlaut ab. Je stärker die Absenkung, desto kräftiger der Funke.</td></tr>
+  <tr><td>schnippt beim Tanzen, ein Funke und ein „S“ fliegen weg</td><td>EMBER senkt gerade einen S-Laut ab. Je stärker die Absenkung, desto kräftiger der Funke.</td></tr>
   <tr><td>sagt „Klingt gelispelt!“</td><td>Die Absenkung liegt eine Zeit lang über 9 dB. Die Stimme kann lispeln – nimm Range oder Amount zurück.</td></tr>
   <tr><td>schläft</td><td>Bypass ist aktiv.</td></tr>
   <tr><td>hält den Kopf schief und lauscht</td><td>AUTO hört zu.</td></tr>
@@ -181,7 +184,7 @@
 <ul>
   <li>Starte mit <strong>AUTO</strong> und arbeite von dort aus weiter.</li>
   <li>3 bis 6 dB Range klingen natürlich. Mehr kann zum Lispeln führen.</li>
-  <li>Nutze <strong>DELTA</strong>: Du solltest nur Zischlaute hören. Hörst du Vokale oder Teile von Wörtern, nimm Range oder Amount zurück oder erhöhe die Frequenz.</li>
+  <li>Nutze <strong>DELTA</strong>: Du solltest nur S-Laute hören. Hörst du Vokale oder Teile von Wörtern, nimm Range oder Amount zurück oder erhöhe die Frequenz.</li>
   <li>Für Sprache probier den Modus <strong>Breitband</strong>.</li>
   <li>Setze EMBER hinter EQ und Kompressor, wenn diese die Höhen anheben, und vor Hall und Delay.</li>
 </ul>
