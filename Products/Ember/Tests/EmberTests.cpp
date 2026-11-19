@@ -1692,6 +1692,102 @@ namespace
     }
 }
 
+double emberThreadCpuMs();
+double emberProcessCpuMs();
+
+// Step 5 of FIGUR_ANIMIEREN.md: CPU with several instances. N plugins process a looped take in real time on one audio
+// thread while their editors are open on the desktop (live Ember at 60 fps); CPU time is taken per thread, so audio
+// and drawing (message thread, shared by all editors in a host) are reported separately.
+static int bench (int seconds)
+{
+    struct AudioLoop final : juce::Thread
+    {
+        std::vector<EmberAudioProcessor*> procs;
+        std::vector<float> src;
+        std::atomic<double> cpuMs { 0 }, worstBlockMs { 0 };
+        std::atomic<int> blocks { 0 };
+        AudioLoop() : juce::Thread ("bench audio") {}
+        void run() override
+        {
+            const int n = 256;
+            juce::AudioBuffer<float> buf (2, n);
+            juce::MidiBuffer midi;
+            size_t pos = 0;
+            const double blockMs = 1000.0 * n / 48000.0, c0 = emberThreadCpuMs();
+            double next = juce::Time::getMillisecondCounterHiRes();
+            while (! threadShouldExit())
+            {
+                const auto w0 = juce::Time::getMillisecondCounterHiRes();
+                for (auto* p : procs)
+                {
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float x = src[(pos + (size_t) i) % src.size()];
+                        buf.setSample (0, i, x);
+                        buf.setSample (1, i, x);
+                    }
+                    p->processBlock (buf, midi);
+                }
+                worstBlockMs = std::max (worstBlockMs.load(), juce::Time::getMillisecondCounterHiRes() - w0);
+                pos = (pos + n) % src.size();
+                ++blocks;
+                cpuMs = emberThreadCpuMs() - c0;
+                next += blockMs;
+                const double wait = next - juce::Time::getMillisecondCounterHiRes();
+                if (wait > 1.0)
+                    juce::Thread::sleep ((int) wait);
+            }
+        }
+    };
+
+    UserSettings::useFileForTests (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_bench.settings"));
+    const auto take = makeTake (48000.0, 10.0);
+    std::printf ("Ember bench: %d s per run, 48 kHz / 256, editors open (live Ember)\n", seconds);
+    std::printf ("  scale  inst | audio %% core  worst block | host UI thread %% core          | whole process %% core\n");
+    for (bool inFront : { true, false })
+    for (float scale : { 1.0f, 2.0f })
+    {
+        LiveMascotView::alwaysInFront = inFront;
+        if (scale == 1.0f)
+            std::printf (inFront ? "  -- cursor on the plugin (60 fps for a single window)\n" : "  -- cursor elsewhere (30 fps)\n");
+        juce::Desktop::getInstance().setGlobalScaleFactor (scale);
+        for (int count : { 1, 2, 4, 8 })
+        {
+            std::vector<std::unique_ptr<EmberAudioProcessor>> procs;
+            std::vector<std::unique_ptr<juce::AudioProcessorEditor>> eds;
+            AudioLoop loop;
+            loop.src = take.x;
+            for (int i = 0; i < count; ++i)
+            {
+                procs.push_back (std::make_unique<EmberAudioProcessor>());
+                procs.back()->setPlayConfigDetails (2, 2, 48000.0, 256);
+                procs.back()->prepareToPlay (48000.0, 256);
+                eds.emplace_back (procs.back()->createEditor());
+                auto& ed = *eds.back();
+                ed.setTopLeftPosition (40 + 30 * i, 40 + 30 * i);
+                ed.addToDesktop (juce::ComponentPeer::windowHasTitleBar);
+                ed.setVisible (true);
+                loop.procs.push_back (procs.back().get());
+            }
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (1500);   // settle (first decode, window creation)
+            loop.startThread (juce::Thread::Priority::highest);
+            const double m0 = emberThreadCpuMs(), p0 = emberProcessCpuMs(), w0 = juce::Time::getMillisecondCounterHiRes();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (seconds * 1000);
+            const double wall = juce::Time::getMillisecondCounterHiRes() - w0, ui = emberThreadCpuMs() - m0, all = emberProcessCpuMs() - p0;
+            loop.stopThread (2000);
+            const double audioWall = loop.blocks.load() * 256 * 1000.0 / 48000.0;
+            std::printf ("  %4.0fx  %4d | %7.2f %%    %6.2f ms   | %6.1f %% (%4.1f %% per editor) | %6.1f %%\n", scale, count,
+                         100.0 * loop.cpuMs.load() / std::max (1.0, audioWall), loop.worstBlockMs.load(),
+                         100.0 * ui / wall, 100.0 * ui / wall / count, 100.0 * all / wall);
+            eds.clear();
+            for (auto& p : procs) p->releaseResources();
+        }
+    }
+    juce::Desktop::getInstance().setGlobalScaleFactor (1.0f);
+    LiveMascotView::alwaysInFront = false;
+    return 0;
+}
+
 int main (int argc, char** argv)
 {
     std::setvbuf (stdout, nullptr, _IONBF, 0);   // progress stays visible even if a test crashes
@@ -1706,6 +1802,8 @@ int main (int argc, char** argv)
         return marketing (juce::File (args[1]), juce::File (args[2]));
     if (args.size() >= 2 && args[0] == "--rig")
         return rigPictures (juce::File (args[1]));
+    if (args.size() >= 1 && args[0] == "--bench")
+        return bench (args.size() >= 2 ? juce::jmax (2, args[1].getIntValue()) : 8);
     if (args.size() >= 2 && args[0] == "--mascot-loops")
         return mascotLoops (juce::File (args[1]));
 

@@ -78,7 +78,9 @@ namespace ember
                 if (png == nullptr)
                     return;
                 Part part;
-                part.image = juce::ImageFileFormat::loadFrom (png, (size_t) n).convertedToFormat (juce::Image::ARGB);
+                // in memory, not a Direct2D image: the parts are read from the drawing thread
+                part.image = juce::SoftwareImageType().convert (juce::ImageFileFormat::loadFrom (png, (size_t) n))
+                                 .convertedToFormat (juce::Image::ARGB);
                 part.box = { (float) p.value["x"], (float) p.value["y"], (float) p.value["w"], (float) p.value["h"] };
                 parts[p.name.toString()] = part;
             }
@@ -133,25 +135,43 @@ namespace ember
     }
 
     // ------------------------------------------------------------------ renderer
+    juce::AffineTransform RigRenderer::fitTransform (juce::Rectangle<float> area)
+    {
+        // fit (prototype: fit): the figure is 86 % of the area's height (700 px of the picture), feet at the bottom
+        const auto& rig = MascotRig::get();
+        const float s = area.getHeight() * 0.86f / 700.0f;
+        const float ox = area.getCentreX() - 512.0f * s, oy = area.getY() + area.getHeight() * 0.97f - (rig.feet.y + 8.0f) * s;
+        return juce::AffineTransform::scale (s).translated (ox, oy);
+    }
+
     void RigRenderer::render (juce::Graphics& g, juce::Rectangle<float> area, const RigPose& pose, float displayScale)
+    {
+        if (! MascotRig::get().isValid() || area.isEmpty())
+            return;
+        renderInto (ring, area, pose, displayScale);
+        const auto t2 = juce::Time::getMillisecondCounterHiRes();
+        juce::Graphics::ScopedSaveState keep (g);
+        g.setOpacity (1.0f);      // images take the opacity of the last colour (the floor shadow's 28 % made him see-through)
+        g.drawImage (ring, area, juce::RectanglePlacement::stretchToFit);   // outline + figure, composed by outline()
+        lastCompositeMs = juce::Time::getMillisecondCounterHiRes() - t2;
+    }
+
+    void RigRenderer::renderInto (juce::Image& target, juce::Rectangle<float> area, const RigPose& pose, float displayScale)
     {
         const auto& rig = MascotRig::get();
         if (! rig.isValid() || area.isEmpty())
             return;
-        // fit (prototype: fit): the figure is 86 % of the area's height (700 px of the picture), feet at the bottom
-        const float s = area.getHeight() * 0.86f / 700.0f;
-        const float ox = area.getCentreX() - 512.0f * s, oy = area.getY() + area.getHeight() * 0.97f - (rig.feet.y + 8.0f) * s;
-        rigToArea = juce::AffineTransform::scale (s).translated (ox, oy);
+        rigToArea = fitTransform (area);
+        const float s = rigToArea.mat00, ox = rigToArea.mat02, oy = rigToArea.mat12;
 
         const int w = std::max (1, juce::roundToInt (area.getWidth() * displayScale));
         const int h = std::max (1, juce::roundToInt (area.getHeight() * displayScale));
         const auto t0 = juce::Time::getMillisecondCounterHiRes();
+        // in memory, not on the GPU: the outline reads the figure's pixels every frame
+        if (target.getWidth() != w || target.getHeight() != h)
+            target = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
         if (figure.getWidth() != w || figure.getHeight() != h)
-        {
-            // in memory, not on the GPU: the outline reads the figure's pixels every frame
             figure = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
-            ring = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
-        }
         else
             figure.clear (figure.getBounds());
         {
@@ -170,13 +190,8 @@ namespace ember
             pixels = nullptr;
         }
         const auto t1 = juce::Time::getMillisecondCounterHiRes();
-        outline (figure, outlineWidth * s * displayScale, juce::Colour (outlineColour));
-        const auto t2 = juce::Time::getMillisecondCounterHiRes();
-        juce::Graphics::ScopedSaveState keep (g);
-        g.setOpacity (1.0f);      // images take the opacity of the last colour (the floor shadow's 28 % made him see-through)
-        g.drawImage (ring, area, juce::RectanglePlacement::stretchToFit);   // outline + figure, composed by outline()
-        const auto t3 = juce::Time::getMillisecondCounterHiRes();
-        lastDrawMs = t1 - t0; lastOutlineMs = t2 - t1; lastCompositeMs = t3 - t2;
+        outline (figure, target, outlineWidth * s * displayScale, juce::Colour (outlineColour));
+        lastDrawMs = t1 - t0; lastOutlineMs = juce::Time::getMillisecondCounterHiRes() - t1;
     }
 
     juce::AffineTransform RigRenderer::bodyTransform (const RigPose& pose)
@@ -244,14 +259,90 @@ namespace ember
             const auto& hb = rig.part ("head").box;
             drawNeckBand (g, "head", neck0, hb.getBottom(), pose);
         }
-        juce::Graphics::ScopedSaveState face (g);
-        g.addTransform (headT);
         if (! headMoves)
             drawPart ("head", headTransform (pose));
         const auto te = juce::Time::getMillisecondCounterHiRes();
-        drawEyes (g, pose);
-        drawMouth (g, pose);
+        drawFace (pose);
         lastFaceMs = juce::Time::getMillisecondCounterHiRes() - te;
+    }
+
+    // ------------------------------------------------------------------ the face, cached
+    // Everything drawEyes / drawMouth can touch, in the picture's space (brows move up to ~15 px and tilt; generous).
+    juce::Rectangle<float> RigRenderer::faceBox()
+    {
+        const auto& rig = MascotRig::get();
+        juce::Rectangle<float> box;
+        auto add = [&box] (juce::Rectangle<float> r) { box = box.isEmpty() ? r : box.getUnion (r); };
+        for (const auto& e : rig.eyes)
+        {
+            if (e.x.empty())
+                continue;
+            float top = 1.0e9f, bot = -1.0e9f;
+            for (size_t k = 0; k < e.x.size(); ++k)
+            {
+                top = std::min (top, e.top[k] - (k < e.up.size() ? e.up[k] : 0.0f));
+                bot = std::max (bot, e.bot[k] + (k < e.low.size() ? e.low[k] : 0.0f));
+            }
+            add ({ e.x.front(), top, e.x.back() - e.x.front(), bot - top });
+            for (const auto* pts : { &e.browUp, &e.browLow, &e.tail })
+                for (auto q : *pts)
+                    add ({ q.x, q.y, 1.0f, 1.0f });
+        }
+        if (! rig.smile.empty())
+        {
+            const float x0 = rig.smileX0, x1 = rig.smileX0 + (float) rig.smile.size() * rig.smileStep;
+            const auto mm = std::minmax_element (rig.smile.begin(), rig.smile.end());
+            add ({ x0, *mm.first, x1 - x0, *mm.second - *mm.first + 30.0f * 1.25f * 1.6f });   // open mouth + tongue
+        }
+        return box.expanded (40.0f);
+    }
+
+    RigRenderer::FaceKey RigRenderer::faceKey (const RigPose& p, float scale)
+    {
+        FaceKey k;
+        const float v[9] = { p.lid, p.lowLid, p.lookX, p.lookY, p.pupil, p.mouth, p.mouthW, p.browY, p.browTilt };
+        std::copy (std::begin (v), std::end (v), k.v);
+        k.scale = scale;
+        k.valid = true;
+        return k;
+    }
+
+    bool RigRenderer::same (const FaceKey& a, const FaceKey& b)
+    {
+        if (! a.valid || ! b.valid || a.scale != b.scale)
+            return false;
+        // under ~1/20 px on a 2x screen: not visible
+        constexpr float tol[9] = { 0.002f, 0.002f, 0.003f, 0.004f, 0.002f, 0.002f, 0.002f, 0.03f, 0.03f };
+        for (int i = 0; i < 9; ++i)
+            if (std::abs (a.v[i] - b.v[i]) > tol[i])
+                return false;
+        return true;
+    }
+
+    void RigRenderer::drawFace (const RigPose& pose)
+    {
+        static const auto box = faceBox();
+        const float K = std::sqrt (std::abs (base.getDeterminant()));   // figure pixels per picture px
+        const auto key = faceKey (pose, K);
+        if (! same (key, faceFor))
+        {
+            const int w = std::max (1, (int) std::ceil (box.getWidth() * K)), h = std::max (1, (int) std::ceil (box.getHeight() * K));
+            if (faceImage.getWidth() != w || faceImage.getHeight() != h)
+                faceImage = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
+            else
+                faceImage.clear (faceImage.getBounds());
+            juce::Graphics fg (faceImage);
+            fg.addTransform (juce::AffineTransform::translation (-box.getX(), -box.getY()).scaled (K));
+            drawEyes (fg, pose);
+            drawMouth (fg, pose);
+            faceFor = key;
+        }
+        // onto the head, like a part
+        const juce::Point<float> a = box.getTopLeft(), b = box.getTopRight(), c = box.getBottomRight(), d = box.getBottomLeft();
+        auto src = [&] (juce::Point<float> q) { return (q - a) * K; };
+        const auto headSpace = headTransform (pose);
+        raster (faceImage, headSpace, src (a), src (b), src (c), a, b, c);
+        raster (faceImage, headSpace, src (a), src (c), src (d), a, c, d);
     }
 
     const juce::Image& RigRenderer::scaled (const juce::String& name)
@@ -597,7 +688,7 @@ namespace ember
     // pixels, only inside the figure's box + the radius), the outline where that distance is under radiusPx,
     // anti-aliased over one pixel. In the same pass the figure goes over it, so one picture goes to the screen.
     // (2026-11-17: the disc of taps cost 12 ms on a 2x screen.)
-    void RigRenderer::outline (const juce::Image& fig, float radiusPx, juce::Colour colour)
+    void RigRenderer::outline (const juce::Image& fig, juce::Image& target, float radiusPx, juce::Colour colour)
     {
         const int w = fig.getWidth(), h = fig.getHeight();
         const juce::Image::BitmapData src (fig, juce::Image::BitmapData::readOnly);
@@ -612,7 +703,7 @@ namespace ember
                     bx0 = std::min (bx0, x); bx1 = std::max (bx1, x); by0 = std::min (by0, y); by1 = std::max (by1, y);
                 }
         }
-        const juce::Image::BitmapData dst (ring, juce::Image::BitmapData::writeOnly);
+        const juce::Image::BitmapData dst (target, juce::Image::BitmapData::writeOnly);
         for (int y = 0; y < h; ++y)
             std::memset (dst.getLinePointer (y), 0, (size_t) w * sizeof (juce::PixelARGB));
         if (bx1 < 0)

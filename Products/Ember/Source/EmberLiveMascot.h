@@ -85,6 +85,7 @@ namespace ember
 
         LiveBrain& getBrain() noexcept { return brain; }
         void stepForTest (float dt) { tick (dt); }
+        static inline std::atomic<bool> alwaysInFront { false };   // EmberTests --bench: as if the cursor were on him
 
     private:
         void timerCallback() override;
@@ -93,13 +94,30 @@ namespace ember
         void paintEffects (juce::Graphics&);
         void paintBubble (juce::Graphics&);
 
+        // Drawing the figure costs 3-15 ms a frame; on the message thread (the host's whole UI) that made the DAW
+        // stutter with two or three windows open (bench 2026-11-19). The figure is drawn on a thread of its own into
+        // one of two images; paint() only puts the newest finished one on the screen.
+        void renderFrame (const RigPose&, juce::Rectangle<float> area, float scale);   // any thread
+        void updateRate();
+        struct Drawer;
+
         LiveBrain brain;
-        RigRenderer renderer;
+        RigRenderer renderer;                 // only under renderLock
+        juce::CriticalSection renderLock, frameLock;
+        juce::Image frames[2];                // frameLock guards which one is shown
+        int front = -1;
+        juce::Rectangle<float> frontArea;
+        float frontScale = 0;
+        struct Job { RigPose pose; juce::Rectangle<float> area; float scale = 1; bool pending = false; } job;   // frameLock
+        std::atomic<double> renderMs { 0 };
+        std::unique_ptr<Drawer> drawer;
+
         MascotInput input;
         juce::String bubble;
         juce::Point<int> lastMouse;
-        double lastTick = 0, frameMs = 0;
+        double lastTick = 0, lastActive = -1.0e9;
+        float screenScale = 1;                // the screen's pixel density, from the last paint
         int currentHz = 60;
-        bool compact = false;
+        bool compact = false, counted = false;
     };
 }

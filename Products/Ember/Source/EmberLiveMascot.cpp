@@ -349,14 +349,91 @@ namespace ember
     }
 
     // ------------------------------------------------------------------ view
+    namespace
+    {
+        std::atomic<int> showingViews { 0 };   // Ember windows open in this process (all instances in a host)
+    }
+
+    struct LiveMascotView::Drawer final : juce::Thread
+    {
+        explicit Drawer (LiveMascotView& v) : juce::Thread ("Ember drawing"), view (v) {}
+        void run() override
+        {
+            while (! threadShouldExit())
+            {
+                wake.wait (200);
+                if (threadShouldExit())
+                    break;
+                Job j;
+                {
+                    const juce::ScopedLock sl (view.frameLock);
+                    j = view.job;
+                    view.job.pending = false;
+                }
+                if (j.pending)
+                    view.renderFrame (j.pose, j.area, j.scale);
+            }
+        }
+        LiveMascotView& view;
+        juce::WaitableEvent wake;
+    };
+
     LiveMascotView::LiveMascotView()
     {
         setOpaque (false);
+        MascotRig::get();      // loaded here, on the message thread, before the drawing thread reads it
         lastTick = juce::Time::getMillisecondCounterHiRes();
+        drawer = std::make_unique<Drawer> (*this);
+        drawer->startThread (juce::Thread::Priority::normal);
         startTimerHz (60);
     }
 
-    LiveMascotView::~LiveMascotView() { stopTimer(); }
+    LiveMascotView::~LiveMascotView()
+    {
+        stopTimer();
+        drawer->signalThreadShouldExit();
+        drawer->wake.signal();
+        drawer->stopThread (2000);
+        if (counted)
+            --showingViews;
+    }
+
+    void LiveMascotView::renderFrame (const RigPose& pose, juce::Rectangle<float> area, float scale)
+    {
+        const juce::ScopedLock rl (renderLock);
+        int back;
+        {
+            const juce::ScopedLock fl (frameLock);
+            back = front == 0 ? 1 : 0;       // never the one paint() may be showing
+        }
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
+        renderer.renderInto (frames[back], area, pose, scale);
+        const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+        renderMs = renderMs.load() == 0 ? ms : renderMs.load() * 0.9 + ms * 0.1;
+        const juce::ScopedLock fl (frameLock);
+        front = back;
+        frontArea = area;
+        frontScale = scale;
+    }
+
+    // 60 frames a second while he is the one being looked at; 30 when the host's window is not in front, the cursor
+    // has been away from the plugin for a few seconds, several Ember windows are open, or this machine needs more
+    // than 14 ms a frame (Jakob 2026-11-19: ok)
+    void LiveMascotView::updateRate()
+    {
+        const double now = juce::Time::getMillisecondCounterHiRes();
+        auto* top = getTopLevelComponent();
+        const bool mouseIn = top != nullptr && top->getLocalBounds().contains (top->getMouseXYRelative());
+        const bool focused = top != nullptr && top->getPeer() != nullptr && top->getPeer()->isFocused();
+        if (alwaysInFront.load() || (juce::Process::isForegroundProcess() && (mouseIn || focused)))
+            lastActive = now;
+        const bool active = now - lastActive < 3000.0;
+        const double ms = renderMs.load();
+        int hz = ms > 14.0 ? 30 : (ms < 9.0 ? 60 : currentHz);
+        if (! active || showingViews.load() > 1)
+            hz = 30;
+        if (hz != currentHz) { currentHz = hz; startTimerHz (hz); }
+    }
 
     void LiveMascotView::setBubble (const juce::String& text)
     {
@@ -379,15 +456,28 @@ namespace ember
         const double now = juce::Time::getMillisecondCounterHiRes();
         const float dt = (float) ((now - lastTick) * 0.001);
         lastTick = now;
-        if (! isShowing())
+        const bool showing = isShowing();
+        if (showing != counted)
+        {
+            counted = showing;
+            showing ? ++showingViews : --showingViews;
+        }
+        if (! showing)
             return;
+        updateRate();
         // he looks at the cursor (or the knob being turned) when it moves anywhere in the window
+        const auto toArea = RigRenderer::fitTransform (stageArea());
         const auto mouse = getMouseXYRelative();
         if (mouse != lastMouse && getTopLevelComponent() != nullptr
             && getTopLevelComponent()->getLocalBounds().contains (getTopLevelComponent()->getLocalPoint (this, mouse)))
-            brain.lookAt (juce::Point<float> ((float) mouse.x, (float) mouse.y).transformedBy (renderer.getRigToArea().inverted()), 3.0f);
+            brain.lookAt (juce::Point<float> ((float) mouse.x, (float) mouse.y).transformedBy (toArea.inverted()), 3.0f);
         lastMouse = mouse;
         tick (dt);
+        {
+            const juce::ScopedLock fl (frameLock);
+            job = { brain.pose(), stageArea(), screenScale, true };
+        }
+        drawer->wake.signal();
         repaint();
     }
 
@@ -400,6 +490,8 @@ namespace ember
     void LiveMascotView::paint (juce::Graphics& g)
     {
         const auto area = stageArea();
+        if (area.isEmpty() || ! MascotRig::get().isValid())
+            return;
         // drawn at the screen's real pixel density (Windows 125 / 150 / 200 %, editor zoom): he was drawn at 1x and
         // the screen scaled him up, which looked pixelated (Jakob 2026-11-17)
         float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
@@ -408,19 +500,33 @@ namespace ember
         // the floor shadow
         const auto pose = brain.pose();
         {
-            const auto feet = juce::Point<float> (512.0f, 859.0f).transformedBy (renderer.getRigToArea());
+            const auto feet = juce::Point<float> (512.0f, 859.0f).transformedBy (RigRenderer::fitTransform (area));
             const float up = -pose.bob, k = area.getHeight() * 0.86f / 700.0f;
             const float w = 175.0f * k * (1.0f + juce::jlimit (-0.05f, 0.06f, pose.squash)) * (1.0f - std::min (0.3f, up / 500.0f));
             g.setColour (juce::Colours::black.withAlpha (0.28f - std::min (0.15f, up / 1000.0f)));
-            if (! renderer.getRigToArea().isIdentity())
-                g.fillEllipse (feet.x - w, feet.y - 22.0f * k, 2.0f * w, 44.0f * k);
+            g.fillEllipse (feet.x - w, feet.y - 22.0f * k, 2.0f * w, 44.0f * k);
         }
-        const auto t0 = juce::Time::getMillisecondCounterHiRes();
-        renderer.render (g, area, pose, scale);
-        // a slow machine / huge screen: 30 frames a second instead of stuttering at 60
-        frameMs = frameMs * 0.9 + (juce::Time::getMillisecondCounterHiRes() - t0) * 0.1;
-        const int hz = frameMs > 14.0 ? 30 : (frameMs < 9.0 ? 60 : currentHz);
-        if (hz != currentHz) { currentHz = hz; startTimerHz (hz); }
+        // off screen (snapshots, tests) or nothing fitting drawn yet (first frame, new size, other screen): drawn here
+        // and now; otherwise the drawing thread's newest frame
+        const bool onScreen = getPeer() != nullptr;
+        if (onScreen)
+            screenScale = scale;
+        bool fits;
+        {
+            const juce::ScopedLock fl (frameLock);
+            fits = front >= 0 && frontArea == area && frontScale == scale;
+        }
+        if (! onScreen || ! fits)
+            renderFrame (pose, area, scale);
+        {
+            const juce::ScopedLock fl (frameLock);
+            if (front >= 0)
+            {
+                juce::Graphics::ScopedSaveState keep (g);
+                g.setOpacity (1.0f);   // images take the opacity of the last colour (the shadow's 28 % made him see-through)
+                g.drawImage (frames[front], frontArea, juce::RectanglePlacement::stretchToFit);
+            }
+        }
         paintEffects (g);
         paintBubble (g);
     }
@@ -428,7 +534,7 @@ namespace ember
     // the S, notes, Z, steam, crumbs, sound rings (prototype: drawEats / drawFx / drawRings)
     void LiveMascotView::paintEffects (juce::Graphics& g)
     {
-        const auto toArea = renderer.getRigToArea();
+        const auto toArea = RigRenderer::fitTransform (stageArea());
         const float k = std::sqrt (std::abs (toArea.getDeterminant()));
         const auto pose = brain.pose();
         const auto mouth = mouthRest.transformedBy (RigRenderer::headTransform (pose));
@@ -506,7 +612,7 @@ namespace ember
         if (text.isEmpty())
             return;
         const auto anchor = juce::Point<float> (700.0f, 205.0f).transformedBy (RigRenderer::headTransform (brain.pose()))
-                                                               .transformedBy (renderer.getRigToArea());
+                                                               .transformedBy (RigRenderer::fitTransform (stageArea()));
         const float fontH = juce::jlimit (11.0f, 15.0f, getHeight() * 0.04f);
         const juce::Font font (juce::FontOptions (fontH, juce::Font::bold));
         juce::GlyphArrangement ga;

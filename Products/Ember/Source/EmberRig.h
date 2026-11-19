@@ -71,6 +71,14 @@ namespace ember
         // Draws the figure for this pose into area (the figure is fitted to the area's height, feet at the bottom).
         void render (juce::Graphics&, juce::Rectangle<float> area, const RigPose&, float displayScale = 1.0f);
 
+        // The same picture, only into an image of area x displayScale pixels (figure + outline, premultiplied), to be
+        // drawn into area later. Touches no Graphics of the screen, so it may run on a thread of its own (one
+        // renderer per thread). The rig must be loaded first (MascotRig::get() on the message thread).
+        void renderInto (juce::Image& target, juce::Rectangle<float> area, const RigPose&, float displayScale);
+
+        // picture -> area: where the figure sits in an area (the same as getRigToArea() after a render)
+        static juce::AffineTransform fitTransform (juce::Rectangle<float> area);
+
         static constexpr float outlineWidth = 6.0f;                 // px in the 1024 space (the drawing's own: 5-6)
         static constexpr juce::uint32 outlineColour = 0xff340616;   // the drawing's outline maroon
 
@@ -100,7 +108,17 @@ namespace ember
         juce::Image::BitmapData* pixels = nullptr;         // the figure's pixels while it is drawn
         void drawEyes (juce::Graphics&, const RigPose&);
         void drawMouth (juce::Graphics&, const RigPose&);
-        void outline (const juce::Image& figure, float radiusPx, juce::Colour);   // -> ring
+        void outline (const juce::Image& figure, juce::Image& target, float radiusPx, juce::Colour);
+
+        // the face (eyes, brows, open mouth) as vectors is the dearest part of a frame; it is drawn into its own image
+        // only when one of its values changes, and laid onto the head like a part (2026-11-19)
+        void drawFace (const RigPose&);
+        struct FaceKey { float v[9] {}; float scale = 0; bool valid = false; };
+        static FaceKey faceKey (const RigPose&, float scale);
+        static bool same (const FaceKey&, const FaceKey&);
+        static juce::Rectangle<float> faceBox();
+        juce::Image faceImage;
+        FaceKey faceFor;
 
         juce::Image figure, ring;
         std::vector<float> dist, buf, z;     // the outline's distance transform
