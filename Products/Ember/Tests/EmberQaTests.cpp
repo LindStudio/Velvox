@@ -440,8 +440,8 @@ namespace ember::qa
                 const auto want = readSettings (p->state);
                 check (std::abs (p->engine.getSettings().thresholdDb - want.thresholdDb) < 1.0e-4f && std::abs (p->engine.getSettings().freq - want.freq) < 0.01f
                            && p->engine.getSettings().mode == want.mode,
-                       juce::String ("factory preset reaches the engine: ") + list[(size_t) i].nameEn);
-                check (p->getPresetName() == presetName (list[(size_t) i]) && ! p->isPresetModified(), juce::String ("name + not modified: ") + list[(size_t) i].nameEn);
+                       juce::String ("factory preset reaches the engine: ") + list[(size_t) i].name);
+                check (p->getPresetName() == presetName (list[(size_t) i]) && ! p->isPresetModified(), juce::String ("name + not modified: ") + list[(size_t) i].name);
             }
 
             // own presets
@@ -989,7 +989,7 @@ namespace ember::qa
                                                 [] (EmberAudioProcessor& p) { p.switchSlot (1); } },
             };
             for (int i = 0; i + 1 < (int) factoryPresets().size(); ++i)
-                cases.push_back ({ juce::String ("preset ") + factoryPresets()[(size_t) i].nameEn + " -> " + factoryPresets()[(size_t) i + 1].nameEn,
+                cases.push_back ({ juce::String ("preset ") + factoryPresets()[(size_t) i].name + " -> " + factoryPresets()[(size_t) i + 1].name,
                                    [i] (EmberAudioProcessor& p) { p.loadFactoryPreset (i); }, [i] (EmberAudioProcessor& p) { p.loadFactoryPreset (i + 1); } });
             double worst = -200.0;
             juce::String worstName;
