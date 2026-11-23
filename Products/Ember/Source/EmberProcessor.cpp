@@ -145,6 +145,7 @@ namespace ember
         xml.setAttribute ("fromAuto", m.current.fromAuto);
         auto* ab = xml.createNewChildElement (abTag);
         ab->setAttribute ("active", m.activeSlot);
+        writeValues (*ab, "CurrentPreset", m.current.presetValues);   // the "*" (changed since loading) survives the project
         for (int i = 0; i < 2; ++i)
         {
             auto* s = ab->createNewChildElement ("Slot");
@@ -165,9 +166,11 @@ namespace ember
         m.current.factoryIndex = xml.getIntAttribute ("factoryPreset", 0);   // never set = still the default preset
         m.current.userPresetName = xml.getStringAttribute ("userPreset");
         m.current.fromAuto = xml.getBoolAttribute ("fromAuto", false);
-        m.current.presetValues = restored;   // a project reopens as it was saved: the restored values count as the preset's
+        m.current.presetValues = restored;   // no preset values saved: the restored values count as the preset's
         if (ab != nullptr)
         {
+            if (auto saved = readValues (*ab, "CurrentPreset"); ! saved.empty())
+                m.current.presetValues = std::move (saved);
             m.activeSlot = juce::jlimit (0, 1, ab->getIntAttribute ("active", 0));
             int i = 0;
             for (auto* s : ab->getChildWithTagNameIterator ("Slot"))
@@ -275,7 +278,11 @@ namespace ember
             for (auto* p : getParameters())
                 if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
                     if (auto* raw = state.getRawParameterValue (rp->getParameterID()))
-                        rp->setValueNotifyingHost (rp->convertTo0to1 (raw->load()));
+                    {
+                        // "nan" / "inf" in a damaged project: that control goes to its default (not NaN in the host)
+                        const float v = raw->load();
+                        rp->setValueNotifyingHost (std::isfinite (v) ? rp->convertTo0to1 (v) : rp->getDefaultValue());
+                    }
         }
         // Delta / S range listening is a tool, not a setting: a project never reopens listening to the S alone
         setListenOff();
@@ -401,12 +408,20 @@ namespace ember
                 if (users[i].getFileNameWithoutExtension() == userPresetName)
                     current = numFactory + i;
         // not in the list (an AUTO setting, a deleted preset): forward starts at the first preset, back at the last
-        const int next = current < 0 ? (direction > 0 ? 0 : total - 1)
-                                     : ((current + direction) % total + total) % total;
-        if (next < numFactory)
-            loadFactoryPreset (next);
-        else
-            loadUserPreset (users[next - numFactory]);
+        const int step = direction > 0 ? 1 : -1;
+        int next = current < 0 ? (direction > 0 ? 0 : total - 1)
+                               : ((current + direction) % total + total) % total;
+        // a user file that does not load (damaged, deleted meanwhile) is skipped, so stepping never gets stuck on it
+        for (int tries = 0; tries < total; ++tries, next = ((next + step) % total + total) % total)
+        {
+            if (next < numFactory)
+            {
+                loadFactoryPreset (next);
+                return;
+            }
+            if (loadUserPreset (users[next - numFactory]))
+                return;
+        }
     }
 
     // -------------------------------------------------------------------- A/B

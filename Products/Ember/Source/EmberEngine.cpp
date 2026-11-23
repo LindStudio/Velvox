@@ -701,11 +701,11 @@ namespace ember
                     const float d = wet * mix * dOut[ch];
                     float y = lOff * (dry[ch] + d);
                     if (lBand > 0.0f)
-                        y += lBand * bOut[ch];
+                        y += lBand * wet * bOut[ch];   // faded like the rest while a stereo mode switch resets the filters
                     if (lDelta > 0.0f)
                         y -= lDelta * d;
                     y *= outGain;
-                    y += byp * (dry[ch] - y);
+                    y = byp >= 1.0f ? dry[ch] : y + byp * (dry[ch] - y);   // bypassed = the input, bit for bit
                     io[ch][i] = y;
                     outPk = std::max (outPk, std::abs (y));
                 }
@@ -730,8 +730,13 @@ namespace ember
             outPk = 0.0f;
         }
 
-        gainReductionDb.push (settings.bypass ? 0.0f : maxReduction);
-        currentReductionDb.store (settings.bypass ? 0.0f : lastReduction, std::memory_order_relaxed);
+        // The meters show what really comes off: below 100 % Mix only part of the reduction reaches the output
+        const auto afterMix = [mix = juce::jlimit (0.0f, 1.0f, settings.mix)] (float r)
+        {
+            return r <= 0.0f || mix >= 1.0f ? r : std::max (0.0f, -fast::gainToDb (1.0f - mix * (1.0f - fast::reductionToGain (r))));
+        };
+        gainReductionDb.push (settings.bypass ? 0.0f : afterMix (maxReduction));
+        currentReductionDb.store (settings.bypass ? 0.0f : afterMix (lastReduction), std::memory_order_relaxed);
         detectorDb.store (std::max (-100.0f, maxDet), std::memory_order_relaxed);
         detectorWeight.store (weightAtMax, std::memory_order_relaxed);
         outputPeak.push (outPk);
