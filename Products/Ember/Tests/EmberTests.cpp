@@ -7,6 +7,7 @@
 //   EmberTests --frames <dir>                  the same SIMPLE frames every run (1x, 1.25x): compare before / after a GUI change
 //   EmberTests --bench [s] [scales=1,1.25] [counts=1,4] [front=yes|no|both] [min=1] [hosted=1] [hz=60] [anim=full|reduced|off]   GUI CPU
 //   EmberTests --mascot-loops <dir>            website loops of Ember (listening, dancing with/without S sparks, idle, lispy, sleeping), 2x
+//   EmberTests --qa / --qa-full                the QA suite (EmberQaTests.cpp); --qa-full adds CPU, memory, the whole matrix, real takes
 //   env EMBER_VOCALS=<dir or ;-list>    also runs AUTO on these real takes (report + sanity checks)
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <thread>
@@ -19,6 +20,7 @@
 #include "EmberRig.h"
 #include "EmberLiveMascot.h"
 #include "EmberPresets.h"
+#include "EmberTestSignals.h"
 #include "Text/I18n.h"
 #include <thread>
 
@@ -50,77 +52,9 @@ namespace
         Test (const char* name) { currentTest = name; std::printf ("%s\n", name); }
     };
 
-    // ------------------------------------------------------------ signals
-    struct Biq
-    {
-        vocalypse::dsp::Biquad b;
-        float run (float x) { return b.process (x, 0); }
-    };
-
-    // A synthetic take: vowels (harmonics of 180 Hz, falling 9 dB/oct above 1 kHz), S bursts (noise 5-11 kHz),
-    // pauses. Returns the sample ranges of the S bursts and vowels.
-    struct Take
-    {
-        std::vector<float> x;
-        std::vector<std::pair<int, int>> sRanges, vRanges;
-    };
-
-    Take makeTake (double fs, double seconds, float sLevelDb = -16.0f, float vowelPeakDb = -12.0f, bool withS = true, unsigned seed = 7)
-    {
-        Take t;
-        const int n = (int) (seconds * fs);
-        t.x.assign ((size_t) n, 0.0f);
-        juce::Random rnd ((juce::int64) seed);
-        Biq hp1, hp2, lp1, lp2;
-        hp1.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 5000.0, 0.54));
-        hp2.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 5000.0, 1.31));
-        lp1.b.setCoeffs (vocalypse::dsp::design::lowPass (fs, 11000.0, 0.54));
-        lp2.b.setCoeffs (vocalypse::dsp::design::lowPass (fs, 11000.0, 1.31));
-
-        int i = 0, phrase = 0;
-        double phase = 0.0;
-        while (i < n)
-        {
-            const int vowelLen = (int) (fs * (0.25 + 0.1 * (phrase % 3)));
-            const int sLen = (int) (fs * (0.08 + 0.04 * (phrase % 2)));
-            const int pause = (int) (fs * 0.07);
-            const float f0 = 170.0f + 25.0f * (float) (phrase % 4);
-            const float vGain = vocalypse::dsp::dbToGain (vowelPeakDb - 3.0f * (float) (phrase % 3)) * 0.35f;
-
-            const int v0 = i;
-            for (int k = 0; k < vowelLen && i < n; ++k, ++i)
-            {
-                phase += f0 / fs;
-                float s = 0.0f;
-                for (int h = 1; h * f0 < 5000.0f; ++h)
-                {
-                    const float hz = h * f0;
-                    const float amp = hz < 1000.0f ? 1.0f / h : (1.0f / h) * std::pow (1000.0f / hz, 1.5f);
-                    s += amp * (float) std::sin (juce::MathConstants<double>::twoPi * phase * h);
-                }
-                const float env = std::min (1.0f, std::min (k, vowelLen - k) / (float) (fs * 0.02));
-                t.x[(size_t) i] = s * vGain * env;
-            }
-            t.vRanges.push_back ({ v0 + (int) (fs * 0.03), i - (int) (fs * 0.03) });
-
-            if (withS)
-            {
-                const int s0 = i;
-                const float sGain = vocalypse::dsp::dbToGain (sLevelDb + 2.0f * (float) (phrase % 3)) * 2.2f;
-                for (int k = 0; k < sLen && i < n; ++k, ++i)
-                {
-                    const float w = rnd.nextFloat() * 2.0f - 1.0f;
-                    const float b = lp2.run (lp1.run (hp2.run (hp1.run (w))));
-                    const float env = std::min (1.0f, std::min (k, sLen - k) / (float) (fs * 0.01));
-                    t.x[(size_t) i] = b * sGain * env;
-                }
-                t.sRanges.push_back ({ s0 + (int) (fs * 0.012), i - (int) (fs * 0.012) });
-            }
-            i += pause;
-            ++phrase;
-        }
-        return t;
-    }
+    using testsig::Biq;
+    using testsig::Take;
+    using testsig::makeTake;
 
     // Runs the engine over a mono signal (as stereo, identical channels) in blocks
     std::vector<float> run (Engine& e, const std::vector<float>& in, int block = 512)
@@ -3306,6 +3240,7 @@ namespace
 
 double emberThreadCpuMs();
 double emberProcessCpuMs();
+void emberRunQa (bool full, int& passed, int& failed);   // EmberQaTests.cpp
 
 // Visual check for GUI optimisations (2026-11-23): the same frames of the SIMPLE view every run (seeded Ember, fixed
 // time steps, the seal's clock set directly), through the screen's renderer (createComponentSnapshot), at 1x and 1.25x.
@@ -3546,6 +3481,11 @@ int main (int argc, char** argv)
     if (args.size() >= 2 && args[0] == "--mascot-loops")
         return mascotLoops (juce::File (args[1]));
 
+    if (args.size() >= 1 && (args[0] == "--qa" || args[0] == "--qa-full"))   // only the QA suite
+    {
+        emberRunQa (args[0] == "--qa-full", passed, failed);
+        return failed == 0 ? 0 : 1;
+    }
     if (args.size() >= 1 && args[0] == "--real-takes")   // only AUTO on the takes of EMBER_VOCALS
     {
         testRealTakes();
@@ -3605,6 +3545,7 @@ int main (int argc, char** argv)
     testMascotFrames (snapshotDir);
     testEditor (snapshotDir);
     testRealTakes();
+    emberRunQa (false, passed, failed);
 
     std::printf ("\nEMBER: %d passed, %d failed\n", passed, failed);
     return failed == 0 ? 0 : 1;

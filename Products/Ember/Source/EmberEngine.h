@@ -165,7 +165,14 @@ namespace ember
             if ((float) ip > x)
                 --ip;
             const float fl = (float) ip;
-            const float f = x - fl;
+            float f = x - fl;
+            if (f >= 1.0f)
+            {
+                // x a hair under an integer: x - floor (x) rounds up to 1 (exp2 (-1e-9) gave 0.99999986, not 1, so the
+                // gain never got back to exactly 1 after an S until the envelope underflowed seconds later)
+                f = 0.0f;
+                ++ip;
+            }
             const float p = 1.0f + f * (0.69315275f + f * (0.24015319f + f * (0.05582818f + f * (0.00898895f + f * 0.00187664f))));
             const std::uint32_t i = (std::uint32_t) (ip + 127) << 23;
             float s;
