@@ -78,7 +78,7 @@
   </ol>
 </nav>
 
-<p>EMBER is a de-esser for vocals and speech from the VOCALYPSE family by Lind Audio. It turns down harsh S, Z and Sh sounds without touching the rest of the voice. Latency is always 5 ms; it is fixed and reported to your host so the host can compensate for it automatically.</p>
+<p>EMBER is a de-esser for vocals and speech from the VOCALYPSE family by Lind Audio. It turns down harsh S, Z and Sh sounds without touching the rest of the voice. Latency is always 10 ms; it is fixed and reported to your host so the host can compensate for it automatically.</p>
 
 <h2 id="quickstart">1. Quick start</h2>
 <ol>
@@ -109,12 +109,14 @@
 <table>
   <tr><th>Control</th><th>Range</th><th>Function</th></tr>
   <tr><td>Frequency</td><td>2–16 kHz</td><td>Lower edge of the S range.</td></tr>
-  <tr><td>Threshold</td><td>−60 to 0 dB</td><td>S-band level above which reduction starts.</td></tr>
+  <tr><td>Width</td><td>1–4 oct</td><td>Split only: how wide the band around the S is. Narrow = only the S, wide (default 3 oct) = the S and the air above it.</td></tr>
+  <tr><td>Threshold</td><td>−50 to −10 dB</td><td>S-band level above which reduction starts.</td></tr>
   <tr><td>Range</td><td>0–24 dB</td><td>Maximum reduction.</td></tr>
   <tr><td>Amount</td><td>0–100 %</td><td>Strength: 50 % = what threshold and range set, 100 % = 1.5x, 0 % = off.</td></tr>
   <tr><td>Attack</td><td>0.1–20 ms</td><td>How fast EMBER reacts to an S sound.</td></tr>
   <tr><td>Release</td><td>10–400 ms</td><td>How fast the reduction recovers afterwards.</td></tr>
-  <tr><td>Lookahead</td><td>0–5 ms</td><td>How far EMBER looks ahead to catch S sounds right at their start. Latency stays at 5 ms regardless.</td></tr>
+  <tr><td>Lookahead</td><td>0–10 ms</td><td>How far EMBER looks ahead to catch S sounds right at their start (default 5 ms). Latency stays at 10 ms regardless.</td></tr>
+  <tr><td>Link</td><td>0–100 %</td><td>Stereo link: 100 % = both channels are reduced together (the image stays put), lower = each channel more on its own.</td></tr>
   <tr><td>Mix</td><td>0–100 %</td><td>Blend of processed and unprocessed signal.</td></tr>
   <tr><td>Output</td><td>±12 dB</td><td>Output level.</td></tr>
   <tr><td>Mode: Split</td><td></td><td>Only the S range gets quieter: a wide dynamic bell around the S (centred at 1.25x the frequency). The voice below and the air above stay, so the S sounds like a quieter S instead of a duller one.</td></tr>
@@ -122,8 +124,10 @@
   <tr><td>Detection: Smart</td><td></td><td>Default and recommended. Reacts only when a real S sound is there (see <a href="#smart">section 5</a>).</td></tr>
   <tr><td>Detection: Relative</td><td></td><td>The S is measured against the loudness of the voice – quiet and loud parts are treated alike.</td></tr>
   <tr><td>Detection: Absolute</td><td></td><td>Fixed level, classic behaviour.</td></tr>
+  <tr><td>Detection: Allround</td><td></td><td>For mixes, buses and instruments: reacts to harsh highs without needing a single voice to compare against.</td></tr>
   <tr><td>Listen: Off</td><td></td><td>Normal output.</td></tr>
-  <tr><td>Listen: S range</td><td></td><td>Hear only the S range, the range EMBER is watching.</td></tr>
+  <tr><td>Listen: S range</td><td></td><td>Hear only the range EMBER works on (in Split the band set by Frequency and Width).</td></tr>
+  <tr><td>Stereo: L/R · M/S · Mid · Side</td><td></td><td>L/R = left and right; M/S = middle and sides separately; Mid = only the middle (e.g. the lead vocal in a mix); Side = only the sides (e.g. wide doubles or reverb).</td></tr>
   <tr><td>Listen: Delta</td><td></td><td>Hear only what is removed.</td></tr>
 </table>
 
@@ -177,6 +181,7 @@
 <h3>Menu (≡ top right)</h3>
 <ul>
   <li><strong>Undo</strong> (<span class="key">Ctrl</span>+<span class="key">Z</span>) and <strong>Redo</strong> (<span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">Z</span> or <span class="key">Ctrl</span>+<span class="key">Y</span>): every change to a control, a click on a voice, a loaded preset and AUTO are one step each. Undo also brings back the preset name and the *. Listening (Delta / S range) and BYPASS are not part of it.</li>
+  <li><strong>Animation:</strong> Full / Reduced / Off – less animation saves computer power, useful with many EMBER instances. Remembered.</li>
   <li><strong>Window size:</strong> 75 / 100 / 125 / 150 / 200 % – remembered, like a size dragged with the bottom-right corner.</li>
   <li><strong>Language:</strong> system / Deutsch / English – remembered.</li>
   <li><strong>Open the manual</strong></li>

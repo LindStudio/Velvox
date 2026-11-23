@@ -79,7 +79,7 @@
   </ol>
 </nav>
 
-<p>EMBER ist ein De-Esser für Gesang und Sprache aus der VOCALYPSE-Familie von Lind Audio. Er macht scharfe S-, Z- und Sch-Laute leiser, ohne den Rest der Stimme anzufassen. Die Latenz beträgt immer 5 ms; sie ist fest und wird deinem Host gemeldet, damit er sie automatisch ausgleicht.</p>
+<p>EMBER ist ein De-Esser für Gesang und Sprache aus der VOCALYPSE-Familie von Lind Audio. Er macht scharfe S-, Z- und Sch-Laute leiser, ohne den Rest der Stimme anzufassen. Die Latenz beträgt immer 10 ms; sie ist fest und wird deinem Host gemeldet, damit er sie automatisch ausgleicht.</p>
 
 <h2 id="schnellstart">1. Schnellstart</h2>
 <ol>
@@ -110,12 +110,14 @@
 <table>
   <tr><th>Regler</th><th>Bereich</th><th>Funktion</th></tr>
   <tr><td>Frequenz</td><td>2–16 kHz</td><td>Untere Grenze des S-Bereichs.</td></tr>
-  <tr><td>Threshold</td><td>−60 bis 0 dB</td><td>Ab diesem Pegel im S-Bereich beginnt die Absenkung.</td></tr>
+  <tr><td>Breite</td><td>1–4 Okt.</td><td>Nur im Split-Modus: wie breit das Band um das S ist. Schmal = nur das S, breit (Standard 3 Oktaven) = das S und die Luft darüber.</td></tr>
+  <tr><td>Threshold</td><td>−50 bis −10 dB</td><td>Ab diesem Pegel im S-Bereich beginnt die Absenkung.</td></tr>
   <tr><td>Range</td><td>0–24 dB</td><td>Maximale Absenkung.</td></tr>
   <tr><td>Amount</td><td>0–100 %</td><td>Stärke der Wirkung: 50 % = was Threshold und Range einstellen, 100 % = anderthalbfach, 0 % = aus.</td></tr>
   <tr><td>Attack</td><td>0,1–20 ms</td><td>Wie schnell EMBER auf einen S-Laut reagiert.</td></tr>
   <tr><td>Release</td><td>10–400 ms</td><td>Wie schnell die Absenkung danach wieder zurückgeht.</td></tr>
-  <tr><td>Lookahead</td><td>0–5 ms</td><td>Wie weit EMBER vorausschaut, um S-Laute schon an ihrem Anfang zu erfassen. Die Latenz bleibt dabei immer 5 ms.</td></tr>
+  <tr><td>Lookahead</td><td>0–10 ms</td><td>Wie weit EMBER vorausschaut, um S-Laute schon an ihrem Anfang zu erfassen (Standard 5 ms). Die Latenz bleibt dabei immer 10 ms.</td></tr>
+  <tr><td>Link</td><td>0–100 %</td><td>Stereo-Kopplung: 100 % = beide Kanäle werden gemeinsam abgesenkt (das Stereobild bleibt stehen), weniger = jeder Kanal mehr für sich.</td></tr>
   <tr><td>Mix</td><td>0–100 %</td><td>Mischung aus bearbeitetem und unbearbeitetem Signal.</td></tr>
   <tr><td>Output</td><td>±12 dB</td><td>Ausgangspegel.</td></tr>
   <tr><td>Modus: Split</td><td></td><td>Nur der S-Bereich wird leiser: ein breites dynamisches Glockenfilter um das S (Mitte beim 1,25-Fachen der Frequenz). Die Stimme darunter und die Luft darüber bleiben, das S klingt danach wie ein leiseres S statt dumpfer.</td></tr>
@@ -123,8 +125,10 @@
   <tr><td>Erkennung: Smart</td><td></td><td>Standard und empfohlen. Reagiert nur, wenn wirklich ein S-Laut erklingt (siehe <a href="#smart">Abschnitt 5</a>).</td></tr>
   <tr><td>Erkennung: Relativ</td><td></td><td>Das S wird im Verhältnis zur Lautheit der Stimme gemessen – leise und laute Stellen werden gleich behandelt.</td></tr>
   <tr><td>Erkennung: Absolut</td><td></td><td>Fester Pegel, klassisches Verhalten.</td></tr>
+  <tr><td>Erkennung: Allround</td><td></td><td>Für Mixe, Busse und Instrumente: reagiert auf scharfe Höhen, ohne eine einzelne Stimme zum Vergleich zu brauchen.</td></tr>
   <tr><td>Abhören: Aus</td><td></td><td>Normales Ausgangssignal.</td></tr>
-  <tr><td>Abhören: S-Bereich</td><td></td><td>Du hörst nur den S-Bereich, also den Bereich, den EMBER überwacht.</td></tr>
+  <tr><td>Abhören: S-Bereich</td><td></td><td>Du hörst nur den Bereich, den EMBER bearbeitet (im Split-Modus das Band aus Frequenz und Breite).</td></tr>
+  <tr><td>Stereo: L/R · M/S · Mid · Side</td><td></td><td>L/R = links und rechts; M/S = Mitte und Seiten getrennt; Mid = nur die Mitte (z. B. der Lead-Gesang in einem Mix); Side = nur die Seiten (z. B. breite Doppelungen oder Hall).</td></tr>
   <tr><td>Abhören: Delta</td><td></td><td>Du hörst nur, was entfernt wird.</td></tr>
 </table>
 
@@ -178,6 +182,7 @@
 <h3>Menü (≡ oben rechts)</h3>
 <ul>
   <li><strong>Rückgängig</strong> (<span class="key">Strg</span>+<span class="key">Z</span>) und <strong>Wiederholen</strong> (<span class="key">Strg</span>+<span class="key">Umschalt</span>+<span class="key">Z</span> oder <span class="key">Strg</span>+<span class="key">Y</span>): Jede Änderung an einem Regler, ein Klick auf eine Stimmlage, ein geladenes Preset und AUTO sind je ein Schritt. Rückgängig bringt auch den Presetnamen und das * zurück. Abhören (Delta / S-Bereich) und BYPASS gehören nicht dazu.</li>
+  <li><strong>Animation:</strong> Voll / Reduziert / Aus – weniger Animation spart Rechenleistung, praktisch bei vielen EMBER-Instanzen. Wird gespeichert.</li>
   <li><strong>Fenstergröße:</strong> 75 / 100 / 125 / 150 / 200 % – wird gespeichert, genau wie eine mit der Ecke unten rechts gezogene Größe.</li>
   <li><strong>Sprache:</strong> Wie das System / Deutsch / English – wird gespeichert.</li>
   <li><strong>Handbuch öffnen</strong></li>

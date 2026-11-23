@@ -18,7 +18,7 @@
 - **Split oder Wideband:** Nur das S absenken (breites dynamisches Glockenfilter, die Luft bleibt) oder die ganze Stimme kurz zurücknehmen – ideal für Sprache und Podcasts.
 - **DELTA-Abhören:** Hör nur, was entfernt wird, und triff sichere Entscheidungen.
 - **9 Werks-Presets und A/B-Vergleich:** Von Gentle bis Strong, von Rap bis Speech / podcast – plus eigene Presets.
-- **Feste 5 ms Latenz:** Wird an den Host gemeldet, bleibt auch im Bypass gleich.
+- **Feste 10 ms Latenz:** Wird an den Host gemeldet, bleibt auch im Bypass gleich.
 
 ### Lern Ember kennen
 
@@ -45,7 +45,7 @@ Ember ist ein kleiner roter Teufel und sitzt mitten im Plugin. Läuft die Stimme
 - **Split or Wideband:** Turn down only the S (wide dynamic bell, the air stays) or dip the whole voice briefly – ideal for speech and podcasts.
 - **DELTA listening:** Hear only what is removed and make confident decisions.
 - **9 factory presets and A/B compare:** From Gentle to Strong, from Rap to Speech / podcast – plus your own presets.
-- **Fixed 5 ms latency:** Reported to the host, unchanged in bypass.
+- **Fixed 10 ms latency:** Reported to the host, unchanged in bypass.
 
 ### Meet Ember
 

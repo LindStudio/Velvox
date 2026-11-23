@@ -336,7 +336,7 @@ namespace vocalypse::ui
     {
         // Design: knob name Montserrat SemiBold, capitals, under the value; 11 px since the review of 2026-10-28
         name.setFont (semiBold (11.0f, 0.03f));
-        name.setMinimumHorizontalScale (0.8f);
+        name.setMinimumHorizontalScale (0.7f);
         name.setJustificationType (juce::Justification::centred);
         name.setColour (juce::Label::textColourId, colours::knobName);
         name.setInterceptsMouseClicks (false, false);

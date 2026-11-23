@@ -323,7 +323,7 @@ namespace ember
         for (float db : { -10.0f, -20.0f, -30.0f, -40.0f, -50.0f })
             g.drawText (db < 0.0f ? utf8 ("−") + juce::String ((int) -db) : juce::String ("0"),
                         juce::Rectangle<float> (b.getX() - 46.0f, yFor (db) - 6.0f, 24.0f, 12.0f), juce::Justification::centredRight);
-        g.drawText ("dB", juce::Rectangle<float> (b.getX() - 46.0f, yFor (-10.0f) - 18.0f, 24.0f, 12.0f), juce::Justification::centredRight);   // the scale's unit
+        g.drawText ("dB", juce::Rectangle<float> (b.getX() - 19.0f, yFor (-10.0f) - 6.0f, 17.0f, 12.0f), juce::Justification::centredLeft);   // the scale's unit, after the top tick
         g.setFont (ui::caps (10.5f));
         g.setColour (c::textMuted);
         g.drawText (tr ("S-PEGEL", "S LEVEL"), getLocalBounds().toFloat().removeFromBottom (18.0f), juce::Justification::centredRight);
