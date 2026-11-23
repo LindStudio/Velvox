@@ -248,7 +248,16 @@ Zwei Wege, die gleich aussehen:
 
 ---
 
-## Hier weitermachen (Stand 19.11.2026)
+## Hier weitermachen (Stand 23.11.2026)
+
+**GUI-CPU (Zweig `fix/ember-gui`, 23.11.2026):** Zusammenfassung und Messwerte in `docs/products/ember-fixes/GUI.md`.
+UI-Thread etwa halbiert (125 %, 60 fps: 33 → 15 % eines Kerns), Prozess 88 → 69 %; Bilder pixelgleich
+(`EmberTests --frames <dir>` vorher/nachher vergleichen, `--snapshots`). Neu: Menü ≡ → Animation Voll / Reduziert /
+Aus (`EMBER.settings`, Schlüssel `animation`); Pause bei minimiertem Host und unter der Lizenzkarte; Rig über
+`MascotRig::acquire()` statt `static`. Rest-Kosten liegen im Zeichen-Thread (Figur ~3,5 ms pro Bild) – weiter nur über
+GPU-Zeichnen. Bench: `EmberTests --bench 6 scales=1.25 counts=1 front=yes [anim=…] [hz=60] [hosted=1 min=1]`.
+
+### Stand 19.11.2026
 
 **Wo der Code liegt:** Repo `velvox`, Zweig **`feature/ember-live-mascot`** (Commit 223955b, "Merge feature/ember-ux").
 Drive: `_git-backup/velvox.bundle`, Quellkopie, Testbuild `Plugins/01 EMBER De-Esser/Testbuild_Siegel_2026-11-19/`.
@@ -269,7 +278,7 @@ Stand vor dem Höllen-Design: Markierung `ember-vor-hoelle` (Testbuild `Testbuil
 1. Jakobs Feedback zum Siegel im Plugin.
 2. Klang: AUTO robuster (S-Frequenz, Schwelle nicht bis -60 dB), Stimmlage-Knöpfe ziehen die Schwelle mit; danach
    Glockenfilter im Split-Modus statt offenem Höhenregal (Hörvergleich gegen Pro-DS).
-3. CPU: mit Siegel ~82 % eines Kerns bei 60 Bildern/s (1 Fenster, 125 %); nächster Schritt wäre Zeichnen über die GPU.
+3. CPU: erledigt auf Zweig `fix/ember-gui` (23.11.2026), siehe unten.
 4. Schritt 6: alte Bildfolgen entfernen; Test in FL Studio / Ableton / Reaper; dann in `feature/ember-deesser`
    übernehmen und Installer neu bauen.
 
