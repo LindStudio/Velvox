@@ -2454,12 +2454,13 @@ namespace
     }
 
     // AUTO as the plugin does it: the capture (stereo, pauses cut) until 12 s of voice, from `startSeconds` on
+    Settings cliBase;   // --process: research switches also reach AUTO
     AutoResult autoOn (const juce::AudioBuffer<float>& b, double fs, bool smart = true, double startSeconds = 0.0,
                        double voicedSeconds = autoEnoughSeconds)
     {
         const int from = std::min (b.getNumSamples(), (int) (startSeconds * fs));
         const float* ch[2] { b.getReadPointer (0, from), b.getReadPointer (std::min (1, b.getNumChannels() - 1), from) };
-        Settings base;
+        Settings base = cliBase;
         base.smart = smart;
         return autoViaCapture (ch, std::min (2, b.getNumChannels()), b.getNumSamples() - from, fs, 512, base, voicedSeconds);
     }
@@ -2544,7 +2545,17 @@ namespace
         const auto has = [&] (const char* k) { return kv.count (k) > 0; };
         if (has ("gain"))
             buf->applyGain (dbToGain (kv["gain"]));
-        Settings s;
+        for (int k = 0; k < 8; ++k)
+        {
+            const juce::String xpK = "xp" + juce::String (k), xfK = "xf" + juce::String (k);
+            if (kv.count (xpK) > 0) cliBase.xp[k] = (int) kv[xpK];
+            if (kv.count (xfK) > 0) cliBase.xf[k] = kv[xfK];
+        }
+        if (has ("attack")) cliBase.attackMs = kv["attack"];
+        if (has ("mode")) cliBase.mode = (int) kv["mode"];
+        if (has ("la")) cliBase.lookaheadMs = kv["la"];
+        if (has ("width")) cliBase.widthOct = kv["width"];
+        Settings s = cliBase;
         if (has ("auto") && kv["auto"] > 0.5f)
         {
             const double start = has ("autostart") ? kv["autostart"] : 0.0;
@@ -2571,6 +2582,7 @@ namespace
         if (has ("width")) s.widthOct = kv["width"];
         if (has ("link")) s.stereoLink = kv["link"];
         if (has ("stereo")) s.stereoMode = (int) kv["stereo"];
+        if (has ("out")) s.outputDb = kv["out"];
         const int block = has ("block") ? std::max (1, (int) kv["block"]) : 512;
         std::printf ("SETTINGS freq %.0f thr %.1f range %.1f amount %.2f att %.2f rel %.0f la %.2f mode %d smart %d rel %d\n",
                      s.freq, s.thresholdDb, s.rangeDb, s.amount, s.attackMs, s.releaseMs, s.lookaheadMs, s.mode, (int) s.smart, (int) s.relative);

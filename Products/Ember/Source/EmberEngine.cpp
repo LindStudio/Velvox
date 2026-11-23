@@ -47,6 +47,27 @@ namespace ember
                 default: y[0] = p[0]; y[1] = p[1]; break;
             }
         }
+
+        // r2 research helpers
+        BiquadCoeffs bandPassRbj (double fs, double f, double q) noexcept
+        {
+            const double w0 = juce::MathConstants<double>::twoPi * std::min (f, fs * 0.45) / fs, al = std::sin (w0) / (2.0 * q);
+            const double a0 = 1.0 + al;
+            BiquadCoeffs c;
+            c.b0 = al / a0; c.b1 = 0.0; c.b2 = -al / a0; c.a1 = -2.0 * std::cos (w0) / a0; c.a2 = (1.0 - al) / a0;
+            return c;
+        }
+        BiquadCoeffs bellAt (double fs, double centreHz, double widthOct) noexcept
+        {
+            const double x = std::exp2 (0.5 * widthOct), gW = std::pow (10.0, -widthRefDb / 20.0);
+            EqBand b;
+            b.on = true;
+            b.type = (int) EqBandType::bell;
+            b.freq = (float) std::min (centreHz, fs * 0.45);
+            b.q = (float) (std::sqrt (gW) / (x - 1.0 / x) * std::pow (10.0, bandRefDb / 40.0));
+            b.gain = -bandRefDb;
+            return eqdesign::design (b, false, fs).sections[0];
+        }
     }
 
     float staticReductionDb (float inDb, float thresholdDb) noexcept
@@ -211,6 +232,9 @@ namespace ember
         indexPhase = 0;
         for (auto& w : weightCh)
             w = 0.0f;
+        xWeight.reset();
+        for (auto& r : xRms)
+            r = 0.0f;
     }
 
     float Detector::weightForIndex (float idx, bool allroundGate) noexcept
@@ -251,6 +275,21 @@ namespace ember
             body2.setLane (ch, bodyHi);
         }
         tiltDb = detectorTiltDbPerOct * (float) std::log2 (f / detectorTiltRefHz);
+        xWeightOn = xWeighting != 0 && xWeightDb != 0.0f;
+        if (xWeightOn)
+            for (int ch = 0; ch < 2; ++ch)
+                xWeight.setLane (ch, design::highShelf (fs, std::min (9000.0, top), 0.7071, xWeighting == 1 ? -xWeightDb : xWeightDb));
+        xRmsCoeff = xRmsMs > 0.0f ? timeConstantCoeff (xRmsMs, fs) : 0.0f;
+    }
+
+    void Detector::setResearch (int weighting, float weightDb, float rmsMs) noexcept
+    {
+        if (weighting == xWeighting && weightDb == xWeightDb && rmsMs == xRmsMs)
+            return;
+        xWeighting = weighting;
+        xWeightDb = weightDb;
+        xRmsMs = rmsMs;
+        designBands();
     }
 
     float Detector::levelFor (float peak, float env, bool relative) const noexcept
@@ -276,7 +315,12 @@ namespace ember
         const float x0 = frame[0], x1 = numChannels > 1 ? frame[1] : 0.0f;
         alignas (16) float a[4], b[4];
        #if EMBER_SSE
-        _mm_store_ps (a, bandIdx2.process (bandIdx1.process (_mm_setr_ps (x0, x1, x0, x1))));
+        {
+            __m128 av = bandIdx2.process (bandIdx1.process (_mm_setr_ps (x0, x1, x0, x1)));
+            if (xWeightOn)
+                av = xWeight.process (av);
+            _mm_store_ps (a, av);
+        }
         _mm_store_ps (b, body2.process (body1.process (_mm_setr_ps (x0, x1, 0.0f, 0.0f))));
        #else
         {
@@ -294,7 +338,13 @@ namespace ember
         float peak = 0.0f, full = 0.0f, hiSq = 0.0f, bodySq = 0.0f;
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            const float ax = std::abs (frame[ch]), ab = std::abs (a[ch]), h = a[2 + ch], bd = b[ch];
+            const float ax = std::abs (frame[ch]), h = a[2 + ch], bd = b[ch];
+            float ab = std::abs (a[ch]);
+            if (xRmsMs > 0.0f)
+            {
+                xRms[ch] = ab * ab + xRmsCoeff * (xRms[ch] - ab * ab);
+                ab = std::sqrt (ab * std::sqrt (2.0f * xRms[ch]));   // dB mean of peak and RMS (+3 dB)
+            }
             peak = std::max (peak, ab);
             full = std::max (full, ax);
             hiSq += h * h;
@@ -376,6 +426,12 @@ namespace ember
                 g.setWindow (gateWin[m]);
             }
 
+        for (auto& d : xDl)
+            d.assign ((size_t) delaySize, 0.0f);
+        xEnvC = timeConstantCoeff (smartEnvMs, fs);
+        xOnFC = timeConstantCoeff (1.0f, fs);
+        xOnSC = timeConstantCoeff (30.0f, fs);
+        xMultC = timeConstantCoeff (1.0f, fs);
         detector.prepare (sampleRate);
         freq.reset (sampleRate, 0.05);
         width.reset (sampleRate, 0.05);
@@ -416,6 +472,21 @@ namespace ember
         listenHp.reset();
         listenHp2.reset();
         listenHpLive = false;
+        for (auto& d : xDl)
+            std::fill (d.begin(), d.end(), 0.0f);
+        for (int k = 0; k < 3; ++k)
+        {
+            xBell[k].reset(); xBp1[k].reset(); xBp2[k].reset();
+            xE[k] = 0.0f;
+        }
+        xTilt.reset();
+        xSkirtHp.reset();
+        xSkirtHp2.reset();
+        xOnF = xOnS = 0.0f;
+        xMult = 1.0f;
+        xHold = 0;
+        for (auto& v : xSlow)
+            v = 0.0f;
         for (auto* lines : { &audioDelay, &bandDelay })
             for (auto& d : *lines)
                 std::fill (d.begin(), d.end(), 0.0f);
@@ -466,6 +537,11 @@ namespace ember
             listenSm[l].setTargetValue (settings.listen == l ? 1.0f : 0.0f);
         attackCoeff = timeConstantCoeff (std::max (0.01f, settings.attackMs), fs);
         releaseCoeff = timeConstantCoeff (std::max (1.0f, settings.releaseMs), fs);
+        xSlowA = timeConstantCoeff (settings.xf[7] > 0.0f ? settings.xf[7] : 40.0f, fs);
+        xSlowR = timeConstantCoeff (4.0f * std::max (1.0f, settings.releaseMs), fs);
+        detector.setResearch (settings.xp[1], settings.xp[1] != 0 ? (settings.xf[2] > 0.0f ? settings.xf[2] : 8.0f) : 0.0f,
+                              settings.xp[3] != 0 ? (settings.xf[6] > 0.0f ? settings.xf[6] : 2.0f) : 0.0f);
+        updateResearch();
         detector.setAllround (settings.smart && settings.allround);
         if (settings.stereoMode != activeStereoMode)
             wetSm.setTargetValue (0.0f);   // fade the processing out, switch at the bottom (process)
@@ -488,6 +564,36 @@ namespace ember
         bandScale = 1.0f / (1.0f - dbToGain (-bandRefDb));
         listenHp.setCoeffs (design::highPass (fs, std::min (shape.lowHz, fs * 0.45), q1));
         listenHp2.setCoeffs (design::highPass (fs, std::min (shape.lowHz, fs * 0.45), q2));
+        updateResearch();
+    }
+
+    void Engine::updateResearch() noexcept
+    {
+        const int mode = settings.xp[0];
+        const double fr = freq.getCurrentValue();
+        const auto shape = splitBand (fr, width.getCurrentValue());
+        const double n = std::log2 (shape.highHz / shape.lowHz);
+        if (mode != 0)
+        {
+            const double ns = settings.xf[0] > 0.0f ? settings.xf[0] : (mode == 1 ? 2.0 : 1.5);
+            const double sp = std::max (0.25, 0.5 * (n - ns));
+            for (int k = 0; k < 3; ++k)
+            {
+                const double c = shape.centreHz * std::exp2 ((k - 1) * sp);
+                xBell[k].setCoeffs (bellAt (fs, c, ns));
+                const double q = 1.0 / (2.0 * std::sinh (0.5 * std::log (2.0) * sp));
+                xBp1[k].setCoeffs (bandPassRbj (fs, c, q));
+                xBp2[k].setCoeffs (bandPassRbj (fs, c, q));
+                xTiltCorr[k] = std::pow (10.0f, (float) (settings.xp[6] * (k - 1) * sp) / 10.0f);
+            }
+        }
+        {
+            const double hz = std::min (shape.lowHz * (settings.xf[0] > 0.0f && mode == 0 ? settings.xf[0] : 1.0), fs * 0.45);
+            xSkirtHp.setCoeffs (design::highPass (fs, hz, settings.xp[7] == 2 ? q1 : 0.7071));
+            xSkirtHp2.setCoeffs (design::highPass (fs, hz, q2));
+        }
+        if (settings.xp[5] != 0)
+            xTilt.setCoeffs (design::highShelf (fs, std::min (0.5 * fr, fs * 0.45), 0.5, (double) settings.xp[5]));
     }
 
     void Engine::process (float* const* channels, int numChannels, int numSamples) noexcept
@@ -590,6 +696,13 @@ namespace ember
             const int eLagPrev = envLag (laPrev), g0LagPrev = gateLag (laPrev, 0), g1LagPrev = gateLag (laPrev, 1);
 
             int wp = writePos, laLeft = laFadeLeft, laPrevL = laPrev;
+            const int xpTrack = settings.xp[0];
+            const bool xpOnset = settings.xp[2] != 0, xpDual = settings.xp[4] != 0, xTiltOn = settings.xp[5] != 0;
+            const float onThr = dbToGain (2.0f * (settings.xf[3] > 0.0f ? settings.xf[3] : 9.0f));
+            const int onHold = (int) ((settings.xf[4] > 0.0f ? settings.xf[4] : 12.0f) * 0.001 * fs);
+            const float onDepth = settings.xf[5] > 0.0f ? settings.xf[5] : 0.7f;
+            const float xTiltLow = dbToGain (-(float) settings.xp[5]);
+            const int xSkirt = settings.xp[7];
             const int ds = delaySize, lat = latency;
             const float aC = attackCoeff, rC = releaseCoeff, bS = bandScale;
             float envL[numSlots] { envDb[0], envDb[1], envDb[2] };
@@ -616,6 +729,63 @@ namespace ember
                 // and the linked one runs beside them (slot 2); the link blends the reductions they ask for
                 for (int c = 0; c < numProc; ++c)
                     bDl[c][wp] = det.band[c];
+                // r2 research: S tracker / per-band offsets, onset protection
+                if (xpTrack != 0)
+                {
+                    float e[3] {};
+                    for (int c = 0; c < numProc; ++c)
+                        for (int kk = 0; kk < 3; ++kk)
+                        {
+                            const float v = xBp2[kk].process (xBp1[kk].process (p[c], c), c);
+                            e[kk] += v * v;
+                        }
+                    float v3[3];
+                    for (int kk = 0; kk < 3; ++kk)
+                        xE[kk] = e[kk] + xEnvC * (xE[kk] - e[kk]);
+                    if (xpTrack == 1)
+                    {
+                        const float gam = settings.xf[1] > 0.0f ? settings.xf[1] : 2.0f;
+                        float pw[3], sw = 0.0f, su = 0.0f;
+                        for (int kk = 0; kk < 3; ++kk)
+                        {
+                            const float t = xE[kk] * xTiltCorr[kk] + 1.0e-20f;
+                            pw[kk] = gam == 2.0f ? t * t : std::pow (t, gam);
+                            sw += pw[kk];
+                            su += (float) kk * pw[kk];
+                        }
+                        const float u = su / sw;
+                        for (int kk = 0; kk < 3; ++kk)
+                            v3[kk] = std::max (0.0f, 1.0f - std::abs (u - (float) kk));
+                    }
+                    else
+                    {
+                        const float slope = settings.xf[1] > 0.0f ? settings.xf[1] : 0.75f;
+                        float L[3], Lm = -300.0f;
+                        for (int kk = 0; kk < 3; ++kk)
+                        {
+                            L[kk] = 3.0103f * fast::log2 (xE[kk] * xTiltCorr[kk] + 1.0e-20f);
+                            Lm = std::max (Lm, L[kk]);
+                        }
+                        for (int kk = 0; kk < 3; ++kk)
+                            v3[kk] = slope * (Lm - L[kk]);
+                    }
+                    for (int kk = 0; kk < 3; ++kk)
+                        xDl[(size_t) kk][(size_t) wp] = v3[kk];
+                }
+                if (xpOnset)
+                {
+                    float eb = 0.0f;
+                    for (int c = 0; c < numProc; ++c)
+                        eb += det.band[c] * det.band[c];
+                    xOnF = eb + xOnFC * (xOnF - eb);
+                    xOnS = eb + xOnSC * (xOnS - eb);
+                    if (xOnF > 1.0e-9f && xOnF > onThr * xOnS)
+                        xHold = onHold;
+                    const float tm = xHold > 0 ? 1.0f - onDepth : 1.0f;
+                    if (xHold > 0)
+                        --xHold;
+                    xMult = tm + xMultC * (xMult - tm);
+                }
                 const int numOwn = perChannel ? numProc : 0;
                 for (int slot = 0; slot < numOwn + 1; ++slot)
                 {
@@ -623,11 +793,20 @@ namespace ember
                     const bool own = slot < numOwn;
                     const float level = own ? det.levelDb[c] : det.linkedDb;
                     const float w = ! smart ? 1.0f : (own ? det.weight[c] : det.linkedWeight);
-                    const float target = std::min (maxReductionDb, std::min (range, staticReductionDb (level, thr)) * scale);
+                    float target = std::min (maxReductionDb, std::min (range, staticReductionDb (level, thr)) * scale);
+                    if (xpOnset)
+                        target *= xMult;
                     float e = envL[c];
                     e = target + (target > e ? aC : rC) * (e - target);
                     envL[c] = e;
-                    eDl[c][wp] = e;
+                    float eo = e;
+                    if (xpDual)
+                    {
+                        float& sl = xSlow[c];
+                        sl = e + (e > sl ? xSlowA : xSlowR) * (sl - e);
+                        eo = std::max (e, sl);
+                    }
+                    eDl[c][wp] = eo;
                     g0Dl[c][wp] = gate[0][c].process (w);
                     g1Dl[c][wp] = gate[1][c].process (w);
                 }
@@ -652,7 +831,7 @@ namespace ember
                 const int readAudio = wrap (wp - lat, ds);
                 float dry[maxChannels] { aDl[0][readAudio], aDl[1][readAudio] }, q[maxChannels], delta[maxChannels] {}, band[maxChannels] {};
                 encode (sm, numIn, dry, q);
-                float gains[maxChannels] { 1.0f, 1.0f }, rs[numSlots] {};
+                float gains[maxChannels] { 1.0f, 1.0f }, rs[numSlots] {}, rApplied[maxChannels] {};
                 for (int slot = 0; slot < numOwn + 1; ++slot)
                 {
                     const int c = slot < numOwn ? slot : linkSlot;
@@ -673,6 +852,7 @@ namespace ember
                     maxReduction = std::max (maxReduction, r);
                     lastReduction = c == 0 ? r : std::max (lastReduction, r);
                     gains[c] = fast::reductionToGain (r);
+                    rApplied[c] = r;
                 }
                 if (laLeft > 0 && --laLeft == 0)
                     laPrevL = laCur;
@@ -681,8 +861,37 @@ namespace ember
                     const float g = gains[perChannel ? c : 0];
                     // split: x + c (bell(x) - x), c = (1 - g) / (1 - bell gain); wideband: g x
                     const float diff = bell.process (q[c], c) - q[c];
-                    const float dSplit = (1.0f - g) * bS * diff;
-                    const float dWide = (g - 1.0f) * q[c];
+                    float dSplit = (1.0f - g) * bS * diff;
+                    if (xSkirt != 0)
+                    {
+                        float hd = xSkirtHp.process (diff, c);
+                        if (xSkirt == 2)
+                            hd = xSkirtHp2.process (hd, c);
+                        dSplit = (1.0f - g) * bS * hd;
+                    }
+                    if (xpTrack == 1)
+                    {
+                        const int rd = wrap (wp - eLagCur, ds);
+                        float acc = 0.0f;
+                        for (int kk = 0; kk < 3; ++kk)
+                            acc += xDl[(size_t) kk][(size_t) rd] * (xBell[kk].process (q[c], c) - q[c]);
+                        dSplit = (1.0f - g) * bS * acc;
+                    }
+                    else if (xpTrack == 2)
+                    {
+                        const int rd = wrap (wp - eLagCur, ds);
+                        const float r = rApplied[perChannel ? c : 0];
+                        float y = q[c];
+                        for (int kk = 0; kk < 3; ++kk)
+                        {
+                            const float gk = fast::reductionToGain (0.5f * std::max (0.0f, r - xDl[(size_t) kk][(size_t) rd]));
+                            y = y + (1.0f - gk) * bS * (xBell[kk].process (y, c) - y);
+                        }
+                        dSplit = y - q[c];
+                    }
+                    float dWide = (g - 1.0f) * q[c];
+                    if (xTiltOn)
+                        dWide = (g - 1.0f) * xTiltLow * xTilt.process (q[c], c);
                     delta[c] = dSplit + m * (dWide - dSplit);
                     if (hpLive)
                     {

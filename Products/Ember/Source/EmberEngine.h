@@ -60,6 +60,9 @@ namespace ember
         float stereoLink = 1.0f;     // 0 = every channel on its own, 1 = fully linked
         int stereoMode = 0;          // 0 = stereo (L/R), 1 = mid/side, 2 = mid only, 3 = side only
         bool allround = false;       // with smart: compare against the band under the S (mixes, buses, instruments)
+        // r2 research switches (bench only, see docs/products/ember-r2/DSP_FORSCHUNG.md)
+        int xp[8] {};
+        float xf[8] {};
     };
 
     // Fixed latency = the longest lookahead
@@ -234,6 +237,9 @@ namespace ember
         };
         void process (const float* frame, int numChannels, bool relative, bool perChannel, Frame& out) noexcept;
         bool isFinite() const noexcept;
+        // r2 research: detector band weighting (0 off, 1 loudness: shelf -db above 9 kHz, 2 sharpness: +db) and
+        // hybrid peak / RMS level (rmsMs > 0)
+        void setResearch (int weighting, float weightDb, float rmsMs) noexcept;
 
         // Smart detection: how much the energy of the S band outweighs the body of the voice (or, in Allround,
         // the band under the S), in dB, from 5 ms RMS envelopes, and the resulting weight 0..1 (linked).
@@ -256,6 +262,11 @@ namespace ember
         float fullEnvCh[maxChannels] {}, sEnvCh[maxChannels] {}, bodyEnvCh[maxChannels] {};
         float indexDb = -60.0f, weight = 0.0f, tiltDb = 0.0f, weightCh[maxChannels] {};
         unsigned indexPhase = 0;
+        // r2 research
+        Biquad4 xWeight;
+        bool xWeightOn = false;
+        int xWeighting = 0;
+        float xWeightDb = 0.0f, xRmsMs = 0.0f, xRmsCoeff = 0.0f, xRms[maxChannels] {};
     };
 
     // Running minimum over `window` samples followed by a moving average over `window` samples: a smooth gate
@@ -330,5 +341,14 @@ namespace ember
         int writePos = 0, delaySize = 1, gridPhase = 0;
         bool wasPerChannel = false;
         int wetHold = 0;   // samples the wet signal stays faded out after a stereo mode switch
+
+        // r2 research prototypes
+        void updateResearch() noexcept;
+        Biquad xBell[3], xBp1[3], xBp2[3], xTilt, xSkirtHp, xSkirtHp2;
+        float xE[3] {}, xEnvC = 0.0f, xTiltCorr[3] { 1, 1, 1 };
+        std::array<std::vector<float>, 3> xDl;
+        float xOnF = 0.0f, xOnS = 0.0f, xOnFC = 0.0f, xOnSC = 0.0f, xMult = 1.0f, xMultC = 0.0f;
+        int xHold = 0;
+        float xSlow[numSlots] {}, xSlowA = 0.0f, xSlowR = 0.0f;
     };
 }
