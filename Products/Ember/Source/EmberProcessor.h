@@ -50,9 +50,12 @@ namespace ember
         enum class AutoPhase { idle, listening, analysing, done, failed };
         void startAuto();
         void finishAuto();   // starts the analysis of what was captured (background thread)
-        bool pollAuto();     // message thread: applies a finished analysis; true when it did
-        void waitForAuto();  // tests: blocks until the analysis is applied
-        void cancelAuto();
+        // Message thread: applies a finished analysis; true when it did. An analysis whose settings no longer hold
+        // is not applied: a loaded project, preset or the other A/B slot discards it, a change of mode, detection,
+        // Amount, attack or lookahead runs it again on the same take with the new settings.
+        bool pollAuto();
+        void waitForAuto();  // tests: blocks until the analysis is applied (or discarded)
+        void cancelAuto();   // while listening or analysing: back to idle, nothing applied
         // Timer step (10 Hz; tests call it with their own clock): finishes on its own after autoEnoughSeconds of voice,
         // or once at least autoMinSeconds were heard and then nothing new for autoQuietSeconds (playback stopped)
         void updateAuto (double nowSeconds);
@@ -65,6 +68,7 @@ namespace ember
         bool isAutoResultLoaded() const noexcept { return autoPhase == AutoPhase::done && fromAuto; }
         AutoPhase getAutoPhase() const noexcept { return autoPhase; }
         double getAutoProgress() const noexcept;   // 0..1 while listening
+        int getAutoRuns() const noexcept { return autoRuns; }   // analyses started (tests: a restart counts)
         const AutoResult& getLastAuto() const noexcept { return lastAuto; }
         juce::String getAutoMessage() const;       // in the interface language
         // Applies an analysis result to the parameters (one host gesture per parameter): frequency, threshold, range,
@@ -74,7 +78,7 @@ namespace ember
         bool didAutoRaiseAmount() const noexcept { return autoRaisedAmount; }
         AutoCapture& getCapture() noexcept { return capture; }
 
-        double getCurrentSampleRate() const noexcept { return currentRate; }
+        double getCurrentSampleRate() const noexcept { return currentRate.load(); }
         // The host's transport is stopped (only known once it has been seen playing; see processBlock)
         bool isHostStopped() const noexcept { return hostStopped.load (std::memory_order_relaxed); }
         float getHostBpm() const noexcept { return hostBpm.load (std::memory_order_relaxed); }
@@ -126,6 +130,10 @@ namespace ember
     private:
         void timerCallback() override;
         void setListenOff();
+        void launchAuto();                         // (re)starts the analysis of autoTake with the current settings
+        void discardPendingAuto();                 // a preset / A/B slot / project was loaded: the running analysis is dropped
+        void autoProjectLoaded();                  // ... a project: also the last result (message thread)
+        bool autoBaseChanged() const;              // the settings AUTO measures with differ from the running analysis
         void beginUndoStep (int parameterIndex);   // remembers the values before an edit
         struct UndoListener;
         struct UndoGroup;                          // edits inside one step (AUTO, presets, A/B, undo itself)
@@ -193,7 +201,7 @@ namespace ember
         bool slotUsed[2] { false, false };
         int activeSlot = 0;
         int autoBeforeSlot = 0;
-        double currentRate = 44100.0;
+        std::atomic<double> currentRate { 44100.0 };
         std::atomic<bool> hostStopped { false };
         std::atomic<float> hostBpm { 0.0f };        // for Ember's dancing (0 = unknown)
         bool hostEverPlayed = false;               // audio thread only
@@ -201,6 +209,12 @@ namespace ember
         int autoLastSamples = 0;
         bool autoRaisedAmount = false;
         Settings autoBase;                         // the settings AUTO measured with
+        float autoUserAmount = 0.5f;               // the Amount the user had (autoBase may hold the raised one)
+        std::shared_ptr<const AutoCapture::Take> autoTake;   // kept while analysing (a restart needs it)
+        int autoRuns = 0;
+        // Projects loaded (setStateInformation, any thread): an analysis started before one is not applied
+        std::atomic<int> projectLoads { 0 };
+        int autoLoadsAtStart = 0, seenProjectLoads = 0;
 
         std::vector<Snapshot> undoSteps, redoSteps;
         int undoGroupDepth = 0, lastUndoParam = -1;

@@ -18,6 +18,7 @@
 #include "EmberLiveMascot.h"
 #include "EmberPresets.h"
 #include "Text/I18n.h"
+#include <thread>
 
 using namespace ember;
 
@@ -413,26 +414,78 @@ namespace
         check (*std::max_element (ys.begin(), ys.end()) == 0.0f, "silence in = silence out");
     }
 
+    // Two different channels (a wide double): the right one is the left one later and quieter
+    std::vector<float> rightOf (const std::vector<float>& x, int delay = 7, float gain = 0.8f)
+    {
+        std::vector<float> r (x.size(), 0.0f);
+        for (size_t i = (size_t) delay; i < x.size(); ++i)
+            r[i] = gain * x[i - (size_t) delay];
+        return r;
+    }
+
+    // A voice limit (or the threshold floor) is what stopped AUTO short of its target
+    bool heldBack (const AutoResult& r)
+    {
+        return r.thresholdDb <= autoMinThresholdDb + 0.5f || r.vowelReductionDb >= 0.9f * autoVowelMaxDb
+            || r.vowelPresenceDb >= 0.9f * autoVowelPresenceMaxDb || r.vowelAirDb >= 0.9f * autoVowelAirMaxDb
+            || r.mixedReductionDb >= 0.9f * autoMixedMaxDb || r.mixedPresenceDb >= 0.9f * autoMixedPresenceMaxDb;
+    }
+
+    // AUTO as the plugin runs it: the capture is fed in host blocks, then the take it holds is analysed
+    AutoResult autoViaCapture (const float* const* ch, int nch, int len, double fs, int block = 512, Settings base = {},
+                               double maxVoicedSeconds = autoEnoughSeconds, AutoCapture::Take* takeOut = nullptr)
+    {
+        AutoCapture c;
+        c.prepare (fs);
+        c.start();
+        for (int start = 0; start < len && c.isCapturing() && c.getVoicedSeconds() < maxVoicedSeconds; start += block)
+        {
+            const float* p[2] { ch[0] + start, ch[nch > 1 ? 1 : 0] + start };
+            c.push (p, nch, std::min (block, len - start));
+        }
+        c.stop();
+        auto take = c.copyTake();
+        const float* tc[2] { take.channel[0].data(), take.numChannels > 1 ? take.channel[1].data() : nullptr };
+        auto r = analyse (tc, take.numChannels, take.numSamples(), fs, base);
+        if (takeOut != nullptr)
+            *takeOut = std::move (take);
+        return r;
+    }
+
     void testAuto()
     {
         Test t ("AUTO finds the S range and a fitting threshold");
-        for (double fs : { 44100.0, 48000.0, 96000.0 })
+        for (double fs : { 44100.0, 48000.0, 96000.0, 192000.0 })
         {
-            const auto take = makeTake (fs, 12.0);
+            // makeTake's S are white noise filtered to 5-11 kHz: at a higher rate the same noise spreads over a wider
+            // band and the S come out 3 dB (96 kHz) / 6 dB (192 kHz) softer. Leveled here, so every rate hears the
+            // same voice (unleveled, AUTO rightly took less off the softer S: 3.2-3.3 dB, the mixed frames' limit)
+            const auto take = makeTake (fs, 12.0, -16.0f + 10.0f * (float) std::log10 (fs / 48000.0));
+            const double t0 = juce::Time::getMillisecondCounterHiRes();
             const auto r = analyse (take.x.data(), (int) take.x.size(), fs);
-            std::printf ("    %.0f Hz: status %d, freq %.0f (peak %.0f), thr %.1f, range %.1f, S med %.1f / 90 %.1f, vowel95 %.1f, exp %.1f, frames S %d V %d\n",
+            const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+            std::printf ("    %.0f Hz: status %d, freq %.0f (peak %.0f), thr %.1f, range %.1f, S med %.1f / 90 %.1f, vowel95 %.1f, frames S %d V %d rej %d\n",
                          fs, (int) r.status, r.freq, r.peakHz, r.thresholdDb, r.rangeDb, r.sibilantMedianDb, r.sibilant90Db, r.vowel95Db,
-                         r.expectedReductionDb, r.sibilantFrames, r.vowelFrames);
-            std::printf ("    vowels lose %.2f dB\n", r.vowelReductionDb);
-            check (r.status == AutoResult::Status::ok, "ok");
-            check (r.freq >= 4000.0f && r.freq <= 8000.0f, "corner in 4-8 kHz");
-            check (r.thresholdDb > r.vowel95Db, "threshold above the vowels");
-            std::printf ("    S vs vowels %.1f dB -> target %.1f dB, mixed frames lose %.2f dB\n", r.sibilanceVsVowelDb, r.targetDb, r.mixedReductionDb);
-            check (r.targetDb >= autoMinTargetDb && r.targetDb <= autoMaxTargetDb, "target within the AUTO window");
-            check (r.expectedReductionDb > 0.3f && r.expectedReductionDb <= r.targetDb + 0.6f, "S lose at most the target (rendered)");
-            check (r.mixedReductionDb <= autoMixedMaxDb + 0.05f, "vowel side of each S kept");
-            check (r.vowelReductionDb <= autoVowelMaxDb + 0.02f, "vowels <= 0.1 dB");
-            check (r.rangeDb <= autoMaxRangeDb, "range <= autoMaxRangeDb");
+                         r.sibilantFrames, r.vowelFrames, r.rejectedFrames);
+            std::printf ("    S vs vowels %.1f dB -> target %.2f, S band -%.2f | vowels -%.2f pres -%.2f air -%.2f | mixed -%.2f pres -%.2f | %d renders, %.0f ms\n",
+                         r.sibilanceVsVowelDb, r.targetDb, r.expectedReductionDb, r.vowelReductionDb, r.vowelPresenceDb, r.vowelAirDb,
+                         r.mixedReductionDb, r.mixedPresenceDb, r.renders, ms);
+            const juce::String at = " (" + juce::String (fs) + ")";
+            check (r.status == AutoResult::Status::ok, "ok" + at);
+            check (r.freq >= 4000.0f && r.freq <= 8000.0f, "corner in 4-8 kHz" + at);
+            check (r.thresholdDb > r.vowel95Db && r.thresholdDb >= autoMinThresholdDb, "threshold above the vowels and the floor" + at);
+            check (r.targetDb >= autoMinTargetDb && r.targetDb <= autoMaxTargetDb, "target within the AUTO window" + at);
+            // AUTO reaches its target (it fell 3.6-4 dB short before) unless a voice limit holds it back: at 44.1 / 48 kHz
+            // none does; at 96 / 192 kHz the engine dips the presence of the mixed frames a little more per dB of S,
+            // and that limit holds AUTO near 3 dB
+            const bool strict = fs < 50000.0;
+            check (r.expectedReductionDb <= r.targetDb + 0.6f && (r.expectedReductionDb >= r.targetDb - 0.5f || (! strict && heldBack (r))),
+                   "S reach the target (rendered): " + juce::String (r.expectedReductionDb, 2) + " of " + juce::String (r.targetDb, 2) + at);
+            check (r.mixedReductionDb <= autoMixedMaxDb + 0.01f && r.mixedPresenceDb <= autoMixedPresenceMaxDb + 0.01f, "vowel side of each S kept" + at);
+            check (r.vowelReductionDb <= autoVowelMaxDb + 0.01f && r.vowelPresenceDb <= autoVowelPresenceMaxDb + 0.01f
+                       && r.vowelAirDb <= autoVowelAirMaxDb + 0.01f, "vowels: full band, presence and air kept" + at);
+            check (r.rangeDb >= autoMinRangeDb && r.rangeDb <= autoMaxRangeDb, "range in the AUTO window" + at);
+            check (r.renders <= 24, "at most 24 renders (" + juce::String (r.renders) + ")" + at);
 
             Settings s;
             s.freq = r.freq;
@@ -445,8 +498,8 @@ namespace
             const double sd = rangesDb (take.x, take.sRanges, 0) - rangesDb (y, take.sRanges, L);
             const double vd = rangesDb (take.x, take.vRanges, 0) - rangesDb (y, take.vRanges, L);
             std::printf ("    applied: S -%.2f dB, vowels -%.2f dB\n", sd, vd);
-            check (sd > 0.3 && sd < 4.5, "S reduced, subtly (0.3-4.5 dB)");
-            check (std::abs (vd) < 0.5, "vowels within 0.5 dB");
+            check (sd > 0.3 && sd < autoMaxTargetDb + 1.0, "S reduced, subtly" + at);
+            check (std::abs (vd) < 0.5, "vowels within 0.5 dB" + at);
         }
 
         // Quiet take: the same result (relative detection)
@@ -461,27 +514,380 @@ namespace
             near (a.thresholdDb, b.thresholdDb, 1.0, "quiet take: same threshold (relative)");
         }
 
+        // Soft S far under the vowels: the threshold never goes below the floor (EMBER would stop being dynamic)
+        {
+            const auto soft = makeTake (48000.0, 12.0, -34.0f);
+            const auto r = analyse (soft.x.data(), (int) soft.x.size(), 48000.0);
+            std::printf ("    soft S: status %d thr %.1f range %.1f S -%.2f of %.2f\n", (int) r.status, r.thresholdDb, r.rangeDb, r.expectedReductionDb, r.targetDb);
+            check (r.status != AutoResult::Status::ok || r.thresholdDb >= autoMinThresholdDb, "threshold floor -45 dB");
+        }
+
+        // Determinism: the same take twice gives the same result
+        {
+            const auto take = makeTake (48000.0, 12.0, -16.0f, -12.0f, true, 11);
+            const auto a = analyse (take.x.data(), (int) take.x.size(), 48000.0);
+            const auto b = analyse (take.x.data(), (int) take.x.size(), 48000.0);
+            check (a.freq == b.freq && a.thresholdDb == b.thresholdDb && a.rangeDb == b.rangeDb && a.expectedReductionDb == b.expectedReductionDb,
+                   "the same take twice: the same result");
+        }
+
+        // The centre of the S does not wander between excerpts of the same voice
+        {
+            const auto take = makeTake (48000.0, 40.0, -16.0f, -12.0f, true, 5);
+            float lo = 1.0e9f, hi = 0.0f;
+            for (double from : { 0.0, 9.0, 18.0, 27.0 })
+            {
+                const int a = (int) (from * 48000.0);
+                const auto r = analyse (take.x.data() + a, (int) (12.0 * 48000.0), 48000.0);
+                lo = std::min (lo, r.peakHz);
+                hi = std::max (hi, r.peakHz);
+            }
+            check (hi / lo < 1.04f, "S centre over 4 excerpts within 4 % (" + juce::String (lo, 0) + "-" + juce::String (hi, 0) + " Hz)");
+        }
+
+        // Breaths and hi-hat bleed in the pauses are no S: the centre (and so the frequency) stays where the S are
+        {
+            const double fs = 48000.0;
+            const auto clean = makeTake (fs, 12.0);
+            auto dirty = clean;
+            juce::Random rnd (99);
+            Biq hp1, hp2, bp1, bp2;
+            hp1.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 9000.0, 0.54));
+            hp2.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 9000.0, 1.31));
+            bp1.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 1000.0, 0.71));
+            bp2.b.setCoeffs (vocalypse::dsp::design::lowPass (fs, 9000.0, 0.71));
+            const float hat = vocalypse::dsp::dbToGain (-16.0f), breath = vocalypse::dsp::dbToGain (-44.0f);
+            for (size_t k = 0; k + 1 < clean.sRanges.size(); ++k)
+            {
+                const int pauseStart = clean.sRanges[k].second + (int) (fs * 0.015);
+                // a hi-hat hit (bright, 30 ms decay) in every pause, a breath (dull noise, 60 ms) in every other one
+                for (int i = 0; i < (int) (fs * 0.05) && pauseStart + i < (int) dirty.x.size(); ++i)
+                {
+                    const float w = rnd.nextFloat() * 2.0f - 1.0f;
+                    dirty.x[(size_t) (pauseStart + i)] += hat * std::exp (-i / (float) (fs * 0.01)) * hp2.run (hp1.run (w));
+                    if (k % 2 == 0 && i < (int) (fs * 0.045))
+                        dirty.x[(size_t) (pauseStart + i)] += breath * bp2.run (bp1.run (rnd.nextFloat() * 2.0f - 1.0f));
+                }
+            }
+            const auto a = analyse (clean.x.data(), (int) clean.x.size(), fs);
+            const auto b = analyse (dirty.x.data(), (int) dirty.x.size(), fs);
+            std::printf ("    bleed: centre %.0f -> %.0f Hz, freq %.0f -> %.0f, S frames %d -> %d, rejected %d\n",
+                         a.peakHz, b.peakHz, a.freq, b.freq, a.sibilantFrames, b.sibilantFrames, b.rejectedFrames);
+            check (b.status == AutoResult::Status::ok && std::abs (b.peakHz / a.peakHz - 1.0f) < 0.04f, "hi-hat + breath: S centre within 4 %");
+            check (b.rejectedFrames > a.rejectedFrames, "the bleed frames are rejected");
+        }
+
+        // Stereo: the S are panned left (20 dB lower on the right). The plugin detects the louder channel and dips
+        // both, so AUTO measures in stereo: what it predicts is what the plugin then does. A mono sum (until
+        // 2026-11-23) heard the S 5 dB softer than the detector does and set AUTO up for a different voice.
+        {
+            const double fs = 48000.0;
+            const auto take = makeTake (fs, 12.0);
+            std::vector<float> l = take.x, rr = take.x, sum (take.x.size());
+            for (auto [a, b] : take.sRanges)   // the S (with their fades) 20 dB lower on the right
+                for (int i = std::max (0, a - (int) (fs * 0.012)); i < std::min ((int) rr.size(), b + (int) (fs * 0.012)); ++i)
+                    rr[(size_t) i] *= 0.1f;
+            for (size_t i = 0; i < sum.size(); ++i)
+                sum[i] = 0.5f * (l[i] + rr[i]);
+            const auto applied = [&] (const AutoResult& r)
+            {
+                Settings s;
+                s.freq = r.freq;
+                s.thresholdDb = r.thresholdDb;
+                s.rangeDb = r.rangeDb;
+                s.releaseMs = autoReleaseMs;
+                E e (fs, s);
+                std::vector<float> yl = l, yr = rr;
+                for (int start = 0; start < (int) yl.size(); start += 512)
+                {
+                    float* p[2] { yl.data() + start, yr.data() + start };
+                    e.process (p, 2, std::min (512, (int) yl.size() - start));
+                }
+                // the S band of the left channel's S, as AUTO judges it
+                Biq h1, h2, g1, g2;
+                h1.b.setCoeffs (vocalypse::dsp::design::highPass (fs, autoSBandHz, 0.54));
+                h2.b.setCoeffs (vocalypse::dsp::design::highPass (fs, autoSBandHz, 1.31));
+                g1.b.setCoeffs (vocalypse::dsp::design::highPass (fs, autoSBandHz, 0.54));
+                g2.b.setCoeffs (vocalypse::dsp::design::highPass (fs, autoSBandHz, 1.31));
+                std::vector<float> hx (l.size()), hy (yl.size());
+                for (size_t i = 0; i < l.size(); ++i) hx[i] = h2.run (h1.run (l[i]));
+                for (size_t i = 0; i < yl.size(); ++i) hy[i] = g2.run (g1.run (yl[i]));
+                return rangesDb (hx, take.sRanges, 0) - rangesDb (hy, take.sRanges, e.getLatencySamples());
+            };
+            const float* ch[2] { l.data(), rr.data() };
+            const auto r = analyse (ch, 2, (int) l.size(), fs, Settings {});
+            const auto m = analyse (sum.data(), (int) sum.size(), fs);
+            const double sd = applied (r), md = applied (m);
+            std::printf ("    stereo: thr %.1f, predicted -%.2f, plugin -%.2f dB | mono sum: thr %.1f, predicted -%.2f, plugin -%.2f dB\n",
+                         r.thresholdDb, r.expectedReductionDb, sd, m.thresholdDb, m.expectedReductionDb, md);
+            check (r.status == AutoResult::Status::ok && r.numChannels == 2, "stereo take analysed in stereo");
+            check (std::abs (sd - r.expectedReductionDb) < 0.5, "stereo: what AUTO predicts is what the plugin does");
+            const float* same[2] { l.data(), l.data() };
+            check (analyse (same, 2, (int) l.size(), fs, Settings {}).numChannels == 1, "two equal channels are analysed once");
+        }
+
         const auto vowelsOnly = makeTake (48000.0, 8.0, -16.0f, -12.0f, false);
         check (analyse (vowelsOnly.x.data(), (int) vowelsOnly.x.size(), 48000.0).status == AutoResult::Status::noSibilance, "no S -> noSibilance");
         const auto shortTake = makeTake (48000.0, 2.0);
         check (analyse (shortTake.x.data(), (int) shortTake.x.size(), 48000.0).status == AutoResult::Status::tooShort, "2 s -> tooShort");
     }
 
+    // How long AUTO thinks, and how fast it stops when the plugin closes
+    void testAutoTiming()
+    {
+        Test t ("AUTO analysis time, cancel");
+        for (double fs : { 48000.0, 192000.0 })
+            for (double secs : { 12.0, 30.0 })
+            {
+                const auto take = makeTake (fs, secs);
+                const auto right = rightOf (take.x);
+                const float* ch[2] { take.x.data(), right.data() };
+                const double t0 = juce::Time::getMillisecondCounterHiRes();
+                const auto r = analyse (ch, 2, (int) take.x.size(), fs, Settings {});
+                const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+                std::printf ("    %3.0f kHz %2.0f s stereo: %6.0f ms, %d renders (status %d)\n", fs / 1000.0, secs, ms, r.renders, (int) r.status);
+                check (r.status == AutoResult::Status::ok, "ok at " + juce::String (fs) + " / " + juce::String (secs) + " s");
+            }
+        // cancel: a 30 s take at 192 kHz stops within a few ms of the flag
+        {
+            const double fs = 192000.0;
+            const auto take = makeTake (fs, 30.0);
+            std::atomic<bool> cancel { false };
+            std::atomic<double> doneAt { 0.0 };
+            AutoResult r;
+            std::thread th ([&] { r = analyse (take.x.data(), (int) take.x.size(), fs, Settings {}, &cancel); doneAt = juce::Time::getMillisecondCounterHiRes(); });
+            juce::Thread::sleep (300);
+            const double c0 = juce::Time::getMillisecondCounterHiRes();
+            cancel = true;
+            th.join();
+            const double latency = doneAt.load() - c0;
+            std::printf ("    cancel after 300 ms: stopped %.1f ms later\n", latency);
+            check (r.status == AutoResult::Status::cancelled && latency < 100.0, "cancelled within 100 ms");
+        }
+    }
+
     void testCapture()
     {
-        Test t ("AUTO capture skips pauses, stops when full");
-        AutoCapture c;
-        c.prepare (8000.0);
-        c.start();
-        std::vector<float> loud (800, 0.3f), quiet (800, 0.0001f);
-        const float* chL[1] { loud.data() };
-        const float* chQ[1] { quiet.data() };
-        c.push (chL, 1, 800);
-        c.push (chQ, 1, 800);
-        check (c.getNumSamples() == 800, "pause not captured");
-        for (int i = 0; i < 400; ++i)
-            c.push (chL, 1, 800);
-        check (c.isFull() && ! c.isCapturing(), "stops at 30 s");
+        Test t ("AUTO capture: pauses cut to a gap, stereo, block size, rate change, threads");
+        {
+            AutoCapture c;
+            c.prepare (8000.0);
+            c.start();
+            std::vector<float> loud (4000, 0.3f), quiet (16000, 0.0001f);
+            const float* chL[1] { loud.data() };
+            const float* chQ[1] { quiet.data() };
+            c.push (chL, 1, 4000);
+            c.push (chQ, 1, 16000);   // 2 s pause: cut to the gap
+            c.push (chL, 1, 4000);
+            near (c.getSeconds(), 1.0 + autoGapSeconds, 0.011, "a long pause shrinks to the gap");
+            near (c.getVoicedSeconds(), 1.0, 0.011, "voice counted without it");
+            for (int i = 0; i < 40 && c.isCapturing(); ++i)
+                c.push (chL, 1, 4000);
+            check (c.isFull() && ! c.isCapturing(), "stops when full");
+            c.stop();
+            check (c.copyTake().numChannels == 1, "equal channels: one channel");
+        }
+        // the same audio in blocks of 64, 512, 2048 (and an odd 333): the same take, so the same AUTO result
+        {
+            const double fs = 48000.0;
+            auto take = makeTake (fs, 15.0);
+            for (double at : { 3.0, 8.0 })   // two long pauses
+                std::fill_n (take.x.begin() + (int) (at * fs), (int) (1.2 * fs), 0.0f);
+            const auto right = rightOf (take.x);
+            const float* ch[2] { take.x.data(), right.data() };
+            AutoCapture::Take ref;
+            const auto a = autoViaCapture (ch, 2, (int) take.x.size(), fs, 512, {}, 1.0e9, &ref);
+            check (ref.numChannels == 2, "different channels: stereo take");
+            for (int block : { 64, 333, 2048 })
+            {
+                AutoCapture::Take other;
+                const auto b = autoViaCapture (ch, 2, (int) take.x.size(), fs, block, {}, 1.0e9, &other);
+                check (other.channel[0] == ref.channel[0] && other.channel[1] == ref.channel[1], "block " + juce::String (block) + ": the same take");
+                check (b.freq == a.freq && b.thresholdDb == a.thresholdDb && b.rangeDb == a.rangeDb
+                           && std::abs (b.expectedReductionDb - a.expectedReductionDb) < 1.0e-4f,
+                       "block " + juce::String (block) + ": the same AUTO result");
+            }
+            std::printf ("    blocks 64/333/512/2048: freq %.0f thr %.1f range %.1f, take %.2f s (voice %.2f s)\n", a.freq, a.thresholdDb, a.rangeDb,
+                         ref.numSamples() / fs, a.seconds);
+        }
+        // a new sample rate while listening: listening starts again at that rate (not "too short")
+        {
+            AutoCapture c;
+            c.prepare (48000.0);
+            c.start();
+            std::vector<float> loud (4800, 0.3f);
+            const float* ch[1] { loud.data() };
+            for (int i = 0; i < 10; ++i)
+                c.push (ch, 1, 4800);
+            c.prepare (48000.0);
+            check (c.getNumSamples() == 48000 && c.isCapturing(), "the same rate: left alone");
+            c.prepare (96000.0);
+            check (c.isCapturing() && c.getNumSamples() == 0 && c.getRestarts() == 1 && c.getSampleRate() == 96000.0, "a new rate: listening again");
+            c.push (ch, 1, 4800);
+            near (c.getSeconds(), 0.05, 0.003, "at the new rate");
+        }
+        // the audio thread pushes while the message thread starts, stops and copies: no torn take, no crash
+        {
+            AutoCapture c;
+            c.prepare (48000.0);
+            std::atomic<bool> run { true };
+            std::vector<float> l (480, 0.2f), r (480, -0.2f);
+            std::thread audio ([&]
+            {
+                const float* ch[2] { l.data(), r.data() };
+                while (run.load())
+                    c.push (ch, 2, 480);
+            });
+            bool consistent = true;
+            for (int i = 0; i < 300; ++i)
+            {
+                c.start();
+                juce::Thread::yield();
+                c.stop();
+                const auto take = c.copyTake();
+                if (take.numSamples() > 0)
+                    consistent = consistent && take.numChannels == 2 && take.channel[0].back() == 0.2f && take.channel[1].back() == -0.2f;
+            }
+            run = false;
+            audio.join();
+            check (consistent, "start / stop / copy against a pushing audio thread");
+        }
+    }
+
+    // The processor around AUTO: what happens when the user (or the host) does something while AUTO works
+    void testAutoProcessor()
+    {
+        Test t ("AUTO in the processor: cancel, loads and changes while analysing, rate change");
+        const auto take = makeTake (48000.0, 13.0);
+        const auto right = rightOf (take.x);
+        const auto feed = [&] (EmberAudioProcessor& p, double fs, double seconds)
+        {
+            juce::AudioBuffer<float> buf (2, 512);
+            juce::MidiBuffer midi;
+            const int len = std::min ((int) take.x.size(), (int) (seconds * fs));
+            for (int start = 0; start + 512 <= len; start += 512)
+            {
+                buf.copyFrom (0, 0, take.x.data() + start, 512);
+                buf.copyFrom (1, 0, right.data() + start, 512);
+                p.processBlock (buf, midi);
+            }
+        };
+        const auto setReal = [] (EmberAudioProcessor& p, const char* id, float v)
+        {
+            if (auto* prm = p.state.getParameter (id))
+                prm->setValueNotifyingHost (prm->convertTo0to1 (v));
+        };
+        const auto real = [] (EmberAudioProcessor& p, const char* id) { return p.state.getRawParameterValue (id)->load(); };
+        using Phase = EmberAudioProcessor::AutoPhase;
+
+        // the AUTO button cancels while analysing; closing the plugin never waits for the analysis
+        {
+            auto p = std::make_unique<EmberAudioProcessor>();
+            p->prepareToPlay (48000.0, 512);
+            setReal (*p, pid::threshold, -20.0f);
+            p->startAuto();
+            feed (*p, 48000.0, 13.0);
+            p->finishAuto();
+            p->cancelAuto();
+            check (p->getAutoPhase() == Phase::idle, "cancel while analysing: idle");
+            p->waitForAuto();
+            near (real (*p, pid::threshold), -20.0, 0.05, "nothing applied");
+            p->startAuto();
+            feed (*p, 48000.0, 13.0);
+            p->finishAuto();
+            const double t0 = juce::Time::getMillisecondCounterHiRes();
+            p.reset();
+            const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+            std::printf ("    closing while analysing took %.1f ms\n", ms);
+            check (ms < 150.0, "closing while analysing: quick (" + juce::String (ms, 1) + " ms)");
+        }
+        // a project loaded while analysing: its values stay, the analysis is dropped, no old result is shown
+        {
+            EmberAudioProcessor src;
+            setReal (src, pid::threshold, -25.0f);
+            juce::MemoryBlock mb;
+            src.getStateInformation (mb);
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.startAuto();
+            feed (p, 48000.0, 13.0);
+            p.finishAuto();
+            p.setStateInformation (mb.getData(), (int) mb.getSize());
+            check (p.getAutoPhase() == Phase::idle, "project loaded while analysing: dropped");
+            p.waitForAuto();
+            near (real (p, pid::threshold), -25.0, 0.05, "the project's threshold stays");
+            // after a finished AUTO a loaded project clears its message
+            p.startAuto();
+            feed (p, 48000.0, 13.0);
+            p.finishAuto();
+            p.waitForAuto();
+            check (p.getAutoPhase() == Phase::done, "AUTO done");
+            p.setStateInformation (mb.getData(), (int) mb.getSize());
+            check (p.getAutoPhase() == Phase::idle && p.getAutoMessage().isEmpty() && p.getLastAuto().status != AutoResult::Status::ok,
+                   "project loaded after AUTO: no old result");
+        }
+        // a preset or the other A/B slot while analysing: dropped as well
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.startAuto();
+            feed (p, 48000.0, 13.0);
+            p.finishAuto();
+            p.loadFactoryPreset (3);
+            const float presetThr = real (p, pid::threshold);
+            p.waitForAuto();
+            check (p.getAutoPhase() == Phase::idle, "preset while analysing: dropped");
+            near (real (p, pid::threshold), presetThr, 0.05, "the preset stays");
+
+            p.switchSlot (1);
+            setReal (p, pid::threshold, -22.0f);
+            p.startAuto();
+            feed (p, 48000.0, 13.0);
+            p.finishAuto();
+            p.switchSlot (0);
+            const float aThr = real (p, pid::threshold);
+            p.waitForAuto();
+            check (p.getAutoPhase() == Phase::idle, "A/B while analysing: dropped");
+            near (real (p, pid::threshold), aThr, 0.05, "slot A stays");
+        }
+        // mode changed while analysing: measured again with it, on the same take
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.startAuto();
+            feed (p, 48000.0, 13.0);
+            p.finishAuto();
+            setReal (p, pid::mode, 1.0f);
+            p.pollAuto();
+            check (p.getAutoRuns() == 2 && p.getAutoPhase() == Phase::analysing, "mode changed: analysed again");
+            p.waitForAuto();
+            check (p.getAutoPhase() == Phase::done && real (p, pid::mode) > 0.5f, "done, wideband kept");
+            check (p.getLastAuto().numChannels == 2, "measured in stereo");
+        }
+        // a new sample rate while listening: it listens again, and finishes normally
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.startAuto();
+            feed (p, 48000.0, 4.0);
+            p.prepareToPlay (96000.0, 512);
+            p.updateAuto (100.0);
+            check (p.getAutoPhase() == Phase::listening && p.getCapture().getNumSamples() == 0, "rate change: listening again");
+            const auto t96 = makeTake (96000.0, 13.0);
+            juce::AudioBuffer<float> buf (2, 512);
+            juce::MidiBuffer midi;
+            for (int start = 0; start + 512 <= (int) t96.x.size(); start += 512)
+            {
+                for (int c = 0; c < 2; ++c)
+                    buf.copyFrom (c, 0, t96.x.data() + start, 512);
+                p.processBlock (buf, midi);
+            }
+            p.updateAuto (101.0);
+            p.updateAuto (101.5 + autoQuietSeconds);   // playback stopped
+            check (p.getAutoPhase() == Phase::analysing, "voice at the new rate, then a stop: analysing");
+            p.waitForAuto();
+            check (p.getAutoPhase() == Phase::done, "and done");
+        }
     }
 
     void testPolish()
@@ -522,7 +928,7 @@ namespace
             check (c.getNumSamples() == 0, "a NaN block is not captured");
             const float* ch[1] { take.x.data() };
             c.push (ch, 1, 4096);
-            check (c.getNumSamples() == 4096, "audio captured");
+            check (c.getNumSamples() > 3000 && c.getNumSamples() <= 4096, "audio captured (whole 5 ms chunks)");
         }
         // split <-> wideband while S are reduced: no jump bigger than the signal itself makes
         {
@@ -1663,27 +2069,15 @@ namespace
         return b;
     }
 
-    std::vector<float> monoOf (const juce::AudioBuffer<float>& b)
+    // AUTO as the plugin does it: the capture (stereo, pauses cut) until 12 s of voice, from `startSeconds` on
+    AutoResult autoOn (const juce::AudioBuffer<float>& b, double fs, bool smart = true, double startSeconds = 0.0,
+                       double voicedSeconds = autoEnoughSeconds)
     {
-        std::vector<float> m ((size_t) b.getNumSamples(), 0.0f);
-        for (int ch = 0; ch < b.getNumChannels(); ++ch)
-            for (int i = 0; i < b.getNumSamples(); ++i)
-                m[(size_t) i] += b.getSample (ch, i) / (float) b.getNumChannels();
-        return m;
-    }
-
-    // AUTO as the plugin does it: only the non-silent blocks of the first 30 s
-    AutoResult autoOn (const std::vector<float>& mono, double fs, bool smart = true)
-    {
-        AutoCapture c;
-        c.prepare (fs);
-        c.start();
-        for (int start = 0; start < (int) mono.size() && c.isCapturing(); start += 512)
-        {
-            const float* ch[1] { mono.data() + start };
-            c.push (ch, 1, std::min (512, (int) mono.size() - start));
-        }
-        return analyse (c.data(), c.getNumSamples(), fs, smart);
+        const int from = std::min (b.getNumSamples(), (int) (startSeconds * fs));
+        const float* ch[2] { b.getReadPointer (0, from), b.getReadPointer (std::min (1, b.getNumChannels() - 1), from) };
+        Settings base;
+        base.smart = smart;
+        return autoViaCapture (ch, std::min (2, b.getNumChannels()), b.getNumSamples() - from, fs, 512, base, voicedSeconds);
     }
 
     int render (const juce::File& in, const juce::File& dir)
@@ -1691,8 +2085,7 @@ namespace
         double fs = 0.0;
         auto buf = loadWav (in, fs);
         if (buf == nullptr) { std::printf ("cannot read %s\n", in.getFullPathName().toRawUTF8()); return 1; }
-        const auto mono = monoOf (*buf);
-        const auto r = autoOn (mono, fs);
+        const auto r = autoOn (*buf, fs);
         std::printf ("%s: status %d freq %.0f thr %.1f range %.1f (S med %.1f, vowel95 %.1f, expected -%.1f dB, S frames %d)\n",
                      in.getFileName().toRawUTF8(), (int) r.status, r.freq, r.thresholdDb, r.rangeDb, r.sibilantMedianDb, r.vowel95Db,
                      r.expectedReductionDb, r.sibilantFrames);
@@ -1768,21 +2161,14 @@ namespace
         Settings s;
         if (has ("auto") && kv["auto"] > 0.5f)
         {
-            const auto mono = monoOf (*buf);
-            const int start = (int) ((has ("autostart") ? kv["autostart"] : 0.0f) * fs);
+            const double start = has ("autostart") ? kv["autostart"] : 0.0;
             const double secs = has ("autosec") ? kv["autosec"] : autoEnoughSeconds;
-            AutoCapture c;
-            c.prepare (fs);
-            c.start();
-            for (int p = start; p < (int) mono.size() && c.isCapturing() && c.getSeconds() < secs; p += 512)
-            {
-                const float* ch[1] { mono.data() + p };
-                c.push (ch, 1, std::min (512, (int) mono.size() - p));
-            }
-            const auto r = analyse (c.data(), c.getNumSamples(), fs, true);
-            std::printf ("AUTO status %d freq %.0f thr %.1f range %.1f peakHz %.0f target %.2f expected %.2f vowel %.3f mixed %.3f sVsV %.1f Sframes %d secs %.1f\n",
+            const double t0 = juce::Time::getMillisecondCounterHiRes();
+            const auto r = autoOn (*buf, fs, true, start, secs);
+            std::printf ("AUTO status %d freq %.0f thr %.1f range %.1f peakHz %.0f target %.2f expected %.2f vowel %.3f vpres %.3f vair %.3f mixed %.3f mpres %.3f sVsV %.1f Sframes %d rej %d secs %.1f ch %d renders %d ms %.0f\n",
                          (int) r.status, r.freq, r.thresholdDb, r.rangeDb, r.peakHz, r.targetDb, r.expectedReductionDb, r.vowelReductionDb,
-                         r.mixedReductionDb, r.sibilanceVsVowelDb, r.sibilantFrames, r.seconds);
+                         r.vowelPresenceDb, r.vowelAirDb, r.mixedReductionDb, r.mixedPresenceDb, r.sibilanceVsVowelDb, r.sibilantFrames,
+                         r.rejectedFrames, r.seconds, r.numChannels, r.renders, juce::Time::getMillisecondCounterHiRes() - t0);
             if (r.status == AutoResult::Status::ok) { s.freq = r.freq; s.thresholdDb = r.thresholdDb; s.rangeDb = r.rangeDb; s.releaseMs = autoReleaseMs; }
         }
         if (has ("freq")) s.freq = kv["freq"];
@@ -2162,35 +2548,63 @@ namespace
                 files.addArray (f.findChildFiles (juce::File::findFiles, true, "*.wav"));
             else if (f.existsAsFile())
                 files.add (f);
+            else
+                check (false, "EMBER_VOCALS: " + part.trim() + " does not exist");
         }
-        int ok = 0;
+        // set but nothing found: that is a broken setup, not a pass
+        check (! files.isEmpty(), "EMBER_VOCALS is set but holds no .wav file");
+        int ok = 0, read = 0;
         for (const auto& f : files)
         {
             double fs = 0.0;
             auto buf = loadWav (f, fs);
+            check (buf != nullptr, f.getFileName() + ": readable");
             if (buf == nullptr || buf->getNumSamples() < (int) (fs * 4.0))
                 continue;
-            const auto mono = monoOf (*buf);
-            const auto r = autoOn (mono, fs);
-            std::printf ("    %-48s %s freq %5.0f thr %6.1f range %4.1f S -%.1f V -%.2f M -%.2f dB (S/V %.1f) peak %.0f\n",
-                         f.getFileName().substring (0, 48).toRawUTF8(), r.status == AutoResult::Status::ok ? "ok  " : "none",
-                         r.freq, r.thresholdDb, r.rangeDb, r.expectedReductionDb, r.vowelReductionDb, r.mixedReductionDb, r.sibilanceVsVowelDb, r.peakHz);
+            ++read;
+            const auto r = autoOn (*buf, fs);
+            std::printf ("    %-16s %s freq %5.0f thr %6.1f range %4.1f S -%.2f of %.2f | V -%.2f pres -%.2f air -%.2f | M -%.2f pres -%.2f (S/V %.1f) peak %.0f, %d renders, %dch\n",
+                         f.getFileName().substring (0, 16).toRawUTF8(), r.status == AutoResult::Status::ok ? "ok  " : "none",
+                         r.freq, r.thresholdDb, r.rangeDb, r.expectedReductionDb, r.targetDb, r.vowelReductionDb, r.vowelPresenceDb, r.vowelAirDb,
+                         r.mixedReductionDb, r.mixedPresenceDb, r.sibilanceVsVowelDb, r.peakHz, r.renders, r.numChannels);
+            check (r.status == AutoResult::Status::ok, f.getFileName() + ": set up");
             if (r.status != AutoResult::Status::ok)
                 continue;
             ++ok;
+            // stability: other 12 s of the same take land near the same frequency
+            if (buf->getNumSamples() > (int) (fs * 70.0))
+            {
+                float lo = r.peakHz, hi = r.peakHz;
+                for (double from : { 25.0, 50.0 })
+                {
+                    const auto o = autoOn (*buf, fs, true, from);
+                    if (o.status == AutoResult::Status::ok)
+                    {
+                        lo = std::min (lo, o.peakHz);
+                        hi = std::max (hi, o.peakHz);
+                    }
+                }
+                std::printf ("      excerpts 0/25/50 s: S centre %.0f-%.0f Hz (%.0f %%)\n", lo, hi, 100.0 * (hi / lo - 1.0));
+                check (hi / lo < 1.30f, f.getFileName() + ": S centre stable over excerpts");
+            }
+            check (r.thresholdDb >= autoMinThresholdDb, f.getFileName() + ": threshold floor");
+            check (r.expectedReductionDb >= r.targetDb - 0.5f || heldBack (r), f.getFileName() + ": target reached unless a voice limit holds it back");
             if (juce::SystemStats::getEnvironmentVariable ("EMBER_COMPARE", {}).isNotEmpty())
             {
-                const auto p = autoOn (mono, fs, false);
+                const auto p = autoOn (*buf, fs, false);
                 std::printf ("      plain relative: thr %6.1f range %4.1f S -%.1f V -%.2f M -%.2f | smart: S -%.1f V -%.2f M -%.2f\n",
                              p.thresholdDb, p.rangeDb, p.expectedReductionDb, p.vowelReductionDb, p.mixedReductionDb,
                              r.expectedReductionDb, r.vowelReductionDb, r.mixedReductionDb);
             }
             check (r.freq >= autoMinCornerHz && r.freq <= autoMaxCornerHz, f.getFileName() + ": corner in range");
-            check (r.vowelReductionDb <= 0.15f, f.getFileName() + ": vowels untouched");
-            check (r.mixedReductionDb <= autoMixedMaxDb + 0.1f, f.getFileName() + ": S next to vowels keeps the vowel");
+            check (r.vowelReductionDb <= autoVowelMaxDb + 0.01f && r.vowelPresenceDb <= autoVowelPresenceMaxDb + 0.01f
+                       && r.vowelAirDb <= autoVowelAirMaxDb + 0.01f, f.getFileName() + ": vowels untouched (full band, presence, air)");
+            check (r.mixedReductionDb <= autoMixedMaxDb + 0.01f && r.mixedPresenceDb <= autoMixedPresenceMaxDb + 0.01f,
+                   f.getFileName() + ": S next to vowels keeps the vowel");
             check (r.rangeDb <= autoMaxRangeDb && r.expectedReductionDb <= autoMaxTargetDb + 0.5f, f.getFileName() + ": subtle");
         }
-        std::printf ("    %d of %d takes set up\n", ok, files.size());
+        std::printf ("    %d of %d takes set up (%d read)\n", ok, files.size(), read);
+        check (read > 0, "EMBER_VOCALS: at least one take was analysed");
     }
 }
 
@@ -2317,6 +2731,23 @@ int main (int argc, char** argv)
     if (args.size() >= 2 && args[0] == "--mascot-loops")
         return mascotLoops (juce::File (args[1]));
 
+    if (args.size() >= 1 && args[0] == "--real-takes")   // only AUTO on the takes of EMBER_VOCALS
+    {
+        testRealTakes();
+        std::printf ("\nEMBER real takes: %d passed, %d failed\n", passed, failed);
+        return failed == 0 ? 0 : 1;
+    }
+    if (args.size() >= 1 && args[0] == "--auto-tests")   // only the AUTO tests (quick loop while tuning AUTO)
+    {
+        testAuto();
+        testAutoTiming();
+        testCapture();
+        testAutoProcessor();
+        testRealTakes();
+        std::printf ("\nEMBER AUTO: %d passed, %d failed\n", passed, failed);
+        return failed == 0 ? 0 : 1;
+    }
+
     juce::File snapshotDir;
     if (args.size() >= 2 && args[0] == "--snapshots")
         snapshotDir = juce::File (args[1]);
@@ -2334,7 +2765,9 @@ int main (int argc, char** argv)
     testRobust();
     testPolish();
     testAuto();
+    testAutoTiming();
     testCapture();
+    testAutoProcessor();
     testProcessor();
     testLicence();
     testMascot();
