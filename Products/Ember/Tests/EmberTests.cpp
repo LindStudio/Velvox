@@ -172,7 +172,7 @@ namespace
     {
         Test t ("layout + defaults");
         EmberAudioProcessor p;
-        check (p.getParameters().size() == 13, "13 parameters");
+        check (p.getParameters().size() == 16, "16 parameters");
         const auto s = readSettings (p.state);
         near (s.freq, voiceMidHz, 0.5, "default freq");
         near (s.thresholdDb, voiceMidThrDb, 0.01, "default threshold");
@@ -184,15 +184,15 @@ namespace
 
     void testLatency()
     {
-        Test t ("latency is 5 ms at every rate");
+        Test t ("latency is 10 ms at every rate (the longest lookahead)");
         for (double fs : { 44100.0, 48000.0, 88200.0, 96000.0, 192000.0 })
         {
             E e (fs);
-            check (e.getLatencySamples() == (int) std::lround (0.005 * fs), "latency at " + juce::String (fs));
+            check (e.getLatencySamples() == (int) std::lround (0.010 * fs), "latency at " + juce::String (fs));
         }
         EmberAudioProcessor p;
         p.prepareToPlay (48000.0, 256);
-        check (p.getLatencySamples() == 240, "processor reports 240 samples at 48 kHz");
+        check (p.getLatencySamples() == 480, "processor reports 480 samples at 48 kHz");
     }
 
     void testNull()
@@ -477,11 +477,12 @@ namespace
             check (r.freq >= 4000.0f && r.freq <= 8000.0f, "corner in 4-8 kHz" + at);
             check (r.thresholdDb > r.vowel95Db && r.thresholdDb >= autoMinThresholdDb, "threshold above the vowels and the floor" + at);
             check (r.targetDb >= autoMinTargetDb && r.targetDb <= autoMaxTargetDb, "target within the AUTO window" + at);
-            // AUTO reaches its target (it fell 3.6-4 dB short before) unless a voice limit holds it back: at 44.1 / 48 kHz
-            // none does; at 96 / 192 kHz the engine dips the presence of the mixed frames a little more per dB of S,
-            // and that limit holds AUTO near 3 dB
-            const bool strict = fs < 50000.0;
-            check (r.expectedReductionDb <= r.targetDb + 0.6f && (r.expectedReductionDb >= r.targetDb - 0.5f || (! strict && heldBack (r))),
+            // AUTO reaches its target unless a voice limit holds it back. Since the split band has the same (matched)
+            // shape at every rate (2026-11-23), the presence of the S next to a vowel binds on this synthetic take at
+            // 44.1-192 kHz alike (before, the bell cramped near Nyquist cut less presence at 44.1 / 48 kHz). The 15 real
+            // takes all reach their target (testRealTakes). Held back, AUTO still has to take a clear part of the S.
+            check (r.expectedReductionDb <= r.targetDb + 0.6f
+                       && (r.expectedReductionDb >= r.targetDb - 0.5f || (heldBack (r) && r.expectedReductionDb >= 1.0f)),
                    "S reach the target (rendered): " + juce::String (r.expectedReductionDb, 2) + " of " + juce::String (r.targetDb, 2) + at);
             check (r.mixedReductionDb <= autoMixedMaxDb + 0.01f && r.mixedPresenceDb <= autoMixedPresenceMaxDb + 0.01f, "vowel side of each S kept" + at);
             check (r.vowelReductionDb <= autoVowelMaxDb + 0.01f && r.vowelPresenceDb <= autoVowelPresenceMaxDb + 0.01f
@@ -1502,6 +1503,378 @@ namespace
         }
     }
 
+    // ================================================================ fix/ember-dsp (2026-11-23)
+    // Hann-windowed DFT power of x[from, to) at hz
+    double tonePower (const std::vector<float>& x, int from, int to, double hz, double fs)
+    {
+        const int n = to - from;
+        const double w = juce::MathConstants<double>::twoPi * hz / fs;
+        double re = 0.0, im = 0.0;
+        for (int i = 0; i < n; ++i)
+        {
+            const double win = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * i / (n - 1));
+            re += win * x[(size_t) (from + i)] * std::cos (w * i);
+            im -= win * x[(size_t) (from + i)] * std::sin (w * i);
+        }
+        return re * re + im * im;
+    }
+
+    // Amplitude of the component at hz around every sample (3 ms Hann window ending there)
+    std::vector<float> amplitudeAt (const std::vector<float>& y, double hz, double fs)
+    {
+        const int n = (int) (fs * 0.003);
+        std::vector<float> a (y.size(), 0.0f);
+        double norm = 0.0;
+        for (int k = 0; k < n; ++k)
+            norm += 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * k / (n - 1));
+        for (int i = n; i < (int) y.size(); i += 8)
+        {
+            double re = 0.0, im = 0.0;
+            for (int k = 0; k < n; ++k)
+            {
+                const double win = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * k / (n - 1));
+                const double ph = juce::MathConstants<double>::twoPi * hz * (i - n + k) / fs;
+                re += win * y[(size_t) (i - n + k)] * std::cos (ph);
+                im -= win * y[(size_t) (i - n + k)] * std::sin (ph);
+            }
+            for (int j = 0; j < 8 && i + j < (int) y.size(); ++j)
+                a[(size_t) (i + j)] = (float) (2.0 * std::sqrt (re * re + im * im) / norm);
+        }
+        return a;
+    }
+
+    // Stereo run (separate channels), block-wise; optional change of settings at sample `at`
+    std::pair<std::vector<float>, std::vector<float>> runStereo (Engine& e, std::vector<float> l, std::vector<float> r, int block = 256,
+                                                                 int at = -1, const Settings* change = nullptr, std::vector<float>* trace = nullptr)
+    {
+        for (int start = 0; start < (int) l.size(); start += block)
+        {
+            if (change != nullptr && start <= at && at < start + block)
+                e.setSettings (*change);
+            const int n = std::min (block, (int) l.size() - start);
+            float* ch[2] { l.data() + start, r.data() + start };
+            e.process (ch, 2, n);
+            if (trace != nullptr)
+                trace->push_back (e.currentReductionDb.load());
+        }
+        return { l, r };
+    }
+
+    void testSmoothBand()
+    {
+        Test t ("split: the band's gain moves every sample (no 16-sample steps, no zipper)");
+        const double fs = 44100.0;
+        // a steady tone in the middle of the band whose level swells 3 times a second: the reduction follows it the
+        // whole time (fast attack and release), so coefficient steps every 16 samples would show as sidebands at fs/16
+        const double f0 = 6200.0 * splitCenterRatio;
+        std::vector<float> x ((size_t) (fs * 2.0));
+        for (size_t i = 0; i < x.size(); ++i)
+        {
+            const double tt = (double) i / fs;
+            const double env = 0.02 + 0.3 * (0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * tt * 3.0));
+            x[i] = (float) (env * std::sin (juce::MathConstants<double>::twoPi * f0 * tt));
+        }
+        Settings s;
+        s.thresholdDb = -45.0f;
+        s.rangeDb = 12.0f;
+        s.attackMs = 0.3f;
+        s.releaseMs = 20.0f;
+        s.smart = false;
+        s.relative = false;
+        E e (fs, s);
+        const auto y = run (e, x);
+        const int from = (int) (fs * 0.5), to = (int) (fs * 1.5);
+        const double tone = tonePower (y, from, to, f0, fs);
+        double worst = 0.0;
+        for (double side : { f0 - fs / 16.0, f0 + fs / 16.0, f0 - fs / 8.0, f0 + fs / 8.0 })
+            worst = std::max (worst, tonePower (y, from, to, side, fs));
+        const double db = 10.0 * std::log10 (worst / tone);
+        const double lossDb = 10.0 * std::log10 (tonePower (x, from - e.getLatencySamples(), to - e.getLatencySamples(), f0, fs) / tone);
+        std::printf ("    tone -%.1f dB, sidebands at fs/16 and fs/8: %.1f dB under the tone\n", lossDb, db);
+        check (lossDb > 4.0, "the tone is reduced");
+        check (db < -90.0, "no zipper sidebands (< -90 dB)");
+    }
+
+    void testBandShape()
+    {
+        Test t ("split band: the same shape at 44.1 - 192 kHz (matched design, no cramping)");
+        double worstLow = 0.0, worstHigh = 0.0, oldWorst = 0.0;
+        for (float freq : { 5000.0f, 6200.0f, 8000.0f })
+            for (float width : { 1.5f, 3.0f, 4.0f })
+                for (double hz : { 2000.0, 3000.0, 5000.0, 7000.0, 9000.0, 12000.0, 15000.0, 18000.0 })
+                {
+                    const double ref = splitResponseDb (192000.0, freq, width, 6.0, hz);
+                    for (double fs : { 44100.0, 48000.0, 96000.0 })
+                    {
+                        const double d = std::abs (splitResponseDb (fs, freq, width, 6.0, hz) - ref);
+                        (hz <= 12000.0 ? worstLow : worstHigh) = std::max (hz <= 12000.0 ? worstLow : worstHigh, d);
+                    }
+                    // the old bilinear bell (RBJ, Q 0.4 at 1.25 x freq) for comparison
+                    const auto o44 = design::peak (44100.0, freq * 1.25, 0.4, -6.0), o192 = design::peak (192000.0, freq * 1.25, 0.4, -6.0);
+                    oldWorst = std::max (oldWorst, (double) std::abs (gainToDb ((float) design::magnitude (o44, hz, 44100.0))
+                                                             - gainToDb ((float) design::magnitude (o192, hz, 192000.0))));
+                }
+        std::printf ("    largest difference to 192 kHz: %.2f dB up to 12 kHz, %.2f dB up to 18 kHz (old bilinear bell: %.2f dB)\n",
+                     worstLow, worstHigh, oldWorst);
+        check (worstLow < 0.3, "within 0.3 dB up to 12 kHz");
+        check (worstHigh < 1.0, "within 1 dB up to 18 kHz");
+        // the reduction asked for is what the band takes at its centre
+        const auto shape = splitBand (6200.0, 3.0);
+        near (splitResponseDb (48000.0, 6200.0, 3.0, 5.0, shape.centreHz), -5.0, 0.05, "centre takes the reduction");
+        near (splitResponseDb (48000.0, 6200.0, 3.0, 0.0, 3000.0), 0.0, 1.0e-9, "0 dB = flat");
+        // width: the half-reduction points sit `width` octaves apart
+        const double lo = splitResponseDb (192000.0, 6200.0, 2.0, 6.0, splitBand (6200.0, 2.0).lowHz);
+        near (lo, -3.0, 0.15, "half the reduction at the lower edge");
+        check (splitResponseDb (48000.0, 6200.0, 1.5, 6.0, 14000.0) > splitResponseDb (48000.0, 6200.0, 4.0, 6.0, 14000.0) + 2.0,
+               "narrow leaves the air, wide takes it");
+        const double under = splitResponseDb (48000.0, 6200.0, 4.0, 6.0, 1500.0);
+        std::printf ("    widest band at 1.5 kHz: %.2f dB (6 dB at the centre)\n", under);
+        check (splitBand (6200.0, maxWidthOct).lowHz >= splitLowestRatio * 6200.0 - 0.01 && under > -1.5,
+               "even wide, the band's lower edge stays at 0.45 x freq (gentle skirt under it)");
+    }
+
+    void testStereo()
+    {
+        Test t ("stereo link 0..100 %, Stereo / Mid-Side / Mid / Side");
+        const double fs = 48000.0;
+        const auto take = makeTake (fs, 3.0);
+        const int L = Engine::latencyFor (fs);
+        std::vector<float> tone (take.x.size());
+        for (size_t i = 0; i < tone.size(); ++i)
+            tone[i] = 0.05f * (float) std::sin (juce::MathConstants<double>::twoPi * 300.0 * i / fs);
+        const auto exactly = [&] (const std::vector<float>& out, const std::vector<float>& in) { return maxDiffDelayed (out, in, L) == 0.0f; };
+
+        // S only on the left; the right carries a steady tone
+        for (float link : { 0.0f, 0.5f, 1.0f })
+        {
+            Settings s;
+            s.thresholdDb = -40.0f;
+            s.mode = 1;
+            s.stereoLink = link;
+            E e (fs, s);
+            const auto [l, r] = runStereo (e, take.x, tone);
+            const double sLoss = rangesDb (take.x, take.sRanges, 0) - rangesDb (l, take.sRanges, L);
+            const double rLoss = rangesDb (tone, take.sRanges, 0) - rangesDb (r, take.sRanges, L);
+            std::printf ("    link %3.0f %%: left S -%.2f dB, right (no S) -%.2f dB during the S\n", link * 100.0f, sLoss, rLoss);
+            check (sLoss > 3.0, "left S reduced (link " + juce::String (link) + ")");
+            if (link == 0.0f)
+                check (exactly (r, tone), "link 0 %: the right channel is untouched (bit-exact)");
+            if (link == 1.0f)
+                check (rLoss > 3.0, "link 100 %: the right channel dips with the left");
+            if (link == 0.5f)
+                check (rLoss > 0.3 && rLoss < sLoss - 1.0, "link 50 %: in between");
+        }
+
+        // S purely in the side (anti-phase), the vowels in the mid
+        std::vector<float> sOnly (take.x.size(), 0.0f), vOnly (take.x.size(), 0.0f);
+        for (auto [a, b] : take.sRanges)
+            for (int i = a - (int) (fs * 0.012); i < b + (int) (fs * 0.012) && i < (int) sOnly.size(); ++i)
+                sOnly[(size_t) i] = take.x[(size_t) i];
+        for (size_t i = 0; i < vOnly.size(); ++i)
+            vOnly[i] = take.x[i] - sOnly[i];
+        std::vector<float> left (take.x.size()), right (take.x.size());
+        for (size_t i = 0; i < left.size(); ++i)
+        {
+            left[i] = vOnly[i] + sOnly[i];
+            right[i] = vOnly[i] - sOnly[i];
+        }
+        const auto sideLoss = [&] (const std::vector<float>& l, const std::vector<float>& r)
+        {
+            std::vector<float> side (l.size()), sideIn (l.size());
+            for (size_t i = 0; i < l.size(); ++i)
+            {
+                side[i] = 0.5f * (l[i] - r[i]);
+                sideIn[i] = 0.5f * (left[i] - right[i]);
+            }
+            return rangesDb (sideIn, take.sRanges, 0) - rangesDb (side, take.sRanges, L);
+        };
+        const auto midError = [&] (const std::vector<float>& l, const std::vector<float>& r)
+        {
+            float m = 0.0f;
+            for (size_t i = (size_t) L; i < l.size(); ++i)
+                m = std::max (m, std::abs (0.5f * (l[i] + r[i]) - vOnly[i - (size_t) L]));
+            return m;
+        };
+        for (int mode : { 0, 1, 2, 3 })
+        {
+            Settings s;
+            s.thresholdDb = -40.0f;
+            s.stereoMode = mode;
+            s.stereoLink = 0.0f;
+            E e (fs, s);
+            const auto [l, r] = runStereo (e, left, right);
+            const double loss = sideLoss (l, r);
+            const float mErr = midError (l, r);
+            std::printf ("    %s: side S -%.2f dB, mid changed by at most %.6f\n", stereoChoices[mode].toRawUTF8(), loss, mErr);
+            if (mode == 2)
+                check (exactly (l, left) && exactly (r, right), "Mid: an S only in the side is left alone (bit-exact)");
+            else
+                check (loss > 3.0, stereoChoices[mode] + ": the side S is reduced");
+            if (mode == 1 || mode == 3)
+                check (mErr < 1.0e-5f, stereoChoices[mode] + ": the mid stays untouched");
+        }
+
+        // no reduction: bit-exact in every stereo mode and link
+        for (int mode : { 0, 1, 2, 3 })
+            for (float link : { 0.0f, 0.3f, 1.0f })
+            {
+                Settings s;
+                s.stereoMode = mode;
+                s.stereoLink = link;
+                std::vector<float> a (tone), b (tone.size());
+                for (size_t i = 0; i < b.size(); ++i)
+                    b[i] = 0.7f * (float) std::sin (juce::MathConstants<double>::twoPi * 500.0 * i / fs);
+                E e (fs, s);
+                const auto [l, r] = runStereo (e, a, b);
+                check (exactly (l, a) && exactly (r, b), "null: " + stereoChoices[mode] + ", link " + juce::String (link));
+            }
+    }
+
+    void testListenBand()
+    {
+        Test t ("listen S band = what is processed (split band / detector band in wideband)");
+        const double fs = 48000.0;
+        const auto toneThrough = [&] (int mode, double hz)
+        {
+            std::vector<float> x ((size_t) fs);
+            for (size_t i = 0; i < x.size(); ++i)
+                x[i] = 0.1f * (float) std::sin (juce::MathConstants<double>::twoPi * hz * i / fs);
+            Settings s;
+            s.listen = 1;
+            s.mode = mode;
+            E e (fs, s);
+            const auto y = run (e, x);
+            return energyDb (y, (int) (fs * 0.5), (int) fs) - energyDb (x, (int) (fs * 0.5), (int) fs);
+        };
+        const auto shape = splitBand (6200.0, defaultWidthOct);
+        const double centre = toneThrough (0, shape.centreHz), low = toneThrough (0, 1000.0), wideLow = toneThrough (1, 3100.0),
+                     wideHigh = toneThrough (1, 12400.0);
+        std::printf ("    split: centre %.1f dB, 1 kHz %.1f dB | wideband: 3.1 kHz %.1f dB, 12.4 kHz %.1f dB\n", centre, low, wideLow, wideHigh);
+        check (std::abs (centre) < 1.0, "split: the band centre is heard at its level");
+        check (low < -40.0, "split: the voice under the band is gone");
+        check (wideLow < -20.0 && std::abs (wideHigh) < 1.0, "wideband: the detector band (from Frequency up)");
+    }
+
+    void testSwitches()
+    {
+        Test t ("switching mode, listen, lookahead, stereo mode cross-fades (no clicks)");
+        const double fs = 48000.0;
+        // steady voice (2 kHz) under a steady S (9 kHz), plain relative detection: reduction on all the time
+        const int n = (int) fs;
+        std::vector<float> x ((size_t) n), x2 ((size_t) n);
+        for (int i = 0; i < n; ++i)
+        {
+            const double tt = i / fs;
+            x[(size_t) i] = (float) (0.2 * std::sin (juce::MathConstants<double>::twoPi * 2000.0 * tt) + 0.3 * std::sin (juce::MathConstants<double>::twoPi * 9000.0 * tt));
+            x2[(size_t) i] = (float) (0.15 * std::sin (juce::MathConstants<double>::twoPi * 2000.0 * tt + 1.0) + 0.1 * std::sin (juce::MathConstants<double>::twoPi * 9000.0 * tt));
+        }
+        Settings base;
+        base.smart = false;
+        base.thresholdDb = -50.0f;
+        base.rangeDb = 12.0f;
+        base.freq = 7000.0f;
+        const int at = n / 2;
+        // the 2 kHz amplitude around the switch: how much of its total change happens within 1 ms at most
+        const auto steepest = [&] (const std::vector<float>& y)
+        {
+            const auto a = amplitudeAt (y, 2000.0, fs);
+            const int ms = (int) (fs * 0.001);
+            float total = std::abs (a[(size_t) (at + (int) (fs * 0.05))] - a[(size_t) (at - (int) (fs * 0.005))]), worst = 0.0f, bump = 0.0f;
+            for (int i = at - ms * 5; i < at + ms * 40; ++i)
+            {
+                worst = std::max (worst, std::abs (a[(size_t) (i + ms)] - a[(size_t) i]));
+                bump = std::max (bump, std::abs (a[(size_t) i] - a[(size_t) (at - ms * 5)]));
+            }
+            return std::make_tuple (worst, total, bump);
+        };
+        struct Case { const char* name; std::function<void (Settings&)> from, to; };
+        const Case cases[] {
+            { "split -> wideband", [] (Settings&) {}, [] (Settings& s) { s.mode = 1; } },
+            { "wideband -> split", [] (Settings& s) { s.mode = 1; }, [] (Settings& s) { s.mode = 0; } },
+            { "listen off -> delta (wideband)", [] (Settings& s) { s.mode = 1; }, [] (Settings& s) { s.mode = 1; s.listen = 2; } },
+            { "listen delta -> S band (wideband)", [] (Settings& s) { s.mode = 1; s.listen = 2; }, [] (Settings& s) { s.mode = 1; s.listen = 1; } },
+            { "stereo -> mid/side (wideband)", [] (Settings& s) { s.mode = 1; }, [] (Settings& s) { s.mode = 1; s.stereoMode = 1; } },
+        };
+        for (const auto& c : cases)
+        {
+            Settings a = base, b = base;
+            c.from (a);
+            c.to (b);
+            E e (fs, a);
+            const auto [l, r] = runStereo (e, x, x2, 64, at, &b);
+            const auto [worst, total, bump] = steepest (l);
+            const float ref = std::max (total, bump);
+            std::printf ("    %-32s 2 kHz moves %.3f in all, at most %.3f per ms (%.0f %%)\n", c.name, ref, worst, ref > 0 ? 100.0f * worst / ref : 0.0f);
+            check (ref > 0.02f, juce::String (c.name) + ": the switch changes the sound");
+            check (worst < 0.2f * ref, juce::String (c.name) + ": spread over more than 5 ms");
+        }
+
+        // lookahead 0 -> 10 ms in the middle of S bursts: the applied reduction never jumps
+        {
+            const auto take = makeTake (fs, 2.0);
+            Settings a;
+            a.thresholdDb = -45.0f;
+            a.lookaheadMs = 0.0f;
+            a.mode = 1;
+            Settings b = a;
+            b.lookaheadMs = maxLookaheadMs;
+            std::vector<float> trRef, trSw;
+            E e1 (fs, a), e2 (fs, a);
+            runStereo (e1, take.x, take.x, 1, -1, nullptr, &trRef);
+            // just before an S starts: 10 ms ahead the envelope is already up
+            const int sw = take.sRanges[3].first - (int) (fs * 0.015);
+            runStereo (e2, take.x, take.x, 1, sw, &b, &trSw);
+            float stepRef = 0.0f, stepSw = 0.0f;
+            for (size_t i = 1; i < trRef.size(); ++i)
+                stepRef = std::max (stepRef, std::abs (trRef[i] - trRef[i - 1]));
+            for (int i = sw; i < sw + (int) (fs * 0.03); ++i)
+                stepSw = std::max (stepSw, std::abs (trSw[(size_t) i] - trSw[(size_t) i - 1]));
+            std::printf ("    lookahead 0 -> 10 ms during an S: largest step of the reduction %.3f dB per sample (without switching %.3f)\n", stepSw, stepRef);
+            check (stepSw <= stepRef * 1.2f + 0.02f, "lookahead switch: no jump in the reduction");
+        }
+    }
+
+    void testAllround()
+    {
+        Test t ("Allround: de-esses inside a mix, where comparing against the voice body fails");
+        const double fs = 48000.0;
+        auto take = makeTake (fs, 6.0);
+        // a loud bed under the voice (band-limited noise up to 2.5 kHz, about the level of the vowels)
+        juce::Random rnd (21);
+        Biq lp1, lp2, hp;
+        lp1.b.setCoeffs (design::lowPass (fs, 2500.0, 0.54));
+        lp2.b.setCoeffs (design::lowPass (fs, 2500.0, 1.31));
+        hp.b.setCoeffs (design::highPass (fs, 60.0, 0.7));
+        std::vector<float> mix = take.x;
+        for (auto& v : mix)
+            v += 1.0f * lp2.run (lp1.run (hp.run (rnd.nextFloat() * 2.0f - 1.0f)));
+        double loss[2], vLoss[2];
+        for (int allround = 0; allround < 2; ++allround)
+        {
+            Settings s;
+            s.thresholdDb = -50.0f;   // in a mix the S sit lower against the full level
+            s.allround = allround == 1;
+            E e (fs, s);
+            const auto y = run (e, mix);
+            const int L = e.getLatencySamples();
+            loss[allround] = rangesDb (mix, take.sRanges, 0) - rangesDb (y, take.sRanges, L);
+            vLoss[allround] = rangesDb (mix, take.vRanges, 0) - rangesDb (y, take.vRanges, L);
+        }
+        std::printf ("    in a mix: Smart S -%.2f dB (vowels -%.2f) | Allround S -%.2f dB (vowels -%.2f)\n", loss[0], vLoss[0], loss[1], vLoss[1]);
+        check (loss[1] > 1.5 && loss[1] > loss[0] + 1.0, "Allround takes the S down in the mix");
+        check (vLoss[1] < 0.3, "Allround leaves the vowels");
+        Settings solo;
+        solo.allround = true;
+        solo.thresholdDb = -36.0f;
+        E e (fs, solo);
+        const auto y = run (e, take.x);
+        const int L = e.getLatencySamples();
+        const double sSolo = rangesDb (take.x, take.sRanges, 0) - rangesDb (y, take.sRanges, L);
+        const double vSolo = rangesDb (take.x, take.vRanges, 0) - rangesDb (y, take.vRanges, L);
+        std::printf ("    solo vocal: Allround S -%.2f dB, vowels -%.2f dB\n", sSolo, vSolo);
+        check (sSolo > 3.0 && vSolo < 0.3, "Allround also works on a solo vocal");
+    }
+
     void testPresets()
     {
         Test t ("presets: factory, user, modified marker, A/B");
@@ -2058,6 +2431,15 @@ namespace
     }
 
     // ------------------------------------------------------------ real takes
+    std::vector<float> monoOf (const juce::AudioBuffer<float>& b)
+    {
+        std::vector<float> m ((size_t) b.getNumSamples(), 0.0f);
+        for (int ch = 0; ch < b.getNumChannels(); ++ch)
+            for (int i = 0; i < b.getNumSamples(); ++i)
+                m[(size_t) i] += b.getSample (ch, i) / (float) b.getNumChannels();
+        return m;
+    }
+
     std::unique_ptr<juce::AudioBuffer<float>> loadWav (const juce::File& f, double& fs)
     {
         juce::AudioFormatManager fm;
@@ -2143,7 +2525,9 @@ namespace
     }
 
     // Offline render for listening and measuring (sound audit 2026-11-19): EmberTests --process <in.wav> <out.wav> [key=value ...]
-    //   freq thr range amount attack release la mix mode det(0 smart,1 rel,2 abs) listen gain(dB in) block
+    //   freq thr range amount attack release la mix mode det(0 smart,1 rel,2 abs,3 allround) listen gain(dB in) block
+    //   width (octaves) link (0..1) stereo (0 L/R, 1 M/S, 2 mid, 3 side)  noengine=1 (file I/O only, CPU bench)
+    //   levels=<wav> (detector level dB + smart weight, dry-aligned)
     //   auto=1 (AUTO first, as the plugin applies it) autosec=12 autostart=0  trace=<wav> (applied reduction, dB, dry-aligned)
     int processCli (const juce::StringArray& args)
     {
@@ -2151,11 +2535,11 @@ namespace
         auto buf = loadWav (juce::File (args[1]), fs);
         if (buf == nullptr) { std::printf ("cannot read\n"); return 1; }
         std::map<juce::String, float> kv;
-        juce::String tracePath;
+        juce::String tracePath, levelsPath;
         for (int i = 3; i < args.size(); ++i)
         {
             const auto k = args[i].upToFirstOccurrenceOf ("=", false, false), v = args[i].fromFirstOccurrenceOf ("=", false, false);
-            if (k == "trace") tracePath = v; else kv[k] = v.getFloatValue();
+            if (k == "trace") tracePath = v; else if (k == "levels") levelsPath = v; else kv[k] = v.getFloatValue();
         }
         const auto has = [&] (const char* k) { return kv.count (k) > 0; };
         if (has ("gain"))
@@ -2183,7 +2567,10 @@ namespace
         if (has ("mix")) s.mix = kv["mix"];
         if (has ("mode")) s.mode = (int) kv["mode"];
         if (has ("listen")) s.listen = (int) kv["listen"];
-        if (has ("det")) { const int d = (int) kv["det"]; s.smart = d == 0; s.relative = d <= 1; }
+        if (has ("det")) { const int d = (int) kv["det"]; s.smart = d == 0 || d == 3; s.allround = d == 3; s.relative = d <= 1 || d == 3; }
+        if (has ("width")) s.widthOct = kv["width"];
+        if (has ("link")) s.stereoLink = kv["link"];
+        if (has ("stereo")) s.stereoMode = (int) kv["stereo"];
         const int block = has ("block") ? std::max (1, (int) kv["block"]) : 512;
         std::printf ("SETTINGS freq %.0f thr %.1f range %.1f amount %.2f att %.2f rel %.0f la %.2f mode %d smart %d rel %d\n",
                      s.freq, s.thresholdDb, s.rangeDb, s.amount, s.attackMs, s.releaseMs, s.lookaheadMs, s.mode, (int) s.smart, (int) s.relative);
@@ -2196,16 +2583,21 @@ namespace
         padded.clear();
         for (int ch = 0; ch < nch; ++ch)
             padded.copyFrom (ch, 0, *buf, ch, 0, N);
-        const bool wantTrace = tracePath.isNotEmpty();
-        std::vector<float> trace (wantTrace ? (size_t) (N + L) : 0, 0.0f);
+        const bool wantTrace = tracePath.isNotEmpty() || levelsPath.isNotEmpty();
+        std::vector<float> trace (wantTrace ? (size_t) (N + L) : 0, 0.0f), levels (trace.size(), 0.0f), weights (trace.size(), 0.0f);
         const int stepBlock = wantTrace ? 1 : block;
         for (int start = 0; start < padded.getNumSamples(); start += stepBlock)
         {
             const int n = std::min (stepBlock, padded.getNumSamples() - start);
             float* ch[2] { padded.getWritePointer (0, start), padded.getWritePointer (nch > 1 ? 1 : 0, start) };
-            e.process (ch, nch, n);
+            if (! has ("noengine"))   // (CPU bench: file I/O alone)
+                e.process (ch, nch, n);
             if (wantTrace)
+            {
                 trace[(size_t) start] = e.currentReductionDb.load();
+                levels[(size_t) start] = e.detectorDb.load();
+                weights[(size_t) start] = e.detectorWeight.load();
+            }
         }
         const auto write = [&] (const juce::File& file, const juce::AudioBuffer<float>& b)
         {
@@ -2219,12 +2611,23 @@ namespace
         for (int ch = 0; ch < nch; ++ch)
             out.copyFrom (ch, 0, padded, ch, L, N);
         write (juce::File (args[2]), out);
-        if (wantTrace)
+        if (levelsPath.isNotEmpty())
         {
-            const int la = juce::jlimit (0, L, (int) std::lround (s.lookaheadMs * 0.001 * fs));
+            // detector level (dB) and smart weight at input time (dry-aligned)
+            juce::AudioBuffer<float> t (2, N);
+            for (int i = 0; i < N; ++i)
+            {
+                t.setSample (0, i, levels[(size_t) i]);
+                t.setSample (1, i, weights[(size_t) i]);
+            }
+            write (juce::File (levelsPath), t);
+        }
+        if (tracePath.isNotEmpty())
+        {
+            // the engine reports the reduction applied to the sample it outputs (dry sample i comes out at i + L)
             juce::AudioBuffer<float> t (1, N);
             for (int i = 0; i < N; ++i)
-                t.setSample (0, i, i + la < N + L ? trace[(size_t) (i + la)] : 0.0f);
+                t.setSample (0, i, trace[(size_t) (i + L)]);
             write (juce::File (tracePath), t);
         }
         std::printf ("LATENCY %d\n", L);
@@ -2565,7 +2968,7 @@ namespace
         }
         // set but nothing found: that is a broken setup, not a pass
         check (! files.isEmpty(), "EMBER_VOCALS is set but holds no .wav file");
-        int ok = 0, read = 0;
+        int ok = 0, read = 0, engineOk = 0;
         for (const auto& f : files)
         {
             double fs = 0.0;
@@ -2574,6 +2977,18 @@ namespace
             if (buf == nullptr || buf->getNumSamples() < (int) (fs * 4.0))
                 continue;
             ++read;
+            const auto mono = monoOf (*buf);
+            {
+                // the engine on the real take: finite, and no S nothing changes (the first 0.2 s before any voice)
+                Settings st;
+                E e (fs, st);
+                const auto y = run (e, mono);
+                bool finite = true;
+                for (float v : y)
+                    finite = finite && std::isfinite (v);
+                check (finite, f.getFileName() + ": engine output finite");
+                engineOk += finite ? 1 : 0;
+            }
             const auto r = autoOn (*buf, fs);
             std::printf ("    %-16s %s freq %5.0f thr %6.1f range %4.1f S -%.2f of %.2f | V -%.2f pres -%.2f air -%.2f | M -%.2f pres -%.2f (S/V %.1f) peak %.0f, %d renders, %dch\n",
                          f.getFileName().substring (0, 16).toRawUTF8(), r.status == AutoResult::Status::ok ? "ok  " : "none",
@@ -2617,6 +3032,7 @@ namespace
         }
         std::printf ("    %d of %d takes set up (%d read)\n", ok, files.size(), read);
         check (read > 0, "EMBER_VOCALS: at least one take was analysed");
+        check (engineOk == files.size(), "every take went through the engine");
     }
 }
 
@@ -2904,6 +3320,12 @@ int main (int argc, char** argv)
     testMascot();
     testSmart();
     testSIntoVowel();
+    testSmoothBand();
+    testBandShape();
+    testStereo();
+    testListenBand();
+    testSwitches();
+    testAllround();
     testPresets();
     testUsability();
     testUxFixes();

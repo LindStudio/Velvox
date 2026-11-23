@@ -18,6 +18,8 @@ namespace ember
             { "Backing Vocals", "Backing vocals", { { pid::freq, 6200.0f }, { pid::threshold, -37.0f }, { pid::range, 8.0f }, { pid::amount, 60.0f } } },
             { "Sprache / Podcast", "Speech / podcast", { { pid::freq, 5500.0f }, { pid::threshold, -31.5f }, { pid::range, 5.0f }, { pid::mode, 1.0f }, { pid::release, 50.0f } } },
             { "Kräftig", "Strong", { { pid::threshold, -38.0f }, { pid::range, 7.0f }, { pid::release, 45.0f } } },
+            // 2026-11-23: Allround for a mix or a bus (measured in a mix: S -2.9 dB, vowels untouched)
+            { "Mix / Bus", "Mix / bus", { { pid::detection, 3.0f }, { pid::threshold, -40.0f }, { pid::range, 4.0f }, { pid::release, 40.0f } } },
         };
         return presets;
     }

@@ -2,56 +2,93 @@
 
 #include "DSP/DspUtilities.h"
 #include <atomic>
+#include <cstdint>
+#include <cstring>
 #include <vector>
+#if defined (_M_X64) || defined (__SSE2__)
+ #include <emmintrin.h>
+ #define EMBER_SSE 1
+#else
+ #define EMBER_SSE 0
+#endif
 
 // EMBER De-Esser - the audio engine (no JUCE plugin classes, so the tests drive it directly).
 //
-//   input ──┬────────────────────────── delay (latency L) ──► S bell / wide gain ──► mix ──► output gain
-//           └─ detector (4th-order high-pass at `freq`, stereo-linked peak, optional relative to the
-//              full-band level) ─► soft-knee 4:1 ─► range cap ─► attack / release ─► delayed by L - lookahead
+//   input ─► (L/R or M/S) ──┬──────────────────── delay (latency L) ──► band / wide gain ──► (back to L/R) ─► mix ─► out
+//                           └─ detector per channel (4th-order high-pass at `freq`, relative to the full-band level)
+//                              + smart gate (S band against the voice body, or against the band under the S in
+//                              Allround) ─► stereo link ─► soft-knee 4:1 ─► range ─► attack / release ─► delay
 //
-// The latency is constant (5 ms) whatever the lookahead, so hosts never see it change; the lookahead only
-// decides how early the reduction starts before an S. At 0 dB reduction the split mode is an exact identity
-// (the bell is skipped), so a voice without S passes bit-exact apart from the delay.
+// The latency is constant (maxLookaheadMs) whatever the lookahead, so hosts never see it change; the lookahead
+// only decides how early the reduction starts before an S.
 //
-// Split (2026-11-23, from the sound audit EMBER_KLANG_TEST.md): a wide dynamic bell centred on the S
-// (splitCenterRatio x freq, Q splitQ) instead of the old open high shelf at freq. The shelf took 1.4x more off the
-// air above the S than off the S itself and pulled the colour of the S down by ~600 Hz (towards "sh" / a lisp);
-// the bell takes more off the S core (15 takes, AUTO: -4.5 instead of -3.3 dB), leaves the air on it and moves the
-// colour by ~70 Hz (Pro-DS wideband: 145 Hz).
+// 2026-11-23 (fix/ember-dsp, towards FabFilter Pro-DS):
+//  - Split: a dynamic bell built as  y = x + c * (bell(x) - x),  bell = a fixed matched (Vicanek) cut of
+//    bandRefDb. The bell runs all the time and only the blend c changes, per sample: no stepped coefficients,
+//    no zipper, the same shape at 44.1 and 192 kHz (no bilinear cramping), and c = 0 is an exact identity
+//    (bit-exact null without reduction). Analog equivalent: a Regalia-Mitra bell with fixed poles.
+//  - Band width in octaves (Width): narrow = only the S, wide = the S and the air above it.
+//  - The smart gate is smoothed by a running minimum + moving average (no fast flutter, and by construction
+//    never more reduction than the gate allows: nothing leaks into the next vowel).
+//  - Stereo link 0..100 % and Stereo / Mid-Side / Mid / Side processing.
+//  - Allround detection (mixes, buses, instruments: no voice body needed).
+//  - Listen S band = what is processed: in Split the band itself (4th-order high-passed at its lower edge, so the voice
+//    under it does not bleed through the gentle bell skirt), in Wideband the detector band.
+//  - Switching listen, mode, lookahead or stereo mode cross-fades (no clicks).
 namespace ember
 {
     using namespace vocalypse::dsp;
 
     struct Settings
     {
-        float freq = 6200.0f;        // detection corner, Hz (the split bell sits at splitCenterRatio x freq)
+        float freq = 6200.0f;        // detection corner, Hz (the split band sits on splitCenterRatio x freq)
         float thresholdDb = -32.0f;
         float rangeDb = 5.0f;        // most the S band is ever reduced (before Amount)
         float amount = 0.5f;         // Amount 0..1; 0.5 = the reduction threshold / range ask for, 1 = 1.5x (amountScale)
         float attackMs = 0.5f;
         float releaseMs = 60.0f;
-        float lookaheadMs = 2.0f;    // 0 .. maxLookaheadMs
+        float lookaheadMs = 5.0f;    // 0 .. maxLookaheadMs
         float mix = 1.0f;
         float outputDb = 0.0f;
-        int mode = 0;                // 0 = split (only the band above freq), 1 = wideband
+        int mode = 0;                // 0 = split (only the S band), 1 = wideband
         bool relative = true;        // detection relative to the full-band level (loud and quiet phrases alike)
         bool smart = true;           // only where the S band outweighs the body of the voice (relative implied)
-        int listen = 0;              // 0 = off, 1 = S band (detector band), 2 = delta (what is removed)
+        int listen = 0;              // 0 = off, 1 = S band (what is processed), 2 = delta (what is removed)
         bool bypass = false;
+        // added 2026-11-23 (fix/ember-dsp)
+        float widthOct = 3.0f;       // split band width (between the half-reduction points), octaves
+        float stereoLink = 1.0f;     // 0 = every channel on its own, 1 = fully linked
+        int stereoMode = 0;          // 0 = stereo (L/R), 1 = mid/side, 2 = mid only, 3 = side only
+        bool allround = false;       // with smart: compare against the band under the S (mixes, buses, instruments)
     };
 
-    inline constexpr float maxLookaheadMs = 5.0f;
-    // Split bell: centre = the typical S of a voice whose detection corner is `freq` (AUTO puts the corner at
-    // 0.8 x the S centre), Q 0.4 is wide enough (about 3 octaves) to catch the S even when it sits half an
-    // octave off. Measured Q 0.4 / 0.5 / 0.7 and shelf variants on 15 takes: 0.4 keeps the colour best.
-    inline constexpr float splitCenterRatio = 1.25f, splitQ = 0.4f;
+    // Fixed latency = the longest lookahead
+    inline constexpr float maxLookaheadMs = 10.0f, defaultLookaheadMs = 5.0f;
+    // Split band: centred on the typical S of a voice whose detection corner is `freq` (AUTO puts the corner at
+    // 0.8 x the S centre). Width = octaves between the points where the band takes half its dB; its lower edge
+    // never goes under splitLowestRatio x freq (a wide band grows into the air, not into the presence).
+    inline constexpr float splitCenterRatio = 1.25f;
+    inline constexpr float minWidthOct = 1.0f, maxWidthOct = 4.0f, defaultWidthOct = 3.0f;
+    inline constexpr float splitLowestRatio = 0.45f;
+    // The fixed matched cut the dynamic band blends towards (any reduction is a blend / extrapolation of it)
+    inline constexpr float bandRefDb = 12.0f;
+    // Width is measured at this depth (the half-dB points of a widthRefDb cut)
+    inline constexpr float widthRefDb = 6.0f;
+    // Centre frequency and pole Q (Regalia-Mitra form) of the split band for a detection corner and a width
+    struct BandShape { double centreHz, poleQ, lowHz, highHz; };   // low / high = the half-reduction points
+    BandShape splitBand (double freq, double widthOct) noexcept;
+    // The fixed matched cut of the split band (what the engine runs) and the band's response in dB at `hz` when
+    // it takes `reductionDb` off (tests, display)
+    BiquadCoeffs splitBell (double sampleRate, double freq, double widthOct) noexcept;
+    double splitResponseDb (double sampleRate, double freq, double widthOct, double reductionDb, double hz) noexcept;
+    // Old split bell (2026-11-22, RBJ Q 0.4 at 1.25 x freq) - about the same as splitBand at 3 octaves
+    inline constexpr float splitQ = 0.4f;
+
     // The detector band loses ~5 dB per octave of S energy as the corner rises (15 takes: 5 kHz +1.5 dB,
     // 8 kHz -1.9 dB against 6.5 kHz). The detector adds it back, so a threshold means the same at every
-    // frequency and the voice buttons aim instead of turning EMBER up or down (HIGH used to be the weakest
-    // setting even for high voices).
+    // frequency and the voice buttons aim instead of turning EMBER up or down.
     inline constexpr float detectorTiltDbPerOct = 5.0f, detectorTiltRefHz = 6500.0f;
-    // Amount: 0 % = off, 50 % = as set, 100 % = 1.5x (was 2x: "Kräftig" + 100 % lisped half of the S)
+    // Amount: 0 % = off, 50 % = as set, 100 % = 1.5x
     inline float amountScale (float amount) noexcept
     {
         return amount <= 0.5f ? 2.0f * amount : 1.0f + (amount - 0.5f);
@@ -63,17 +100,119 @@ namespace ember
     // absolute mode for a voice peaking at -18 dBFS. Below fullFloorDb (near-silence) nothing is de-essed.
     inline constexpr float referenceDb = -18.0f;
     inline constexpr float fullFloorDb = -60.0f;
-    // Smart detection (2026-11-13, measured against FabFilter Pro-DS on 9 real takes): the energy above
-    // smartBandHz against the body of the voice (150 Hz - 3 kHz), smartEnvMs RMS envelopes. Real S sit at
+    // Smart detection (2026-11-13, measured against FabFilter Pro-DS on 9 real takes): the energy above the
+    // smart band against the body of the voice (150 Hz - 3 kHz), smartEnvMs RMS envelopes. Real S sit at
     // +1 .. +20 dB, vowels under -13 dB, the loud S-into-vowel transitions at -10 .. -1 dB. Weight 0 at
     // smartNoneDb, 1 at smartFullDb: a transition keeps its vowel, only the S itself is taken down.
+    // The smart band follows the frequency (smartBandRatio x freq: 4 kHz at the default 6.2 kHz).
     inline constexpr float smartNoneDb = -1.0f, smartFullDb = 5.0f;
-    inline constexpr float smartBandHz = 4000.0f, smartEnvMs = 5.0f;
-    // The weight follows fast (it is the gate that keeps vowels out of the reduction)
-    inline constexpr float smartRiseMs = 0.5f, smartFallMs = 1.0f;
+    inline constexpr float smartBandRatio = 0.65f, smartBandMinHz = 3500.0f, smartBandMaxHz = 6000.0f;
+    inline constexpr float smartEnvMs = 5.0f;
+    // The smart band at the default frequency (the fixed value before 2026-11-23)
+    inline constexpr float smartBandHz = 4000.0f;
+    // Allround: the smart band against the band right under it (allroundLowRatio .. allroundHighRatio x freq)
+    // instead of the voice body - works on mixes and instruments too, where the body is always full
+    inline constexpr float allroundLowRatio = 0.3f, allroundHighRatio = 0.6f;
+    inline constexpr float allroundNoneDb = -6.0f, allroundFullDb = 0.0f;
+    // Gate smoothing window (running minimum + moving average) in split / wideband: wideband moves the whole
+    // voice, so its gate glides slower. The gate leads the audio by the lookahead (at most latency - window).
+    inline constexpr float gateSplitMs = 2.0f, gateWideMs = 6.0f;
+    // Cross-fade time for listen / mode / lookahead / stereo mode switches
+    inline constexpr float switchFadeMs = 15.0f;
 
     // Static curve: reduction in dB (>= 0) for a detector level, soft knee
     float staticReductionDb (float inDb, float thresholdDb) noexcept;
+
+    // Fast log2 / exp2 (|error| < 0.0002 dB in level terms): the detector runs them for every sample
+    namespace fast
+    {
+        inline float log2 (float x) noexcept
+        {
+            x = std::max (x, 1.0e-30f);
+            std::uint32_t i;
+            std::memcpy (&i, &x, 4);
+            const float e = (float) ((int) ((i >> 23) & 0xffu) - 127);
+            i = (i & 0x007fffffu) | 0x3f800000u;
+            float m;
+            std::memcpy (&m, &i, 4);
+            const float t = m - 1.0f;
+            return e + t * (1.4418258f + t * (-0.7086821f + t * (0.41542195f + t * (-0.19442267f + t * 0.04588553f))));
+        }
+        inline float exp2 (float x) noexcept
+        {
+            x = std::clamp (x, -126.0f, 126.0f);
+            int ip = (int) x;
+            if ((float) ip > x)
+                --ip;
+            const float fl = (float) ip;
+            const float f = x - fl;
+            const float p = 1.0f + f * (0.69315275f + f * (0.24015319f + f * (0.05582818f + f * (0.00898895f + f * 0.00187664f))));
+            const std::uint32_t i = (std::uint32_t) (ip + 127) << 23;
+            float s;
+            std::memcpy (&s, &i, 4);
+            return p * s;
+        }
+        inline float gainToDb (float g) noexcept { return 6.0205999f * log2 (g); }
+        // reduction in dB (>= 0) -> gain; exactly 1 for no reduction
+        inline float reductionToGain (float db) noexcept { return db <= 0.0f ? 1.0f : exp2 (-0.16609640f * db); }
+    }
+
+    // Four float biquads side by side (TDF II, one SSE register per coefficient / state where available): the
+    // detector runs its three filter chains for both channels as two of these per stage
+    struct Biquad4
+    {
+       #if EMBER_SSE
+        __m128 b0 = _mm_set1_ps (1.0f), b1 = _mm_setzero_ps(), b2 = _mm_setzero_ps(), a1 = _mm_setzero_ps(), a2 = _mm_setzero_ps();
+        __m128 s1 = _mm_setzero_ps(), s2 = _mm_setzero_ps();
+        void setLane (int lane, const BiquadCoeffs& c) noexcept
+        {
+            alignas (16) float t[4];
+            const auto put = [&] (__m128& r, double v) { _mm_store_ps (t, r); t[lane] = (float) v; r = _mm_load_ps (t); };
+            put (b0, c.b0); put (b1, c.b1); put (b2, c.b2); put (a1, c.a1); put (a2, c.a2);
+        }
+        void reset() noexcept { s1 = s2 = _mm_setzero_ps(); }
+        inline __m128 process (__m128 x) noexcept
+        {
+            const __m128 y = _mm_add_ps (_mm_mul_ps (b0, x), s1);
+            s1 = _mm_add_ps (_mm_sub_ps (_mm_mul_ps (b1, x), _mm_mul_ps (a1, y)), s2);
+            s2 = _mm_sub_ps (_mm_mul_ps (b2, x), _mm_mul_ps (a2, y));
+            return y;
+        }
+        bool isFinite() const noexcept
+        {
+            alignas (16) float t[8];
+            _mm_store_ps (t, s1);
+            _mm_store_ps (t + 4, s2);
+            for (float v : t)
+                if (! std::isfinite (v))
+                    return false;
+            return true;
+        }
+       #else
+        float b0[4] { 1, 1, 1, 1 }, b1[4] {}, b2[4] {}, a1[4] {}, a2[4] {}, s1[4] {}, s2[4] {};
+        void setLane (int lane, const BiquadCoeffs& c) noexcept
+        {
+            b0[lane] = (float) c.b0; b1[lane] = (float) c.b1; b2[lane] = (float) c.b2; a1[lane] = (float) c.a1; a2[lane] = (float) c.a2;
+        }
+        void reset() noexcept { for (int l = 0; l < 4; ++l) s1[l] = s2[l] = 0.0f; }
+        inline void process (const float* x, float* y) noexcept
+        {
+            for (int l = 0; l < 4; ++l)
+            {
+                y[l] = b0[l] * x[l] + s1[l];
+                s1[l] = b1[l] * x[l] - a1[l] * y[l] + s2[l];
+                s2[l] = b2[l] * x[l] - a2[l] * y[l];
+            }
+        }
+        bool isFinite() const noexcept
+        {
+            for (int l = 0; l < 4; ++l)
+                if (! std::isfinite (s1[l]) || ! std::isfinite (s2[l]))
+                    return false;
+            return true;
+        }
+       #endif
+    };
 
     // The detector alone (used by the engine and by the Auto analysis, so both measure the same thing)
     class Detector
@@ -81,26 +220,62 @@ namespace ember
     public:
         void prepare (double sampleRate);
         void reset();
-        void setFrequency (float hz) noexcept;   // recomputes the filter
-        // One frame of all channels -> detector level in dB (relative or absolute). `band` receives the
-        // filtered band of channel 0 / 1 (for S-band listening) when not null.
+        void setFrequency (float hz) noexcept;   // recomputes the filters (detector, smart and allround bands)
+        void setAllround (bool on) noexcept;      // the gate compares against the band under the S
+        // One frame of all channels -> linked detector level in dB (relative or absolute). `band` receives the
+        // filtered band of channel 0 / 1 when not null.
         float process (const float* frame, int numChannels, bool relative, float* band = nullptr) noexcept;
+
+        // The same with every channel's own level and weight as well (for stereo link < 100 %)
+        struct Frame
+        {
+            float linkedDb = -200.0f, linkedWeight = 0.0f;
+            float levelDb[maxChannels] {}, weight[maxChannels] {}, band[maxChannels] {};
+        };
+        void process (const float* frame, int numChannels, bool relative, bool perChannel, Frame& out) noexcept;
         bool isFinite() const noexcept;
 
-        // Smart detection: how much the energy above smartBandHz outweighs the body of the voice
-        // (150 Hz - 3 kHz), in dB, from 5 ms RMS envelopes, and the resulting weight 0..1 for the reduction.
-        // An S is noise high up with little body; a vowel, or a vowel the S runs into, has its energy in the
-        // body -> weight 0, left alone.
+        // Smart detection: how much the energy of the S band outweighs the body of the voice (or, in Allround,
+        // the band under the S), in dB, from 5 ms RMS envelopes, and the resulting weight 0..1 (linked).
         float getSibilanceIndexDb() const noexcept { return indexDb; }
         float getSibilanceWeight() const noexcept { return weight; }
-        static float weightForIndex (float indexDb) noexcept;
+        static float weightForIndex (float indexDb) noexcept { return weightForIndex (indexDb, false); }
+        static float weightForIndex (float indexDb, bool allround) noexcept;
 
     private:
-        double fs = 44100.0;
-        Biquad hp1, hp2, bodyHp, bodyLp, idxHp1, idxHp2;
-        float fullEnv = 0.0f, fullRelease = 0.0f;
-        float sEnv = 0.0f, bodyEnv = 0.0f, envCoeff = 0.0f;   // energies (mean square)
-        float indexDb = -60.0f, weight = 0.0f, tiltDb = 0.0f;
+        float levelFor (float peak, float fullEnvValue, bool relative) const noexcept;
+        float indexFor (float sE, float bE) const noexcept;
+        void designBands() noexcept;
+
+        double fs = 44100.0, freqHz = 6200.0;
+        bool allround = false;
+        // stage 1 / 2: lanes [band L, band R, smart L, smart R] and [body L, body R, -, -]
+        Biquad4 bandIdx1, bandIdx2, body1, body2;
+        float fullEnv = 0.0f, fullRelease = 0.0f, envCoeff = 0.0f;
+        float sEnv = 0.0f, bodyEnv = 0.0f;   // energies (mean square), linked
+        float fullEnvCh[maxChannels] {}, sEnvCh[maxChannels] {}, bodyEnvCh[maxChannels] {};
+        float indexDb = -60.0f, weight = 0.0f, tiltDb = 0.0f, weightCh[maxChannels] {};
+        unsigned indexPhase = 0;
+    };
+
+    // Running minimum over `window` samples followed by a moving average over `window` samples: a smooth gate
+    // that never exceeds its input (out(t) <= in(t)), with linear ramps of `window` samples. Delay window - 1.
+    class MinAverage
+    {
+    public:
+        void prepare (int maxWindow);
+        void setWindow (int window) noexcept;   // resets
+        void reset() noexcept;
+        float process (float x) noexcept;
+        int getWindow() const noexcept { return window; }
+
+    private:
+        int window = 1, cap = 1;
+        std::vector<float> dqVal, hBuf;
+        std::vector<int> dqIdx;
+        int head = 0, count = 0, hPos = 0, t = 0, run = 0;
+        double sum = 0.0, invWindow = 1.0;
+        float lastX = -1.0f;
     };
 
     class Engine
@@ -123,23 +298,37 @@ namespace ember
         std::atomic<float> detectorDb { -100.0f }, detectorWeight { 0.0f };
 
     private:
-        void updateBell (float reductionDb) noexcept;
+        void updateBand() noexcept;
+        int lookaheadSamples (float ms) const noexcept;
 
         double fs = 44100.0;
         int latency = 0;
         Settings settings;
+        int activeStereoMode = 0;    // the stereo mode the filters run in (switches while the wet signal is faded out)
         Detector detector;
-        Biquad bell, listenHp1, listenHp2;
-        juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> freq { 6500.0f };
-        juce::SmoothedValue<float> mixSm { 1.0f }, outSm { 1.0f }, bypassSm { 0.0f };
-        float attackCoeff = 0.0f, releaseCoeff = 0.0f, riseCoeff = 0.0f, fallCoeff = 0.0f;
-        float envDb = 0.0f, bellDb = 0.0f, weightSm = 0.0f;
+        Biquad bell;                 // fixed matched cut of bandRefDb (double: it is the audio path)
+        Biquad listenHp, listenHp2;  // listening to the split band: 4th-order high-pass at its lower edge
+        bool listenHpLive = false;
+        float bandScale = 1.0f;      // 1 / (1 - bell gain at its centre): (bell(x) - x) * bandScale = the band
+        juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> freq { 6200.0f }, width { 3.0f };
+        juce::SmoothedValue<float> mixSm { 1.0f }, outSm { 1.0f }, bypassSm { 0.0f }, modeSm { 0.0f }, wetSm { 1.0f };
+        juce::SmoothedValue<float> listenSm[3];
+        float attackCoeff = 0.0f, releaseCoeff = 0.0f;
+        // control slots: 0 / 1 = channel (or the shared one in slot 0 when fully linked), 2 = linked beside own
+        static constexpr int numSlots = maxChannels + 1;
+        float envDb[numSlots] {};
 
-        // Delay lines: audio (per channel) and the reduction envelope
-        std::array<std::vector<float>, maxChannels> audioDelay;
-        std::vector<float> envDelay;
+        // Lookahead (samples) and the cross-fade from the previous one
+        int laCur = 0, laPrev = 0, laFadeLeft = 0, laFadeLen = 1;
+        // Smart gate smoothing per processing channel, one per mode (cross-faded with the mode)
+        MinAverage gate[2][numSlots];
+        int gateWin[2] { 1, 1 };
+
+        // Delay lines: audio (per input channel), envelope / gates / detector band (per processing channel)
+        std::array<std::vector<float>, maxChannels> audioDelay, bandDelay;
+        std::array<std::vector<float>, numSlots> envDelay, gateDelay0, gateDelay1;
         int writePos = 0, delaySize = 1, gridPhase = 0;
-        bool bellStale = false;
-        std::vector<float> dryScratch[maxChannels], wetScratch[maxChannels];
+        bool wasPerChannel = false;
+        int wetHold = 0;   // samples the wet signal stays faded out after a stereo mode switch
     };
 }

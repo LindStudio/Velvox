@@ -1,5 +1,6 @@
 #include "EmberAuto.h"
 #include "EmberEngine.h"
+#include "EmberParams.h"   // thresholdMaxDb: AUTO stays inside the parameter range
 #include <juce_dsp/juce_dsp.h>
 #include <map>
 #include <thread>
@@ -398,7 +399,7 @@ namespace ember
         // the same) - a voice whose S are that tame gets less than the target instead.
         // The search starts at a guess and steps down from it until the target is bracketed (the reduction falls
         // by roughly 0.4 dB per dB of threshold), so a take needs 4-7 renders per search.
-        const float top0 = std::min (0.0f, std::ceil (detMax + kneeDb * 0.5f));
+        const float top0 = std::min (thresholdMaxDb, std::ceil (detMax + kneeDb * 0.5f));
         const auto searchThreshold = [&] (float range, float guess)
         {
             const auto sGap = [&] (float thr) { return measure (thr, range).sRed - r.targetDb; };
@@ -428,7 +429,7 @@ namespace ember
                 juce::ignoreUnused (a);
                 thr = b;   // the lowest threshold that keeps the voice
             }
-            return juce::jlimit (autoMinThresholdDb, 0.0f, thr);
+            return juce::jlimit (autoMinThresholdDb, thresholdMaxDb, thr);
         };
 
         // First with the widest range, which then shrinks to the room the strong S of this take need (many S
