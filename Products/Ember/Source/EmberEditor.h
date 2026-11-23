@@ -121,9 +121,10 @@ namespace ember
     private:
         void repaintEdges (juce::Rectangle<float>, float width);
         seal::Scene scene;
-        seal::RuneAtlas borderRunes { seal::pink }, sealRunes { seal::pinkLight };
+        seal::RuneAtlas borderRunes { seal::pink, true }, sealRunes { seal::pinkLight, true };
         bool simple = true;
         int ticks = 0;
+        float paintedLit = -1.0f;   // calm (animation reduced / off): repainted only when the light changes
         juce::Rectangle<float> knob;
         std::vector<juce::Rectangle<float>> plates;
     };
@@ -206,6 +207,8 @@ namespace ember
         LiveMascotView mascot;      // Ember as a live rig (2026-11-17); MascotView (frames) stays for its tests until step 6
         SealOverlay sealOverlay;
         juce::Image chamber;        // the back wall, drawn once per size
+        juce::Point<int> chamberWanted;     // while resizing: the size it should have, since when (drawn when it stays)
+        double chamberWantedSince = 0;
         double sealClock = 0.0, lastTickS = 0.0;
         std::vector<juce::Rectangle<float>> plates() const;
         ReductionMeter meter, advancedMeter;

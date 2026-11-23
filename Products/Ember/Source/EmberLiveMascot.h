@@ -32,6 +32,7 @@ namespace ember
         void setHover (bool h) noexcept { hover = h; }
         void say (const juce::String& text);                                 // types into the bubble, mouth talks
         void wake() noexcept;
+        void setFewerParticles (bool f) noexcept { fewer = f; }              // animation "reduced": fewer crumbs
 
         RigPose pose() const;
         Mode getMode() const noexcept { return mode; }
@@ -58,7 +59,7 @@ namespace ember
         Mode mode = Mode::idle;
         float t = 0, beat = 0, silentFor = 0, sleepy = 0, hot = 0, proudFor = 0, lookFor = 0, chompT = -99, lastS = -99;
         float nextBlink = 1.5f, blinkT = -1, nextAction = 2.5f, hotSaid = -99;
-        bool doubleBlink = false, asleep = false, hover = false, wasListening = false, armed = true;
+        bool doubleBlink = false, asleep = false, hover = false, wasListening = false, armed = true, fewer = false;
         juce::Point<float> look;
         // idle action
         int action = -1; float actionT = 0, actionLen = 1; bool actionDone = false;
@@ -69,14 +70,26 @@ namespace ember
         int eaten = 0;
     };
 
+    // How much moves (≡ menu, a user setting for all windows; 2026-11-23): full = as designed (60 / 30 fps);
+    // reduced = 30 fps, the seal's letters, the circle and the border stand still, fewer crumbs; off = Ember stands in
+    // his rest pose on a still seal, drawn again only when something he shows changes (bypass, bubble, size).
+    enum class AnimationLevel { full = 0, reduced = 1, off = 2 };
+    AnimationLevel animationLevelFromString (const juce::String&);
+    juce::String toString (AnimationLevel);
+
     class LiveMascotView final : public juce::Component, private juce::Timer
     {
     public:
         LiveMascotView();
         ~LiveMascotView() override;
 
+        static void setAnimationLevel (AnimationLevel l) noexcept { animationLevel = (int) l; }
+        static AnimationLevel getAnimationLevel() noexcept { return (AnimationLevel) animationLevel.load(); }
+        // Something covers him completely (the licence card): he pauses and the last picture stays
+        void setCovered (bool c) noexcept { covered = c; }
+
         void setInput (const MascotInput& in) { input = in; }
-        void setBubble (const juce::String& text);      // a new text: Ember says it
+        void setBubble (const juce::String& text);      // a new text: Ember says it (animation off: it just shows)
         void setCompact (bool c) { compact = c; }
         // The pink seal stage (2026-11-19): Ember stands on the summoning circle, its letters float round him.
         // Off = the plain stage (tests, old look).
@@ -97,6 +110,7 @@ namespace ember
         LiveBrain& getBrain() noexcept { return brain; }
         void stepForTest (float dt) { tick (dt); }
         static inline std::atomic<bool> alwaysInFront { false };   // EmberTests --bench: as if the cursor were on him
+        static inline std::atomic<int> fixedHzForTest { 0 };        // EmberTests --bench hz=: this frame rate, whatever happens
         // EmberTests --bench: where a frame's time goes (ms, summed over all frames): figure, seal floor, runes + braziers, the rest
         static inline std::atomic<double> benchFigureMs { 0 }, benchFloorMs { 0 }, benchRunesMs { 0 }, benchComposeMs { 0 };
         static inline std::atomic<int> benchFrames { 0 };
@@ -114,19 +128,33 @@ namespace ember
         // stutter with two or three windows open (bench 2026-11-19). The figure is drawn on a thread of its own into
         // one of two images; paint() only puts the newest finished one on the screen.
         void renderFrame (const RigPose&, juce::Rectangle<float> bounds, float scale, const seal::Scene&);   // any thread
-        void updateRate();
+        void updateRate (AnimationLevel);
+        bool hostWindowHidden() const;   // the host's window minimised or hidden (the editor itself still "shows")
+        void postFrame (const RigPose&, const seal::Scene&);
         struct Drawer;
+        static inline std::atomic<int> animationLevel { 0 };
+        static constexpr float maxRenderScale = 2.0f;   // beyond 2x screens: drawn at 2x and scaled (same look, far less work)
 
+        std::shared_ptr<const MascotRig> rig = MascotRig::acquire();   // shared by all windows, freed with the last
         LiveBrain brain;
         RigRenderer renderer;                 // only under renderLock
         mutable juce::CriticalSection renderLock, frameLock;
         juce::Image frames[2];                // frameLock guards which one is shown
-        int front = -1;
+        int front = -1, frameSerial = 0;      // frameSerial counts finished frames (frameLock)
+        juce::Image screen;                   // message thread: the newest frame as the screen's own image (uploaded
+        int shownSerial = -1;                 // in place, not made anew each frame); the frame it holds
+        juce::Image pendingBackdrop;          // frameLock: a new wall for the drawing thread (setBackdrop never waits)
+        bool backdropPending = false;
+        juce::Image paintBackdrop;            // message thread: shown until the first frame is ready
         juce::Rectangle<float> frontArea;     // the view's bounds the frame was drawn for
         float frontScale = 0;
         struct Job { RigPose pose; juce::Rectangle<float> area; float scale = 1; seal::Scene scene; bool pending = false; } job;   // frameLock
         juce::Image figure;                   // the figure alone (drawing thread / renderLock), composed into a frame
-        juce::Image floorLayer;               // the seal on the floor, renewed every fourth frame (it turns slowly)
+        juce::Image floorLayer;               // the seal on the floor, renewed every fourth frame (it turns slowly);
+        juce::Point<int> floorAt;             // only the part where the floor is drawn, at this pixel of the frame
+        RigPose figurePose;                   // what the figure image shows (drawn again only when it changes)
+        juce::Rectangle<float> figureArea;
+        float figureScale = 0;
         juce::Image backdrop;                 // renderLock
         float backdropScale = 0.0f;
         seal::RuneAtlas runeAtlas { seal::pinkLight };
@@ -138,7 +166,14 @@ namespace ember
         juce::String bubble;
         juce::Point<int> lastMouse;
         double lastTick = 0, lastActive = -1.0e9;
-        float screenScale = 1;                // the screen's pixel density, from the last paint
+        float screenScale = 0;                // the screen's pixel density, from the last paint (0 = not painted yet)
+        float renderScale = 0, wantedScale = 0;   // frames are drawn at renderScale; a new density waits until the
+        double wantedSince = 0;                   // window has stopped resizing (paint stretches the last frame)
+        juce::Path sGlyph;                    // the flying S at 100 px (made once, scaled per frame)
+        struct BubbleLayout { juce::String text; float fontH = 0, maxW = 0; juce::Rectangle<float> size; } bubbleLayout;
+        bool covered = false;
+        AnimationLevel shownLevel = AnimationLevel::full;
+        juce::String stillKey;                // animation off: what the still picture shows
         bool sealStage = false;
         int lastEaten = 0;
         float sinceSwallow = 99.0f, heat = 0.0f;

@@ -1844,7 +1844,17 @@ namespace
     void testRig()
     {
         currentTest = "rig";
-        const auto& rig = MascotRig::get();
+        {
+            std::weak_ptr<const MascotRig> gone;
+            {
+                const auto h = MascotRig::acquire();
+                gone = h;
+            }
+            check (gone.expired(), "the rig (its pictures) is freed with the last window");
+        }
+        const auto held = MascotRig::acquire();
+        const auto& rig = *held;
+        check (&MascotRig::get() == held.get() && MascotRig::acquire() == held, "one rig, shared");
         check (rig.isValid(), "rig data loads (parts, rig.json, eyes)");
         check (rig.parts.size() == 7 && rig.meshes.size() == 5, "7 parts, 5 meshes");
         // the figure is drawn and sits inside the area; the plugin's size (~300 px) renders fast enough for 60 fps
@@ -1990,6 +2000,15 @@ static int framesDump (const juce::File& dir, const juce::StringArray& args)
     dir.createDirectory();
     UserSettings::useFileForTests (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_frames.settings"));
     vocalypse::i18n::overrideSystemLanguage (vocalypse::i18n::Language::german);
+    juce::String anim ("full");
+    for (const auto& a : args)
+        if (a.startsWith ("anim="))
+            anim = a.fromFirstOccurrenceOf ("=", false, false);
+    {
+        UserSettings s;
+        s.file().setValue ("animation", anim);
+        s.file().saveIfNeeded();
+    }
     EmberAudioProcessor p;
     p.prepareToPlay (48000.0, 512);
     std::unique_ptr<juce::AudioProcessorEditor> base (p.createEditor());
@@ -2029,8 +2048,8 @@ static int framesDump (const juce::File& dir, const juce::StringArray& args)
             if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
         }
     }
-    juce::ignoreUnused (args);
     vocalypse::i18n::overrideSystemLanguage (std::nullopt);
+    LiveMascotView::setAnimationLevel (AnimationLevel::full);
     std::printf ("frames: %s\n", dir.getFullPathName().toRawUTF8());
     return 0;
 }
@@ -2101,8 +2120,14 @@ static int bench (int seconds, const juce::StringArray& args)
     if (frontOpt != "yes") fronts.push_back (false);
     const bool minimised = opt.getValue ("min", "0") == "1";
     const auto anim = opt.getValue ("anim", "");
+    LiveMascotView::fixedHzForTest = opt.getValue ("hz", "0").getIntValue();
 
     UserSettings::useFileForTests (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_bench.settings"));
+    {
+        UserSettings s;   // the editors read the animation setting when they open
+        s.file().setValue ("animation", anim.isNotEmpty() ? anim : juce::String ("full"));
+        s.file().saveIfNeeded();
+    }
     const auto take = makeTake (48000.0, 10.0);
     std::printf ("Ember bench: %d s per run, 48 kHz / 256, editors open (live Ember)%s%s\n", seconds, minimised ? ", windows minimised" : "",
                  anim.isNotEmpty() ? (", animation " + anim).toRawUTF8() : "");

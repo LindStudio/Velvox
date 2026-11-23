@@ -23,10 +23,11 @@ namespace ember::seal
         float sinceS = 99.0f;  // seconds since Ember swallowed the last S
         float heat = 0;        // 0..1.2: how hard the de-esser works (reduction / 9 dB, smoothed)
         bool on = true;        // false in bypass: the seal goes dark
+        bool calm = false;     // animation "reduced" / "off" (menu): the circle, its letters and the border stand still
         float lit() const noexcept { return on ? 0.65f + 0.35f * juce::jmin (1.0f, heat) : 0.12f; }
         float wave() const noexcept { return juce::jmax (0.0f, 1.0f - sinceS * 1.1f); }
         float jump() const noexcept { return juce::jmax (0.0f, 1.0f - sinceS * 1.6f); }
-        float rotation() const noexcept { return (float) (t * 0.11); }
+        float rotation() const noexcept { return calm ? 0.0f : (float) (t * 0.11); }
     };
 
     // One of the 24 runes as strokes in a box of 0.6 x 1 (top left 0,0)
@@ -36,14 +37,20 @@ namespace ember::seal
 
     // The glowing runes drawn once into small images and then only copied (drawing ~160 of them as glowing strokes
     // every frame cost most of the seal's time). One atlas per thread that draws; sizes are rounded to 1 px.
+    // forScreen: the atlas draws straight onto the window (message thread). Its sprites are then kept as the screen's
+    // own images (Direct2D): a memory image is uploaded to the graphics card anew on every single draw, which made
+    // the ~200 border runes the dearest part of every repaint (2026-11-23). Same pixels either way.
     class RuneAtlas
     {
     public:
-        explicit RuneAtlas (juce::Colour c) : colour (c) {}
+        explicit RuneAtlas (juce::Colour c, bool forScreen = false) : colour (c), screen (forScreen) {}
         void setScale (float physicalScale);
         void draw (juce::Graphics&, int index, juce::Point<float> c, float height, float alpha);
+        // the area draw() covers (to skip runes outside the part of the window being repainted)
+        juce::Rectangle<float> bounds (juce::Point<float> c, float height) const;
     private:
         juce::Colour colour;
+        bool screen = false;
         float scale = 1.0f;
         std::map<int, juce::Image> sprites;
     };
