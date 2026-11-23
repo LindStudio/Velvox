@@ -9,15 +9,27 @@ namespace ember
 {
     using ParamValues = std::map<juce::String, float>;   // parameter ID -> real value
 
+    // Factory preset categories (2026-11-23, r2/ember-presets): the menu shows one submenu per category, in this
+    // order; `none` is only the plugin's init state "Default" at the top
+    enum class PresetCategory { none, vocalBasics, maleVocals, femaleVocals, genre, specialPurpose };
+    inline constexpr PresetCategory presetCategories[] { PresetCategory::vocalBasics, PresetCategory::maleVocals,
+                                                         PresetCategory::femaleVocals, PresetCategory::genre,
+                                                         PresetCategory::specialPurpose };
+    juce::String categoryName (PresetCategory);   // in the interface language
+
     struct FactoryPreset
     {
-        const char* nameDe;
-        const char* nameEn;
+        PresetCategory category;
+        const char* name;     // English in both languages (preset names are product names)
+        const char* infoDe;   // one sentence: what it is for (status line after loading, manual)
+        const char* infoEn;
         ParamValues values;   // missing IDs = default
     };
 
+    // Sorted by category (the order of presetCategories, "Default" first): stepping with ‹ › follows this list
     const std::vector<FactoryPreset>& factoryPresets();
-    juce::String presetName (const FactoryPreset&);   // in the interface language
+    juce::String presetName (const FactoryPreset&);
+    juce::String presetInfo (const FactoryPreset&);   // in the interface language
 
     // Bypass and listen (Delta / S range) are tools, not settings: presets, A/B, undo and the "modified" marker
     // never touch them (a preset never switches the plugin off or loads "only the S")

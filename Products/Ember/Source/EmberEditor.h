@@ -188,6 +188,7 @@ namespace ember
         void setVoice (int voice);
         void refreshButtons();
         void showPresetMenu();
+        void showPresetInfo();   // the loaded factory preset's one-line purpose in the status line
         void savePresetAs();
         void renamePreset (const juce::File&);
         void deletePreset (const juce::File&);
