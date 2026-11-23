@@ -12,7 +12,7 @@
     --line: #1c2030;
     --text: #e6e7ec;
     --muted: #9a9db0;
-    --ember: #ff3b1f;
+    --ember: #ff3a6e;   /* EMBER pink (the plugin accent) */
   }
   * { box-sizing: border-box; }
   html { background: var(--bg); }
@@ -93,7 +93,7 @@
 <table>
   <tr><th>Element</th><th>Funktion</th></tr>
   <tr><td>Amount</td><td>Wie stark EMBER eingreift. 50 % entspricht genau dem, was Threshold und Range vorgeben, 100 % der anderthalbfachen Wirkung, 0 % schaltet die Bearbeitung ab.</td></tr>
-  <tr><td>Stimmlage: TIEF / MITTEL / HOCH</td><td>Legt fest, wo der S-Bereich beginnt: ab 5 kHz (TIEF), 6,2 kHz (MITTEL) oder 7,4 kHz (HOCH). Der Threshold wird passend mitgesetzt (tiefe Stimmen haben leisere S), außer AUTO hat ihn schon eingestellt.</td></tr>
+  <tr><td>Stimmlage: TIEF / MITTEL / HOCH</td><td>Legt fest, wo der S-Bereich beginnt: ab 5 kHz (TIEF), 6,2 kHz (MITTEL) oder 7,4 kHz (HOCH). Der Threshold wird passend mitgesetzt (tiefe Stimmen haben leisere S), solange er noch auf einem Stimmlagen-Wert steht (auch dem Standard). Einen Threshold, den du, ein Preset oder AUTO eingestellt hat, lässt die Stimmlage stehen; die Statuszeile sagt dir das kurz. Ein Klick auf die schon leuchtende Stimmlage nach AUTO behält die Frequenz, die AUTO in diesem Bereich gefunden hat. Es leuchtet die Stimmlage, in deren Bereich die Frequenz liegt (TIEF bis 5,75 kHz, MITTEL bis 7 kHz, darüber HOCH). Ein Klick ist ein Schritt für Rückgängig.</td></tr>
   <tr><td>DELTA</td><td>Du hörst nur, was entfernt wird.</td></tr>
   <tr><td>ABSENKUNG</td><td>Zeigt, wie viel leiser die S-Laute gerade werden (0 bis −12 dB, Gain Reduction).</td></tr>
 </table>
@@ -102,9 +102,9 @@
 <p>ADVANCED gibt dir Zugriff auf alle Parameter.</p>
 <h3>Anzeigen</h3>
 <ul>
-  <li><strong>Spektrum:</strong> Der rot markierte S-Bereich zeigt, wo EMBER arbeitet. Zieh an seiner roten Kante, um die Frequenz einzustellen (Shift = fein, Mausrad = Schritt). Die Achse zeigt 1 bis 20 kHz. Oben läuft der Verlauf der Absenkung mit.</li>
+  <li><strong>Spektrum:</strong> Der pink markierte S-Bereich zeigt, wo EMBER arbeitet. Zieh an seiner pinken Kante, um die Frequenz einzustellen (Shift = fein, Mausrad = Schritt). Die Achse zeigt 1 bis 20 kHz. Oben läuft der Verlauf der Absenkung mit.</li>
   <li><strong>ABSENKUNG:</strong> Wie viel gerade weggenommen wird, in dB.</li>
-  <li><strong>S-PEGEL</strong> (rechts): Pegel im S-Bereich. Die rote Linie ist der Threshold; du kannst sie mit der Maus verschieben (Shift = fein, Mausrad = Schritt). Ein grauer Balken bedeutet: Die Smart-Erkennung hört gerade keinen S-Laut.</li>
+  <li><strong>S-PEGEL</strong> (rechts): Pegel im S-Bereich in dB. Die pinke Linie ist der Threshold; du kannst sie mit der Maus verschieben (Shift = fein, Mausrad = Schritt, Doppelklick = Standard). Beim Ziehen steht der Wert in dB daneben. Ein grau gestreifter Balken bedeutet: Die Smart-Erkennung hört gerade keinen S-Laut.</li>
 </ul>
 <h3>Regler und Schalter</h3>
 <table>
@@ -131,7 +131,7 @@
 <h2 id="auto">4. AUTO</h2>
 <p>Spiel den Gesang ab und klicke auf <strong>AUTO</strong> oder auf Ember.</p>
 <ul>
-  <li>Ember hört etwa 12 Sekunden Gesang zu (Pausen werden übersprungen, maximal 30 Sekunden). Ember hält dabei die Hand ans Ohr. Er ist von selbst fertig – auch wenn du die Wiedergabe nach mindestens 3 Sekunden Gesang anhältst. Ein Klick auf <strong>ABBRECHEN</strong> bricht ab. Kommt kein Ton an, sagt Ember dir, dass du Play drücken sollst.</li>
+  <li>Ember hört 12 Sekunden Gesang zu (Pausen zählen nicht mit). Ember hält dabei die Hand ans Ohr. Er ist von selbst fertig – auch wenn du die Wiedergabe nach mindestens 3 Sekunden Gesang anhältst. Ein Klick auf <strong>ABBRECHEN</strong> bricht ab. Kommt kein Ton an, sagt Ember dir, dass du Play drücken sollst. Ist <strong>BYPASS</strong> an, sagt dir die Statuszeile, dass du das Ergebnis erst ohne BYPASS hörst.</li>
   <li>Danach probiert EMBER Einstellungen aus, indem es die Aufnahme durchrechnet:
     <ul>
       <li>EMBER sucht die Mitte der S-Energie dieser Stimme und legt die Frequenz knapp darunter (zwischen 4,5 und 9,5 kHz). Dieselbe Stimme bekommt so auch bei verschiedenen Ausschnitten fast dieselbe Frequenz.</li>
@@ -141,7 +141,9 @@
       <li>Alles andere bleibt, wie du es eingestellt hast (Modus, Erkennung, Amount, Attack, Lookahead, Mix, Output) – AUTO misst damit. Nur ein Amount unter 25 % wird auf 50 % gesetzt.</li>
     </ul>
   </li>
-  <li>Deine Einstellung von vorher liegt danach auf <strong>A</strong>, das AUTO-Ergebnis auf <strong>B</strong>. Klick auf A, um AUTO zurückzunehmen, oder vergleiche beide.</li>
+  <li>Deine Einstellung von vorher bleibt auf dem Slot, auf dem du warst, das AUTO-Ergebnis kommt auf den anderen und wird aktiv. Beim ersten Mal heißt das: vorher auf <strong>A</strong>, AUTO auf <strong>B</strong>. Klick auf A, um AUTO zurückzunehmen, oder vergleiche beide.</li>
+  <li>Hast du auf dem anderen Slot schon eine andere Einstellung geparkt, überschreibt AUTO sie nicht: Das Ergebnis kommt dann auf den aktiven Slot, und <span class="key">Strg</span>+<span class="key">Z</span> holt deine Einstellung von vorher zurück. Die Statuszeile sagt dir, wo „vorher“ liegt.</li>
+  <li>Rückgängig nimmt AUTO in einem Schritt zurück, samt Presetname und A/B.</li>
 </ul>
 <p>Das Ergebnis ist bewusst dezent. Wenn du mehr Wirkung möchtest, erhöhe Amount.</p>
 <p>Findet EMBER zu wenige S-Laute, erscheint ein Hinweis: Spiel dann eine Stelle mit vielen S-, Z- oder Sch-Lauten ab und starte AUTO erneut.</p>
@@ -149,7 +151,7 @@
 <h2 id="smart">5. Smart-Erkennung einfach erklärt</h2>
 <p>Ein klassischer De-Esser reagiert auf alles, was im Höhenbereich laut ist. Das trifft auch helle Vokale, Luft in der Stimme und Atemgeräusche – die Stimme klingt dann dumpf oder lispelt.</p>
 <p>Die Smart-Erkennung vergleicht deshalb den S-Bereich mit dem Körper der Stimme (250 Hz bis 3 kHz). Nur wenn der S-Bereich im Verhältnis deutlich hervorsticht, handelt es sich um einen echten S-Laut, und EMBER greift ein. Helle Vokale, Luft und Atmer bleiben dadurch unberührt.</p>
-<p>In der S-LEVEL-Anzeige siehst du das direkt: Ist der Balken grau, hört die Smart-Erkennung gerade keinen S-Laut.</p>
+<p>In der S-PEGEL-Anzeige siehst du das direkt: Ist der Balken grau gestreift, hört die Smart-Erkennung gerade keinen S-Laut.</p>
 
 <h2 id="launen">6. Embers Launen</h2>
 <table>
@@ -166,18 +168,22 @@
 <p>Die Preset-Leiste zeigt <strong>‹ Presetname ›</strong>. Mit den Pfeilen blätterst du durch die Presets, ein Klick auf den Namen öffnet das Menü.</p>
 <ul>
   <li><strong>Werks-Presets:</strong> Standard, Sanft, Pop-Gesang, Rap, Tiefe Stimme, Hohe Stimme, Backing Vocals, Sprache / Podcast, Kräftig.</li>
-  <li><strong>Eigene Presets</strong>, außerdem <strong>Preset speichern …</strong> und <strong>Preset-Ordner öffnen</strong>.</li>
+  <li><strong>Eigene Presets</strong>, außerdem <strong>Preset speichern …</strong>, <strong>Preset umbenennen</strong>, <strong>Preset löschen</strong> (mit Rückfrage; die Datei kommt in den Papierkorb) und <strong>Preset-Ordner öffnen</strong>.</li>
+  <li>Von einer AUTO-Einstellung aus springt der rechte Pfeil zum ersten Preset, der linke zum letzten.</li>
   <li>Ein <strong>*</strong> hinter dem Namen bedeutet, dass du seit dem Laden etwas geändert hast.</li>
   <li><strong>SPEICHERN</strong> speichert dein eigenes Preset als <code>.emberpreset</code> in <code>Dokumente\Lind Audio\EMBER\Presets</code>.</li>
 </ul>
 <h3>A/B-Vergleich</h3>
-<p>Mit den Slots <strong>A</strong> und <strong>B</strong> vergleichst du zwei Einstellungen. B startet als Kopie von A. <strong>A → B</strong> kopiert die aktive Einstellung in den anderen Speicher.</p>
+<p>Mit den Slots <strong>A</strong> und <strong>B</strong> vergleichst du zwei Einstellungen. B startet als Kopie von A. Der Kopier-Knopf kopiert die aktive Einstellung in den anderen Speicher: Er heißt <strong>A → B</strong>, solange A aktiv ist, und <strong>B → A</strong>, wenn B aktiv ist. A und B (und welcher aktiv ist) werden mit dem Projekt gespeichert. Wie AUTO die Slots füllt, steht in <a href="#auto">Abschnitt 4</a>.</p>
 <h3>Menü (≡ oben rechts)</h3>
 <ul>
+  <li><strong>Rückgängig</strong> (<span class="key">Strg</span>+<span class="key">Z</span>) und <strong>Wiederholen</strong> (<span class="key">Strg</span>+<span class="key">Umschalt</span>+<span class="key">Z</span> oder <span class="key">Strg</span>+<span class="key">Y</span>): Jede Änderung an einem Regler, ein Klick auf eine Stimmlage, ein geladenes Preset und AUTO sind je ein Schritt. Rückgängig bringt auch den Presetnamen und das * zurück. Abhören (Delta / S-Bereich) und BYPASS gehören nicht dazu.</li>
+  <li><strong>Fenstergröße:</strong> 75 / 100 / 125 / 150 / 200 % – wird gespeichert, genau wie eine mit der Ecke unten rechts gezogene Größe.</li>
   <li><strong>Sprache:</strong> Wie das System / Deutsch / English – wird gespeichert.</li>
   <li><strong>Handbuch öffnen</strong></li>
   <li><strong>Ember-Tipp wieder zeigen</strong></li>
-  <li><strong>Über EMBER …</strong></li>
+  <li><strong>Lizenz:</strong> zeigt den Stand der Lizenz, dazu <strong>Lizenzschlüssel eingeben …</strong>, <strong>Diesen Computer freigeben</strong> (mit Rückfrage) und den Link zum Schlüssel.</li>
+  <li><strong>Über EMBER …</strong> (Klick oder <span class="key">Esc</span> schließt es)</li>
 </ul>
 
 <h2 id="tipps">8. Tipps für gute Ergebnisse</h2>
@@ -193,8 +199,11 @@
 <table>
   <tr><th>Aktion</th><th>Wirkung</th></tr>
   <tr><td>Maus ruhen lassen</td><td>Zu jedem Control erscheint eine Infokarte.</td></tr>
-  <tr><td>Doppelklick</td><td>Setzt das Control auf den Standardwert zurück.</td></tr>
+  <tr><td>Doppelklick oder <span class="key">Alt</span> + Klick</td><td>Setzt das Control auf den Standardwert zurück.</td></tr>
   <tr><td><span class="key">Shift</span> / <span class="key">Strg</span> + Ziehen</td><td>Feineinstellung.</td></tr>
+  <tr><td>Mausrad</td><td>Ein Schritt pro Raste, mit <span class="key">Shift</span> / <span class="key">Strg</span> fein. Geht auch an der Kante im Spektrum und an der Threshold-Linie.</td></tr>
+  <tr><td><span class="key">Strg</span>+<span class="key">Z</span> / <span class="key">Strg</span>+<span class="key">Umschalt</span>+<span class="key">Z</span> / <span class="key">Strg</span>+<span class="key">Y</span></td><td>Rückgängig / Wiederholen (wenn dein Host die Tasten an das Plugin weitergibt; sonst über das Menü ≡).</td></tr>
+  <tr><td>Ecke unten rechts ziehen</td><td>Fenster vergrößern oder verkleinern (75 bis 200 %); feste Stufen im Menü ≡ › Fenstergröße.</td></tr>
   <tr><td>Klick auf den Wert</td><td>Wert direkt eintippen.</td></tr>
   <tr><td>Rechtsklick</td><td>Kontextmenü.</td></tr>
   <tr><td>BYPASS</td><td>Schaltet die Bearbeitung ab; die Latenz bleibt erhalten, damit deine Spur synchron bleibt.</td></tr>
