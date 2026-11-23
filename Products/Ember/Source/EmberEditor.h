@@ -33,7 +33,8 @@ namespace ember
     class ReductionMeter final : public juce::Component
     {
     public:
-        void setValue (float db) { value = db; repaint(); }
+        // repainted only while something shows a change (the window's runes repaint with it; silence = no repaints)
+        void setValue (float db) { const bool moved = std::abs (db - value) > 0.005f || peakHold > 0.01f; value = db; if (moved) repaint(); }
         void paint (juce::Graphics&) override;
         static constexpr float maxDb = 12.0f;
     private:

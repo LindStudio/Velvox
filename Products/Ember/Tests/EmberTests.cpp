@@ -5,7 +5,7 @@
 //   EmberTests --marketing <take.wav> <dir>   website pictures (2x) of both views, captured at the strongest S
 //   EmberTests --rig <dir>                     the live rig (FIGUR_ANIMIEREN.md): rest pose + test poses as PNG, 600 px
 //   EmberTests --frames <dir>                  the same SIMPLE frames every run (1x, 1.25x): compare before / after a GUI change
-//   EmberTests --bench [s] [scales=1,1.25] [counts=1,4] [front=yes|no|both] [min=1] [anim=full|reduced|off]   GUI CPU
+//   EmberTests --bench [s] [scales=1,1.25] [counts=1,4] [front=yes|no|both] [min=1] [hosted=1] [hz=60] [anim=full|reduced|off]   GUI CPU
 //   EmberTests --mascot-loops <dir>            website loops of Ember (listening, dancing with/without S sparks, idle, lispy, sleeping), 2x
 //   env EMBER_VOCALS=<dir or ;-list>    also runs AUTO on these real takes (report + sanity checks)
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -2119,6 +2119,7 @@ static int bench (int seconds, const juce::StringArray& args)
     if (frontOpt != "no") fronts.push_back (true);
     if (frontOpt != "yes") fronts.push_back (false);
     const bool minimised = opt.getValue ("min", "0") == "1";
+    const bool hosted = opt.getValue ("hosted", "0") == "1";   // each editor a child window inside a host window, as in a DAW
     const auto anim = opt.getValue ("anim", "");
     LiveMascotView::fixedHzForTest = opt.getValue ("hz", "0").getIntValue();
 
@@ -2143,6 +2144,7 @@ static int bench (int seconds, const juce::StringArray& args)
         {
             const int count = (int) countF;
             std::vector<std::unique_ptr<EmberAudioProcessor>> procs;
+            std::vector<std::unique_ptr<juce::Component>> hosts;   // destroyed after the editors
             std::vector<std::unique_ptr<juce::AudioProcessorEditor>> eds;
             AudioLoop loop;
             loop.src = take.x;
@@ -2153,8 +2155,21 @@ static int bench (int seconds, const juce::StringArray& args)
                 procs.back()->prepareToPlay (48000.0, 256);
                 eds.emplace_back (procs.back()->createEditor());
                 auto& ed = *eds.back();
-                ed.setTopLeftPosition (40 + 30 * i, 40 + 30 * i);
-                ed.addToDesktop (juce::ComponentPeer::windowHasTitleBar | juce::ComponentPeer::windowHasMinimiseButton);
+                if (hosted)
+                {
+                    hosts.push_back (std::make_unique<juce::Component>());
+                    auto& h = *hosts.back();
+                    h.setBounds (40 + 30 * i, 40 + 30 * i, ed.getWidth(), ed.getHeight());
+                    h.addToDesktop (juce::ComponentPeer::windowHasTitleBar | juce::ComponentPeer::windowHasMinimiseButton);
+                    h.setVisible (true);
+                    ed.setTopLeftPosition (0, 0);
+                    ed.addToDesktop (0, h.getPeer()->getNativeHandle());
+                }
+                else
+                {
+                    ed.setTopLeftPosition (40 + 30 * i, 40 + 30 * i);
+                    ed.addToDesktop (juce::ComponentPeer::windowHasTitleBar | juce::ComponentPeer::windowHasMinimiseButton);
+                }
                 ed.setVisible (true);
                 loop.procs.push_back (procs.back().get());
             }
@@ -2162,7 +2177,10 @@ static int bench (int seconds, const juce::StringArray& args)
             if (minimised)
             {
                 for (auto& e : eds)
-                    if (auto* peer = e->getPeer())
+                    if (auto* peer = e->getPeer(); peer != nullptr && ! hosted)
+                        peer->setMinimised (true);
+                for (auto& h : hosts)
+                    if (auto* peer = h->getPeer())
                         peer->setMinimised (true);
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (1000);
             }

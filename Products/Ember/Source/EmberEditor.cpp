@@ -103,7 +103,7 @@ namespace ember
     void SealOverlay::update (const seal::Scene& s, bool simpleView, juce::Rectangle<float> knobArea, std::vector<juce::Rectangle<float>> plateAreas)
     {
         const bool surge = scene.sinceS < 1.2f || s.sinceS < 1.2f;
-        const bool viewChanged = simple != simpleView || knob != knobArea;
+        const bool viewChanged = simple != simpleView || knob != knobArea || scene.calm != s.calm;
         scene = s;
         simple = simpleView;
         knob = knobArea;
@@ -111,7 +111,7 @@ namespace ember
         // calm (animation reduced / off): the border and the knob's seal stand still, only their light follows the work
         const float lit = s.on ? juce::jmin (1.0f, s.heat) : -1.0f;
         const bool due = s.calm ? (viewChanged || std::abs (lit - paintedLit) > 0.02f) : true;
-        if (++ticks % 2 == 0 && due)   // the border and the knob's seal move slowly: 15 frames a second are enough
+        if ((++ticks % 2 == 0 || viewChanged) && due)   // the border and the knob's seal move slowly: 15 frames a second are enough
         {
             paintedLit = lit;
             repaintEdges (getLocalBounds().toFloat().reduced (6.0f), 7.0f);
