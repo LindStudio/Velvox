@@ -15,12 +15,21 @@ namespace ember
             return r;
         }
 
+        // Text typed into a host's own editor -> value: the read-outs' format back ("6,20 kHz", "−32,5 dB", "50 %"),
+        // German comma, typographic minus, k = x 1000 (QA 2026-11-23: "6.20 kHz" came back as 6.2 Hz, "−35,5" as 0)
+        float parseTyped (const juce::String& text)
+        {
+            const auto t = text.trim().replaceCharacter (',', '.').replace (juce::String::charToString ((juce::juce_wchar) 0x2212), "-");
+            const auto rest = t.trimCharactersAtStart ("+-0123456789. ");
+            return t.getFloatValue() * (rest.startsWithIgnoreCase ("k") ? 1000.0f : 1.0f);
+        }
+
         Attr unit (const juce::String& label, int decimals)
         {
             return Attr().withLabel (label).withStringFromValueFunction ([decimals, label] (float v, int)
             {
                 return vocalypse::i18n::number (v, decimals) + " " + label;
-            });
+            }).withValueFromStringFunction (parseTyped);
         }
 
         Attr hz()
@@ -28,7 +37,16 @@ namespace ember
             return Attr().withLabel ("Hz").withStringFromValueFunction ([] (float v, int)
             {
                 return v >= 1000.0f ? vocalypse::i18n::number (v / 1000.0f, 2) + " kHz" : juce::String (juce::roundToInt (v)) + " Hz";
-            });
+            }).withValueFromStringFunction (parseTyped);
+        }
+
+        // Width: the unit in the interface language ("3,00 Okt." / "3.00 oct"), the host label stays "oct"
+        Attr octaves()
+        {
+            return Attr().withLabel ("oct").withStringFromValueFunction ([] (float v, int)
+            {
+                return vocalypse::i18n::number (v, 2) + " " + vocalypse::i18n::tr ("Okt.", "oct");
+            }).withValueFromStringFunction (parseTyped);
         }
 
         Attr percent()
@@ -36,7 +54,7 @@ namespace ember
             return Attr().withLabel ("%").withStringFromValueFunction ([] (float v, int)
             {
                 return juce::String (juce::roundToInt (v)) + " %";
-            });
+            }).withValueFromStringFunction (parseTyped);
         }
     }
 
@@ -58,7 +76,7 @@ namespace ember
         layout.add (std::make_unique<juce::AudioParameterChoice> (id (pid::detection), "Detection", detectionChoices, 0));
         layout.add (std::make_unique<juce::AudioParameterChoice> (id (pid::listen), "Listen", listenChoices, 0));
         layout.add (std::make_unique<juce::AudioParameterBool> (id (pid::bypass), "Bypass", false));
-        layout.add (std::make_unique<Float> (id (pid::width), "Width", juce::NormalisableRange<float> (minWidthOct, maxWidthOct, 0.01f), defaultWidthOct, unit ("oct", 2)));
+        layout.add (std::make_unique<Float> (id (pid::width), "Width", juce::NormalisableRange<float> (minWidthOct, maxWidthOct, 0.01f), defaultWidthOct, octaves()));
         layout.add (std::make_unique<Float> (id (pid::link), "Stereo Link", juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f, percent()));
         layout.add (std::make_unique<juce::AudioParameterChoice> (id (pid::stereo), "Stereo Mode", stereoChoices, 0));
         return layout;

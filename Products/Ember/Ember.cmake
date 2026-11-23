@@ -101,7 +101,8 @@ target_link_libraries(Ember
 
 if(VOCALYPSE_BUILD_TESTS)
     juce_add_console_app(EmberTests PRODUCT_NAME "EmberTests")
-    target_sources(EmberTests PRIVATE ${EMBER_SOURCES} ${EMBER_SHARED_SOURCES} Products/Ember/Tests/EmberTests.cpp Products/Ember/Tests/EmberBenchTime.cpp)
+    target_sources(EmberTests PRIVATE ${EMBER_SOURCES} ${EMBER_SHARED_SOURCES} Products/Ember/Tests/EmberTests.cpp Products/Ember/Tests/EmberBenchTime.cpp
+        Products/Ember/Tests/EmberQaTests.cpp Products/Ember/Tests/EmberQaSys.cpp)
     target_include_directories(EmberTests PRIVATE Source Products/Ember/Source)
     if(MSVC)
         target_compile_options(EmberTests PRIVATE /bigobj /utf-8)
