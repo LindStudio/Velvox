@@ -65,10 +65,10 @@ namespace ember
 
     void EmberAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     {
-        currentRate = sampleRate;
+        currentRate.store (sampleRate);
         engine.setSettings (readSettings (state));
         engine.prepare (sampleRate, samplesPerBlock);
-        capture.prepare (sampleRate);
+        capture.prepare (sampleRate);   // a new rate while AUTO listens: it listens again from the start
         setLatencySamples (engine.getLatencySamples());
     }
 
@@ -136,6 +136,10 @@ namespace ember
         setListenOff();
         // a project reopens as it was saved: the restored values count as the preset's
         presetValues = ember::capture (state);
+        // an AUTO analysis (or result) from before this state does not belong to it
+        projectLoads.fetch_add (1);
+        if (juce::MessageManager::existsAndIsCurrentThread())
+            autoProjectLoaded();
     }
 
     // ---------------------------------------------------------------- presets
@@ -145,6 +149,7 @@ namespace ember
         if (! juce::isPositiveAndBelow (index, (int) list.size()))
             return;
         beginUndoStep (-1);
+        discardPendingAuto();
         const UndoGroup group (*this);
         ember::apply (state, list[(size_t) index].values);
         factoryIndex = index;
@@ -160,6 +165,7 @@ namespace ember
         if (! ember::loadUserPreset (file, v))
             return false;
         beginUndoStep (-1);
+        discardPendingAuto();
         const UndoGroup group (*this);
         ember::apply (state, v);
         factoryIndex = -1;
@@ -227,6 +233,7 @@ namespace ember
 
     void EmberAudioProcessor::restoreSlot (const Slot& s)
     {
+        discardPendingAuto();
         {
             const UndoGroup group (*this);   // switching back is the way back, not an undo step
             ember::apply (state, s.values);
@@ -340,7 +347,8 @@ namespace ember
     {
         if (licence->isLocked())
             return;   // the audio passes through unprocessed: AUTO would claim a result nobody hears
-        capture.prepare (currentRate);
+        discardPendingAuto();
+        capture.prepare (currentRate.load());
         capture.start();
         autoPhase = AutoPhase::listening;
         autoNow = autoLastGrowth = juce::Time::getMillisecondCounterHiRes() * 0.001;
@@ -356,10 +364,10 @@ namespace ember
         autoNow = nowSeconds;
         if (const int samples = capture.getNumSamples(); samples != autoLastSamples)
         {
-            autoLastSamples = samples;
+            autoLastSamples = samples;     // (a new sample rate restarts the capture: it shrinks, which counts as news)
             autoLastGrowth = nowSeconds;
         }
-        const double seconds = capture.getSeconds();
+        const double seconds = capture.getVoicedSeconds();
         if (seconds >= autoEnoughSeconds || ! capture.isCapturing())
             finishAuto();
         else if (seconds >= autoMinSeconds && nowSeconds - autoLastGrowth >= autoQuietSeconds)
@@ -368,7 +376,7 @@ namespace ember
 
     bool EmberAudioProcessor::isAutoWaitingForAudio() const noexcept
     {
-        return autoPhase == AutoPhase::listening && getAutoQuietSeconds() >= autoQuietSeconds && capture.getSeconds() < autoMinSeconds;
+        return autoPhase == AutoPhase::listening && getAutoQuietSeconds() >= autoQuietSeconds && capture.getVoicedSeconds() < autoMinSeconds;
     }
 
     bool EmberAudioProcessor::isShowingAutoResult() const
@@ -379,42 +387,104 @@ namespace ember
     void EmberAudioProcessor::cancelAuto()
     {
         if (autoPhase == AutoPhase::analysing)
+            discardPendingAuto();   // the background analysis stops within a few ms, nothing is applied
+        else if (autoPhase == AutoPhase::listening)
+        {
+            capture.stop();
+            autoPhase = AutoPhase::idle;
+        }
+    }
+
+    void EmberAudioProcessor::discardPendingAuto()
+    {
+        if (autoPhase != AutoPhase::analysing)
             return;
-        capture.stop();
+        autoCancel->store (true);
+        autoTake.reset();
         autoPhase = AutoPhase::idle;
+    }
+
+    void EmberAudioProcessor::autoProjectLoaded()
+    {
+        seenProjectLoads = projectLoads.load();
+        discardPendingAuto();
+        if (autoPhase == AutoPhase::done || autoPhase == AutoPhase::failed)
+        {
+            autoPhase = AutoPhase::idle;   // "Set: from 6.2 kHz ..." was about the settings before this project
+            lastAuto = {};
+        }
     }
 
     double EmberAudioProcessor::getAutoProgress() const noexcept
     {
-        return autoPhase == AutoPhase::listening ? juce::jlimit (0.0, 1.0, capture.getSeconds() / autoEnoughSeconds) : 0.0;
+        return autoPhase == AutoPhase::listening ? juce::jlimit (0.0, 1.0, capture.getVoicedSeconds() / autoEnoughSeconds) : 0.0;
     }
 
     void EmberAudioProcessor::finishAuto()
     {
         if (autoPhase != AutoPhase::listening)
             return;
-        capture.stop();
-        std::vector<float> take (capture.data(), capture.data() + capture.getNumSamples());
-        const double rate = capture.getSampleRate();
+        capture.stop();   // when it returns, the audio thread no longer writes
+        autoTake = std::make_shared<const AutoCapture::Take> (capture.copyTake());
         autoPhase = AutoPhase::analysing;
+        launchAuto();
+    }
+
+    void EmberAudioProcessor::launchAuto()
+    {
+        autoCancel->store (true);   // a run with older settings stops (its future is replaced below)
         autoCancel = std::make_shared<std::atomic<bool>> (false);
         // measured with the user's own mode, Amount, detection and times (only an Amount too low to work with is raised)
         autoBase = readSettings (state);
+        autoUserAmount = autoBase.amount;
         autoRaisedAmount = autoBase.amount < autoMinAmount;
         if (autoRaisedAmount)
             autoBase.amount = 0.5f;
-        pending = std::async (std::launch::async, [take = std::move (take), rate, base = autoBase, cancel = autoCancel]
+        autoLoadsAtStart = projectLoads.load();
+        ++autoRuns;
+        pending = std::async (std::launch::async, [take = autoTake, base = autoBase, cancel = autoCancel]
         {
-            return analyse (take.data(), (int) take.size(), rate, base, cancel.get());
+            if (take == nullptr || take->numChannels <= 0)
+                return AutoResult {};
+            const float* ch[2] { take->channel[0].data(), take->numChannels > 1 ? take->channel[1].data() : nullptr };
+            return analyse (ch, take->numChannels, take->numSamples(), take->sampleRate, base, cancel.get());
         });
+    }
+
+    bool EmberAudioProcessor::autoBaseChanged() const
+    {
+        const auto now = readSettings (state);
+        return now.mode != autoBase.mode || now.relative != autoBase.relative || now.smart != autoBase.smart
+            || std::abs (now.attackMs - autoBase.attackMs) > 1.0e-4f || std::abs (now.lookaheadMs - autoBase.lookaheadMs) > 1.0e-4f
+            || std::abs (now.amount - autoUserAmount) > 1.0e-4f;
     }
 
     bool EmberAudioProcessor::pollAuto()
     {
-        if (autoPhase != AutoPhase::analysing || ! pending.valid()
-            || pending.wait_for (std::chrono::seconds (0)) != std::future_status::ready)
+        if (autoPhase != AutoPhase::analysing || ! pending.valid())
             return false;
-        lastAuto = pending.get();
+        // a project loaded on another thread meanwhile: this analysis belongs to the settings before it
+        if (projectLoads.load() != autoLoadsAtStart)
+        {
+            autoProjectLoaded();
+            return false;
+        }
+        // mode, detection, Amount or times changed while analysing: measured again with them, on the same take
+        if (autoBaseChanged())
+        {
+            launchAuto();
+            return false;
+        }
+        if (pending.wait_for (std::chrono::seconds (0)) != std::future_status::ready)
+            return false;
+        auto result = pending.get();
+        autoTake.reset();
+        if (result.status == AutoResult::Status::cancelled)
+        {
+            autoPhase = AutoPhase::idle;
+            return false;
+        }
+        lastAuto = result;
         if (lastAuto.status == AutoResult::Status::ok)
         {
             applyAuto (lastAuto);
@@ -429,9 +499,12 @@ namespace ember
 
     void EmberAudioProcessor::waitForAuto()
     {
-        if (pending.valid())
+        for (int i = 0; i < 8 && autoPhase == AutoPhase::analysing && pending.valid(); ++i)
+        {
             pending.wait();
-        pollAuto();
+            if (pollAuto())
+                break;
+        }
     }
 
     void EmberAudioProcessor::applyAuto (const AutoResult& r)
@@ -486,10 +559,11 @@ namespace ember
                 return tr ("Ember probiert Einstellungen aus …", "Ember is trying settings …");
             case AutoPhase::done:
             {
+                // expectedReductionDb is what the S frames lose above autoSBandHz (their sharpness), not the whole S
                 const auto khz = number (lastAuto.freq / 1000.0, 1);
-                return format (tr ("Eingestellt: ab {0} kHz, S-Laute −{1} dB, Vokale bleiben unberührt.",
-                                   "Set: from {0} kHz, S sounds −{1} dB, vowels stay untouched."),
-                               { khz, number (lastAuto.expectedReductionDb, 1) })
+                return format (tr ("Eingestellt: ab {0} kHz, Schärfe der S-Laute (über {2} kHz) −{1} dB, Vokale bleiben unberührt.",
+                                   "Set: from {0} kHz, S sharpness (above {2} kHz) −{1} dB, vowels stay untouched."),
+                               { khz, number (lastAuto.expectedReductionDb, 1), number (autoSBandHz / 1000.0, 0) })
                        + (autoRaisedAmount ? tr (" Amount stand zu tief und ist jetzt 50 %.", " Amount was too low and is now 50 %.") : juce::String())
                        + tr (" Vorher liegt auf A.", " Before is on A.");
             }
@@ -504,6 +578,8 @@ namespace ember
 
     void EmberAudioProcessor::timerCallback()
     {
+        if (projectLoads.load() != seenProjectLoads)
+            autoProjectLoaded();   // setStateInformation ran on another thread
         pollAuto();
         updateAuto (juce::Time::getMillisecondCounterHiRes() * 0.001);
     }

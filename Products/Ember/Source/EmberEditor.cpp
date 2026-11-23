@@ -640,8 +640,8 @@ namespace ember
         // ---- SIMPLE
         mascot.onClick = [this]
         {
-            // while he listens a click on him does nothing (the AUTO button cancels): no accidental cancel
-            if (processor.getAutoPhase() != EmberAudioProcessor::AutoPhase::listening)
+            // while he listens or thinks a click on him does nothing (the AUTO button cancels): no accidental cancel
+            if (const auto ph = processor.getAutoPhase(); ph != EmberAudioProcessor::AutoPhase::listening && ph != EmberAudioProcessor::AutoPhase::analysing)
                 autoClicked();
         };
         mascot.setSealStage (true);
@@ -980,11 +980,11 @@ namespace ember
     void EmberPanel::autoClicked()
     {
         using Phase = EmberAudioProcessor::AutoPhase;
-        if (processor.getLicence().isLocked() || processor.getAutoPhase() == Phase::analysing)
+        if (processor.getLicence().isLocked())
             return;
         settings.setAutoUsed();
-        // while listening the button always cancels; finishing happens by itself (12 s of voice, or playback stopped)
-        if (processor.getAutoPhase() == Phase::listening)
+        // while listening or analysing the button cancels; finishing happens by itself (12 s of voice, or playback stopped)
+        if (processor.getAutoPhase() == Phase::listening || processor.getAutoPhase() == Phase::analysing)
             processor.cancelAuto();
         else
         {
@@ -1174,7 +1174,7 @@ namespace ember
         const auto phase = processor.getAutoPhase();
         // locked: the audio passes through unprocessed, so AUTO and BYPASS have nothing to do
         const bool locked = processor.getLicence().isLocked();
-        autoBtn.setEnabled (phase != Phase::analysing && ! locked);
+        autoBtn.setEnabled (! locked);
         bypassBtn.setEnabled (! locked);
         const float progress = phase == Phase::listening ? (float) processor.getAutoProgress() : -1.0f;
         if (std::abs (progress - autoBtn.progress) > 0.001f)
@@ -1182,9 +1182,7 @@ namespace ember
             autoBtn.progress = progress;
             autoBtn.repaint();
         }
-        if (phase == Phase::analysing)
-            autoBtn.setButtonText (utf8 ("…"));
-        else if (phase == Phase::listening)
+        if (phase == Phase::listening || phase == Phase::analysing)
             autoBtn.setButtonText (tr ("ABBRECHEN", "CANCEL"));
         else
             autoBtn.setButtonText ("AUTO");
