@@ -3,15 +3,37 @@
 
 namespace vocalypse::ui
 {
+    namespace
+    {
+        // The typefaces are made once per process (EMBER QA 2026-11-23): JUCE keeps every font it was handed as
+        // memory data until the process ends (DirectWrite custom font loader), so making them anew with every
+        // editor (EmbeddedFonts lives in SharedResourcePointers) lost 2.3 MB each time the window was opened.
+        // Released with JUCE's shutdown (DeletedAtShutdown), before the DirectWrite factory goes.
+        struct LoadedFonts final : juce::DeletedAtShutdown
+        {
+            LoadedFonts()
+            {
+                using namespace VocalypseBinaryData;
+                light    = juce::Typeface::createSystemTypefaceFor (MontserratLight_ttf, (size_t) MontserratLight_ttfSize);
+                regular  = juce::Typeface::createSystemTypefaceFor (MontserratRegular_ttf, (size_t) MontserratRegular_ttfSize);
+                medium   = juce::Typeface::createSystemTypefaceFor (MontserratMedium_ttf, (size_t) MontserratMedium_ttfSize);
+                semibold = juce::Typeface::createSystemTypefaceFor (MontserratSemiBold_ttf, (size_t) MontserratSemiBold_ttfSize);
+                bold     = juce::Typeface::createSystemTypefaceFor (MontserratBold_ttf, (size_t) MontserratBold_ttfSize);
+                mono     = juce::Typeface::createSystemTypefaceFor (RobotoMonoRegular_ttf, (size_t) RobotoMonoRegular_ttfSize);
+            }
+            ~LoadedFonts() override { clearSingletonInstance(); }
+            juce::Typeface::Ptr regular, medium, semibold, light, bold, mono;
+            JUCE_DECLARE_SINGLETON_INLINE (LoadedFonts, false)
+        };
+    }
+
     EmbeddedFonts::EmbeddedFonts()
     {
-        using namespace VocalypseBinaryData;
-        light    = juce::Typeface::createSystemTypefaceFor (MontserratLight_ttf, (size_t) MontserratLight_ttfSize);
-        regular  = juce::Typeface::createSystemTypefaceFor (MontserratRegular_ttf, (size_t) MontserratRegular_ttfSize);
-        medium   = juce::Typeface::createSystemTypefaceFor (MontserratMedium_ttf, (size_t) MontserratMedium_ttfSize);
-        semibold = juce::Typeface::createSystemTypefaceFor (MontserratSemiBold_ttf, (size_t) MontserratSemiBold_ttfSize);
-        bold     = juce::Typeface::createSystemTypefaceFor (MontserratBold_ttf, (size_t) MontserratBold_ttfSize);
-        mono     = juce::Typeface::createSystemTypefaceFor (RobotoMonoRegular_ttf, (size_t) RobotoMonoRegular_ttfSize);
+        if (auto* f = LoadedFonts::getInstance())
+        {
+            light = f->light; regular = f->regular; medium = f->medium;
+            semibold = f->semibold; bold = f->bold; mono = f->mono;
+        }
     }
 
     namespace
