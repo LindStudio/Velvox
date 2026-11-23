@@ -4,6 +4,8 @@
 //   EmberTests --snapshots <dir>        PNGs of SIMPLE and ADVANCED (both languages)
 //   EmberTests --marketing <take.wav> <dir>   website pictures (2x) of both views, captured at the strongest S
 //   EmberTests --rig <dir>                     the live rig (FIGUR_ANIMIEREN.md): rest pose + test poses as PNG, 600 px
+//   EmberTests --frames <dir>                  the same SIMPLE frames every run (1x, 1.25x): compare before / after a GUI change
+//   EmberTests --bench [s] [scales=1,1.25] [counts=1,4] [front=yes|no|both] [min=1] [anim=full|reduced|off]   GUI CPU
 //   EmberTests --mascot-loops <dir>            website loops of Ember (listening, dancing with/without S sparks, idle, lispy, sleeping), 2x
 //   env EMBER_VOCALS=<dir or ;-list>    also runs AUTO on these real takes (report + sanity checks)
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -1980,10 +1982,64 @@ namespace
 double emberThreadCpuMs();
 double emberProcessCpuMs();
 
+// Visual check for GUI optimisations (2026-11-23): the same frames of the SIMPLE view every run (seeded Ember, fixed
+// time steps, the seal's clock set directly), through the screen's renderer (createComponentSnapshot), at 1x and 1.25x.
+// Compare two runs pixel by pixel (before / after a change).
+static int framesDump (const juce::File& dir, const juce::StringArray& args)
+{
+    dir.createDirectory();
+    UserSettings::useFileForTests (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_frames.settings"));
+    vocalypse::i18n::overrideSystemLanguage (vocalypse::i18n::Language::german);
+    EmberAudioProcessor p;
+    p.prepareToPlay (48000.0, 512);
+    std::unique_ptr<juce::AudioProcessorEditor> base (p.createEditor());
+    auto* ed = dynamic_cast<EmberEditor*> (base.get());
+    if (ed == nullptr)
+        return 1;
+    ed->setSize (look::baseW, look::baseH);
+    ed->setAdvanced (false);
+    ed->tickForTest();   // texts, buttons
+    auto& panel = ed->getPanel();
+    auto& m = panel.getMascot();
+    m.getBrain().seedForTest (12345);
+    juce::PNGImageFormat png;
+    const float dt = 1.0f / 60.0f;
+    for (int k = 0; k <= 300; ++k)
+    {
+        MascotInput in;
+        in.hasSignal = true;
+        in.reductionDb = (k % 40) < 6 ? 6.0f : 0.0f;
+        in.bpm = 120.0;
+        m.setInput (in);
+        m.stepForTest (dt);
+        if (k % 15 != 0)
+            continue;
+        seal::Scene sc;
+        sc.t = k * (double) dt;
+        sc.sinceS = m.secondsSinceSwallow();
+        sc.heat = in.reductionDb / 9.0f;
+        sc.on = true;
+        const auto kb = juce::Rectangle<float> (624, 118, 248, 230);
+        panel.getSealOverlay().update (sc, true, juce::Rectangle<float> (92.0f, 92.0f).withCentre ({ kb.getCentreX(), kb.getY() + 90.0f }),
+                                       { { 0, 0, 900, 60 }, { 24, 68, 852, 32 }, { 548, 112, 336, 410 }, { 16, 528, 868, 58 } });
+        for (float scale : { 1.0f, 1.25f })
+        {
+            const auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, scale);
+            juce::FileOutputStream out (dir.getChildFile ("frame_" + juce::String (k).paddedLeft ('0', 3) + (scale > 1.0f ? "_125" : "_100") + ".png"));
+            if (out.openedOk()) { out.setPosition (0); out.truncate(); png.writeImageToStream (img, out); }
+        }
+    }
+    juce::ignoreUnused (args);
+    vocalypse::i18n::overrideSystemLanguage (std::nullopt);
+    std::printf ("frames: %s\n", dir.getFullPathName().toRawUTF8());
+    return 0;
+}
+
+
 // Step 5 of FIGUR_ANIMIEREN.md: CPU with several instances. N plugins process a looped take in real time on one audio
 // thread while their editors are open on the desktop (live Ember at 60 fps); CPU time is taken per thread, so audio
 // and drawing (message thread, shared by all editors in a host) are reported separately.
-static int bench (int seconds)
+static int bench (int seconds, const juce::StringArray& args)
 {
     struct AudioLoop final : juce::Thread
     {
@@ -2025,19 +2081,42 @@ static int bench (int seconds)
         }
     };
 
+    // options (key=value after the seconds): scales=1,1.25 counts=1,4 front=yes|no|both min=1 (windows minimised)
+    juce::StringPairArray opt;
+    for (const auto& a : args)
+        if (a.contains ("="))
+            opt.set (a.upToFirstOccurrenceOf ("=", false, false), a.fromFirstOccurrenceOf ("=", false, false));
+    const auto numbers = [&] (const char* key, const char* fallback)
+    {
+        std::vector<float> out;
+        for (const auto& t : juce::StringArray::fromTokens (opt.getValue (key, fallback), ",", ""))
+            out.push_back (t.getFloatValue());
+        return out;
+    };
+    const auto scales = numbers ("scales", "1,2");
+    const auto counts = numbers ("counts", "1,2,4,8");
+    const auto frontOpt = opt.getValue ("front", "both");
+    std::vector<bool> fronts;
+    if (frontOpt != "no") fronts.push_back (true);
+    if (frontOpt != "yes") fronts.push_back (false);
+    const bool minimised = opt.getValue ("min", "0") == "1";
+    const auto anim = opt.getValue ("anim", "");
+
     UserSettings::useFileForTests (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_bench.settings"));
     const auto take = makeTake (48000.0, 10.0);
-    std::printf ("Ember bench: %d s per run, 48 kHz / 256, editors open (live Ember)\n", seconds);
+    std::printf ("Ember bench: %d s per run, 48 kHz / 256, editors open (live Ember)%s%s\n", seconds, minimised ? ", windows minimised" : "",
+                 anim.isNotEmpty() ? (", animation " + anim).toRawUTF8() : "");
     std::printf ("  scale  inst | audio %% core  worst block | host UI thread %% core          | whole process %% core\n");
-    for (bool inFront : { true, false })
-    for (float scale : { 1.0f, 2.0f })
+    for (bool inFront : fronts)
+    for (float scale : scales)
     {
         LiveMascotView::alwaysInFront = inFront;
-        if (scale == 1.0f)
+        if (scale == scales.front())
             std::printf (inFront ? "  -- cursor on the plugin (60 fps for a single window)\n" : "  -- cursor elsewhere (30 fps)\n");
         juce::Desktop::getInstance().setGlobalScaleFactor (scale);
-        for (int count : { 1, 2, 4, 8 })
+        for (float countF : counts)
         {
+            const int count = (int) countF;
             std::vector<std::unique_ptr<EmberAudioProcessor>> procs;
             std::vector<std::unique_ptr<juce::AudioProcessorEditor>> eds;
             AudioLoop loop;
@@ -2050,11 +2129,18 @@ static int bench (int seconds)
                 eds.emplace_back (procs.back()->createEditor());
                 auto& ed = *eds.back();
                 ed.setTopLeftPosition (40 + 30 * i, 40 + 30 * i);
-                ed.addToDesktop (juce::ComponentPeer::windowHasTitleBar);
+                ed.addToDesktop (juce::ComponentPeer::windowHasTitleBar | juce::ComponentPeer::windowHasMinimiseButton);
                 ed.setVisible (true);
                 loop.procs.push_back (procs.back().get());
             }
             juce::MessageManager::getInstance()->runDispatchLoopUntil (1500);   // settle (first decode, window creation)
+            if (minimised)
+            {
+                for (auto& e : eds)
+                    if (auto* peer = e->getPeer())
+                        peer->setMinimised (true);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (1000);
+            }
             LiveMascotView::benchFigureMs = 0; LiveMascotView::benchFloorMs = 0; LiveMascotView::benchRunesMs = 0;
             LiveMascotView::benchComposeMs = 0; LiveMascotView::benchFrames = 0;
             loop.startThread (juce::Thread::Priority::highest);
@@ -2063,13 +2149,13 @@ static int bench (int seconds)
             const double wall = juce::Time::getMillisecondCounterHiRes() - w0, ui = emberThreadCpuMs() - m0, all = emberProcessCpuMs() - p0;
             loop.stopThread (2000);
             const double audioWall = loop.blocks.load() * 256 * 1000.0 / 48000.0;
-            std::printf ("  %4.0fx  %4d | %7.2f %%    %6.2f ms   | %6.1f %% (%4.1f %% per editor) | %6.1f %%\n", scale, count,
+            std::printf ("  %5.2fx %4d | %7.2f %%    %6.2f ms   | %6.1f %% (%4.1f %% per editor) | %6.1f %%\n", scale, count,
                          100.0 * loop.cpuMs.load() / std::max (1.0, audioWall), loop.worstBlockMs.load(),
                          100.0 * ui / wall, 100.0 * ui / wall / count, 100.0 * all / wall);
             if (const int fr = LiveMascotView::benchFrames.load(); fr > 0)
-                std::printf ("            per frame: figure %.2f, seal floor %.2f, runes+fire %.2f, rest %.2f ms (%d frames)\n",
+                std::printf ("            per frame: figure %.2f, seal floor %.2f, runes+fire %.2f, rest %.2f ms (%d frames, %.1f fps)\n",
                              LiveMascotView::benchFigureMs.load() / fr, LiveMascotView::benchFloorMs.load() / fr,
-                             LiveMascotView::benchRunesMs.load() / fr, LiveMascotView::benchComposeMs.load() / fr, fr);
+                             LiveMascotView::benchRunesMs.load() / fr, LiveMascotView::benchComposeMs.load() / fr, fr, fr * 1000.0 / wall / count);
             eds.clear();
             for (auto& p : procs) p->releaseResources();
         }
@@ -2096,7 +2182,9 @@ int main (int argc, char** argv)
     if (args.size() >= 2 && args[0] == "--rig")
         return rigPictures (juce::File (args[1]), args.size() >= 3 && args[2] == "transparent");
     if (args.size() >= 1 && args[0] == "--bench")
-        return bench (args.size() >= 2 ? juce::jmax (2, args[1].getIntValue()) : 8);
+        return bench (args.size() >= 2 ? juce::jmax (2, args[1].getIntValue()) : 8, args);
+    if (args.size() >= 2 && args[0] == "--frames")
+        return framesDump (juce::File (args[1]), args);
     if (args.size() >= 2 && args[0] == "--mascot-loops")
         return mascotLoops (juce::File (args[1]));
 

@@ -41,6 +41,7 @@ namespace ember
         const std::vector<Eat>& eats() const noexcept { return eating; }
         const std::vector<Fx>& effects() const noexcept { return fx; }
         int eatenCount() const noexcept { return eaten; }
+        void seedForTest (juce::int64 seed) { rnd.setSeed (seed); }   // EmberTests --frames: the same frames every run
 
         // springs (public for tests)
         Spring head { 0, 90, 12 }, headX { 0, 90, 13 }, headY { 0, 110, 14 }, earL { 0, 160, 7 }, earR { 0, 160, 7 },

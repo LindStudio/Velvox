@@ -170,6 +170,7 @@ namespace ember
         void setAdvanced (bool);
         void tick() { timerCallback(); }
         LiveMascotView& getMascot() noexcept { return mascot; }
+        SealOverlay& getSealOverlay() noexcept { return sealOverlay; }   // EmberTests --frames
         bool keyPressed (const juce::KeyPress&) override;   // Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo
 
     private:
