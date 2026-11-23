@@ -4,29 +4,175 @@
 
 namespace ember
 {
+    namespace
+    {
+        // One factory preset's sound. Every preset names all of these (so a later change of a default never moves a
+        // preset); the rest (mix, output, mode, stereo, link) stays at its default unless `extra` sets it.
+        // amount in % (50 = as set), detection 0 Smart / 1 Relative / 2 Absolute / 3 Allround, width in octaves.
+        ParamValues sound (float freq, float thr, float range, float amount, float attack, float release, float lookahead,
+                           float width, float detection = 0.0f, ParamValues extra = {})
+        {
+            ParamValues v { { pid::freq, freq }, { pid::threshold, thr }, { pid::range, range }, { pid::amount, amount },
+                            { pid::attack, attack }, { pid::release, release }, { pid::lookahead, lookahead },
+                            { pid::width, width }, { pid::detection, detection } };
+            for (const auto& [id, x] : extra)
+                v[id] = x;
+            return v;
+        }
+    }
+
     const std::vector<FactoryPreset>& factoryPresets()
     {
-        // Values in real units; detection 0 = Smart, mode 0 = Split / 1 = Wideband. Thresholds as the detector reads
-        // since 2026-11-23 (the same at every frequency, detectorTiltDbPerOct)
+        // 2026-11-23 (r2/ember-presets): 30 presets in 5 categories, each measured on fitting takes (15 real dry
+        // vocals + compressed / bright "club" and "trap" versions of them), see docs/products/ember-r2/PRESETS.md.
+        // Thresholds as the detector reads since 2026-11-23 (the same at every frequency, detectorTiltDbPerOct).
+        // No frequency within 100 Hz of the voice range borders (5.75 / 7 kHz), and no threshold on a voice value
+        // (-35 / -34 / -33), so a voice button never moves a preset's threshold.
+        using C = PresetCategory;
         static const std::vector<FactoryPreset> presets {
-            { "Standard", "Default", {} },
-            { "Sanft", "Gentle", { { pid::threshold, -28.0f }, { pid::range, 3.0f }, { pid::release, 40.0f } } },
-            { "Pop-Gesang", "Pop vocal", { { pid::freq, 6800.0f }, { pid::threshold, -32.0f }, { pid::range, 5.0f }, { pid::release, 35.0f } } },
-            { "Rap", "Rap", { { pid::freq, 5600.0f }, { pid::threshold, -34.5f }, { pid::range, 6.0f }, { pid::release, 30.0f } } },
-            { "Tiefe Stimme", "Deep voice", { { pid::freq, voiceLowHz }, { pid::threshold, voiceLowThrDb }, { pid::range, 5.0f } } },
-            { "Hohe Stimme", "High voice", { { pid::freq, voiceHighHz }, { pid::threshold, voiceHighThrDb }, { pid::range, 5.0f } } },
-            { "Backing Vocals", "Backing vocals", { { pid::freq, 6200.0f }, { pid::threshold, -37.0f }, { pid::range, 8.0f }, { pid::amount, 60.0f } } },
-            { "Sprache / Podcast", "Speech / podcast", { { pid::freq, 5500.0f }, { pid::threshold, -31.5f }, { pid::range, 5.0f }, { pid::mode, 1.0f }, { pid::release, 50.0f } } },
-            { "Kräftig", "Strong", { { pid::threshold, -38.0f }, { pid::range, 7.0f }, { pid::release, 45.0f } } },
-            // 2026-11-23: Allround for a mix or a bus (measured in a mix: S -2.9 dB, vowels untouched)
-            { "Mix / Bus", "Mix / bus", { { pid::detection, 3.0f }, { pid::threshold, -40.0f }, { pid::range, 4.0f }, { pid::release, 40.0f } } },
+            { C::none, "Default",
+              "Der Startzustand: für die meisten Stimmen ein natürlicher Anfang.",
+              "The starting point: a natural start for most voices.",
+              sound (voiceMidHz, voiceMidThrDb, 5.0f, 50.0f, 0.5f, 60.0f, defaultLookaheadMs, defaultWidthOct) },
+            { C::vocalBasics, "Gentle Vocal",
+              "Leichte, unauffällige Absenkung für Stimmen mit nur wenig scharfen S.",
+              "Light, unobtrusive reduction for voices with only a few sharp S sounds.",
+              sound (6000.0f, -31.0f, 3.5f, 50.0f, 0.5f, 70.0f, 5.0f, 2.5f) },
+            { C::vocalBasics, "Natural De-Essing",
+              "Etwas bestimmter als Default, mit schmalerem Band: das S wird ruhiger, die Luft bleibt.",
+              "A little firmer than Default with a narrower band: the S calms down, the air stays.",
+              sound (6000.0f, -35.5f, 5.5f, 50.0f, 0.5f, 50.0f, 5.0f, 2.5f) },
+            { C::vocalBasics, "Transparent",
+              "Schmales Band nur auf dem S-Kern: kaum Klangfärbung, Luft und Glanz bleiben fast ganz.",
+              "Narrow band on the core of the S only: hardly any colouring, air and sheen stay almost untouched.",
+              sound (6000.0f, -34.5f, 4.5f, 50.0f, 0.3f, 60.0f, 6.0f, 1.8f) },
+            { C::vocalBasics, "Subtle Reduction",
+              "Die leichteste Einstellung: nimmt nur die Spitzen der S etwas zurück.",
+              "The lightest setting: only takes the tips of the S sounds back a little.",
+              sound (6000.0f, -30.0f, 2.5f, 50.0f, 0.5f, 70.0f, 5.0f, 3.0f) },
+            { C::vocalBasics, "Strong Sibilance",
+              "Für deutlich zu scharfe S: kräftige Absenkung, schnellere Erholung.",
+              "For clearly too sharp S sounds: strong reduction, faster recovery.",
+              sound (6000.0f, -38.0f, 7.5f, 50.0f, 0.5f, 45.0f, 5.0f, 3.0f) },
+            { C::maleVocals, "Male Rap",
+              "Tiefer S-Bereich und schnelle Erholung für Rap mit tiefer bis mittlerer Männerstimme.",
+              "Low S range and fast recovery for rap with a low to mid male voice.",
+              sound (5300.0f, -36.5f, 6.0f, 50.0f, 0.3f, 35.0f, 5.0f, 3.0f) },
+            { C::maleVocals, "Deep Male Vocal",
+              "S-Bereich ab 4,8 kHz für tiefe Männerstimmen, deren S tief und dunkel liegen.",
+              "S range from 4.8 kHz for deep male voices whose S sounds sit low and dark.",
+              sound (4800.0f, -36.0f, 5.0f, 50.0f, 0.5f, 60.0f, 5.0f, 3.0f) },
+            { C::maleVocals, "Bright Male Vocal",
+              "Höherer, schmalerer S-Bereich für helle Männerstimmen und Tenöre.",
+              "Higher, narrower S range for bright male voices and tenors.",
+              sound (6600.0f, -34.5f, 5.0f, 50.0f, 0.5f, 55.0f, 5.0f, 2.5f) },
+            { C::maleVocals, "Aggressive Rap",
+              "Kräftig und schnell für harten, dichten Rap mit vielen scharfen S.",
+              "Strong and fast for hard, dense rap with many sharp S sounds.",
+              sound (5400.0f, -39.0f, 8.0f, 60.0f, 0.3f, 30.0f, 5.0f, 3.0f) },
+            { C::maleVocals, "Modern Pop Male",
+              "Für glänzend produzierte Pop-Männerstimmen: bestimmt, Luft bleibt.",
+              "For shiny, produced male pop vocals: firm, the air stays.",
+              sound (6300.0f, -35.5f, 5.5f, 50.0f, 0.5f, 45.0f, 5.0f, 2.5f) },
+            { C::femaleVocals, "Female Pop",
+              "Ausgewogen für Pop-Frauenstimmen: S ruhiger, Glanz bleibt.",
+              "Balanced for female pop vocals: calmer S, the sheen stays.",
+              sound (6300.0f, -34.5f, 5.0f, 50.0f, 0.5f, 45.0f, 5.0f, 2.5f) },
+            { C::femaleVocals, "Bright Female Vocal",
+              "Hoher, schmaler S-Bereich für sehr helle Frauenstimmen mit spitzen S.",
+              "High, narrow S range for very bright female voices with piercing S sounds.",
+              sound (6400.0f, -36.0f, 6.0f, 50.0f, 0.5f, 45.0f, 5.0f, 2.0f) },
+            { C::femaleVocals, "Airy Vocal",
+              "Sehr schmales Band nur auf dem S: gehauchte, luftige Stimmen behalten ihre Luft.",
+              "Very narrow band on the S only: breathy, airy voices keep their air.",
+              sound (6200.0f, -34.5f, 5.0f, 50.0f, 0.5f, 50.0f, 5.0f, 1.5f) },
+            { C::femaleVocals, "Soft Female Vocal",
+              "Sanft und langsam für leise, weiche Frauenstimmen und Balladen.",
+              "Gentle and slow for quiet, soft female voices and ballads.",
+              sound (6200.0f, -31.0f, 3.5f, 50.0f, 0.7f, 80.0f, 5.0f, 2.5f) },
+            { C::femaleVocals, "Powerful Female Vocal",
+              "Kräftig für laute, gepresste Frauenstimmen mit harten S.",
+              "Strong for loud, belting female voices with hard S sounds.",
+              sound (6200.0f, -37.5f, 7.0f, 50.0f, 0.4f, 40.0f, 5.0f, 2.5f) },
+            { C::genre, "Hypertechno",
+              "Für stark komprimierte, hell gemischte Vocals bei hohem Tempo: kräftig, schnelle Erholung.",
+              "For heavily compressed, brightly mixed vocals at high tempo: strong, fast recovery.",
+              sound (6400.0f, -37.0f, 7.0f, 50.0f, 0.3f, 40.0f, 5.0f, 3.0f) },
+            { C::genre, "EDM Lead Vocal",
+              "Für komprimierte, helle EDM-Lead-Vocals: bestimmt und schnell.",
+              "For compressed, bright EDM lead vocals: firm and fast.",
+              sound (6300.0f, -36.0f, 6.0f, 50.0f, 0.4f, 45.0f, 5.0f, 3.0f) },
+            { C::genre, "Dance Pop",
+              "Für helle, komprimierte Dance-Pop-Vocals: deutlich, aber natürlich.",
+              "For bright, compressed dance pop vocals: clear but natural.",
+              sound (6200.0f, -35.5f, 5.5f, 50.0f, 0.4f, 35.0f, 5.0f, 2.5f) },
+            { C::genre, "Hard Dance",
+              "Die stärkste Genre-Einstellung: für extrem komprimierte, sehr helle Vocals, breites Band, sehr schnell.",
+              "The strongest genre setting: for extremely compressed, very bright vocals, wide band, very fast.",
+              sound (6200.0f, -38.5f, 8.0f, 55.0f, 0.2f, 30.0f, 5.0f, 3.0f) },
+            { C::genre, "Melodic Techno",
+              "Weich und langsam für flächige, hallige Vocals: kein Pumpen.",
+              "Smooth and slow for wide, reverb-heavy vocals: no pumping.",
+              sound (6100.0f, -34.5f, 5.0f, 50.0f, 0.6f, 80.0f, 5.0f, 2.5f) },
+            { C::genre, "Trap Vocals",
+              "Tiefer S-Bereich, kräftig und schnell für komprimierte Trap-Vocals mit viel Höhen.",
+              "Low S range, strong and fast for compressed trap vocals with a lot of top end.",
+              sound (5400.0f, -37.0f, 6.5f, 50.0f, 0.3f, 30.0f, 5.0f, 3.0f) },
+            { C::genre, "Modern Hip-Hop",
+              "Tiefer S-Bereich, bestimmt für komprimierte Hip-Hop-Vocals.",
+              "Low S range, firm for compressed hip-hop vocals.",
+              sound (5500.0f, -35.5f, 5.5f, 50.0f, 0.4f, 45.0f, 5.0f, 3.0f) },
+            { C::genre, "Acoustic Vocals",
+              "Behutsam und langsam für natürliche, wenig bearbeitete Aufnahmen.",
+              "Careful and slow for natural, lightly processed recordings.",
+              sound (6300.0f, -31.5f, 3.5f, 45.0f, 0.6f, 90.0f, 5.0f, 2.5f) },
+            { C::specialPurpose, "Harsh S Sounds",
+              "Schmal und kräftig auf dem S-Kern: zähmt stechende S, ohne die Luft zu nehmen.",
+              "Narrow and strong on the core of the S: tames stinging S sounds without taking the air.",
+              sound (6000.0f, -38.0f, 8.0f, 50.0f, 0.3f, 45.0f, 5.0f, 2.0f) },
+            { C::specialPurpose, "Extreme Sibilance",
+              "Maximale Absenkung für extrem scharfe Aufnahmen. Mit Delta prüfen, ob es lispelt.",
+              "Maximum reduction for extremely sharp recordings. Check with Delta that it does not lisp.",
+              sound (6000.0f, -42.0f, 10.0f, 65.0f, 0.3f, 45.0f, 5.0f, 2.5f) },
+            { C::specialPurpose, "Sharp T Sounds",
+              "Sehr schneller Attack: fängt auch kurze t-, k- und z-Spitzen am Anfang.",
+              "Very fast attack: also catches short t, k and ts peaks right at their start.",
+              sound (6400.0f, -38.0f, 6.0f, 50.0f, 0.1f, 50.0f, 5.0f, 2.5f) },
+            { C::specialPurpose, "Vocal Recording Rescue",
+              "Für problematische Aufnahmen (helles Mikrofon, zu nah): großer Range, früher Einsatz.",
+              "For problem recordings (bright microphone, too close): wide range, early start.",
+              sound (6000.0f, -38.5f, 10.0f, 50.0f, 0.2f, 55.0f, 8.0f, 3.0f) },
+            { C::specialPurpose, "Mix / Bus",
+              "Allround-Erkennung für einen ganzen Mix, eine Gruppe oder Instrumente statt einer Solostimme.",
+              "Allround detection for a whole mix, a group or instruments instead of a single vocal.",
+              sound (6000.0f, -41.0f, 4.5f, 50.0f, 0.5f, 45.0f, 5.0f, 3.0f, 3.0f) }
         };
         return presets;
     }
 
     juce::String presetName (const FactoryPreset& p)
     {
-        return vocalypse::i18n::tr (p.nameDe, p.nameEn);
+        return p.name;
+    }
+
+    juce::String presetInfo (const FactoryPreset& p)
+    {
+        return vocalypse::i18n::tr (p.infoDe, p.infoEn);
+    }
+
+    juce::String categoryName (PresetCategory c)
+    {
+        using vocalypse::i18n::tr;
+        switch (c)
+        {
+            case PresetCategory::vocalBasics:    return tr ("Gesang-Grundlagen", "Vocal Basics");
+            case PresetCategory::maleVocals:     return tr ("Männerstimmen", "Male Vocals");
+            case PresetCategory::femaleVocals:   return tr ("Frauenstimmen", "Female Vocals");
+            case PresetCategory::genre:          return tr ("Genres", "Genre");
+            case PresetCategory::specialPurpose: return tr ("Spezialfälle", "Special Purpose");
+            case PresetCategory::none:           break;
+        }
+        return {};
     }
 
     bool isSetting (const juce::String& id)

@@ -58,6 +58,8 @@ namespace ember
     // Stimme presets of SIMPLE (UI writes the frequency)
     // (2026-11-23, 15 takes: each button is the strongest for its own voices; the threshold goes with it, because
     //  a deep voice's S sit lower against the voice than a high one's)
-    inline constexpr float voiceLowHz = 5000.0f, voiceMidHz = 6200.0f, voiceHighHz = 7400.0f;
-    inline constexpr float voiceLowThrDb = -35.0f, voiceMidThrDb = -32.0f, voiceHighThrDb = -33.0f;
+    // MID = the plugin's default (r2/ember-presets, 15 takes: 6 kHz / -34 dB instead of 6.2 kHz / -32 dB gives deep
+    // voices -2.9 instead of -2.1 dB S core, bright ones -4.2 instead of -3.9, the S colour shifts less: -80 instead of -127 Hz)
+    inline constexpr float voiceLowHz = 5000.0f, voiceMidHz = 6000.0f, voiceHighHz = 7400.0f;
+    inline constexpr float voiceLowThrDb = -35.0f, voiceMidThrDb = -34.0f, voiceHighThrDb = -33.0f;
 }

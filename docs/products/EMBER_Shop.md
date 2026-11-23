@@ -17,7 +17,7 @@
 - **SIMPLE oder ADVANCED:** Ein Amount-Regler und drei Stimmlagen für den schnellen Weg – oder volle Kontrolle mit Spektrum, ziehbarem S-Bereich und Threshold-Linie.
 - **Split oder Wideband:** Nur das S absenken (breites dynamisches Glockenfilter, die Luft bleibt) oder die ganze Stimme kurz zurücknehmen – ideal für Sprache und Podcasts.
 - **DELTA-Abhören:** Hör nur, was entfernt wird, und triff sichere Entscheidungen.
-- **9 Werks-Presets und A/B-Vergleich:** Von Gentle bis Strong, von Rap bis Speech / podcast – plus eigene Presets.
+- **29 Werks-Presets in 5 Kategorien und A/B-Vergleich:** Gesang-Grundlagen, Männer- und Frauenstimmen, Genres (Hypertechno, EDM, Trap, Hip-Hop, Akustik …) und Spezialfälle (Harsh S, Sharp T, Recording Rescue, Mix / Bus) – jedes an echten Stimmen gemessen, plus eigene Presets.
 - **Feste 10 ms Latenz:** Wird an den Host gemeldet, bleibt auch im Bypass gleich.
 
 ### Lern Ember kennen
@@ -44,7 +44,7 @@ Ember ist ein kleiner roter Teufel und sitzt mitten im Plugin. Läuft die Stimme
 - **SIMPLE or ADVANCED:** One Amount knob and three voice types for the fast route – or full control with a spectrum, a draggable S range and threshold line.
 - **Split or Wideband:** Turn down only the S (wide dynamic bell, the air stays) or dip the whole voice briefly – ideal for speech and podcasts.
 - **DELTA listening:** Hear only what is removed and make confident decisions.
-- **9 factory presets and A/B compare:** From Gentle to Strong, from Rap to Speech / podcast – plus your own presets.
+- **29 factory presets in 5 categories and A/B compare:** Vocal basics, male and female vocals, genres (hypertechno, EDM, trap, hip-hop, acoustic …) and special purpose (harsh S, sharp T, recording rescue, mix / bus) – each measured on real vocals, plus your own presets.
 - **Fixed 10 ms latency:** Reported to the host, unchanged in bypass.
 
 ### Meet Ember

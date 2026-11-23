@@ -92,7 +92,7 @@
 <table>
   <tr><th>Element</th><th>Function</th></tr>
   <tr><td>Amount</td><td>How strongly EMBER works. 50 % is exactly what threshold and range set, 100 % is one and a half times that, 0 % turns processing off.</td></tr>
-  <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets where the S range starts: from 5 kHz (LOW), 6.2 kHz (MID) or 7.4 kHz (HIGH). The threshold is set to match (deep voices have softer S) while it is still at a voice value (the default included). A threshold set by you, a preset or AUTO stays; the status line tells you briefly. After AUTO, a click on the voice that is already lit keeps the frequency AUTO found in that range. The voice whose range holds the frequency lights up (LOW up to 5.75 kHz, MID up to 7 kHz, HIGH above). One click is one undo step.</td></tr>
+  <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets where the S range starts: from 5 kHz (LOW), 6 kHz (MID) or 7.4 kHz (HIGH). The threshold is set to match (deep voices have softer S) while it is still at a voice value (the default included). A threshold set by you, a preset or AUTO stays; the status line tells you briefly. After AUTO, a click on the voice that is already lit keeps the frequency AUTO found in that range. The voice whose range holds the frequency lights up (LOW up to 5.75 kHz, MID up to 7 kHz, HIGH above). One click is one undo step.</td></tr>
   <tr><td>DELTA</td><td>Hear only what is removed.</td></tr>
   <tr><td>REDUCTION</td><td>Shows how much quieter the S sounds are right now (0 to −12 dB, gain reduction).</td></tr>
 </table>
@@ -170,12 +170,49 @@
 <h2 id="presets">7. Presets and A/B</h2>
 <p>The presets bar shows <strong>‹ preset name ›</strong>. Use the arrows to step through presets; click the name to open the menu.</p>
 <ul>
-  <li><strong>Factory presets:</strong> Default, Gentle, Pop vocal, Rap, Deep voice, High voice, Backing vocals, Speech / podcast, Strong.</li>
+  <li><strong>Factory presets:</strong> <strong>Default</strong> (the state EMBER starts in) and 28 presets in five submenus: Vocal Basics, Male Vocals, Female Vocals, Genre and Special Purpose (list below). After loading, the status line says in one sentence what the preset is for. The arrows step through all factory presets in menu order, then through your presets.</li>
   <li><strong>Your presets</strong>, plus <strong>Save preset…</strong>, <strong>Rename preset</strong>, <strong>Delete preset</strong> (asks first; the file goes to the recycle bin) and <strong>Open preset folder</strong>.</li>
   <li>From an AUTO setting, the right arrow goes to the first preset, the left arrow to the last.</li>
   <li>A <strong>*</strong> after the name means you have changed something since loading.</li>
   <li><strong>SAVE</strong> stores your own preset as <code>.emberpreset</code> in <code>Documents\Lind Audio\EMBER\Presets</code>.</li>
 </ul>
+<h3>Factory presets</h3>
+<p>Every preset was measured on fitting vocals (see the product notes). The genre presets assume vocals that are already compressed and brightened the way these genres are mixed. A preset is a starting point: AUTO or the voice buttons fit EMBER to your voice.</p>
+<table>
+  <tr><th colspan="2">Vocal Basics</th></tr>
+  <tr><td>Gentle Vocal</td><td>Light, unobtrusive reduction for voices with only a few sharp S sounds.</td></tr>
+  <tr><td>Natural De-Essing</td><td>A little firmer than Default with a narrower band: the S calms down, the air stays.</td></tr>
+  <tr><td>Transparent</td><td>Narrow band on the core of the S only: hardly any colouring, air and sheen stay almost untouched.</td></tr>
+  <tr><td>Subtle Reduction</td><td>The lightest setting: only takes the tips of the S sounds back a little.</td></tr>
+  <tr><td>Strong Sibilance</td><td>For clearly too sharp S sounds: strong reduction, faster recovery.</td></tr>
+  <tr><th colspan="2">Male Vocals</th></tr>
+  <tr><td>Male Rap</td><td>Low S range and fast recovery for rap with a low to mid male voice.</td></tr>
+  <tr><td>Deep Male Vocal</td><td>S range from 4.8 kHz for deep male voices whose S sounds sit low and dark.</td></tr>
+  <tr><td>Bright Male Vocal</td><td>Higher, narrower S range for bright male voices and tenors.</td></tr>
+  <tr><td>Aggressive Rap</td><td>Strong and fast for hard, dense rap with many sharp S sounds.</td></tr>
+  <tr><td>Modern Pop Male</td><td>For shiny, produced male pop vocals: firm, the air stays.</td></tr>
+  <tr><th colspan="2">Female Vocals</th></tr>
+  <tr><td>Female Pop</td><td>Balanced for female pop vocals: calmer S, the sheen stays.</td></tr>
+  <tr><td>Bright Female Vocal</td><td>High, narrow S range for very bright female voices with piercing S sounds.</td></tr>
+  <tr><td>Airy Vocal</td><td>Very narrow band on the S only: breathy, airy voices keep their air.</td></tr>
+  <tr><td>Soft Female Vocal</td><td>Gentle and slow for quiet, soft female voices and ballads.</td></tr>
+  <tr><td>Powerful Female Vocal</td><td>Strong for loud, belting female voices with hard S sounds.</td></tr>
+  <tr><th colspan="2">Genre</th></tr>
+  <tr><td>Hypertechno</td><td>For heavily compressed, brightly mixed vocals at high tempo: strong, fast recovery.</td></tr>
+  <tr><td>EDM Lead Vocal</td><td>For compressed, bright EDM lead vocals: firm and fast.</td></tr>
+  <tr><td>Dance Pop</td><td>For bright, compressed dance pop vocals: clear but natural.</td></tr>
+  <tr><td>Hard Dance</td><td>The strongest genre setting: for extremely compressed, very bright vocals, wide band, very fast.</td></tr>
+  <tr><td>Melodic Techno</td><td>Smooth and slow for wide, reverb-heavy vocals: no pumping.</td></tr>
+  <tr><td>Trap Vocals</td><td>Low S range, strong and fast for compressed trap vocals with a lot of top end.</td></tr>
+  <tr><td>Modern Hip-Hop</td><td>Low S range, firm for compressed hip-hop vocals.</td></tr>
+  <tr><td>Acoustic Vocals</td><td>Careful and slow for natural, lightly processed recordings.</td></tr>
+  <tr><th colspan="2">Special Purpose</th></tr>
+  <tr><td>Harsh S Sounds</td><td>Narrow and strong on the core of the S: tames stinging S sounds without taking the air.</td></tr>
+  <tr><td>Extreme Sibilance</td><td>Maximum reduction for extremely sharp recordings. Check with Delta that it does not lisp.</td></tr>
+  <tr><td>Sharp T Sounds</td><td>Very fast attack: also catches short t, k and ts peaks right at their start.</td></tr>
+  <tr><td>Vocal Recording Rescue</td><td>For problem recordings (bright microphone, too close): wide range, early start.</td></tr>
+  <tr><td>Mix / Bus</td><td>Allround detection for a whole mix, a group or instruments instead of a single vocal.</td></tr>
+</table>
 <h3>A/B compare</h3>
 <p>Slots <strong>A</strong> and <strong>B</strong> let you compare two settings. B starts as a copy of A. The copy button copies the active setting into the other slot: it reads <strong>A → B</strong> while A is active and <strong>B → A</strong> while B is active. A and B (and which one is active) are saved with the project. How AUTO fills the slots is described in <a href="#auto">section 4</a>.</p>
 <h3>Menu (≡ top right)</h3>

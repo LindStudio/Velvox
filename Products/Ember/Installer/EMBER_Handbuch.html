@@ -93,7 +93,7 @@
 <table>
   <tr><th>Element</th><th>Funktion</th></tr>
   <tr><td>Amount</td><td>Wie stark EMBER eingreift. 50 % entspricht genau dem, was Threshold und Range vorgeben, 100 % der anderthalbfachen Wirkung, 0 % schaltet die Bearbeitung ab.</td></tr>
-  <tr><td>Stimmlage: TIEF / MITTEL / HOCH</td><td>Legt fest, wo der S-Bereich beginnt: ab 5 kHz (TIEF), 6,2 kHz (MITTEL) oder 7,4 kHz (HOCH). Der Threshold wird passend mitgesetzt (tiefe Stimmen haben leisere S), solange er noch auf einem Stimmlagen-Wert steht (auch dem Standard). Einen Threshold, den du, ein Preset oder AUTO eingestellt hat, lässt die Stimmlage stehen; die Statuszeile sagt dir das kurz. Ein Klick auf die schon leuchtende Stimmlage nach AUTO behält die Frequenz, die AUTO in diesem Bereich gefunden hat. Es leuchtet die Stimmlage, in deren Bereich die Frequenz liegt (TIEF bis 5,75 kHz, MITTEL bis 7 kHz, darüber HOCH). Ein Klick ist ein Schritt für Rückgängig.</td></tr>
+  <tr><td>Stimmlage: TIEF / MITTEL / HOCH</td><td>Legt fest, wo der S-Bereich beginnt: ab 5 kHz (TIEF), 6 kHz (MITTEL) oder 7,4 kHz (HOCH). Der Threshold wird passend mitgesetzt (tiefe Stimmen haben leisere S), solange er noch auf einem Stimmlagen-Wert steht (auch dem Standard). Einen Threshold, den du, ein Preset oder AUTO eingestellt hat, lässt die Stimmlage stehen; die Statuszeile sagt dir das kurz. Ein Klick auf die schon leuchtende Stimmlage nach AUTO behält die Frequenz, die AUTO in diesem Bereich gefunden hat. Es leuchtet die Stimmlage, in deren Bereich die Frequenz liegt (TIEF bis 5,75 kHz, MITTEL bis 7 kHz, darüber HOCH). Ein Klick ist ein Schritt für Rückgängig.</td></tr>
   <tr><td>DELTA</td><td>Du hörst nur, was entfernt wird.</td></tr>
   <tr><td>ABSENKUNG</td><td>Zeigt, wie viel leiser die S-Laute gerade werden (0 bis −12 dB, Gain Reduction).</td></tr>
 </table>
@@ -171,12 +171,49 @@
 <h2 id="presets">7. Presets und A/B</h2>
 <p>Die Preset-Leiste zeigt <strong>‹ Presetname ›</strong>. Mit den Pfeilen blätterst du durch die Presets, ein Klick auf den Namen öffnet das Menü.</p>
 <ul>
-  <li><strong>Werks-Presets:</strong> Standard, Sanft, Pop-Gesang, Rap, Tiefe Stimme, Hohe Stimme, Backing Vocals, Sprache / Podcast, Kräftig.</li>
+  <li><strong>Werks-Presets:</strong> <strong>Default</strong> (der Zustand, mit dem EMBER startet) und 28 Presets in fünf Untermenüs: Gesang-Grundlagen, Männerstimmen, Frauenstimmen, Genres und Spezialfälle (Liste unten). Nach dem Laden sagt die Statuszeile in einem Satz, wofür das Preset gedacht ist. Die Pfeile gehen alle Werks-Presets in der Reihenfolge des Menüs durch, danach deine eigenen.</li>
   <li><strong>Eigene Presets</strong>, außerdem <strong>Preset speichern …</strong>, <strong>Preset umbenennen</strong>, <strong>Preset löschen</strong> (mit Rückfrage; die Datei kommt in den Papierkorb) und <strong>Preset-Ordner öffnen</strong>.</li>
   <li>Von einer AUTO-Einstellung aus springt der rechte Pfeil zum ersten Preset, der linke zum letzten.</li>
   <li>Ein <strong>*</strong> hinter dem Namen bedeutet, dass du seit dem Laden etwas geändert hast.</li>
   <li><strong>SPEICHERN</strong> speichert dein eigenes Preset als <code>.emberpreset</code> in <code>Dokumente\Lind Audio\EMBER\Presets</code>.</li>
 </ul>
+<h3>Werks-Presets</h3>
+<p>Jedes Preset wurde an passenden Stimmen gemessen. Die Genre-Presets gehen von Vocals aus, die schon so komprimiert und aufgehellt sind, wie man diese Genres mischt. Ein Preset ist ein Startpunkt: AUTO oder die Stimmlage passen EMBER an deine Stimme an.</p>
+<table>
+  <tr><th colspan="2">Gesang-Grundlagen</th></tr>
+  <tr><td>Gentle Vocal</td><td>Leichte, unauffällige Absenkung für Stimmen mit nur wenig scharfen S.</td></tr>
+  <tr><td>Natural De-Essing</td><td>Etwas bestimmter als Default, mit schmalerem Band: das S wird ruhiger, die Luft bleibt.</td></tr>
+  <tr><td>Transparent</td><td>Schmales Band nur auf dem S-Kern: kaum Klangfärbung, Luft und Glanz bleiben fast ganz.</td></tr>
+  <tr><td>Subtle Reduction</td><td>Die leichteste Einstellung: nimmt nur die Spitzen der S etwas zurück.</td></tr>
+  <tr><td>Strong Sibilance</td><td>Für deutlich zu scharfe S: kräftige Absenkung, schnellere Erholung.</td></tr>
+  <tr><th colspan="2">Männerstimmen</th></tr>
+  <tr><td>Male Rap</td><td>Tiefer S-Bereich und schnelle Erholung für Rap mit tiefer bis mittlerer Männerstimme.</td></tr>
+  <tr><td>Deep Male Vocal</td><td>S-Bereich ab 4,8 kHz für tiefe Männerstimmen, deren S tief und dunkel liegen.</td></tr>
+  <tr><td>Bright Male Vocal</td><td>Höherer, schmalerer S-Bereich für helle Männerstimmen und Tenöre.</td></tr>
+  <tr><td>Aggressive Rap</td><td>Kräftig und schnell für harten, dichten Rap mit vielen scharfen S.</td></tr>
+  <tr><td>Modern Pop Male</td><td>Für glänzend produzierte Pop-Männerstimmen: bestimmt, Luft bleibt.</td></tr>
+  <tr><th colspan="2">Frauenstimmen</th></tr>
+  <tr><td>Female Pop</td><td>Ausgewogen für Pop-Frauenstimmen: S ruhiger, Glanz bleibt.</td></tr>
+  <tr><td>Bright Female Vocal</td><td>Hoher, schmaler S-Bereich für sehr helle Frauenstimmen mit spitzen S.</td></tr>
+  <tr><td>Airy Vocal</td><td>Sehr schmales Band nur auf dem S: gehauchte, luftige Stimmen behalten ihre Luft.</td></tr>
+  <tr><td>Soft Female Vocal</td><td>Sanft und langsam für leise, weiche Frauenstimmen und Balladen.</td></tr>
+  <tr><td>Powerful Female Vocal</td><td>Kräftig für laute, gepresste Frauenstimmen mit harten S.</td></tr>
+  <tr><th colspan="2">Genres</th></tr>
+  <tr><td>Hypertechno</td><td>Für stark komprimierte, hell gemischte Vocals bei hohem Tempo: kräftig, schnelle Erholung.</td></tr>
+  <tr><td>EDM Lead Vocal</td><td>Für komprimierte, helle EDM-Lead-Vocals: bestimmt und schnell.</td></tr>
+  <tr><td>Dance Pop</td><td>Für helle, komprimierte Dance-Pop-Vocals: deutlich, aber natürlich.</td></tr>
+  <tr><td>Hard Dance</td><td>Die stärkste Genre-Einstellung: für extrem komprimierte, sehr helle Vocals, breites Band, sehr schnell.</td></tr>
+  <tr><td>Melodic Techno</td><td>Weich und langsam für flächige, hallige Vocals: kein Pumpen.</td></tr>
+  <tr><td>Trap Vocals</td><td>Tiefer S-Bereich, kräftig und schnell für komprimierte Trap-Vocals mit viel Höhen.</td></tr>
+  <tr><td>Modern Hip-Hop</td><td>Tiefer S-Bereich, bestimmt für komprimierte Hip-Hop-Vocals.</td></tr>
+  <tr><td>Acoustic Vocals</td><td>Behutsam und langsam für natürliche, wenig bearbeitete Aufnahmen.</td></tr>
+  <tr><th colspan="2">Spezialfälle</th></tr>
+  <tr><td>Harsh S Sounds</td><td>Schmal und kräftig auf dem S-Kern: zähmt stechende S, ohne die Luft zu nehmen.</td></tr>
+  <tr><td>Extreme Sibilance</td><td>Maximale Absenkung für extrem scharfe Aufnahmen. Mit Delta prüfen, ob es lispelt.</td></tr>
+  <tr><td>Sharp T Sounds</td><td>Sehr schneller Attack: fängt auch kurze t-, k- und z-Spitzen am Anfang.</td></tr>
+  <tr><td>Vocal Recording Rescue</td><td>Für problematische Aufnahmen (helles Mikrofon, zu nah): großer Range, früher Einsatz.</td></tr>
+  <tr><td>Mix / Bus</td><td>Allround-Erkennung für einen ganzen Mix, eine Gruppe oder Instrumente statt einer Solostimme.</td></tr>
+</table>
 <h3>A/B-Vergleich</h3>
 <p>Mit den Slots <strong>A</strong> und <strong>B</strong> vergleichst du zwei Einstellungen. B startet als Kopie von A. Der Kopier-Knopf kopiert die aktive Einstellung in den anderen Speicher: Er heißt <strong>A → B</strong>, solange A aktiv ist, und <strong>B → A</strong>, wenn B aktiv ist. A und B (und welcher aktiv ist) werden mit dem Projekt gespeichert. Wie AUTO die Slots füllt, steht in <a href="#auto">Abschnitt 4</a>.</p>
 <h3>Menü (≡ oben rechts)</h3>

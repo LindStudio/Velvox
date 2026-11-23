@@ -662,8 +662,8 @@ namespace ember
         // ---- preset bar
         styleShape (prevBtn, triangle (false));
         styleShape (nextBtn, triangle (true));
-        prevBtn.onClick = [this] { processor.stepPreset (-1); };
-        nextBtn.onClick = [this] { processor.stepPreset (1); };
+        prevBtn.onClick = [this] { processor.stepPreset (-1); showPresetInfo(); };
+        nextBtn.onClick = [this] { processor.stepPreset (1); showPresetInfo(); };
         presetBtn.onClick = [this] { showPresetMenu(); };
         presetBtn.setColour (juce::TextButton::textColourOffId, c::textStrong);
         saveBtn.setButtonText (tr ("SPEICHERN", "SAVE"));
@@ -833,7 +833,7 @@ namespace ember
             addInfo (*m, tr ("Absenkung", "Reduction"), tr ("So viel leiser werden die S-Laute gerade, in dB (Gain Reduction).",
                                                             "How much quieter the S sounds are right now, in dB (gain reduction)."));
         addInfo (voiceLow, tr ("Tiefe Stimme", "Low voice"), tr ("S-Bereich ab 5 kHz, greift etwas früher: für tiefe und männliche Stimmen.", "S range from 5 kHz, steps in a little earlier: for low and male voices."));
-        addInfo (voiceMid, tr ("Mittlere Stimme", "Mid voice"), tr ("S-Bereich ab 6,2 kHz, passt für die meisten Stimmen.", "S range from 6.2 kHz, fits most voices."));
+        addInfo (voiceMid, tr ("Mittlere Stimme", "Mid voice"), tr ("S-Bereich ab 6 kHz, passt für die meisten Stimmen.", "S range from 6 kHz, fits most voices."));
         addInfo (voiceHigh, tr ("Hohe Stimme", "High voice"), tr ("S-Bereich ab 7,4 kHz, für hohe und weibliche Stimmen.", "S range from 7.4 kHz, for high and female voices."));
         addInfo (listenBtn, "Delta", tr ("Nur das hören, was entfernt wird. Hörst du Vokale, ist es zu viel.",
                                          "Hear only what is removed. If you hear vowels, it is too much."));
@@ -1088,13 +1088,36 @@ namespace ember
         refreshButtons();
     }
 
+    void EmberPanel::showPresetInfo()
+    {
+        // a factory preset says in the status line what it is for (user presets have no text)
+        const auto& factory = factoryPresets();
+        const int i = processor.getFactoryIndex();
+        if (juce::isPositiveAndBelow (i, (int) factory.size()))
+            showNotice (presetName (factory[(size_t) i]) + ": " + presetInfo (factory[(size_t) i]));
+    }
+
     void EmberPanel::showPresetMenu()
     {
         juce::PopupMenu menu;
         menu.addSectionHeader (tr ("Werks-Presets", "Factory presets"));
         const auto& factory = factoryPresets();
+        // "Default" on top, then one submenu per category (ticked while one of its presets is loaded)
         for (int i = 0; i < (int) factory.size(); ++i)
-            menu.addItem (1 + i, presetName (factory[(size_t) i]), true, processor.getFactoryIndex() == i);
+            if (factory[(size_t) i].category == PresetCategory::none)
+                menu.addItem (1 + i, presetName (factory[(size_t) i]), true, processor.getFactoryIndex() == i);
+        for (const auto category : presetCategories)
+        {
+            juce::PopupMenu sub;
+            bool current = false;
+            for (int i = 0; i < (int) factory.size(); ++i)
+                if (factory[(size_t) i].category == category)
+                {
+                    sub.addItem (1 + i, presetName (factory[(size_t) i]), true, processor.getFactoryIndex() == i);
+                    current = current || processor.getFactoryIndex() == i;
+                }
+            menu.addSubMenu (categoryName (category), sub, true, nullptr, current);
+        }
         const auto users = userPresets();
         menu.addSectionHeader (tr ("Eigene Presets", "Your presets"));
         if (users.isEmpty())
@@ -1119,7 +1142,10 @@ namespace ember
                                     return;
                                 auto& self = *safe;
                                 if (id >= 1 && id < 100)
+                                {
                                     self.processor.loadFactoryPreset (id - 1);
+                                    self.showPresetInfo();
+                                }
                                 else if (id >= 100 && id < 1000 && id - 100 < users.size())
                                 {
                                     if (! self.processor.loadUserPreset (users[id - 100]))
