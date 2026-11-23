@@ -1,5 +1,66 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
+## STAND 2026-11-23 (abends) – alle Audit-Fixes + Pro-DS-Niveau (Branch feature/ember-fixes) – HIER WEITERMACHEN
+Jakob: „mach alle fixes, das rechtliche notieren aber nicht machen + verbessere den algorithmus um auf das selbe level
+wie der fabfilter ds zu kommen“. Audit mit 4 Prüfern, danach 4 Agenten parallel (Branches fix/ember-dsp, -auto, -ux, -gui),
+zusammengeführt in `feature/ember-fixes` (Basis = Klang-Stand vom 23.11., Commit aeb1e54; feature/ember-sound unverändert).
+Details je Bereich: `docs/products/ember-fixes/DSP.md`, `AUTO.md`, `UX.md`, `GUI.md`. Rechtliches (nur notiert):
+`docs/products/EMBER_RECHTLICHES.md`.
+- **Klang:**
+  - Die Glocke ändert die Absenkung pro Sample (Regalia-Mitra), statt alle 16 Samples in Stufen zu springen.
+  - Gleiche Form bei 44,1–192 kHz (matched).
+  - Weicheres Gate im Breitband.
+  - „S-Bereich“ beim Abhören = das bearbeitete Band.
+  - Überblendungen beim Umschalten.
+  - Das Smart-Band folgt der Frequenz.
+  - Threshold-Bereich −50…−10 dB.
+  - Neu: Breite (1–4 Okt.), Stereo-Link, L/R·M/S·Mid·Side, Erkennung „Allround“ (Mix/Bus), Lookahead bis 10 ms (Standard 5).
+  - **Latenz jetzt fest 10 ms.**
+- **AUTO:**
+  - Stereo-Aufnahme.
+  - Pausen auf festem 5-ms-Raster, damit das Ergebnis nicht von der Puffergröße abhängt.
+  - Vokale auch in Präsenz und Luft geprüft.
+  - Atmer und Hi-Hats werden aussortiert.
+  - Schneller: 3–14 statt bis zu 34 Durchläufe.
+  - In der Analyse abbrechbar; Projekt- oder Preset-Laden verwirft eine laufende Analyse; race-frei.
+  - Sucht nur innerhalb −50…−10 dB.
+- **Bedienung:**
+  - Stimmlage = 1 Undo-Schritt und überschreibt keinen eigenen Threshold.
+  - „rot“ → pink in Texten und Handbüchern.
+  - Undo stellt den Preset-Namen wieder her.
+  - AUTO lässt eine geparkte B-Einstellung stehen; A/B wird im Projekt gespeichert.
+  - Presets umbenennen und löschen, Menü für die Fenstergröße.
+  - Bypass-Hinweis bei AUTO, pinke Lizenzkarte.
+  - setStateInformation ist thread-sicher.
+- **GUI-CPU:**
+  - UI-Thread etwa halbiert, Prozess ~20 % weniger (Voll, 60 fps), Bilder pixelgleich.
+  - Menü Animation Voll / Reduziert / Aus (Aus ≈ 7 % eines Kerns).
+  - Pausiert bei minimiertem Host.
+  - Rig ohne statisches juce::Image.
+- **Gemessen** (Bench `C:\Users\Shadow\dev\velvox-bench\2026-11-23\bench_merged`, `run.py`):
+
+  | J1–J3 | S-Kern | Luft über S | S-Schwerpunkt | Reinheit Delta | Vokale |
+  |---|---|---|---|---|---|
+  | Pro-DS Standard | −3,71 dB | −3,62 | −145 Hz | 98,1 % | 0,00 |
+  | EMBER vorher AUTO | −4,09 | −2,88 | −32 Hz | 98,0 % | 0,00 |
+  | EMBER neu Standard | −4,07 | −3,39 | −48 Hz | 99,1 % | 0,00 |
+  | EMBER neu AUTO | −4,05 | −3,44 | −120 Hz | 99,2 % | 0,00 |
+
+  Alle 15 Takes, AUTO: S-Kern −3,48 dB (vorher −3,29), Reinheit 99,5 % (vorher 98,8 %), Vokale 0,00 dB.
+- **Tests:** 634 grün (mit EMBER_VOCALS, 15/15 Takes), pluginval 10 SUCCESS (mit GUI). Nicht installiert, nicht gepusht.
+- **Hörbeispiele:** `C:\Users\Shadow\dev\velvox-bench\2026-11-23\hoertest_prods_level`
+  - 01 Original
+  - 02/03 neu AUTO (+ DELTA)
+  - 04/05 neu Standard (+ DELTA)
+  - 06/07 Pro-DS (nur J1–J3)
+  - 08/09 vorher AUTO
+- **Bekannt/offen:**
+  - Auf dem synthetischen Test-Take hält die Präsenz-Grenze AUTO bei ~2 statt 4,5 dB; die echten Takes treffen alle ihr Ziel.
+  - Das Figur-Zeichnen (~3,5 ms pro Bild) ist jetzt der größte GUI-Kostenpunkt; nächster Schritt wäre die GPU.
+  - Verdeckte (nicht minimierte) Fenster werden nicht erkannt.
+  - Die Klangfarbe des S ist noch etwas heller als bei Pro-DS (−120 statt −145 Hz).
+- **Nächste Schritte:** Jakobs Hörurteil → DAW-Test (FL/Ableton/Reaper) → rechtliche Punkte → Installer mit Lizenz AN.
+
 ## STAND 2026-11-23 – Klang verbessert (Branch feature/ember-sound, nicht committet)
 Jakob: „verbessere den algorithmus“. Grundlage: Klangtest `docs/products/EMBER_KLANG_TEST.md` (19.11.), gemessen mit
 `EmberTests --process` über 15 echte Takes (Skripte `run.py`/`grp.py` im Session-Scratchpad, Takes aus dem Klangtest).
