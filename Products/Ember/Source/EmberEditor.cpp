@@ -155,13 +155,6 @@ namespace ember
         g.setColour (c::borderInset);
         g.drawRoundedRectangle (bar, 4.0f, 1.0f);
 
-        if (value > peakHold || --holdTicks <= 0)
-        {
-            peakHold = std::max (value, peakHold - 0.15f);
-            if (value >= peakHold)
-                holdTicks = 30;
-        }
-
         const float frac = juce::jlimit (0.0f, 1.0f, value / maxDb);
         auto lit = bar.reduced (2.0f).withHeight ((bar.getHeight() - 4.0f) * frac);
         g.setGradientFill (juce::ColourGradient (look::glow, lit.getX(), bar.getY(), look::accent, lit.getX(), bar.getBottom(), false));
@@ -191,6 +184,22 @@ namespace ember
             g.drawText (tr ("ABSENKUNG", "REDUCTION"), juce::Rectangle<float> (label.getHeight(), label.getWidth() + 4.0f).withCentre (label.getCentre()),
                         juce::Justification::centred, false);
         }
+    }
+
+    void ReductionMeter::setValue (float db)
+    {
+        const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        const float dt = lastUpdate > 0.0 ? (float) juce::jlimit (0.0, 0.25, now - lastUpdate) : 0.0f;
+        lastUpdate = now;
+        value = db;
+        if (value >= peakHold)
+        {
+            peakHold = value;
+            holdLeft = 1.0f;
+        }
+        else if ((holdLeft -= dt) <= 0.0f)
+            peakHold = std::max (value, peakHold - 4.5f * dt);
+        repaint();
     }
 
     DetectorMeter::DetectorMeter (EmberAudioProcessor& p) : processor (p) {}
@@ -246,9 +255,12 @@ namespace ember
 
     void DetectorMeter::setLevel (float db, float smartWeight)
     {
+        const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        const float dt = lastUpdate > 0.0 ? (float) juce::jlimit (0.0, 0.25, now - lastUpdate) : 0.0f;
+        lastUpdate = now;
         level = db;
         weight = smartWeight;
-        hold = db > hold ? db : hold - 0.6f;
+        hold = db > hold ? db : hold - 18.0f * dt;   // falls 18 dB/s, whatever the repaint rate
         repaint();
     }
 
@@ -272,6 +284,16 @@ namespace ember
             g.fillRoundedRectangle (under, 3.0f);
             g.setColour (weight > 0.5f ? look::accent : c::textMuted);
             g.fillRoundedRectangle (over, 3.0f);
+            if (weight <= 0.5f && over.getHeight() > 1.0f)
+            {
+                // Smart hears no S: striped, so it does not rest on the colour alone
+                juce::Graphics::ScopedSaveState keep (g);
+                g.reduceClipRegion (over.getSmallestIntegerContainer());
+                g.setColour (c::panelInset.withAlpha (0.75f));
+                const float w = over.getWidth();
+                for (float y = over.getY() - w; y < over.getBottom(); y += 5.0f)
+                    g.drawLine (over.getX(), y + w, over.getRight(), y, 1.6f);
+            }
         }
 
         // Threshold handle
@@ -285,13 +307,15 @@ namespace ember
             // the value at the line while it is held
             g.setFont (ui::monoFont (10.0f));
             g.setColour (c::textStrong);
-            g.drawText (i18n::number (thr, 1), juce::Rectangle<float> (0.0f, ty - 22.0f, b.getX() - 10.0f, 14.0f), juce::Justification::centredRight);
+            g.drawText (i18n::number (thr, 1) + " dB", juce::Rectangle<float> (0.0f, ty - 22.0f, b.getX() - 10.0f, 14.0f), juce::Justification::centredRight);
         }
 
         g.setFont (ui::monoFont (9.5f));
         g.setColour (c::textMuted);
         for (float db : { 0.0f, -20.0f, -40.0f, -60.0f })
-            g.drawText (juce::String ((int) db), juce::Rectangle<float> (b.getX() - 46.0f, yFor (db) - 6.0f, 24.0f, 12.0f), juce::Justification::centredRight);
+            g.drawText (db < 0.0f ? utf8 ("−") + juce::String ((int) -db) : juce::String ("0"),
+                        juce::Rectangle<float> (b.getX() - 46.0f, yFor (db) - 6.0f, 24.0f, 12.0f), juce::Justification::centredRight);
+        g.drawText ("dB", juce::Rectangle<float> (b.getX() - 46.0f, yFor (0.0f) + 7.0f, 24.0f, 12.0f), juce::Justification::centredRight);   // the scale's unit
         g.setFont (ui::caps (10.5f));
         g.setColour (c::textMuted);
         g.drawText (tr ("S-PEGEL", "S LEVEL"), getLocalBounds().toFloat().removeFromBottom (18.0f), juce::Justification::centredRight);
@@ -505,7 +529,7 @@ namespace ember
 
     void BandDisplay::mouseDown (const juce::MouseEvent& e)
     {
-        // only the red edge is grabbed, and it moves with the mouse from where it is (no jump to the click)
+        // only the pink edge is grabbed, and it moves with the mouse from where it is (no jump to the click)
         if (auto* p = processor.state.getParameter (pid::freq); p != nullptr && nearHandle (e.position))
         {
             dragging = true;
@@ -573,9 +597,16 @@ namespace ember
                               r.removeFromTop (90.0f).toNearestInt(), juce::Justification::topLeft, 6);
             g.setColour (c::textMuted);
             g.setFont (ui::font (12.0f));
-            g.drawText (tr ("Klicken zum Schließen", "Click to close"), r, juce::Justification::bottomLeft);
+            g.drawText (tr ("Klicken oder Esc zum Schließen", "Click or press Esc to close"), r, juce::Justification::bottomLeft);
         }
         void mouseUp (const juce::MouseEvent&) override { setVisible (false); }
+        bool keyPressed (const juce::KeyPress& key) override
+        {
+            if (key != juce::KeyPress::escapeKey)
+                return false;
+            setVisible (false);
+            return true;
+        }
     };
 
     // ================================================================ panel
@@ -656,9 +687,9 @@ namespace ember
         styleSegment (voiceLow, tr ("TIEF", "LOW"), 2);
         styleSegment (voiceMid, tr ("MITTEL", "MID"), 2);
         styleSegment (voiceHigh, tr ("HOCH", "HIGH"), 2);
-        voiceLow.onClick = [this] { setVoice (voiceLowHz, voiceLowThrDb); };
-        voiceMid.onClick = [this] { setVoice (voiceMidHz, voiceMidThrDb); };
-        voiceHigh.onClick = [this] { setVoice (voiceHighHz, voiceHighThrDb); };
+        voiceLow.onClick = [this] { setVoice (0); };
+        voiceMid.onClick = [this] { setVoice (1); };
+        voiceHigh.onClick = [this] { setVoice (2); };
         listenBtn.setButtonText ("DELTA");
         listenBtn.onClick = [this]
         {
@@ -741,26 +772,32 @@ namespace ember
                                           "The simple view: Ember, Amount, voice and Delta. Enough for most vocals."));
         addInfo (advancedBtn, "ADVANCED", tr ("Alle Regler, das Spektrum mit dem S-Bereich und die S-Pegel-Anzeige mit dem Threshold.",
                                               "Every control, the spectrum with the S range and the S level meter with the threshold."));
-        addInfo (autoBtn, "AUTO", tr ("Spiel deinen Gesang ab und klick auf AUTO. Ember hört bis zu 12 Sekunden Gesang zu (Pausen zählen nicht) und ist dann von selbst fertig. "
-                                      "Er stellt nur Frequenz, Threshold, Range und Release ein, alles andere bleibt. Deine Einstellung von vorher liegt danach auf A. "
-                                      "Während er zuhört, bricht ein Klick ab.",
-                                      "Play your vocal and click AUTO. Ember listens to up to 12 seconds of vocal (pauses don't count) and then finishes on his own. "
-                                      "He sets only frequency, threshold, range and release, everything else stays. Your previous setting is on A afterwards. "
-                                      "While he listens, a click cancels."));
+        addInfo (autoBtn, "AUTO", tr ("Spiel deinen Gesang ab und klick auf AUTO. Ember hört 12 Sekunden Gesang zu (Pausen zählen nicht) und ist dann von selbst fertig, "
+                                      "auch wenn du nach mindestens 3 Sekunden die Wiedergabe stoppst. Er stellt nur Frequenz, Threshold, Range und Release ein, alles andere bleibt. "
+                                      "Deine Einstellung von vorher bleibt auf dem Slot, auf dem du warst (meist A), das Ergebnis kommt auf den anderen. Liegt dort schon eine "
+                                      "andere Einstellung von dir, bleibt sie, und Strg+Z holt die vorherige zurück. Während er zuhört, bricht ein Klick ab.",
+                                      "Play your vocal and click AUTO. Ember listens to 12 seconds of vocal (pauses don't count) and then finishes on his own, "
+                                      "also when you stop playback after at least 3 seconds. He sets only frequency, threshold, range and release, everything else stays. "
+                                      "Your previous setting stays on the slot you were on (usually A), the result goes to the other one. If that slot already holds "
+                                      "a different setting of yours, it stays, and Ctrl+Z brings back the previous one. While he listens, a click cancels."));
         addInfo (bypassBtn, "BYPASS", tr ("Schaltet den De-Esser aus, um mit dem Original zu vergleichen. Die Latenz bleibt gleich.",
                                           "Switches the de-esser off to compare with the original. The latency stays the same."));
-        addInfo (menuBtn, tr ("Menü", "Menu"), tr ("Sprache, Handbuch, Lizenz und Infos zu EMBER.", "Language, manual, licence and about EMBER."));
+        addInfo (menuBtn, tr ("Menü", "Menu"), tr ("Rückgängig / Wiederholen, Fenstergröße, Sprache, Handbuch, Lizenz und Infos zu EMBER.",
+                                                   "Undo / redo, window size, language, manual, licence and about EMBER."));
         addInfo (prevBtn, tr ("Voriges Preset", "Previous preset"), tr ("Lädt das vorige Preset.", "Loads the previous preset."));
         addInfo (nextBtn, tr ("Nächstes Preset", "Next preset"), tr ("Lädt das nächste Preset.", "Loads the next preset."));
-        addInfo (presetBtn, "Preset", tr ("Werks-Presets und deine eigenen Presets. Ein * zeigt, dass du seit dem Laden etwas geändert hast.",
-                                          "Factory presets and your own presets. A * shows you changed something since loading."));
+        addInfo (presetBtn, "Preset", tr ("Werks-Presets und deine eigenen Presets (dort auch umbenennen und löschen). Ein * zeigt, dass du seit dem Laden etwas geändert hast.",
+                                          "Factory presets and your own presets (rename and delete them there too). A * shows you changed something since loading."));
         addInfo (saveBtn, tr ("Preset speichern", "Save preset"), tr ("Speichert die aktuelle Einstellung als eigenes Preset.",
                                                                       "Saves the current setting as your own preset."));
         addInfo (slotA, tr ("Vergleich A", "Compare A"), tr ("Zwei Einstellungen vergleichen: A und B merken sich je eine Einstellung. "
                                                              "Umschalten, hören, die bessere behalten.",
                                                              "Compare two settings: A and B each keep one setting. Switch, listen, keep the better one."));
         addInfo (slotB, tr ("Vergleich B", "Compare B"), tr ("Beim ersten Klick startet B als Kopie von A.", "On the first click B starts as a copy of A."));
-        addInfo (slotCopy, tr ("Kopieren", "Copy"), tr ("Kopiert die aktive Einstellung in den anderen Speicher.", "Copies the active setting into the other slot."));
+        addInfo (slotCopy, tr ("Kopieren", "Copy"), tr ("Kopiert die aktive Einstellung in den anderen Speicher: A → B, wenn A aktiv ist, sonst B → A. "
+                                                        "A und B werden mit dem Projekt gespeichert.",
+                                                        "Copies the active setting into the other slot: A → B while A is active, otherwise B → A. "
+                                                        "A and B are saved with the project."));
         addInfo (mascot, "Ember", tr ("Ember zeigt, was der De-Esser tut: Er tanzt zur Stimme, und jedes S, das abgesenkt wird, fliegt ihm zu und er frisst es. Klick auf ihn startet AUTO.",
                                       "Ember shows what the de-esser does: he dances to the vocal, and every S that is reduced flies to him and he eats it. Click him to start AUTO."));
         for (auto* m : { &meter, &advancedMeter })
@@ -771,18 +808,19 @@ namespace ember
         addInfo (voiceHigh, tr ("Hohe Stimme", "High voice"), tr ("S-Bereich ab 7,4 kHz, für hohe und weibliche Stimmen.", "S range from 7.4 kHz, for high and female voices."));
         addInfo (listenBtn, "Delta", tr ("Nur das hören, was entfernt wird. Hörst du Vokale, ist es zu viel.",
                                          "Hear only what is removed. If you hear vowels, it is too much."));
-        addInfo (display, tr ("Spektrum", "Spectrum"), tr ("Rot markiert: der S-Bereich, der bei S-Lauten leiser wird. Die rote Kante ziehen = Frequenz "
+        addInfo (display, tr ("Spektrum", "Spectrum"), tr ("Pink markiert: der S-Bereich, der bei S-Lauten leiser wird. Die pinke Kante ziehen = Frequenz "
                                                            "(Shift = fein, Mausrad = Schritt). Oben: wie viel in den letzten Sekunden weggenommen wurde.",
-                                                           "Red: the S range that gets quieter on S sounds. Drag the red edge = frequency "
+                                                           "Pink: the S range that gets quieter on S sounds. Drag the pink edge = frequency "
                                                            "(Shift = fine, wheel = step). Top: how much was removed over the last seconds."));
-        addInfo (detector, tr ("S-Pegel", "S level"), tr ("Wie laut die S-Laute gerade sind. Über der roten Linie (Threshold) wird reduziert. "
-                                                          "Grau = Smart erkennt keinen S-Laut. Linie ziehen = Threshold, Mausrad = Schritt, Shift = fein.",
-                                                          "How loud the S sounds are right now. Above the red line (threshold) they are reduced. "
-                                                          "Grey = Smart hears no S sound. Drag the line = threshold, wheel = step, Shift = fine."));
+        addInfo (detector, tr ("S-Pegel", "S level"), tr ("Wie laut die S-Laute gerade sind, in dB. Über der pinken Linie (Threshold) wird reduziert. "
+                                                          "Grau gestreift = Smart erkennt keinen S-Laut. Linie ziehen = Threshold, Mausrad = Schritt, Shift = fein.",
+                                                          "How loud the S sounds are right now, in dB. Above the pink line (threshold) they are reduced. "
+                                                          "Grey stripes = Smart hears no S sound. Drag the line = threshold, wheel = step, Shift = fine."));
 
         addAndMakeVisible (sealOverlay);
         addChildComponent (infoPopup);
         about = std::make_unique<AboutOverlay>();
+        about->setWantsKeyboardFocus (true);
         addChildComponent (*about);
         addChildComponent (licenceLock);
         licenceLock.setLicence (&processor.getLicence());
@@ -957,24 +995,36 @@ namespace ember
         licenceLock.setBounds (getLocalBounds().withTrimmedTop (60));   // the top bar (≡ menu) stays usable
     }
 
-    void EmberPanel::setVoice (float hz, float thresholdDb)
+    void EmberPanel::setVoice (int voice)
     {
-        // a click on the voice that is already lit keeps the frequency AUTO found in that range (e.g. 7.2 kHz in MID)
-        const float now = processor.state.getRawParameterValue (pid::freq)->load();
-        const float lowMid = 0.5f * (voiceLowHz + voiceMidHz), midHigh = 0.5f * (voiceMidHz + voiceHighHz);
-        const auto rangeOf = [&] (float f) { return f < lowMid ? 0 : (f < midHigh ? 1 : 2); };
-        const bool autoDone = processor.getAutoPhase() == EmberAudioProcessor::AutoPhase::done;
-        if (autoDone && std::abs (now - processor.getLastAuto().freq) < 1.0f && rangeOf (now) == rangeOf (hz))
-            return;
-        if (auto* p = processor.state.getParameter (pid::freq))
-            ui::gestures::setReal (*p, hz);
-        // The voice's threshold comes along (a deep voice's S sit lower against the voice), unless AUTO set the
-        // threshold for this voice: the detector reads the same at every frequency, so AUTO's threshold still fits
-        const float thrNow = processor.state.getRawParameterValue (pid::threshold)->load();
-        if (! (autoDone && std::abs (thrNow - processor.getLastAuto().thresholdDb) < 0.05f))
-            if (auto* p = processor.state.getParameter (pid::threshold))
-                ui::gestures::setReal (*p, thresholdDb);
+        using Result = EmberAudioProcessor::VoiceResult;
+        const auto result = processor.setVoice (voice);
+        if (result == Result::keptAutoFrequency)
+            showNotice (i18n::format (tr ("AUTO hat in diesem Bereich {0} gefunden – die Frequenz bleibt.",
+                                          "AUTO found {0} in this range – the frequency stays."),
+                                      { hzText (processor.state.getRawParameterValue (pid::freq)->load()) }));
+        else if (result == Result::setKeptThreshold)
+            showNotice (i18n::format (tr ("Stimmlage gesetzt. Der Threshold bleibt bei {0} dB (von Hand, Preset oder AUTO gesetzt).",
+                                          "Voice set. The threshold stays at {0} dB (set by hand, a preset or AUTO)."),
+                                      { i18n::number (processor.state.getRawParameterValue (pid::threshold)->load(), 1) }));
         refreshButtons();
+    }
+
+    void EmberPanel::showNotice (const juce::String& text)
+    {
+        notice = text;
+        noticeUntil = juce::Time::getMillisecondCounterHiRes() * 0.001 + 5.0;
+    }
+
+    void EmberPanel::warn (const juce::String& title, const juce::String& message)
+    {
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                          .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                          .withTitle (title)
+                                          .withMessage (message)
+                                          .withButton ("OK")
+                                          .withAssociatedComponent (this),
+                                      nullptr);
     }
 
     void EmberPanel::autoClicked()
@@ -982,7 +1032,6 @@ namespace ember
         using Phase = EmberAudioProcessor::AutoPhase;
         if (processor.getLicence().isLocked() || processor.getAutoPhase() == Phase::analysing)
             return;
-        settings.setAutoUsed();
         // while listening the button always cancels; finishing happens by itself (12 s of voice, or playback stopped)
         if (processor.getAutoPhase() == Phase::listening)
             processor.cancelAuto();
@@ -1004,27 +1053,93 @@ namespace ember
         menu.addSectionHeader (tr ("Eigene Presets", "Your presets"));
         if (users.isEmpty())
             menu.addItem (-1, tr ("(noch keine – mit SPEICHERN anlegen)", "(none yet – create one with SAVE)"), false);
+        juce::PopupMenu rename, remove;
         for (int i = 0; i < users.size(); ++i)
-            menu.addItem (100 + i, users[i].getFileNameWithoutExtension(), true,
-                          processor.getFactoryIndex() < 0 && processor.getPresetName() == users[i].getFileNameWithoutExtension());
+        {
+            const auto name = users[i].getFileNameWithoutExtension();
+            menu.addItem (100 + i, name, true, processor.getFactoryIndex() < 0 && processor.getPresetName() == name);
+            rename.addItem (2000 + i, name);
+            remove.addItem (3000 + i, name);
+        }
         menu.addSeparator();
         menu.addItem (1000, tr ("Preset speichern …", "Save preset …"));
+        menu.addSubMenu (tr ("Preset umbenennen", "Rename preset"), rename, ! users.isEmpty());
+        menu.addSubMenu (tr ("Preset löschen", "Delete preset"), remove, ! users.isEmpty());
         menu.addItem (1001, tr ("Preset-Ordner öffnen", "Open preset folder"));
         menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presetBtn),
-                            [this, users] (int id)
+                            [safe = juce::Component::SafePointer<EmberPanel> (this), users] (int id)
                             {
+                                if (safe == nullptr || id == 0)
+                                    return;
+                                auto& self = *safe;
                                 if (id >= 1 && id < 100)
-                                    processor.loadFactoryPreset (id - 1);
-                                else if (id >= 100 && id < 1000)
-                                    processor.loadUserPreset (users[id - 100]);
+                                    self.processor.loadFactoryPreset (id - 1);
+                                else if (id >= 100 && id < 1000 && id - 100 < users.size())
+                                {
+                                    if (! self.processor.loadUserPreset (users[id - 100]))
+                                        self.warn (tr ("Preset laden", "Load preset"),
+                                                   i18n::format (tr ("„{0}“ ließ sich nicht laden. Die Datei fehlt oder ist kein EMBER-Preset.",
+                                                                     "“{0}” could not be loaded. The file is missing or is not an EMBER preset."),
+                                                                 { users[id - 100].getFileNameWithoutExtension() }));
+                                }
+                                else if (id >= 2000 && id < 3000 && id - 2000 < users.size())
+                                    self.renamePreset (users[id - 2000]);
+                                else if (id >= 3000 && id < 4000 && id - 3000 < users.size())
+                                    self.deletePreset (users[id - 3000]);
                                 else if (id == 1000)
-                                    savePresetAs();
+                                    self.savePresetAs();
                                 else if (id == 1001)
                                 {
                                     userPresetFolder().createDirectory();
                                     userPresetFolder().startAsProcess();
                                 }
+                                self.refreshButtons();
                             });
+    }
+
+    void EmberPanel::renamePreset (const juce::File& file)
+    {
+        dialog = std::make_unique<juce::AlertWindow> (tr ("Preset umbenennen", "Rename preset"),
+                                                      i18n::format (tr ("Neuer Name für „{0}“:", "New name for “{0}”:"), { file.getFileNameWithoutExtension() }),
+                                                      juce::MessageBoxIconType::NoIcon, this);
+        dialog->setLookAndFeel (&getLookAndFeel());   // the panel (and its look) outlives the window it owns
+        dialog->addTextEditor ("name", file.getFileNameWithoutExtension());
+        dialog->addButton (tr ("Umbenennen", "Rename"), 1, juce::KeyPress (juce::KeyPress::returnKey));
+        dialog->addButton (tr ("Abbrechen", "Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        dialog->enterModalState (true, juce::ModalCallbackFunction::create ([safe = juce::Component::SafePointer<EmberPanel> (this), file] (int result)
+        {
+            if (safe == nullptr || safe->dialog == nullptr)
+                return;
+            const auto name = safe->dialog->getTextEditorContents ("name");
+            // the window goes after its callback (it is still on the modal stack right now)
+            juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->dialog.reset(); });
+            if (result != 1)
+                return;
+            if (const auto error = safe->processor.renameUserPreset (file, name); error.isNotEmpty())
+                safe->warn (tr ("Preset umbenennen", "Rename preset"), error);
+            safe->refreshButtons();
+        }), false);
+    }
+
+    void EmberPanel::deletePreset (const juce::File& file)
+    {
+        const auto name = file.getFileNameWithoutExtension();
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                          .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                          .withTitle (tr ("Preset löschen?", "Delete preset?"))
+                                          .withMessage (i18n::format (tr ("„{0}“ kommt in den Papierkorb. Projekte, die es nutzen, behalten ihre Einstellung.",
+                                                                          "“{0}” goes to the recycle bin. Projects that use it keep their setting."), { name }))
+                                          .withButton (tr ("Löschen", "Delete"))
+                                          .withButton (tr ("Abbrechen", "Cancel"))
+                                          .withAssociatedComponent (this),
+                                      [safe = juce::Component::SafePointer<EmberPanel> (this), file] (int result)
+                                      {
+                                          if (safe == nullptr || result != 1)
+                                              return;
+                                          if (const auto error = safe->processor.deleteUserPreset (file); error.isNotEmpty())
+                                              safe->warn (tr ("Preset löschen", "Delete preset"), error);
+                                          safe->refreshButtons();
+                                      });
     }
 
     void EmberPanel::savePresetAs()
@@ -1035,11 +1150,16 @@ namespace ember
                                                        juce::String ("*") + presetExtension);
         chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                                   | juce::FileBrowserComponent::warnAboutOverwriting,
-                              [this] (const juce::FileChooser& fc)
+                              [safe = juce::Component::SafePointer<EmberPanel> (this)] (const juce::FileChooser& fc)
                               {
                                   const auto file = fc.getResult();
-                                  if (file != juce::File())
-                                      processor.saveUserPreset (file);
+                                  if (safe == nullptr || file == juce::File())
+                                      return;
+                                  if (! safe->processor.saveUserPreset (file))
+                                      safe->warn (tr ("Preset speichern", "Save preset"),
+                                                  tr ("Das Preset ließ sich nicht speichern. Ist der Ordner schreibgeschützt oder voll?",
+                                                      "The preset could not be saved. Is the folder read-only or full?"));
+                                  safe->refreshButtons();
                               });
     }
 
@@ -1052,8 +1172,14 @@ namespace ember
         lang.addItem (13, "English", true, current == "en");
         juce::PopupMenu menu;
         menu.addItem (50, tr ("Rückgängig (Strg+Z)", "Undo (Ctrl+Z)"), processor.canUndo());
-        menu.addItem (51, tr ("Wiederholen (Strg+Umschalt+Z)", "Redo (Ctrl+Shift+Z)"), processor.canRedo());
+        menu.addItem (51, tr ("Wiederholen (Strg+Umschalt+Z / Strg+Y)", "Redo (Ctrl+Shift+Z / Ctrl+Y)"), processor.canRedo());
         menu.addSeparator();
+        juce::PopupMenu size;
+        const auto* editor = findParentComponentOfClass<EmberEditor>();
+        const int percentNow = editor != nullptr ? editor->getScalePercent() : 100;
+        for (int pct : { 75, 100, 125, 150, 200 })
+            size.addItem (60 + pct, juce::String (pct) + " %", editor != nullptr, percentNow == pct);
+        menu.addSubMenu (tr ("Fenstergröße", "Window size"), size);
         menu.addSubMenu (tr ("Sprache", "Language"), lang);
         menu.addItem (20, tr ("Handbuch öffnen", "Open the manual"));
         menu.addItem (21, tr ("Ember-Tipp wieder zeigen", "Show Ember's tip again"));
@@ -1112,6 +1238,12 @@ namespace ember
                                     processor.undo();
                                 else if (id == 51)
                                     processor.redo();
+                                else if (id > 60 && id <= 260)
+                                {
+                                    if (auto* ed = findParentComponentOfClass<EmberEditor>())
+                                        ed->setScalePercent (id - 60);
+                                    return;   // the panel may be rebuilt / rescaled: nothing else to do here
+                                }
                                 if (id >= 11 && id <= 13)
                                 {
                                     const juce::String pref = id == 11 ? "system" : (id == 12 ? "de" : "en");
@@ -1137,13 +1269,18 @@ namespace ember
                                 else if (id == 30)
                                 {
                                     about->setVisible (true);
-                                    about->toFront (false);
+                                    about->toFront (true);   // with the focus: Esc closes it
                                 }
                             });
     }
 
     bool EmberPanel::keyPressed (const juce::KeyPress& key)
     {
+        if (key == juce::KeyPress::escapeKey && about != nullptr && about->isVisible())
+        {
+            about->setVisible (false);
+            return true;
+        }
         const auto mods = key.getModifiers();
         if (! mods.isCommandDown())
             return false;
@@ -1191,10 +1328,10 @@ namespace ember
 
         const float hz = processor.state.getRawParameterValue (pid::freq)->load();
         // the range the frequency lies in lights up - also after AUTO or a drag picked e.g. 7.3 kHz
-        const float lowMid = 0.5f * (voiceLowHz + voiceMidHz), midHigh = 0.5f * (voiceMidHz + voiceHighHz);
-        voiceLow.setToggleState (hz < lowMid, juce::dontSendNotification);
-        voiceMid.setToggleState (hz >= lowMid && hz < midHigh, juce::dontSendNotification);
-        voiceHigh.setToggleState (hz >= midHigh, juce::dontSendNotification);
+        const int voice = EmberAudioProcessor::voiceRangeOf (hz);
+        voiceLow.setToggleState (voice == 0, juce::dontSendNotification);
+        voiceMid.setToggleState (voice == 1, juce::dontSendNotification);
+        voiceHigh.setToggleState (voice == 2, juce::dontSendNotification);
         const bool hearing = std::lround (processor.state.getRawParameterValue (pid::listen)->load()) == 2;   // Delta
         listenBtn.setToggleState (hearing, juce::dontSendNotification);
         listenBtn.setColour (juce::TextButton::buttonOnColourId, look::accent);
@@ -1229,6 +1366,8 @@ namespace ember
 
         if (phase != lastPhase && (phase == Phase::done || phase == Phase::failed))
             messageUntil = now + 8.0;
+        if (phase != lastPhase && phase == Phase::done)
+            settings.setAutoUsed();   // the tip goes once AUTO really did its job (not on a cancel)
         lastPhase = phase;
 
         if (in > 0.00316f)
@@ -1236,6 +1375,9 @@ namespace ember
 
         juce::String text;
         const int listen = (int) std::lround (processor.state.getRawParameterValue (pid::listen)->load());
+        const auto bypassNote = bypassed ? tr ("  BYPASS ist an: Das Ergebnis hörst du erst, wenn du BYPASS ausschaltest.",
+                                               "  BYPASS is on: you hear the result once you switch BYPASS off.")
+                                         : juce::String();
         if (phase == Phase::listening && processor.isAutoWaitingForAudio())
         {
             text = processor.getAutoMessage();
@@ -1243,7 +1385,7 @@ namespace ember
         }
         else if (phase == Phase::listening)
         {
-            text = processor.getAutoMessage() + "  " + juce::String (juce::roundToInt (processor.getAutoProgress() * 100.0)) + " %";
+            text = processor.getAutoMessage() + "  " + juce::String (juce::roundToInt (processor.getAutoProgress() * 100.0)) + " %" + bypassNote;
             mascot.setBubble (tr ("Ich hör zu …", "Listening …"));
         }
         else if (phase == Phase::analysing)
@@ -1251,14 +1393,19 @@ namespace ember
             text = processor.getAutoMessage();
             mascot.setBubble (tr ("Moment …", "One moment …"));
         }
-        else if (now < messageUntil)
+        else if (now < noticeUntil)
         {
-            text = processor.getAutoMessage();
+            text = notice;
+            mascot.setBubble ({});
+        }
+        else if (now < messageUntil && (phase == Phase::failed || processor.isAutoResultLoaded()))
+        {
+            text = processor.getAutoMessage() + (phase == Phase::done ? bypassNote : juce::String());
             mascot.setBubble (phase == Phase::done ? tr ("Passt!", "Got it!") : tr ("Hmm …", "Hmm …"));
         }
-        else if (! advanced && ! bypassed && listen == 0 && processor.isShowingAutoResult())
+        else if (! advanced && listen == 0 && processor.isShowingAutoResult())
         {
-            text = processor.getAutoMessage();   // SIMPLE: what AUTO set stays readable until something changes
+            text = processor.getAutoMessage() + bypassNote;   // SIMPLE: what AUTO set stays readable until something changes
             mascot.setBubble ({});
         }
         else if (processor.getLicence().isLocked())
@@ -1326,6 +1473,7 @@ namespace ember
     {
         applyLanguage (settings->getLanguage());
         setLookAndFeel (&lnf);
+        setWantsKeyboardFocus (true);   // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y where the host passes the keys on
         rebuildPanel();
         setResizable (true, true);
         setResizeLimits (look::baseW * 3 / 4, look::baseH * 3 / 4, look::baseW * 2, look::baseH * 2);
@@ -1369,6 +1517,23 @@ namespace ember
         panel->setTransform (juce::AffineTransform::scale (scale));
         if (getWidth() > 0)
             settings->setEditorWidth (getWidth());
+    }
+
+    void EmberEditor::setScalePercent (int percent)
+    {
+        const int w = juce::jlimit (look::baseW * 3 / 4, look::baseW * 2, look::baseW * percent / 100);
+        setSize (w, w * look::baseH / look::baseW);
+        settings->file().saveIfNeeded();
+    }
+
+    int EmberEditor::getScalePercent() const
+    {
+        return juce::roundToInt (100.0 * getWidth() / look::baseW);
+    }
+
+    bool EmberEditor::keyPressed (const juce::KeyPress& key)
+    {
+        return panel != nullptr && panel->keyPressed (key);
     }
 
     bool EmberEditor::isAdvanced() const { return panel != nullptr && panel->isAdvanced(); }

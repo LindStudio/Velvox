@@ -61,6 +61,8 @@ namespace ember
         bool isAutoWaitingForAudio() const noexcept;
         // The AUTO result is still what is set (nothing changed since, the other slot holds the settings from before)
         bool isShowingAutoResult() const;
+        // An AUTO result is loaded (maybe changed since): undo / a preset / A/B to another setting end it
+        bool isAutoResultLoaded() const noexcept { return autoPhase == AutoPhase::done && fromAuto; }
         AutoPhase getAutoPhase() const noexcept { return autoPhase; }
         double getAutoProgress() const noexcept;   // 0..1 while listening
         const AutoResult& getLastAuto() const noexcept { return lastAuto; }

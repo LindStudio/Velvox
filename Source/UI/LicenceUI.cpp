@@ -1,4 +1,5 @@
 #include "LicenceUI.h"
+#include "VocalypseLookAndFeel.h"
 
 // Licence key entry and the lock card, shared by VOCALYPSE and the single plugins (moved out of
 // SettingsOverlay 2026-11-12; the product name and shop link come from the licensing::Manager).
@@ -9,6 +10,11 @@ namespace vocalypse::ui
     namespace
     {
         constexpr int pad = space::xl;
+
+        juce::Colour accentOf (const juce::LookAndFeel& lf)
+        {
+            return lf.isColourSpecified (LicenceLock::accentColourId) ? lf.findColour (LicenceLock::accentColourId) : colours::fire;
+        }
     }
 
     void showActivationDialog (licensing::Manager& m, juce::Component* over)
@@ -19,11 +25,23 @@ namespace vocalypse::ui
                                                      : tr ("Kopier den Lizenzschlüssel aus deiner Bestell-E-Mail und füg ihn hier ein.",
                                                            "Paste the licence key from your order email here."),
                                          juce::MessageBoxIconType::NoIcon, over);
+        // The plugin's look (the window is its own desktop window and may outlive the editor: it owns its look,
+        // which the modal callback keeps alive until the window is gone)
+        auto look = std::make_shared<VocalypseLookAndFeel>();
+        if (over != nullptr)
+        {
+            const auto a = accentOf (over->getLookAndFeel());
+            look->setColour (juce::AlertWindow::outlineColourId, a.withAlpha (0.7f));
+            look->setColour (juce::TextEditor::focusedOutlineColourId, a.withAlpha (0.7f));
+            look->setColour (juce::TextEditor::highlightColourId, a.withAlpha (0.25f));
+            look->setColour (LicenceLock::accentColourId, a);
+        }
+        w->setLookAndFeel (look.get());
         w->addTextEditor ("key", {}, tr ("Lizenzschlüssel", "Licence key"));
         w->addButton (tr ("Aktivieren", "Activate"), 1, juce::KeyPress (juce::KeyPress::returnKey));
         w->addButton (tr ("Abbrechen", "Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
         // The window is its own desktop window: the plugin may close (and the Manager go) while it is open
-        w->enterModalState (true, juce::ModalCallbackFunction::create ([w, &m, life = m.lifetime()] (int result)
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([w, &m, life = m.lifetime(), look] (int result)
         {
             const auto key = w->getTextEditorContents ("key");
             if (result != 1 || life.expired())
@@ -83,7 +101,7 @@ namespace vocalypse::ui
         if (show)
         {
             toFront (false);
-            startTimer (1000);
+            startTimer (250);
         }
         else
             stopTimer();
@@ -94,8 +112,15 @@ namespace vocalypse::ui
     {
         if (licence == nullptr)
             return;
-        licence->reloadIfChanged();   // may unlock: sync() runs through the change message
-        enterButton.setEnabled (! licence->isBusy());
+        if (++ticks % 4 == 0)
+            licence->reloadIfChanged();   // may unlock: sync() runs through the change message
+        const bool nowBusy = licence->isBusy();
+        enterButton.setEnabled (! nowBusy);
+        if (nowBusy != busy)
+        {
+            busy = nowBusy;
+            repaint();
+        }
     }
 
     juce::Rectangle<int> LicenceLock::cardBounds() const
@@ -115,13 +140,15 @@ namespace vocalypse::ui
         second.setBounds (r);
     }
 
+    juce::Colour LicenceLock::accent() const { return accentOf (getLookAndFeel()); }
+
     void LicenceLock::paint (juce::Graphics& g)
     {
         g.fillAll (colours::scrim.withMultipliedAlpha (0.85f));
         const auto card = cardBounds().toFloat();
         g.setColour (colours::panel);
         g.fillRoundedRectangle (card, 12.0f);
-        g.setColour (colours::fire);
+        g.setColour (accent());
         g.drawRoundedRectangle (card.reduced (0.5f), 12.0f, 1.2f);
 
         auto r = card.reduced ((float) pad);
@@ -155,5 +182,13 @@ namespace vocalypse::ui
                                                    "{0} is passing your vocal through unprocessed. Activate it with the key from your order "
                                                    "email – your projects and settings stay as they are."), { name }),
                           r.removeFromTop (80.0f).toNearestInt(), juce::Justification::topLeft, 4, 1.0f);
+        if (busy)
+        {
+            // the key is on its way to the server: say so instead of a silent, greyed-out button
+            g.setColour (accent());
+            g.setFont (font (typesize::small, true));
+            g.drawText (tr ("Wird aktiviert … einen Moment.", "Activating … one moment."),
+                        card.reduced ((float) pad).removeFromBottom (34.0f + 22.0f).removeFromTop (18.0f), juce::Justification::centredLeft, true);
+        }
     }
 }

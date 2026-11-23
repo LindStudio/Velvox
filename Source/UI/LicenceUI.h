@@ -6,7 +6,8 @@
 
 namespace vocalypse::ui
 {
-    // Asks for the key from the email and activates it (a small modal card)
+    // Asks for the key from the email and activates it (a small modal card in the plugin's look; the accent comes
+    // from LicenceLock::accentColourId of over's look-and-feel when it sets one)
     void showActivationDialog (licensing::Manager&, juce::Component* over);
 
     // Trial over / key invalid: covers the plugin, says why the vocal passes through unprocessed,
@@ -14,6 +15,9 @@ namespace vocalypse::ui
     class LicenceLock final : public juce::Component, private juce::ChangeListener, private juce::Timer
     {
     public:
+        // The card's accent: set it in the product's look-and-feel (default: the VOCALYPSE fire)
+        enum ColourIds { accentColourId = 0x2a11c001 };
+
         LicenceLock();
         ~LicenceLock() override;
         void setLicence (licensing::Manager* m);
@@ -26,8 +30,11 @@ namespace vocalypse::ui
         void timerCallback() override;
         void sync();
         juce::Rectangle<int> cardBounds() const;
+        juce::Colour accent() const;
 
         licensing::Manager* licence = nullptr;
         juce::TextButton enterButton, buyButton;
+        bool busy = false;   // activating: the card says so
+        int ticks = 0;
     };
 }
