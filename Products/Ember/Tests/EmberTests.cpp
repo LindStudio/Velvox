@@ -2528,6 +2528,7 @@ namespace
     // Offline render for listening and measuring (sound audit 2026-11-19): EmberTests --process <in.wav> <out.wav> [key=value ...]
     //   freq thr range amount attack release la mix mode det(0 smart,1 rel,2 abs,3 allround) listen gain(dB in) block
     //   width (octaves) link (0..1) stereo (0 L/R, 1 M/S, 2 mid, 3 side)  noengine=1 (file I/O only, CPU bench)
+    //   track (0 = one fixed split bell, 1 = the band follows each S)  out (output dB)
     //   levels=<wav> (detector level dB + smart weight, dry-aligned)
     //   auto=1 (AUTO first, as the plugin applies it) autosec=12 autostart=0  trace=<wav> (applied reduction, dB, dry-aligned)
     int processCli (const juce::StringArray& args)
@@ -2545,16 +2546,11 @@ namespace
         const auto has = [&] (const char* k) { return kv.count (k) > 0; };
         if (has ("gain"))
             buf->applyGain (dbToGain (kv["gain"]));
-        for (int k = 0; k < 8; ++k)
-        {
-            const juce::String xpK = "xp" + juce::String (k), xfK = "xf" + juce::String (k);
-            if (kv.count (xpK) > 0) cliBase.xp[k] = (int) kv[xpK];
-            if (kv.count (xfK) > 0) cliBase.xf[k] = kv[xfK];
-        }
         if (has ("attack")) cliBase.attackMs = kv["attack"];
         if (has ("mode")) cliBase.mode = (int) kv["mode"];
         if (has ("la")) cliBase.lookaheadMs = kv["la"];
         if (has ("width")) cliBase.widthOct = kv["width"];
+        if (has ("track")) cliBase.trackS = kv["track"] > 0.5f;
         Settings s = cliBase;
         if (has ("auto") && kv["auto"] > 0.5f)
         {

@@ -35,6 +35,12 @@
 //  - Listen S band = what is processed: in Split the band itself (4th-order high-passed at its lower edge, so the voice
 //    under it does not bleed through the gentle bell skirt), in Wideband the detector band.
 //  - Switching listen, mode, lookahead or stereo mode cross-fades (no clicks).
+//
+// 2026-11-24 (r2 research, docs/products/ember-r2/DSP_FORSCHUNG.md):
+//  - S tracking: the split band is a blend of three fixed matched bells half an octave apart. A tracker (three
+//    band-passes around the band behind a high-pass at its lower edge, 5 ms energies) finds where the energy of the current S sits and the blend
+//    weights follow it, so the band sits on every S ("sh" lower, "s" higher). Only the weights move: no
+//    coefficient modulation, and with no reduction the output is still bit-exact.
 namespace ember
 {
     using namespace vocalypse::dsp;
@@ -60,9 +66,8 @@ namespace ember
         float stereoLink = 1.0f;     // 0 = every channel on its own, 1 = fully linked
         int stereoMode = 0;          // 0 = stereo (L/R), 1 = mid/side, 2 = mid only, 3 = side only
         bool allround = false;       // with smart: compare against the band under the S (mixes, buses, instruments)
-        // r2 research switches (bench only, see docs/products/ember-r2/DSP_FORSCHUNG.md)
-        int xp[8] {};
-        float xf[8] {};
+        // added 2026-11-24 (r2 research)
+        bool trackS = true;          // split band follows each S (false = one fixed bell, the band before 2026-11-24)
     };
 
     // Fixed latency = the longest lookahead
@@ -84,6 +89,18 @@ namespace ember
     // it takes `reductionDb` off (tests, display)
     BiquadCoeffs splitBell (double sampleRate, double freq, double widthOct) noexcept;
     double splitResponseDb (double sampleRate, double freq, double widthOct, double reductionDb, double hz) noexcept;
+    // S tracking (2026-11-24): three bells, trackSpreadOct apart around the split band's centre, each
+    // trackSpreadOct x 2 narrower than the band (at least trackMinBellOct): with the S in the middle the band is
+    // the middle bell; a lower or higher S moves the weight to the outer bells, so together they still cover
+    // the band's width. Tracker: band-passes on the three centres (two sections each), trackEnvMs energies.
+    inline constexpr float trackSpreadOct = 0.5f, trackMinBellOct = 1.0f, trackEnvMs = 5.0f;
+    struct TrackBells { double centreHz[3]; double widthOct; };
+    TrackBells trackBells (double freq, double widthOct) noexcept;
+    // Matched (Vicanek) cut of bandRefDb on `centreHz`, `widthOct` between its half-reduction points (widthRefDb)
+    BiquadCoeffs bellAt (double sampleRate, double centreHz, double widthOct) noexcept;
+    // Blend weights of the three bells for tracker energies e[0..2] (low, middle, high): a triangle around the
+    // energy centroid; silence -> the middle bell
+    void trackWeights (const float* e, float* w) noexcept;
     // Old split bell (2026-11-22, RBJ Q 0.4 at 1.25 x freq) - about the same as splitBand at 3 octaves
     inline constexpr float splitQ = 0.4f;
 
@@ -237,9 +254,6 @@ namespace ember
         };
         void process (const float* frame, int numChannels, bool relative, bool perChannel, Frame& out) noexcept;
         bool isFinite() const noexcept;
-        // r2 research: detector band weighting (0 off, 1 loudness: shelf -db above 9 kHz, 2 sharpness: +db) and
-        // hybrid peak / RMS level (rmsMs > 0)
-        void setResearch (int weighting, float weightDb, float rmsMs) noexcept;
 
         // Smart detection: how much the energy of the S band outweighs the body of the voice (or, in Allround,
         // the band under the S), in dB, from 5 ms RMS envelopes, and the resulting weight 0..1 (linked).
@@ -262,11 +276,6 @@ namespace ember
         float fullEnvCh[maxChannels] {}, sEnvCh[maxChannels] {}, bodyEnvCh[maxChannels] {};
         float indexDb = -60.0f, weight = 0.0f, tiltDb = 0.0f, weightCh[maxChannels] {};
         unsigned indexPhase = 0;
-        // r2 research
-        Biquad4 xWeight;
-        bool xWeightOn = false;
-        int xWeighting = 0;
-        float xWeightDb = 0.0f, xRmsMs = 0.0f, xRmsCoeff = 0.0f, xRms[maxChannels] {};
     };
 
     // Running minimum over `window` samples followed by a moving average over `window` samples: a smooth gate
@@ -310,6 +319,7 @@ namespace ember
 
     private:
         void updateBand() noexcept;
+        void resetTrack() noexcept;
         int lookaheadSamples (float ms) const noexcept;
 
         double fs = 44100.0;
@@ -317,7 +327,11 @@ namespace ember
         Settings settings;
         int activeStereoMode = 0;    // the stereo mode the filters run in (switches while the wet signal is faded out)
         Detector detector;
-        Biquad bell;                 // fixed matched cut of bandRefDb (double: it is the audio path)
+        // Split band: three fixed matched cuts of bandRefDb (lanes 0..2: low, middle, high) per processing channel,
+        // blended by the tracker weights; the tracker's band-passes on the same centres (two sections)
+        Biquad4 bells[maxChannels], trackBp1[maxChannels], trackBp2[maxChannels], trackHp[maxChannels];
+        float trackE[3] {}, trackCoeff = 0.0f;
+        bool trackOn = true;
         Biquad listenHp, listenHp2;  // listening to the split band: 4th-order high-pass at its lower edge
         bool listenHpLive = false;
         float bandScale = 1.0f;      // 1 / (1 - bell gain at its centre): (bell(x) - x) * bandScale = the band
@@ -338,17 +352,9 @@ namespace ember
         // Delay lines: audio (per input channel), envelope / gates / detector band (per processing channel)
         std::array<std::vector<float>, maxChannels> audioDelay, bandDelay;
         std::array<std::vector<float>, numSlots> envDelay, gateDelay0, gateDelay1;
+        std::array<std::vector<float>, 3> trackDelay;   // tracker weights (linked), lead the audio like the envelope
         int writePos = 0, delaySize = 1, gridPhase = 0;
         bool wasPerChannel = false;
         int wetHold = 0;   // samples the wet signal stays faded out after a stereo mode switch
-
-        // r2 research prototypes
-        void updateResearch() noexcept;
-        Biquad xBell[3], xBp1[3], xBp2[3], xTilt, xSkirtHp, xSkirtHp2;
-        float xE[3] {}, xEnvC = 0.0f, xTiltCorr[3] { 1, 1, 1 };
-        std::array<std::vector<float>, 3> xDl;
-        float xOnF = 0.0f, xOnS = 0.0f, xOnFC = 0.0f, xOnSC = 0.0f, xMult = 1.0f, xMultC = 0.0f;
-        int xHold = 0;
-        float xSlow[numSlots] {}, xSlowA = 0.0f, xSlowR = 0.0f;
     };
 }
