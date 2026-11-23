@@ -61,6 +61,8 @@ namespace ember
         bool isAutoWaitingForAudio() const noexcept;
         // The AUTO result is still what is set (nothing changed since, the other slot holds the settings from before)
         bool isShowingAutoResult() const;
+        // An AUTO result is loaded (maybe changed since): undo / a preset / A/B to another setting end it
+        bool isAutoResultLoaded() const noexcept { return autoPhase == AutoPhase::done && fromAuto; }
         AutoPhase getAutoPhase() const noexcept { return autoPhase; }
         double getAutoProgress() const noexcept;   // 0..1 while listening
         const AutoResult& getLastAuto() const noexcept { return lastAuto; }
@@ -81,6 +83,10 @@ namespace ember
         void loadFactoryPreset (int index);
         bool loadUserPreset (const juce::File&);
         bool saveUserPreset (const juce::File&);
+        // User preset files: rename (the shown name follows when it is the loaded one) and delete (to the recycle bin).
+        // An empty result = done, otherwise the reason in the interface language.
+        juce::String renameUserPreset (const juce::File&, const juce::String& newName);
+        juce::String deleteUserPreset (const juce::File&);
         juce::String getPresetName() const;        // shown name; factory names follow the interface language
         bool isPresetModified() const;              // the values differ from the loaded preset
         int getFactoryIndex() const noexcept { return factoryIndex; }
@@ -89,6 +95,20 @@ namespace ember
         int getActiveSlot() const noexcept { return activeSlot; }   // 0 = A, 1 = B
         void switchSlot (int slot);                // stores the current values in the active slot, loads the other
         void copyActiveToOther();
+        // Where AUTO left the settings from before: 0 = A, 1 = B, -1 = only in undo (the other slot held a different
+        // setting the user had parked there; AUTO never overwrites it)
+        int getAutoBeforeSlot() const noexcept { return autoBeforeSlot; }
+
+        // ---- Voice buttons (SIMPLE): LOW / MID / HIGH ------------------------------------------------
+        // The ranges that light up; the borders lie between the voices and away from every factory preset's frequency
+        static constexpr float voiceLowMidHz = 5750.0f, voiceMidHighHz = 7000.0f;
+        static int voiceRangeOf (float hz) noexcept { return hz < voiceLowMidHz ? 0 : (hz < voiceMidHighHz ? 1 : 2); }
+        int getVoiceRange() const;                 // of the current frequency
+        enum class VoiceResult { set, setKeptThreshold, keptAutoFrequency };
+        // One click = one undo step. Sets the voice's frequency; the threshold comes along only while it is still at a
+        // voice value (default included) - a threshold set by hand, a preset or AUTO stays. A click on the lit voice
+        // keeps the frequency AUTO found in that range.
+        VoiceResult setVoice (int voice);
 
         // ---- Undo / redo of the settings (message thread). Every edit in the editor (a host gesture) is one step;
         // AUTO and loading a preset are one step each. Listen and bypass are not part of it.
@@ -110,15 +130,49 @@ namespace ember
         struct UndoListener;
         struct UndoGroup;                          // edits inside one step (AUTO, presets, A/B, undo itself)
 
-        // A slot remembers which preset its values came from
+        // A slot remembers which preset its values came from (and whether they are an AUTO result)
         struct Slot
         {
             ParamValues values, presetValues;
             int factoryIndex = 0;
             juce::String userPresetName;
+            bool fromAuto = false;
+            bool operator== (const Slot&) const = default;
         };
         Slot currentSlot() const;
         void restoreSlot (const Slot&);
+        void restoreMeta (const Slot&);            // preset name / marker / AUTO flag (not the values)
+        void setPresetMeta (int factory, const juce::String& user, bool isAuto);   // presetValues = what is set now
+        void assignAutoSlots (const Slot& before);   // AUTO's result into A/B (see getAutoBeforeSlot)
+
+        // An undo step: the values and the preset name / marker; AUTO steps also bring the A/B slots back
+        struct Snapshot
+        {
+            Slot current;
+            Slot slots[2];
+            bool slotUsed[2] { false, false };
+            int activeSlot = 0;
+            bool restoresSlots = false;
+        };
+        Snapshot snapshot() const;
+        void restoreSnapshot (const Snapshot&);
+
+        // A/B and the preset name in the project (getStateInformation / setStateInformation). A state restored off the
+        // message thread is taken over by the message thread (timer); metaLock guards what getStateInformation reads.
+        struct Meta
+        {
+            Slot current;                          // values unused
+            Slot slots[2];
+            bool slotUsed[2] { false, false };
+            int activeSlot = 0;
+        };
+        Meta currentMeta() const;
+        void applyMeta (const Meta&);              // message thread
+        void applyPendingMeta();                   // message thread
+        static void writeMeta (juce::XmlElement&, const Meta&);
+        static Meta readMeta (const juce::XmlElement& root, const juce::XmlElement* ab, const ParamValues& restored);
+        juce::CriticalSection metaLock;
+        std::unique_ptr<Meta> pendingMeta;
 
         juce::SharedResourcePointer<EmberLicence> sharedLicence;
         vocalypse::licensing::Manager* licence = &sharedLicence.getObject();
@@ -134,9 +188,11 @@ namespace ember
         int factoryIndex = 0;                      // -1 = user preset / AUTO result
         juce::String userPresetName;
         ParamValues presetValues;                  // what the loaded preset set (for "modified")
+        bool fromAuto = false;                     // the loaded "preset" is an AUTO result
         Slot slots[2];
         bool slotUsed[2] { false, false };
         int activeSlot = 0;
+        int autoBeforeSlot = 0;
         double currentRate = 44100.0;
         std::atomic<bool> hostStopped { false };
         std::atomic<float> hostBpm { 0.0f };        // for Ember's dancing (0 = unknown)
@@ -146,7 +202,7 @@ namespace ember
         bool autoRaisedAmount = false;
         Settings autoBase;                         // the settings AUTO measured with
 
-        std::vector<ParamValues> undoSteps, redoSteps;
+        std::vector<Snapshot> undoSteps, redoSteps;
         int undoGroupDepth = 0, lastUndoParam = -1;
         double lastUndoTime = 0.0;
         std::unique_ptr<UndoListener> undoListener;

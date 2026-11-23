@@ -34,6 +34,10 @@ namespace ember
     juce::Array<juce::File> userPresets();
     bool saveUserPreset (const juce::File&, const ParamValues&);
     bool loadUserPreset (const juce::File&, ParamValues& out);
+    // Renames a preset file (same folder; the name made legal for a file). The error in the interface language.
+    juce::Result renameUserPresetFile (const juce::File&, const juce::String& newName, juce::File& renamed);
+    // Moves a preset file to the recycle bin (deletes it where there is none)
+    juce::Result deleteUserPresetFile (const juce::File&);
     inline constexpr const char* presetExtension = ".emberpreset";
 
     // Per-user settings (language, editor size, first-run hint): %APPDATA%/Lind Audio/EMBER.settings

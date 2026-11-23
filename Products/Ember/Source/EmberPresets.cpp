@@ -121,6 +121,37 @@ namespace ember
         return true;
     }
 
+    juce::Result renameUserPresetFile (const juce::File& file, const juce::String& newName, juce::File& renamed)
+    {
+        using vocalypse::i18n::tr;
+        const auto name = juce::File::createLegalFileName (newName.trim()).trim();
+        if (name.isEmpty())
+            return juce::Result::fail (tr ("Bitte gib einen Namen ein.", "Please enter a name."));
+        if (! file.existsAsFile())
+            return juce::Result::fail (tr ("Das Preset gibt es nicht mehr.", "The preset no longer exists."));
+        renamed = file.getSiblingFile (name + presetExtension);
+        if (renamed.getFullPathName() == file.getFullPathName())
+            return juce::Result::ok();
+        // the same name in other letter case is a rename of the same file (Windows); any other existing file stays
+        if (renamed.exists() && renamed != file)
+            return juce::Result::fail (vocalypse::i18n::format (tr ("Ein Preset „{0}“ gibt es schon.", "A preset “{0}” already exists."), { name }));
+        if (! file.moveFileTo (renamed))
+            return juce::Result::fail (tr ("Umbenennen ging nicht. Ist die Datei schreibgeschützt oder gerade geöffnet?",
+                                           "Renaming failed. Is the file read-only or open in another program?"));
+        return juce::Result::ok();
+    }
+
+    juce::Result deleteUserPresetFile (const juce::File& file)
+    {
+        using vocalypse::i18n::tr;
+        if (! file.existsAsFile())
+            return juce::Result::ok();   // already gone
+        if (file.moveToTrash() || file.deleteFile())
+            return juce::Result::ok();
+        return juce::Result::fail (tr ("Löschen ging nicht. Ist die Datei schreibgeschützt oder gerade geöffnet?",
+                                       "Deleting failed. Is the file read-only or open in another program?"));
+    }
+
     // ------------------------------------------------------------------ settings
     namespace
     {

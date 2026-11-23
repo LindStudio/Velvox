@@ -1,6 +1,7 @@
 #include "EmberProcessor.h"
 #include "EmberEditor.h"
 #include "Text/I18n.h"
+#include <optional>
 
 namespace ember
 {
@@ -105,12 +106,150 @@ namespace ember
     }
 
     // ------------------------------------------------------------------ state
+    namespace
+    {
+        constexpr const char* abTag = "EmberAB";
+
+        void writeValues (juce::XmlElement& parent, const char* tag, const ParamValues& values)
+        {
+            auto* e = parent.createNewChildElement (tag);
+            for (const auto& [id, v] : values)
+            {
+                auto* p = e->createNewChildElement ("Param");
+                p->setAttribute ("id", id);
+                p->setAttribute ("value", (double) v);
+            }
+        }
+
+        ParamValues readValues (const juce::XmlElement& parent, const char* tag)
+        {
+            ParamValues out;
+            if (auto* e = parent.getChildByName (tag))
+                for (auto* p : e->getChildWithTagNameIterator ("Param"))
+                    if (const auto v = (float) p->getDoubleAttribute ("value"); std::isfinite (v))
+                        out[p->getStringAttribute ("id")] = v;
+            return out;
+        }
+
+        bool isMessageThread()
+        {
+            auto* mm = juce::MessageManager::getInstanceWithoutCreating();
+            return mm == nullptr || mm->isThisTheMessageThread();
+        }
+    }
+
+    void EmberAudioProcessor::writeMeta (juce::XmlElement& xml, const Meta& m)
+    {
+        xml.setAttribute ("factoryPreset", m.current.factoryIndex);
+        xml.setAttribute ("userPreset", m.current.userPresetName);
+        xml.setAttribute ("fromAuto", m.current.fromAuto);
+        auto* ab = xml.createNewChildElement (abTag);
+        ab->setAttribute ("active", m.activeSlot);
+        for (int i = 0; i < 2; ++i)
+        {
+            auto* s = ab->createNewChildElement ("Slot");
+            s->setAttribute ("used", m.slotUsed[i]);
+            if (! m.slotUsed[i])
+                continue;
+            s->setAttribute ("factoryPreset", m.slots[i].factoryIndex);
+            s->setAttribute ("userPreset", m.slots[i].userPresetName);
+            s->setAttribute ("fromAuto", m.slots[i].fromAuto);
+            writeValues (*s, "Values", m.slots[i].values);
+            writeValues (*s, "Preset", m.slots[i].presetValues);
+        }
+    }
+
+    EmberAudioProcessor::Meta EmberAudioProcessor::readMeta (const juce::XmlElement& xml, const juce::XmlElement* ab, const ParamValues& restored)
+    {
+        Meta m;
+        m.current.factoryIndex = xml.getIntAttribute ("factoryPreset", 0);   // never set = still the default preset
+        m.current.userPresetName = xml.getStringAttribute ("userPreset");
+        m.current.fromAuto = xml.getBoolAttribute ("fromAuto", false);
+        m.current.presetValues = restored;   // a project reopens as it was saved: the restored values count as the preset's
+        if (ab != nullptr)
+        {
+            m.activeSlot = juce::jlimit (0, 1, ab->getIntAttribute ("active", 0));
+            int i = 0;
+            for (auto* s : ab->getChildWithTagNameIterator ("Slot"))
+            {
+                if (i >= 2)
+                    break;
+                if (s->getBoolAttribute ("used", false))
+                {
+                    m.slotUsed[i] = true;
+                    m.slots[i].factoryIndex = s->getIntAttribute ("factoryPreset", 0);
+                    m.slots[i].userPresetName = s->getStringAttribute ("userPreset");
+                    m.slots[i].fromAuto = s->getBoolAttribute ("fromAuto", false);
+                    m.slots[i].values = readValues (*s, "Values");
+                    m.slots[i].presetValues = readValues (*s, "Preset");
+                }
+                ++i;
+            }
+        }
+        return m;
+    }
+
+    EmberAudioProcessor::Meta EmberAudioProcessor::currentMeta() const
+    {
+        Meta m;
+        m.current.presetValues = presetValues;
+        m.current.factoryIndex = factoryIndex;
+        m.current.userPresetName = userPresetName;
+        m.current.fromAuto = fromAuto;
+        for (int i = 0; i < 2; ++i)
+        {
+            m.slots[i] = slots[i];
+            m.slotUsed[i] = slotUsed[i];
+        }
+        m.activeSlot = activeSlot;
+        return m;
+    }
+
+    void EmberAudioProcessor::applyMeta (const Meta& m)
+    {
+        {
+            const juce::ScopedLock sl (metaLock);
+            presetValues = m.current.presetValues;
+            factoryIndex = m.current.factoryIndex;
+            userPresetName = m.current.userPresetName;
+            fromAuto = m.current.fromAuto;
+            for (int i = 0; i < 2; ++i)
+            {
+                slots[i] = m.slots[i];
+                slotUsed[i] = m.slotUsed[i];
+            }
+            activeSlot = m.activeSlot;
+            autoBeforeSlot = 0;
+        }
+        undoSteps.clear();   // the steps belong to the settings from before this state
+        redoSteps.clear();
+        lastUndoParam = -1;
+    }
+
+    void EmberAudioProcessor::applyPendingMeta()
+    {
+        std::unique_ptr<Meta> m;
+        {
+            const juce::ScopedLock sl (metaLock);
+            m = std::move (pendingMeta);
+        }
+        if (m != nullptr)
+            applyMeta (*m);
+    }
+
     void EmberAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
     {
         auto copy = state.copyState();
         copy.setProperty ("version", EMBER_VERSION_STRING, nullptr);
-        if (auto xml = copy.createXml())
-            copyXmlToBinary (*xml, dest);
+        auto xml = copy.createXml();
+        if (xml == nullptr)
+            return;
+        {
+            // the host may ask from any thread; the message thread writes the meta under the same lock
+            const juce::ScopedLock sl (metaLock);
+            writeMeta (*xml, pendingMeta != nullptr ? *pendingMeta : currentMeta());
+        }
+        copyXmlToBinary (*xml, dest);
     }
 
     void EmberAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -118,40 +257,68 @@ namespace ember
         auto xml = getXmlFromBinary (data, sizeInBytes);
         if (xml == nullptr || ! xml->hasTagName (state.state.getType()))
             return;
-        const UndoGroup group (*this);
-        state.replaceState (juce::ValueTree::fromXml (*xml));
-        factoryIndex = (int) state.state.getProperty ("factoryPreset", 0);   // never set = still the default preset
-        activeSlot = 0;                       // the slots held values from before this state
-        slotUsed[0] = slotUsed[1] = false;
-        undoSteps.clear();
-        redoSteps.clear();
-        userPresetName = state.state.getProperty ("userPreset", juce::String()).toString();
-        // replaceState leaves parameters that the saved state does not mention untouched and does not
-        // always resend values; snap every parameter to the stored value (VOCALYPSE lesson 0.6.1)
-        for (auto* p : getParameters())
-            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
-                if (auto* raw = state.getRawParameterValue (rp->getParameterID()))
-                    rp->setValueNotifyingHost (rp->convertTo0to1 (raw->load()));
+        // A/B is not part of the parameter tree
+        std::unique_ptr<juce::XmlElement> ab;
+        if (auto* e = xml->getChildByName (abTag))
+        {
+            ab = std::make_unique<juce::XmlElement> (*e);
+            xml->removeChildElement (e, true);
+        }
+        const bool messageThread = isMessageThread();
+        {
+            std::optional<UndoGroup> group;   // off the message thread no gesture becomes an undo step anyway
+            if (messageThread)
+                group.emplace (*this);
+            state.replaceState (juce::ValueTree::fromXml (*xml));
+            // replaceState leaves parameters that the saved state does not mention untouched and does not
+            // always resend values; snap every parameter to the stored value (VOCALYPSE lesson 0.6.1)
+            for (auto* p : getParameters())
+                if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+                    if (auto* raw = state.getRawParameterValue (rp->getParameterID()))
+                        rp->setValueNotifyingHost (rp->convertTo0to1 (raw->load()));
+        }
         // Delta / S range listening is a tool, not a setting: a project never reopens listening to the S alone
         setListenOff();
-        // a project reopens as it was saved: the restored values count as the preset's
-        presetValues = ember::capture (state);
+
+        auto meta = readMeta (*xml, ab.get(), ember::capture (state));
+        if (messageThread)
+        {
+            {
+                const juce::ScopedLock sl (metaLock);
+                pendingMeta.reset();
+            }
+            applyMeta (meta);
+        }
+        else
+        {
+            // the editor, undo and A/B live on the message thread: it takes the restored meta over (timerCallback)
+            const juce::ScopedLock sl (metaLock);
+            pendingMeta = std::make_unique<Meta> (std::move (meta));
+        }
     }
 
     // ---------------------------------------------------------------- presets
+    void EmberAudioProcessor::setPresetMeta (int factory, const juce::String& user, bool isAuto)
+    {
+        auto values = ember::capture (state);
+        const juce::ScopedLock sl (metaLock);
+        factoryIndex = factory;
+        userPresetName = user;
+        fromAuto = isAuto;
+        presetValues = std::move (values);
+    }
+
     void EmberAudioProcessor::loadFactoryPreset (int index)
     {
         const auto& list = factoryPresets();
         if (! juce::isPositiveAndBelow (index, (int) list.size()))
             return;
         beginUndoStep (-1);
-        const UndoGroup group (*this);
-        ember::apply (state, list[(size_t) index].values);
-        factoryIndex = index;
-        userPresetName = {};
-        presetValues = ember::capture (state);
-        state.state.setProperty ("factoryPreset", index, nullptr);
-        state.state.setProperty ("userPreset", juce::String(), nullptr);
+        {
+            const UndoGroup group (*this);
+            ember::apply (state, list[(size_t) index].values);
+        }
+        setPresetMeta (index, {}, false);
     }
 
     bool EmberAudioProcessor::loadUserPreset (const juce::File& file)
@@ -160,13 +327,11 @@ namespace ember
         if (! ember::loadUserPreset (file, v))
             return false;
         beginUndoStep (-1);
-        const UndoGroup group (*this);
-        ember::apply (state, v);
-        factoryIndex = -1;
-        userPresetName = file.getFileNameWithoutExtension();
-        presetValues = ember::capture (state);
-        state.state.setProperty ("factoryPreset", -1, nullptr);
-        state.state.setProperty ("userPreset", userPresetName, nullptr);
+        {
+            const UndoGroup group (*this);
+            ember::apply (state, v);
+        }
+        setPresetMeta (-1, file.getFileNameWithoutExtension(), false);
         return true;
     }
 
@@ -176,12 +341,30 @@ namespace ember
         const auto target = file.hasFileExtension (presetExtension) ? file : file.getSiblingFile (file.getFileName() + presetExtension);
         if (! ember::saveUserPreset (target, ember::capture (state)))
             return false;
-        factoryIndex = -1;
-        userPresetName = target.getFileNameWithoutExtension();
-        presetValues = ember::capture (state);
-        state.state.setProperty ("factoryPreset", -1, nullptr);
-        state.state.setProperty ("userPreset", userPresetName, nullptr);
+        setPresetMeta (-1, target.getFileNameWithoutExtension(), false);
         return true;
+    }
+
+    juce::String EmberAudioProcessor::renameUserPreset (const juce::File& file, const juce::String& newName)
+    {
+        juce::File renamed;
+        if (const auto r = renameUserPresetFile (file, newName, renamed); r.failed())
+            return r.getErrorMessage();
+        const auto oldName = file.getFileNameWithoutExtension(), name = renamed.getFileNameWithoutExtension();
+        const juce::ScopedLock sl (metaLock);
+        if (factoryIndex < 0 && userPresetName == oldName)
+            userPresetName = name;
+        for (auto& s : slots)
+            if (s.factoryIndex < 0 && s.userPresetName == oldName)
+                s.userPresetName = name;
+        return {};
+    }
+
+    juce::String EmberAudioProcessor::deleteUserPreset (const juce::File& file)
+    {
+        // the setting itself stays as it is (also its name in the bar): only the file goes
+        const auto r = deleteUserPresetFile (file);
+        return r.failed() ? r.getErrorMessage() : juce::String();
     }
 
     juce::String EmberAudioProcessor::getPresetName() const
@@ -204,15 +387,16 @@ namespace ember
         const int numFactory = (int) factoryPresets().size();
         const auto users = userPresets();
         const int total = numFactory + users.size();
-        int current = factoryIndex;
-        if (current < 0)
-        {
-            current = numFactory;
+        if (total <= 0 || direction == 0)
+            return;
+        int current = factoryIndex < numFactory ? factoryIndex : -1;
+        if (current < 0 && userPresetName.isNotEmpty())
             for (int i = 0; i < users.size(); ++i)
                 if (users[i].getFileNameWithoutExtension() == userPresetName)
                     current = numFactory + i;
-        }
-        const int next = ((current + direction) % total + total) % total;
+        // not in the list (an AUTO setting, a deleted preset): forward starts at the first preset, back at the last
+        const int next = current < 0 ? (direction > 0 ? 0 : total - 1)
+                                     : ((current + direction) % total + total) % total;
         if (next < numFactory)
             loadFactoryPreset (next);
         else
@@ -222,7 +406,16 @@ namespace ember
     // -------------------------------------------------------------------- A/B
     EmberAudioProcessor::Slot EmberAudioProcessor::currentSlot() const
     {
-        return { ember::capture (state), presetValues, factoryIndex, userPresetName };
+        return { ember::capture (state), presetValues, factoryIndex, userPresetName, fromAuto };
+    }
+
+    void EmberAudioProcessor::restoreMeta (const Slot& s)
+    {
+        const juce::ScopedLock sl (metaLock);
+        presetValues = s.presetValues;
+        factoryIndex = s.factoryIndex;
+        userPresetName = s.userPresetName;
+        fromAuto = s.fromAuto;
     }
 
     void EmberAudioProcessor::restoreSlot (const Slot& s)
@@ -231,37 +424,157 @@ namespace ember
             const UndoGroup group (*this);   // switching back is the way back, not an undo step
             ember::apply (state, s.values);
         }
-        presetValues = s.presetValues;
-        factoryIndex = s.factoryIndex;
-        userPresetName = s.userPresetName;
-        state.state.setProperty ("factoryPreset", factoryIndex, nullptr);
-        state.state.setProperty ("userPreset", userPresetName, nullptr);
+        restoreMeta (s);
     }
 
     void EmberAudioProcessor::switchSlot (int slot)
     {
         if (slot == activeSlot || ! juce::isPositiveAndBelow (slot, 2))
             return;
-        slots[activeSlot] = currentSlot();
-        slotUsed[activeSlot] = true;
-        activeSlot = slot;
-        if (slotUsed[slot])
-            restoreSlot (slots[slot]);
-        else
+        const auto now = currentSlot();
+        const bool visited = slotUsed[slot];
         {
-            slots[slot] = currentSlot();   // first visit: B starts as a copy of A
-            slotUsed[slot] = true;
+            const juce::ScopedLock sl (metaLock);
+            slots[activeSlot] = now;
+            slotUsed[activeSlot] = true;
+            activeSlot = slot;
+            if (! visited)
+            {
+                slots[slot] = now;   // first visit: B starts as a copy of A
+                slotUsed[slot] = true;
+            }
         }
+        if (visited)
+            restoreSlot (slots[slot]);
     }
 
     void EmberAudioProcessor::copyActiveToOther()
     {
+        const auto now = currentSlot();
+        const juce::ScopedLock sl (metaLock);
         const int other = 1 - activeSlot;
-        slots[other] = currentSlot();
+        slots[other] = now;
         slotUsed[other] = true;
     }
 
+    void EmberAudioProcessor::assignAutoSlots (const Slot& before)
+    {
+        // Undo of AUTO also brings A/B back as they were: the step beginUndoStep made for AUTO gets the slots
+        if (! undoSteps.empty())
+        {
+            auto& step = undoSteps.back();
+            step.restoresSlots = true;
+            for (int i = 0; i < 2; ++i)
+            {
+                step.slots[i] = slots[i];
+                step.slotUsed[i] = slotUsed[i];
+            }
+            step.activeSlot = activeSlot;
+        }
+        // AUTO never overwrites a setting parked on the other slot. Other slot free (never used, or the same as
+        // before): before stays on the slot you are on, the result goes to the other one and is active (the first
+        // time: A = before, B = AUTO). Something else parked there: the result goes into the active slot, before is
+        // one undo away.
+        const int other = 1 - activeSlot;
+        const bool parked = slotUsed[other] && ! ember::sameValues (slots[other].values, before.values);
+        const auto result = currentSlot();
+        const juce::ScopedLock sl (metaLock);
+        if (parked)
+        {
+            slots[activeSlot] = result;
+            slotUsed[activeSlot] = true;
+            autoBeforeSlot = -1;
+        }
+        else
+        {
+            slots[activeSlot] = before;
+            slots[other] = result;
+            slotUsed[0] = slotUsed[1] = true;
+            autoBeforeSlot = activeSlot;
+            activeSlot = other;
+        }
+    }
+
+    // ----------------------------------------------------------- voice buttons
+    int EmberAudioProcessor::getVoiceRange() const
+    {
+        return voiceRangeOf (state.getRawParameterValue (pid::freq)->load());
+    }
+
+    EmberAudioProcessor::VoiceResult EmberAudioProcessor::setVoice (int voice)
+    {
+        voice = juce::jlimit (0, 2, voice);
+        const float hz[] { voiceLowHz, voiceMidHz, voiceHighHz };
+        const float thr[] { voiceLowThrDb, voiceMidThrDb, voiceHighThrDb };
+        const float freqNow = state.getRawParameterValue (pid::freq)->load();
+        const float thrNow = state.getRawParameterValue (pid::threshold)->load();
+        const auto presetValue = [this] (const char* id)
+        {
+            const auto it = presetValues.find (id);
+            return it != presetValues.end() ? it->second : std::numeric_limits<float>::quiet_NaN();
+        };
+        // a click on the voice that is already lit keeps the frequency AUTO found in that range (e.g. 7.2 kHz in MID)
+        if (fromAuto && std::abs (freqNow - presetValue (pid::freq)) < 1.0f && voiceRangeOf (freqNow) == voice)
+            return VoiceResult::keptAutoFrequency;
+
+        // The voice's threshold comes along (a deep voice's S sit lower against the voice) only while the threshold
+        // is still one of the voice values (the default is MID's): one set by hand, by a preset or by AUTO stays
+        bool atVoiceValue = false;
+        for (float t : thr)
+            atVoiceValue = atVoiceValue || std::abs (thrNow - t) < 0.05f;
+        const bool autoThreshold = fromAuto && std::abs (thrNow - presetValue (pid::threshold)) < 0.05f;
+        const bool moveThreshold = atVoiceValue && ! autoThreshold;
+
+        beginUndoStep (-1);   // one click = one undo step
+        const UndoGroup group (*this);
+        const auto set = [this] (const char* id, float realValue)
+        {
+            if (auto* p = state.getParameter (id))
+            {
+                p->beginChangeGesture();
+                p->setValueNotifyingHost (p->convertTo0to1 (realValue));
+                p->endChangeGesture();
+            }
+        };
+        set (pid::freq, hz[voice]);
+        if (moveThreshold)
+            set (pid::threshold, thr[voice]);
+        return moveThreshold || std::abs (thrNow - thr[voice]) < 0.05f ? VoiceResult::set : VoiceResult::setKeptThreshold;
+    }
+
     // ------------------------------------------------------------------- undo
+    EmberAudioProcessor::Snapshot EmberAudioProcessor::snapshot() const
+    {
+        Snapshot s;
+        s.current = currentSlot();
+        for (int i = 0; i < 2; ++i)
+        {
+            s.slots[i] = slots[i];
+            s.slotUsed[i] = slotUsed[i];
+        }
+        s.activeSlot = activeSlot;
+        return s;
+    }
+
+    void EmberAudioProcessor::restoreSnapshot (const Snapshot& s)
+    {
+        {
+            const UndoGroup group (*this);
+            ember::apply (state, s.current.values);
+        }
+        restoreMeta (s.current);   // the preset name, its "*" and the AUTO result come back with the values
+        if (s.restoresSlots)
+        {
+            const juce::ScopedLock sl (metaLock);
+            for (int i = 0; i < 2; ++i)
+            {
+                slots[i] = s.slots[i];
+                slotUsed[i] = s.slotUsed[i];
+            }
+            activeSlot = s.activeSlot;
+        }
+    }
+
     void EmberAudioProcessor::beginUndoStep (int parameterIndex)
     {
         if (undoGroupDepth > 0)
@@ -273,38 +586,37 @@ namespace ember
         lastUndoTime = now;
         if (sameEdit)
             return;
-        auto values = ember::capture (state);
-        if (! undoSteps.empty() && undoSteps.back() == values)
+        auto step = snapshot();
+        if (! undoSteps.empty() && undoSteps.back().current == step.current)
             return;   // the edit before changed nothing
         redoSteps.clear();
-        undoSteps.push_back (std::move (values));
+        undoSteps.push_back (std::move (step));
         if (undoSteps.size() > 100)
             undoSteps.erase (undoSteps.begin());
     }
 
     bool EmberAudioProcessor::canUndo() const
     {
-        const auto now = ember::capture (state);
+        const auto now = currentSlot();
         for (const auto& step : undoSteps)
-            if (step != now)
+            if (step.current != now)
                 return true;
         return false;
     }
 
     bool EmberAudioProcessor::undo()
     {
-        const auto now = ember::capture (state);
-        while (! undoSteps.empty() && undoSteps.back() == now)
+        const auto now = currentSlot();
+        while (! undoSteps.empty() && undoSteps.back().current == now)
             undoSteps.pop_back();   // an edit that changed nothing
         if (undoSteps.empty())
             return false;
-        redoSteps.push_back (now);
         const auto target = undoSteps.back();
         undoSteps.pop_back();
-        {
-            const UndoGroup group (*this);
-            ember::apply (state, target);
-        }
+        auto back = snapshot();
+        back.restoresSlots = target.restoresSlots;
+        redoSteps.push_back (std::move (back));
+        restoreSnapshot (target);
         lastUndoParam = -1;
         return true;
     }
@@ -313,13 +625,12 @@ namespace ember
     {
         if (redoSteps.empty())
             return false;
-        undoSteps.push_back (ember::capture (state));
         const auto target = redoSteps.back();
         redoSteps.pop_back();
-        {
-            const UndoGroup group (*this);
-            ember::apply (state, target);
-        }
+        auto back = snapshot();
+        back.restoresSlots = target.restoresSlots;
+        undoSteps.push_back (std::move (back));
+        restoreSnapshot (target);
         lastUndoParam = -1;
         return true;
     }
@@ -328,7 +639,9 @@ namespace ember
     {
         if (auto* p = state.getParameter (pid::listen); p != nullptr && p->getValue() > 0.0f)
         {
-            const UndoGroup group (*this);
+            std::optional<UndoGroup> group;
+            if (isMessageThread())
+                group.emplace (*this);
             p->beginChangeGesture();
             p->setValueNotifyingHost (0.0f);
             p->endChangeGesture();
@@ -373,7 +686,7 @@ namespace ember
 
     bool EmberAudioProcessor::isShowingAutoResult() const
     {
-        return autoPhase == AutoPhase::done && factoryIndex < 0 && userPresetName.isEmpty() && ! isPresetModified();
+        return autoPhase == AutoPhase::done && fromAuto && factoryIndex < 0 && userPresetName.isEmpty() && ! isPresetModified();
     }
 
     void EmberAudioProcessor::cancelAuto()
@@ -458,17 +771,9 @@ namespace ember
         if (autoRaisedAmount)
             set (pid::amount, autoBase.amount * 100.0f);
         set (pid::listen, 0.0f);
-        factoryIndex = -1;
-        userPresetName = {};
-        presetValues = ember::capture (state);
-        state.state.setProperty ("factoryPreset", -1, nullptr);
-        state.state.setProperty ("userPreset", juce::String(), nullptr);
-
-        // A = before, B = AUTO (active): one click on A takes AUTO back, A/B compares the two
-        slots[0] = before;
-        slots[1] = currentSlot();
-        slotUsed[0] = slotUsed[1] = true;
-        activeSlot = 1;
+        // ---- preset name and A/B (fix-ux): AUTO never overwrites a setting parked on the other slot, see assignAutoSlots
+        setPresetMeta (-1, {}, true);
+        assignAutoSlots (before);
     }
 
     juce::String EmberAudioProcessor::getAutoMessage() const
@@ -491,7 +796,10 @@ namespace ember
                                    "Set: from {0} kHz, S sounds −{1} dB, vowels stay untouched."),
                                { khz, number (lastAuto.expectedReductionDb, 1) })
                        + (autoRaisedAmount ? tr (" Amount stand zu tief und ist jetzt 50 %.", " Amount was too low and is now 50 %.") : juce::String())
-                       + tr (" Vorher liegt auf A.", " Before is on A.");
+                       + (autoBeforeSlot == 0   ? tr (" Vorher liegt auf A.", " Before is on A.")
+                          : autoBeforeSlot == 1 ? tr (" Vorher liegt auf B.", " Before is on B.")
+                                                : format (tr (" Vorher: Strg+Z. Deine Einstellung auf {0} bleibt.", " Before: Ctrl+Z. Your setting on {0} stays."),
+                                                          { activeSlot == 0 ? "B" : "A" }));
             }
             case AutoPhase::failed:
                 if (lastAuto.status == AutoResult::Status::noSibilance)
@@ -504,6 +812,7 @@ namespace ember
 
     void EmberAudioProcessor::timerCallback()
     {
+        applyPendingMeta();   // a state the host restored off the message thread
         pollAuto();
         updateAuto (juce::Time::getMillisecondCounterHiRes() * 0.001);
     }

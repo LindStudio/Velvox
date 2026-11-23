@@ -12,7 +12,7 @@
     --line: #1c2030;
     --text: #e6e7ec;
     --muted: #9a9db0;
-    --ember: #ff3b1f;
+    --ember: #ff3a6e;   /* EMBER pink (the plugin accent) */
   }
   * { box-sizing: border-box; }
   html { background: var(--bg); }
@@ -92,7 +92,7 @@
 <table>
   <tr><th>Element</th><th>Function</th></tr>
   <tr><td>Amount</td><td>How strongly EMBER works. 50 % is exactly what threshold and range set, 100 % is one and a half times that, 0 % turns processing off.</td></tr>
-  <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets where the S range starts: from 5 kHz (LOW), 6.2 kHz (MID) or 7.4 kHz (HIGH). The threshold is set to match (deep voices have softer S), unless AUTO has already set it.</td></tr>
+  <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets where the S range starts: from 5 kHz (LOW), 6.2 kHz (MID) or 7.4 kHz (HIGH). The threshold is set to match (deep voices have softer S) while it is still at a voice value (the default included). A threshold set by you, a preset or AUTO stays; the status line tells you briefly. After AUTO, a click on the voice that is already lit keeps the frequency AUTO found in that range. The voice whose range holds the frequency lights up (LOW up to 5.75 kHz, MID up to 7 kHz, HIGH above). One click is one undo step.</td></tr>
   <tr><td>DELTA</td><td>Hear only what is removed.</td></tr>
   <tr><td>REDUCTION</td><td>Shows how much quieter the S sounds are right now (0 to −12 dB, gain reduction).</td></tr>
 </table>
@@ -101,9 +101,9 @@
 <p>ADVANCED gives you access to every parameter.</p>
 <h3>Displays</h3>
 <ul>
-  <li><strong>Spectrum:</strong> The red S range shows where EMBER works. Drag its red edge to set the frequency (Shift = fine, wheel = step). The axis shows 1 to 20 kHz. The reduction history runs along the top.</li>
+  <li><strong>Spectrum:</strong> The pink S range shows where EMBER works. Drag its pink edge to set the frequency (Shift = fine, wheel = step). The axis shows 1 to 20 kHz. The reduction history runs along the top.</li>
   <li><strong>REDUCTION:</strong> How much is being removed right now, in dB.</li>
-  <li><strong>S LEVEL</strong> (right): level in the S range. The red line is the threshold; you can drag it (Shift = fine, wheel = step). A grey bar means Smart detection hears no S sound at the moment.</li>
+  <li><strong>S LEVEL</strong> (right): level in the S range in dB. The pink line is the threshold; you can drag it (Shift = fine, wheel = step, double-click = default). While you drag, its value in dB is shown next to it. A grey striped bar means Smart detection hears no S sound at the moment.</li>
 </ul>
 <h3>Controls</h3>
 <table>
@@ -130,7 +130,7 @@
 <h2 id="auto">4. AUTO</h2>
 <p>Play the vocal and click <strong>AUTO</strong> or click Ember.</p>
 <ul>
-  <li>Ember listens to about 12 seconds of singing (pauses are skipped, up to 30 seconds), holding his hand to his ear. He finishes on his own – also when you stop playback after at least 3 seconds of singing. <strong>CANCEL</strong> stops him. If no sound arrives, Ember tells you to press play.</li>
+  <li>Ember listens to 12 seconds of singing (pauses don't count), holding his hand to his ear. He finishes on his own – also when you stop playback after at least 3 seconds of singing. <strong>CANCEL</strong> stops him. If no sound arrives, Ember tells you to press play. If <strong>BYPASS</strong> is on, the status line tells you that you only hear the result once BYPASS is off.</li>
   <li>EMBER then tries settings by rendering the take:
     <ul>
       <li>EMBER finds the centre of this voice's S energy and sets the frequency just below it (between 4.5 and 9.5 kHz). The same voice gets almost the same frequency whichever part AUTO hears.</li>
@@ -140,7 +140,9 @@
       <li>Everything else stays as you set it (mode, detection, Amount, attack, lookahead, mix, output) – AUTO measures with it. Only an Amount below 25 % is set to 50 %.</li>
     </ul>
   </li>
-  <li>Your previous setting is then on <strong>A</strong>, the AUTO result on <strong>B</strong>. Click A to take AUTO back, or compare both.</li>
+  <li>Your previous setting stays on the slot you were on; the AUTO result goes to the other slot and becomes active. The first time this means: before on <strong>A</strong>, AUTO on <strong>B</strong>. Click A to take AUTO back, or compare both.</li>
+  <li>If you have already parked a different setting on the other slot, AUTO does not overwrite it: the result then goes into the active slot, and <span class="key">Ctrl</span>+<span class="key">Z</span> brings back your previous setting. The status line tells you where "before" is.</li>
+  <li>Undo takes AUTO back in one step, including the preset name and A/B.</li>
 </ul>
 <p>The result is subtle by design. If you want more, raise Amount.</p>
 <p>If EMBER finds too few S sounds, a message asks you to play a part with many S, Z or Sh sounds. Then start AUTO again.</p>
@@ -148,7 +150,7 @@
 <h2 id="smart">5. Smart detection explained simply</h2>
 <p>A classic de-esser reacts to anything that is loud in the high frequencies. That includes bright vowels, air in the voice and breaths – the voice then sounds dull or lispy.</p>
 <p>Smart detection therefore compares the S range with the body of the voice (250 Hz to 3 kHz). Only when the S range clearly stands out relative to the body is it a real S sound, and EMBER steps in. Bright vowels, air and breaths stay untouched.</p>
-<p>You can see this in the S LEVEL meter: when the bar is grey, Smart detection hears no S sound.</p>
+<p>You can see this in the S LEVEL meter: when the bar is grey and striped, Smart detection hears no S sound.</p>
 
 <h2 id="moods">6. Ember's moods</h2>
 <table>
@@ -165,18 +167,22 @@
 <p>The presets bar shows <strong>‹ preset name ›</strong>. Use the arrows to step through presets; click the name to open the menu.</p>
 <ul>
   <li><strong>Factory presets:</strong> Default, Gentle, Pop vocal, Rap, Deep voice, High voice, Backing vocals, Speech / podcast, Strong.</li>
-  <li><strong>Your presets</strong>, plus <strong>Save preset…</strong> and <strong>Open preset folder</strong>.</li>
+  <li><strong>Your presets</strong>, plus <strong>Save preset…</strong>, <strong>Rename preset</strong>, <strong>Delete preset</strong> (asks first; the file goes to the recycle bin) and <strong>Open preset folder</strong>.</li>
+  <li>From an AUTO setting, the right arrow goes to the first preset, the left arrow to the last.</li>
   <li>A <strong>*</strong> after the name means you have changed something since loading.</li>
   <li><strong>SAVE</strong> stores your own preset as <code>.emberpreset</code> in <code>Documents\Lind Audio\EMBER\Presets</code>.</li>
 </ul>
 <h3>A/B compare</h3>
-<p>Slots <strong>A</strong> and <strong>B</strong> let you compare two settings. B starts as a copy of A. <strong>A → B</strong> copies the settings of A to B.</p>
+<p>Slots <strong>A</strong> and <strong>B</strong> let you compare two settings. B starts as a copy of A. The copy button copies the active setting into the other slot: it reads <strong>A → B</strong> while A is active and <strong>B → A</strong> while B is active. A and B (and which one is active) are saved with the project. How AUTO fills the slots is described in <a href="#auto">section 4</a>.</p>
 <h3>Menu (≡ top right)</h3>
 <ul>
+  <li><strong>Undo</strong> (<span class="key">Ctrl</span>+<span class="key">Z</span>) and <strong>Redo</strong> (<span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">Z</span> or <span class="key">Ctrl</span>+<span class="key">Y</span>): every change to a control, a click on a voice, a loaded preset and AUTO are one step each. Undo also brings back the preset name and the *. Listening (Delta / S range) and BYPASS are not part of it.</li>
+  <li><strong>Window size:</strong> 75 / 100 / 125 / 150 / 200 % – remembered, like a size dragged with the bottom-right corner.</li>
   <li><strong>Language:</strong> system / Deutsch / English – remembered.</li>
   <li><strong>Open the manual</strong></li>
   <li><strong>Show Ember's tip again</strong></li>
-  <li><strong>About EMBER</strong></li>
+  <li><strong>Licence:</strong> shows the licence status, plus <strong>Enter licence key …</strong>, <strong>Release this computer</strong> (asks first) and the link to get a key.</li>
+  <li><strong>About EMBER</strong> (a click or <span class="key">Esc</span> closes it)</li>
 </ul>
 
 <h2 id="tips">8. Tips for great results</h2>
@@ -192,8 +198,11 @@
 <table>
   <tr><th>Action</th><th>Result</th></tr>
   <tr><td>Rest the mouse</td><td>Every control shows an info card.</td></tr>
-  <tr><td>Double-click</td><td>Resets the control to its default.</td></tr>
+  <tr><td>Double-click or <span class="key">Alt</span> + click</td><td>Resets the control to its default.</td></tr>
   <tr><td><span class="key">Shift</span> / <span class="key">Ctrl</span> + drag</td><td>Fine adjustment.</td></tr>
+  <tr><td>Mouse wheel</td><td>One step per notch, fine with <span class="key">Shift</span> / <span class="key">Ctrl</span>. Also works on the edge in the spectrum and on the threshold line.</td></tr>
+  <tr><td><span class="key">Ctrl</span>+<span class="key">Z</span> / <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">Z</span> / <span class="key">Ctrl</span>+<span class="key">Y</span></td><td>Undo / redo (when your host passes the keys on to the plugin; otherwise use the ≡ menu).</td></tr>
+  <tr><td>Drag the bottom-right corner</td><td>Make the window bigger or smaller (75 to 200 %); fixed steps under ≡ › Window size.</td></tr>
   <tr><td>Click the value</td><td>Type a value.</td></tr>
   <tr><td>Right-click</td><td>Context menu.</td></tr>
   <tr><td>BYPASS</td><td>Turns processing off; latency is kept so your track stays in sync.</td></tr>

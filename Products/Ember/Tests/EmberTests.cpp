@@ -7,6 +7,7 @@
 //   EmberTests --mascot-loops <dir>            website loops of Ember (listening, dancing with/without S sparks, idle, lispy, sleeping), 2x
 //   env EMBER_VOCALS=<dir or ;-list>    also runs AUTO on these real takes (report + sanity checks)
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <thread>
 #include "EmberEngine.h"
 #include "EmberAuto.h"
 #include "EmberParams.h"
@@ -1343,6 +1344,222 @@ namespace
         }
     }
 
+    // UX fixes 2026-11-23 (docs/products/ember-fixes/UX.md): voice buttons, undo with the preset name, A/B in the
+    // project and next to AUTO, preset stepping and files, state restored off the message thread
+    void testUxFixes()
+    {
+        Test t ("ux fixes: voice buttons, undo name, A/B saved + AUTO, preset stepping, preset files, threaded state");
+        const auto real = [] (EmberAudioProcessor& p, const char* id) { return p.state.getRawParameterValue (id)->load(); };
+        const auto setReal = [] (EmberAudioProcessor& p, const char* id, float v)
+        {
+            if (auto* prm = p.state.getParameter (id))
+            {
+                prm->beginChangeGesture();
+                prm->setValueNotifyingHost (prm->convertTo0to1 (v));
+                prm->endChangeGesture();
+            }
+        };
+        AutoResult fake;
+        fake.status = AutoResult::Status::ok;
+        fake.freq = 6500.0f;
+        fake.thresholdDb = -29.3f;
+        fake.rangeDb = 6.0f;
+        using VR = EmberAudioProcessor::VoiceResult;
+
+        // 1: one voice click = one undo step (frequency and threshold together)
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            check (p.setVoice (0) == VR::set, "LOW from the default");
+            near (real (p, pid::freq), voiceLowHz, 1.0, "LOW frequency");
+            near (real (p, pid::threshold), voiceLowThrDb, 0.05, "LOW threshold comes along");
+            check (p.undo(), "undo the voice");
+            near (real (p, pid::freq), voiceMidHz, 1.0, "frequency back in one step");
+            near (real (p, pid::threshold), voiceMidThrDb, 0.05, "threshold back in the same step");
+            check (! p.canUndo(), "and that was the only step");
+            check (p.redo() && std::abs (real (p, pid::threshold) - voiceLowThrDb) < 0.05f, "redo brings both");
+            p.setVoice (2);
+            near (real (p, pid::threshold), voiceHighThrDb, 0.05, "from one voice value to the next");
+        }
+        // 2: a threshold from a preset, by hand or from AUTO stays; the AUTO protection ends with a preset load
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.loadFactoryPreset (3);   // Rap: -34.5 dB
+            const float rapThr = real (p, pid::threshold);
+            check (p.setVoice (2) == VR::setKeptThreshold, "HIGH on Rap: reported as threshold kept");
+            near (real (p, pid::freq), voiceHighHz, 1.0, "HIGH frequency set");
+            near (real (p, pid::threshold), rapThr, 0.05, "the preset's threshold stays");
+            setReal (p, pid::threshold, -20.0f);
+            p.setVoice (0);
+            near (real (p, pid::threshold), -20.0, 0.05, "a hand-set threshold stays");
+
+            p.applyAuto (fake);
+            check (p.getVoiceRange() == 1, "AUTO at 6.5 kHz lights MID");
+            check (p.setVoice (1) == VR::keptAutoFrequency, "MID again keeps AUTO's frequency");
+            near (real (p, pid::freq), 6500.0, 1.0, "AUTO frequency kept");
+            p.setVoice (0);
+            near (real (p, pid::threshold), -29.3, 0.05, "AUTO's threshold stays on another voice");
+            p.loadFactoryPreset (0);
+            setReal (p, pid::freq, 6500.0f);   // by hand onto AUTO's old frequency
+            p.setVoice (1);
+            near (real (p, pid::freq), voiceMidHz, 1.0, "after a preset load MID sets its frequency (no stale AUTO protection)");
+            // the protection belongs to the setting, not to the last AUTO run: it comes back with A/B and a project
+            p.applyAuto (fake);
+            juce::MemoryBlock mb;
+            p.getStateInformation (mb);
+            EmberAudioProcessor q;
+            q.setStateInformation (mb.getData(), (int) mb.getSize());
+            check (q.setVoice (1) == VR::keptAutoFrequency, "a project with an AUTO result: MID keeps AUTO's frequency");
+            p.switchSlot (1 - p.getActiveSlot());
+            setReal (p, pid::freq, 6500.0f);
+            check (p.setVoice (1) != VR::keptAutoFrequency && std::abs (real (p, pid::freq) - voiceMidHz) < 1.0f, "the slot from before AUTO is not protected");
+        }
+        // 3: the borders between the voices lie away from every factory preset (and the voices themselves)
+        {
+            EmberAudioProcessor p;
+            for (int i = 0; i < (int) factoryPresets().size(); ++i)
+            {
+                p.loadFactoryPreset (i);
+                const float hz = real (p, pid::freq);
+                check (std::abs (hz - EmberAudioProcessor::voiceLowMidHz) > 100.0f && std::abs (hz - EmberAudioProcessor::voiceMidHighHz) > 100.0f,
+                       juce::String (factoryPresets()[(size_t) i].nameEn) + ": " + juce::String (hz, 0) + " Hz clearly inside a voice range");
+            }
+            check (EmberAudioProcessor::voiceRangeOf (voiceLowHz) == 0 && EmberAudioProcessor::voiceRangeOf (voiceMidHz) == 1
+                       && EmberAudioProcessor::voiceRangeOf (voiceHighHz) == 2, "each voice lights its own button");
+            for (int v = 0; v < 3; ++v)
+            {
+                p.setVoice (v);
+                check (p.getVoiceRange() == v, "voice " + juce::String (v) + " after the parameter round trip");
+            }
+        }
+        // 5: undo of a preset load / AUTO brings the name, the "*" and the A/B slots back
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.loadFactoryPreset (2);
+            const auto popName = p.getPresetName();
+            p.loadFactoryPreset (8);
+            check (p.undo() && p.getPresetName() == popName && ! p.isPresetModified(), "undo a preset: its name and no *");
+            check (p.redo() && p.getPresetName() == presetName (factoryPresets()[8]), "redo: the other name");
+            p.applyAuto (fake);
+            check (p.getPresetName() == juce::String ("AUTO-Einstellung") && p.getActiveSlot() == 1, "AUTO on B");
+            check (p.undo(), "undo AUTO");
+            check (p.getPresetName() == presetName (factoryPresets()[8]) && ! p.isPresetModified(), "undo AUTO: the preset name before, no *");
+            check (p.getActiveSlot() == 0, "undo AUTO: A/B as before");
+            check (p.redo() && p.getActiveSlot() == 1 && p.getPresetName() == juce::String ("AUTO-Einstellung"), "redo AUTO: B and the AUTO name");
+            setReal (p, pid::range, 11.0f);
+            check (p.undo() && p.getActiveSlot() == 1, "an ordinary undo does not switch A/B");
+        }
+        // 6: AUTO never overwrites a setting parked on the other slot
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.switchSlot (1);
+            setReal (p, pid::threshold, -44.0f);   // parked on B
+            p.switchSlot (0);
+            p.applyAuto (fake);
+            check (p.getActiveSlot() == 0 && p.getAutoBeforeSlot() == -1, "B parked: the result goes into A");
+            p.switchSlot (1);
+            near (real (p, pid::threshold), -44.0, 0.05, "B kept the parked setting");
+            p.switchSlot (0);
+            near (real (p, pid::threshold), -29.3, 0.05, "A holds the AUTO result");
+            p.undo();
+            near (real (p, pid::threshold), voiceMidThrDb, 0.05, "the setting before is one undo away");
+        }
+        // 7: A/B and the active slot are saved with the project
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.loadFactoryPreset (1);
+            p.switchSlot (1);
+            p.loadFactoryPreset (4);
+            setReal (p, pid::range, 9.0f);
+            juce::MemoryBlock mb;
+            p.getStateInformation (mb);
+            EmberAudioProcessor q;
+            q.setStateInformation (mb.getData(), (int) mb.getSize());
+            check (q.getActiveSlot() == 1, "active slot B restored");
+            near (real (q, pid::range), 9.0, 0.05, "B's values");
+            check (q.getPresetName() == presetName (factoryPresets()[4]), "B's preset name");
+            q.switchSlot (0);
+            check (q.getPresetName() == presetName (factoryPresets()[1]) && ! q.isPresetModified(), "A: its preset, unchanged");
+            near (real (q, pid::threshold), -28.0, 0.05, "A's values");
+            q.switchSlot (1);
+            near (real (q, pid::range), 9.0, 0.05, "and back to B");
+            // the saved state carries no stray copy of the A/B data into the parameter tree
+            juce::MemoryBlock again;
+            q.getStateInformation (again);
+            const auto xml = juce::AudioProcessor::getXmlFromBinary (again.getData(), (int) again.getSize());
+            int abCount = 0;
+            if (xml != nullptr)
+                for (auto* e : xml->getChildIterator())
+                    abCount += e->hasTagName ("EmberAB") ? 1 : 0;
+            check (abCount == 1, "one A/B block after a round trip");
+        }
+        // 10: stepping from an AUTO setting starts at the first preset (forward) / the last (back)
+        {
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            p.applyAuto (fake);
+            check (p.getFactoryIndex() < 0, "AUTO setting is no preset");
+            p.stepPreset (1);
+            check (p.getFactoryIndex() == 0, "next from AUTO = the first factory preset");
+            p.applyAuto (fake);
+            p.stepPreset (-1);
+            const bool noUsers = userPresets().isEmpty();
+            check (noUsers ? p.getFactoryIndex() == (int) factoryPresets().size() - 1 : p.getFactoryIndex() < 0, "previous from AUTO = the last preset");
+        }
+        // 14: rename / delete user preset files
+        {
+            const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_ux_presets");
+            dir.deleteRecursively();
+            EmberAudioProcessor p;
+            check (p.saveUserPreset (dir.getChildFile ("Alt")), "save");
+            const auto alt = dir.getChildFile (juce::String ("Alt") + presetExtension);
+            check (p.saveUserPreset (dir.getChildFile ("Belegt")), "save a second");
+            check (p.renameUserPreset (alt, "Belegt").isNotEmpty() && alt.existsAsFile(), "rename onto an existing preset is refused");
+            check (p.renameUserPreset (alt, "   ").isNotEmpty(), "an empty name is refused");
+            check (p.loadUserPreset (alt), "load Alt");
+            check (p.renameUserPreset (alt, "Neu: Lead").isEmpty(), "rename (an illegal character is dropped)");
+            check (! alt.existsAsFile(), "old file gone");
+            const auto renamed = dir.findChildFiles (juce::File::findFiles, false, "Neu*");
+            check (renamed.size() == 1 && p.getPresetName() == renamed[0].getFileNameWithoutExtension(), "the bar shows the new name");
+            if (renamed.size() == 1)
+            {
+                check (p.deleteUserPreset (renamed[0]).isEmpty() && ! renamed[0].existsAsFile(), "delete");
+                check (p.deleteUserPreset (renamed[0]).isEmpty(), "deleting a file that is gone is no error");
+            }
+            check (p.renameUserPreset (alt, "X").isNotEmpty(), "renaming a missing file says so");
+            dir.deleteRecursively();
+        }
+        // 19: a state restored off the message thread: parameters at once, the rest on the message thread
+        {
+            EmberAudioProcessor src;
+            src.prepareToPlay (48000.0, 512);
+            src.loadFactoryPreset (5);
+            src.switchSlot (1);
+            src.loadFactoryPreset (2);
+            juce::MemoryBlock mb;
+            src.getStateInformation (mb);
+
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            setReal (p, pid::range, 12.0f);   // an undo step that belongs to the old state
+            std::thread worker ([&] { p.setStateInformation (mb.getData(), (int) mb.getSize()); });
+            worker.join();
+            near (real (p, pid::threshold), -32.0, 0.05, "parameters restored at once");
+            juce::MemoryBlock saved;
+            p.getStateInformation (saved);   // before the message thread took over: the restored A/B are saved
+            EmberAudioProcessor q;
+            q.setStateInformation (saved.getData(), (int) saved.getSize());
+            check (q.getActiveSlot() == 1 && q.getPresetName() == presetName (factoryPresets()[2]), "pending meta is what gets saved");
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (300);   // the processor's timer takes it over
+            check (p.getActiveSlot() == 1 && p.getPresetName() == presetName (factoryPresets()[2]), "taken over on the message thread");
+            check (! p.canUndo(), "the old undo steps are gone");
+        }
+    }
+
     void testEditor (const juce::File& snapshotDir)
     {
         Test t ("editor: both views, scaling, languages");
@@ -2125,6 +2342,7 @@ int main (int argc, char** argv)
     testSIntoVowel();
     testPresets();
     testUsability();
+    testUxFixes();
     testMascotClips();
     testRig();
     testLiveBrain();

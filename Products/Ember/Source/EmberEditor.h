@@ -33,12 +33,13 @@ namespace ember
     class ReductionMeter final : public juce::Component
     {
     public:
-        void setValue (float db) { value = db; repaint(); }
+        // From the editor's timer; the peak holds for a second and then falls 4.5 dB/s (by the clock, not per frame)
+        void setValue (float db);
         void paint (juce::Graphics&) override;
         static constexpr float maxDb = 12.0f;
     private:
-        float value = 0.0f, peakHold = 0.0f;
-        int holdTicks = 0;
+        float value = 0.0f, peakHold = 0.0f, holdLeft = 0.0f;
+        double lastUpdate = 0.0;
     };
 
     // ADVANCED: detector level of the S band with the threshold as a draggable line
@@ -63,6 +64,7 @@ namespace ember
         bool nearHandle (juce::Point<float>) const;   // only the threshold line is grabbed (a click elsewhere does nothing)
         EmberAudioProcessor& processor;
         float level = -100.0f, hold = -100.0f, weight = 0.0f;
+        double lastUpdate = 0.0;
         float lastDragY = 0.0f, dragDb = 0.0f;   // the value follows unrounded while dragging
         bool dragging = false, hover = false;
     };
@@ -105,6 +107,7 @@ namespace ember
     class EmberLookAndFeel final : public vocalypse::ui::VocalypseLookAndFeel
     {
     public:
+        EmberLookAndFeel() { setColour (vocalypse::ui::LicenceLock::accentColourId, look::accent); }   // the lock card in pink
         void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& background,
                                    bool highlighted, bool down) override;
     };
@@ -143,6 +146,9 @@ namespace ember
         void tickForTest();
         EmberPanel& getPanel() noexcept { return *panel; }
         void setLanguage (const juce::String& preference);   // "system" / "de" / "en"; rebuilds the panel
+        void setScalePercent (int percent);                  // ≡ > Size (75 - 200 %); remembered like a dragged size
+        int getScalePercent() const;
+        bool keyPressed (const juce::KeyPress&) override;     // undo / redo also when the editor itself has the focus
 
     private:
         void rebuildPanel();
@@ -177,10 +183,14 @@ namespace ember
         void timerCallback() override;
         void layout();
         void autoClicked();
-        void setVoice (float hz, float thresholdDb);
+        void setVoice (int voice);
         void refreshButtons();
         void showPresetMenu();
         void savePresetAs();
+        void renamePreset (const juce::File&);
+        void deletePreset (const juce::File&);
+        void showNotice (const juce::String&);   // a short note in the status line (a few seconds)
+        void warn (const juce::String& title, const juce::String& message);
         void showMainMenu();
         void addInfo (juce::Component&, const juce::String& title, const juce::String& text);
 
@@ -228,6 +238,9 @@ namespace ember
         std::vector<std::unique_ptr<vocalypse::ui::HoverInfo>> infos;
         std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
         std::unique_ptr<juce::FileChooser> chooser;
+        std::unique_ptr<juce::AlertWindow> dialog;   // rename preset (owned here: it uses the editor's look)
+        juce::String notice;
+        double noticeUntil = 0.0;
         bool advanced = false;
         EmberAudioProcessor::AutoPhase lastPhase = EmberAudioProcessor::AutoPhase::idle;
         double messageUntil = 0.0, lastSignal = -1.0e9;
