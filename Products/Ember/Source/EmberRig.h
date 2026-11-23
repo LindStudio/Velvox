@@ -4,6 +4,7 @@
 #include <array>
 #include <functional>
 #include <map>
+#include <memory>
 #include <vector>
 
 // Ember as a live rig (2026-11-17, "Animations-Engine statt Video"): the figure is drawn every frame from a few parts
@@ -30,7 +31,10 @@ namespace ember
     class MascotRig
     {
     public:
-        static const MascotRig& get();                 // loaded once, shared by every window
+        // Loaded once, shared by every window and freed with the last one (never a static juce::Image: releasing
+        // images at DLL unload hung FL Studio, VOCALYPSE 2026-11-03). Each RigRenderer holds it.
+        static std::shared_ptr<const MascotRig> acquire();
+        static const MascotRig& get();                 // the one held right now (a RigRenderer or acquire() holds it)
 
         struct Part { juce::Image image; juce::Rectangle<float> box; };
         struct Mesh
@@ -123,6 +127,7 @@ namespace ember
         juce::Image faceImage;
         FaceKey faceFor;
 
+        std::shared_ptr<const MascotRig> rigHold = MascotRig::acquire();   // made on the message thread
         juce::Image figure, ring;
         std::vector<float> dist, buf, z;     // the outline's distance transform
         std::vector<int> v;

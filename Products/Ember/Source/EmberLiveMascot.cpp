@@ -1,6 +1,7 @@
 #include "EmberLiveMascot.h"
 #include "Text/I18n.h"
 #include <cmath>
+#include <cstring>
 
 // The behaviour follows the approved browser prototype (tools/mascot/ember_live_prototype_template.html, v17):
 // brain(), triggerS / chomp, talkStep, the idle actions, blinking. Comments name the prototype's parts.
@@ -55,7 +56,7 @@ namespace ember
         headY.kick (90 * k); head.kick ((rnd.nextBool() ? -1.0f : 1.0f) * 14 * k); squash.kick (1.8f * k);
         earL.kick (-70 * k); earR.kick (70 * k);
         lowLid.v = std::max (lowLid.v, 0.55f);                                // pleased squint
-        for (int i = 0, n = 2 + juce::roundToInt (4 * e.strength); i < n; ++i)
+        for (int i = 0, n = fewer ? 1 + juce::roundToInt (2 * e.strength) : 2 + juce::roundToInt (4 * e.strength); i < n; ++i)
             fx.push_back ({ Fx::crumb, e.at, { (rnd.nextFloat() - 0.5f) * 160, -60 - rnd.nextFloat() * 120 }, 0, 0.5f + rnd.nextFloat() * 0.3f, 3 + rnd.nextFloat() * 3 });
         if (e.db > 9)
             hot = std::min (1.0f, hot + 0.5f);
@@ -354,6 +355,24 @@ namespace ember
         std::atomic<int> showingViews { 0 };   // Ember windows open in this process (all instances in a host)
     }
 
+    bool emberHostWindowHidden (void* nativeHandle);
+
+    bool LiveMascotView::hostWindowHidden() const
+    {
+        auto* peer = getPeer();
+        return peer != nullptr && emberHostWindowHidden (peer->getNativeHandle());
+    }
+
+    AnimationLevel animationLevelFromString (const juce::String& s)
+    {
+        return s == "reduced" ? AnimationLevel::reduced : (s == "off" ? AnimationLevel::off : AnimationLevel::full);
+    }
+
+    juce::String toString (AnimationLevel l)
+    {
+        return l == AnimationLevel::reduced ? "reduced" : (l == AnimationLevel::off ? "off" : "full");
+    }
+
     struct LiveMascotView::Drawer final : juce::Thread
     {
         explicit Drawer (LiveMascotView& v) : juce::Thread ("Ember drawing"), view (v) {}
@@ -381,7 +400,11 @@ namespace ember
     LiveMascotView::LiveMascotView()
     {
         setOpaque (false);
-        MascotRig::get();      // loaded here, on the message thread, before the drawing thread reads it
+        {
+            juce::GlyphArrangement ga;
+            ga.addLineOfText (juce::FontOptions (100.0f, juce::Font::bold), "S", 0, 0);
+            ga.createPath (sGlyph);
+        }
         lastTick = juce::Time::getMillisecondCounterHiRes();
         drawer = std::make_unique<Drawer> (*this);
         drawer->startThread (juce::Thread::Priority::normal);
@@ -405,24 +428,36 @@ namespace ember
         {
             const juce::ScopedLock fl (frameLock);
             back = front == 0 ? 1 : 0;       // never the one paint() may be showing
+            if (backdropPending)
+            {
+                backdrop = pendingBackdrop;
+                pendingBackdrop = {};
+                backdropPending = false;
+            }
         }
         const auto t0 = juce::Time::getMillisecondCounterHiRes();
         // the square stage inside the view holds the figure; the frame covers the whole view (the seal is wider)
         const auto area = bounds.withSizeKeepingCentre (std::min (bounds.getWidth(), bounds.getHeight()), bounds.getHeight());
-        renderer.renderInto (figure, area, pose, scale);
+        // the figure is drawn again only when it changed (animation off, or the same pose twice)
+        if (! figure.isValid() || figureArea != area || figureScale != scale || std::memcmp (&figurePose, &pose, sizeof (RigPose)) != 0)
+        {
+            renderer.renderInto (figure, area, pose, scale);
+            figurePose = pose; figureArea = area; figureScale = scale;
+        }
         const auto tFig = juce::Time::getMillisecondCounterHiRes();
         double floorMs = 0, runesMs = 0;
         const int w = std::max (1, juce::roundToInt (bounds.getWidth() * scale)), h = std::max (1, juce::roundToInt (bounds.getHeight() * scale));
         auto& out = frames[back];
+        const bool wallFills = backdrop.isValid() && backdrop.getWidth() == w && backdrop.getHeight() == h;
         if (out.getWidth() != w || out.getHeight() != h)
             out = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
-        else
-            out.clear (out.getBounds());
+        else if (! wallFills)
+            out.clear (out.getBounds());     // (the wall is opaque: copying it sets every pixel anyway)
         {
             juce::Graphics g (out);
             if (backdrop.isValid())
             {
-                if (backdrop.getWidth() == w && backdrop.getHeight() == h)
+                if (wallFills)
                     g.drawImageAt (backdrop, 0, 0);
                 else
                     g.drawImage (backdrop, juce::Rectangle<float> (0.0f, 0.0f, (float) w, (float) h));
@@ -441,22 +476,31 @@ namespace ember
                 seal::drawBrazier (g, { bounds.getRight() - 28.0f, bounds.getY() + 72.0f }, sc, 2);
                 runesMs += juce::Time::getMillisecondCounterHiRes() - tb;
                 const auto tf = juce::Time::getMillisecondCounterHiRes();
-                const bool fresh = floorLayer.getWidth() != w || floorLayer.getHeight() != h;
-                if (fresh || frameCount++ % 4 == 0)
+                // the calm floor in a layer of its own, only as big as what it draws (the light pool, the rings, the
+                // light pillars rising 260 px from the star's points), placed on whole pixels: the same pixels as a
+                // layer the size of the frame, with far less to clear and copy
+                const auto floorBox = juce::Rectangle<float> (centre.x - rx * 1.08f, centre.y - ry * 0.873f - 260.0f,
+                                                              rx * 2.16f, ry * 0.873f + 260.0f + ry * 1.15f).expanded (14.0f);
+                const auto px = juce::Rectangle<float> (floorBox.getX() * scale, floorBox.getY() * scale, floorBox.getWidth() * scale, floorBox.getHeight() * scale)
+                                    .getSmallestIntegerContainer().getIntersection ({ 0, 0, w, h });
+                const bool fresh = floorLayer.getWidth() != px.getWidth() || floorLayer.getHeight() != px.getHeight() || floorAt != px.getPosition();
+                if (! px.isEmpty() && (fresh || frameCount++ % 4 == 0))
                 {
                     if (fresh)
-                        floorLayer = juce::Image (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
+                        floorLayer = juce::Image (juce::Image::ARGB, px.getWidth(), px.getHeight(), true, juce::SoftwareImageType());
                     else
                         floorLayer.clear (floorLayer.getBounds());
+                    floorAt = px.getPosition();
                     juce::Graphics fg (floorLayer);
-                    fg.addTransform (juce::AffineTransform::scale (scale));
+                    fg.addTransform (juce::AffineTransform::scale (scale).translated ((float) -px.getX(), (float) -px.getY()));
                     seal::drawFloor (fg, centre, rx, ry, sc);
                 }
+                if (floorLayer.isValid())
                 {
-                    juce::Graphics::ScopedSaveState px (g);
+                    juce::Graphics::ScopedSaveState pxs (g);
                     g.setOrigin (0, 0);
                     g.addTransform (juce::AffineTransform::scale (1.0f / scale));   // back to pixels: a plain copy
-                    g.drawImageAt (floorLayer, 0, 0);
+                    g.drawImageAt (floorLayer, floorAt.x, floorAt.y);
                 }
                 seal::drawFloorLive (g, centre, rx, ry, sc);
                 floorMs += juce::Time::getMillisecondCounterHiRes() - tf;
@@ -472,7 +516,7 @@ namespace ember
             g.setOpacity (1.0f);   // images take the opacity of the last colour (the shadow's 28 % made him see-through)
             {
                 // the figure was drawn at exactly this pixel size: copied, not resampled
-                juce::Graphics::ScopedSaveState px (g);
+                juce::Graphics::ScopedSaveState pxs (g);
                 g.addTransform (juce::AffineTransform::scale (1.0f / scale));
                 g.drawImageAt (figure, juce::roundToInt (area.getX() * scale), juce::roundToInt (area.getY() * scale));
             }
@@ -497,18 +541,22 @@ namespace ember
         front = back;
         frontArea = bounds;
         frontScale = scale;
+        ++frameSerial;
     }
 
     void LiveMascotView::setBackdrop (const juce::Image& wall, float scale)
     {
+        // handed over, not drawn here: the drawing thread may be in the middle of a frame (this never waits for it)
+        const auto copy = wall.isValid() ? juce::SoftwareImageType().convert (wall) : juce::Image();
         {
-            const juce::ScopedLock rl (renderLock);
-            backdrop = wall.isValid() ? juce::SoftwareImageType().convert (wall) : juce::Image();
-            backdropScale = scale;
             const juce::ScopedLock fl (frameLock);
-            front = -1;
+            pendingBackdrop = copy;
+            backdropPending = true;
         }
-        setOpaque (backdrop.isValid());
+        paintBackdrop = wall;
+        backdropScale = scale;
+        stillKey.clear();
+        setOpaque (copy.isValid());
         repaint();
     }
 
@@ -519,6 +567,8 @@ namespace ember
         // on the seal he stands a little higher and smaller, so the circle fits under his feet
         renderer.fitHeight = on ? 0.80f : 0.86f;
         renderer.fitFeet = on ? 0.86f : 0.97f;
+        figure = {};
+        stillKey.clear();
         const juce::ScopedLock fl (frameLock);
         front = -1;
     }
@@ -531,17 +581,21 @@ namespace ember
     seal::Scene LiveMascotView::scene() const
     {
         seal::Scene sc;
+        const auto level = getAnimationLevel();
+        sc.on = ! input.bypass;
+        sc.calm = level != AnimationLevel::full;
+        if (level == AnimationLevel::off)
+            return sc;          // a still seal: no time, no S, no heat
         sc.t = clock;
         sc.sinceS = sinceSwallow;
         sc.heat = heat;
-        sc.on = ! input.bypass;
         return sc;
     }
 
     // 60 frames a second while he is the one being looked at; 30 when the host's window is not in front, the cursor
     // has been away from the plugin for a few seconds, several Ember windows are open, or this machine needs more
-    // than 14 ms a frame (Jakob 2026-11-19: ok)
-    void LiveMascotView::updateRate()
+    // than 14 ms a frame (Jakob 2026-11-19: ok). Animation reduced: 30; off: only a few looks a second for changes.
+    void LiveMascotView::updateRate (AnimationLevel level)
     {
         const double now = juce::Time::getMillisecondCounterHiRes();
         auto* top = getTopLevelComponent();
@@ -551,9 +605,13 @@ namespace ember
             lastActive = now;
         const bool active = now - lastActive < 3000.0;
         const double ms = renderMs.load();
-        int hz = ms > 14.0 ? 30 : (ms < 9.0 ? 60 : currentHz);
-        if (! active || showingViews.load() > 1)
+        int hz = ms > 14.0 ? 30 : (ms < 9.0 ? 60 : (currentHz >= 30 ? currentHz : 60));
+        if (! active || showingViews.load() > 1 || level == AnimationLevel::reduced)
             hz = 30;
+        if (level == AnimationLevel::off)
+            hz = 4;
+        else if (fixedHzForTest.load() > 0)
+            hz = fixedHzForTest.load();
         if (hz != currentHz) { currentHz = hz; startTimerHz (hz); }
     }
 
@@ -562,7 +620,10 @@ namespace ember
         if (text != bubble)
         {
             bubble = text;
-            brain.say (text);
+            if (getAnimationLevel() == AnimationLevel::off)
+                repaint();      // he does not speak: the bubble just shows
+            else
+                brain.say (text);
         }
     }
 
@@ -573,20 +634,60 @@ namespace ember
         return r.withSizeKeepingCentre (std::min (r.getWidth(), r.getHeight()), r.getHeight());
     }
 
+    void LiveMascotView::postFrame (const RigPose& pose, const seal::Scene& sc)
+    {
+        {
+            const juce::ScopedLock fl (frameLock);
+            job = { pose, getLocalBounds().toFloat(), renderScale > 0.0f ? renderScale : 1.0f, sc, true };
+        }
+        drawer->wake.signal();
+        repaint();
+    }
+
     void LiveMascotView::timerCallback()
     {
         const double now = juce::Time::getMillisecondCounterHiRes();
         const float dt = (float) ((now - lastTick) * 0.001);
         lastTick = now;
-        const bool showing = isShowing();
+        // hidden, minimised (also the host's whole window), or under the licence card: nothing is drawn, the timer
+        // only looks a few times a second whether he can be seen again
+        const bool showing = isShowing() && ! covered && ! hostWindowHidden();
         if (showing != counted)
         {
             counted = showing;
             showing ? ++showingViews : --showingViews;
         }
         if (! showing)
+        {
+            if (currentHz != 5) { currentHz = 5; startTimerHz (5); }
             return;
-        updateRate();
+        }
+        const auto level = getAnimationLevel();
+        updateRate (level);
+        // a new pixel density (another screen, the window being resized): frames keep the old one until it has
+        // stayed the same for a moment; paint stretches them meanwhile, so resizing never waits for a new frame
+        if (screenScale > 0.0f && screenScale != wantedScale) { wantedScale = screenScale; wantedSince = now; }
+        if (wantedScale > 0.0f && renderScale != wantedScale && (renderScale == 0.0f || now - wantedSince > 200.0))
+            renderScale = wantedScale;
+
+        if (level == AnimationLevel::off)
+        {
+            // a still picture: drawn again only when something it shows changes
+            const auto key = juce::String ((int) input.bypass) + "|" + getLocalBounds().toString() + "|" + juce::String (renderScale)
+                             + "|" + juce::String ((int) sealStage) + "|" + juce::String (backdropScale);
+            if (key != stillKey || shownLevel != level)
+            {
+                stillKey = key;
+                shownLevel = level;
+                postFrame (RigPose {}, scene());
+            }
+            return;
+        }
+        if (shownLevel == AnimationLevel::off)
+            repaint();          // the bubble and the S come back
+        shownLevel = level;
+        stillKey.clear();
+        brain.setFewerParticles (level == AnimationLevel::reduced);
         // he looks at the cursor (or the knob being turned) when it moves anywhere in the window
         const auto toArea = toStage();
         const auto mouse = getMouseXYRelative();
@@ -595,12 +696,7 @@ namespace ember
             brain.lookAt (juce::Point<float> ((float) mouse.x, (float) mouse.y).transformedBy (toArea.inverted()), 3.0f);
         lastMouse = mouse;
         tick (dt);
-        {
-            const juce::ScopedLock fl (frameLock);
-            job = { brain.pose(), getLocalBounds().toFloat(), screenScale, scene(), true };
-        }
-        drawer->wake.signal();
-        repaint();
+        postFrame (brain.pose(), scene());
     }
 
     void LiveMascotView::tick (float dt)
@@ -621,37 +717,63 @@ namespace ember
     void LiveMascotView::paint (juce::Graphics& g)
     {
         const auto area = stageArea();
-        if (area.isEmpty() || ! MascotRig::get().isValid())
+        if (area.isEmpty() || ! rig->isValid())
             return;
         // drawn at the screen's real pixel density (Windows 125 / 150 / 200 %, editor zoom): he was drawn at 1x and
-        // the screen scaled him up, which looked pixelated (Jakob 2026-11-17)
+        // the screen scaled him up, which looked pixelated (Jakob 2026-11-17). Above 2x the difference cannot be seen.
         float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
         if (! (scale > 0.25f)) scale = 1.0f;
-        scale = juce::jlimit (1.0f, 3.0f, scale);
-        const auto pose = brain.pose();
+        scale = juce::jlimit (1.0f, maxRenderScale, scale);
+        const bool still = getAnimationLevel() == AnimationLevel::off;
+        const auto pose = still ? RigPose {} : brain.pose();
         const auto bounds = getLocalBounds().toFloat();
-        // off screen (snapshots, tests) or nothing fitting drawn yet (first frame, new size, other screen): drawn here
-        // and now; otherwise the drawing thread's newest frame
+        // On screen the drawing thread's newest frame is shown, stretched while the size has just changed: the message
+        // thread never waits for the drawing thread (a frame takes 3-15 ms). Only the very first frame is drawn here,
+        // and only if the drawing thread is free. Off screen (snapshots, tests): drawn here and now.
         const bool onScreen = getPeer() != nullptr;
         if (onScreen)
             screenScale = scale;
-        bool fits;
+        bool fits, any;
         {
             const juce::ScopedLock fl (frameLock);
             fits = front >= 0 && frontArea == bounds && frontScale == scale;
+            any = front >= 0;
         }
-        if (! onScreen || ! fits)
+        if (! onScreen && ! fits)
             renderFrame (pose, bounds, scale, scene());
+        else if (onScreen && ! any)
+        {
+            const juce::ScopedTryLock rl (renderLock);
+            if (rl.isLocked())
+                renderFrame (pose, bounds, scale, scene());
+        }
         {
             const juce::ScopedLock fl (frameLock);
-            if (front >= 0)
+            if (front >= 0 && frameSerial != shownSerial)
             {
-                juce::Graphics::ScopedSaveState keep (g);
-                g.setOpacity (1.0f);
-                g.drawImage (frames[front], frontArea, juce::RectanglePlacement::stretchToFit);
+                // into the screen's own image, in place: a memory image would be uploaded as a new texture every time
+                const auto& src = frames[front];
+                if (screen.getWidth() != src.getWidth() || screen.getHeight() != src.getHeight())
+                    screen = juce::Image (juce::Image::ARGB, src.getWidth(), src.getHeight(), false, juce::NativeImageType());
+                {
+                    const juce::Image::BitmapData from (src, juce::Image::BitmapData::readOnly);
+                    juce::Image::BitmapData to (screen, juce::Image::BitmapData::writeOnly);
+                    for (int y = 0; y < src.getHeight(); ++y)
+                        std::memcpy (to.getLinePointer (y), from.getLinePointer (y), (size_t) src.getWidth() * 4);
+                }
+                shownSerial = frameSerial;
             }
         }
-        paintEffects (g);
+        if (screen.isValid())
+        {
+            juce::Graphics::ScopedSaveState keep (g);
+            g.setOpacity (1.0f);
+            g.drawImage (screen, bounds, juce::RectanglePlacement::stretchToFit);
+        }
+        else if (paintBackdrop.isValid())
+            g.drawImage (paintBackdrop, bounds, juce::RectanglePlacement::stretchToFit);
+        if (! still)
+            paintEffects (g);
         paintBubble (g);
     }
 
@@ -670,10 +792,8 @@ namespace ember
             const auto pos = a * ((1 - q) * (1 - q)) + c * (2 * (1 - q) * q) + b * (q * q);
             const float size = e.size * (1 - 0.65f * std::max (0.0f, (p - 0.78f) / 0.22f)) * std::min (1.0f, p * 6) * k;
             const auto at = pos.transformedBy (toArea);
-            juce::GlyphArrangement ga;
-            ga.addLineOfText (juce::FontOptions (size, juce::Font::bold), "S", 0, 0);
-            juce::Path s;
-            ga.createPath (s);
+            auto s = sGlyph;   // the glyph at 100 px, made once
+            s.applyTransform (juce::AffineTransform::scale (size / 100.0f));
             const auto bb = s.getBounds();
             const auto tf = juce::AffineTransform::translation (-bb.getCentreX(), -bb.getCentreY()).rotated (e.spin * (1 - p)).translated (at);
             g.setColour (juce::Colour (0xff2a0a12));
@@ -742,18 +862,24 @@ namespace ember
     void LiveMascotView::paintBubble (juce::Graphics& g)
     {
         // while he says something it types in; otherwise the editor's bubble stays as it is
-        const auto text = brain.isTalking() ? brain.shownText() : bubble;
-        const auto full = brain.isTalking() ? brain.fullText() : bubble;
+        const bool talking = brain.isTalking() && getAnimationLevel() != AnimationLevel::off;
+        const auto text = talking ? brain.shownText() : bubble;
+        const auto full = talking ? brain.fullText() : bubble;
         if (text.isEmpty())
             return;
         const auto anchor = juce::Point<float> (700.0f, 205.0f).transformedBy (RigRenderer::headTransform (brain.pose()))
                                                                .transformedBy (toStage());
         const float fontH = juce::jlimit (11.0f, 15.0f, getHeight() * 0.04f);
         const juce::Font font (juce::FontOptions (fontH, juce::Font::bold));
-        juce::GlyphArrangement ga;
         const float maxW = std::min (getWidth() * 0.46f, 240.0f);
-        ga.addFittedText (font, full, 0, 0, maxW, 200, juce::Justification::topLeft, 4);
-        const auto size = ga.getBoundingBox (0, -1, true);
+        auto& lay = bubbleLayout;   // the bubble's size, laid out again only for a new text
+        if (lay.text != full || lay.fontH != fontH || lay.maxW != maxW)
+        {
+            juce::GlyphArrangement ga;
+            ga.addFittedText (font, full, 0, 0, maxW, 200, juce::Justification::topLeft, 4);
+            lay = { full, fontH, maxW, ga.getBoundingBox (0, -1, true) };
+        }
+        const auto size = lay.size;
         auto box = juce::Rectangle<float> (size.getWidth() + 22, size.getHeight() + 16);
         box.setPosition (juce::jlimit (6.0f, getWidth() - box.getWidth() - 6.0f, anchor.x), std::max (6.0f, anchor.y - box.getHeight()));
         juce::Path p;

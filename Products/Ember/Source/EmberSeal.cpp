@@ -114,13 +114,22 @@ namespace ember::seal
                 sg.addTransform (juce::AffineTransform::scale (scale));
                 drawRune (sg, idx, { w * 0.5f, hh * 0.5f }, (float) h, colour, 1.0f);
             }
-            it = sprites.emplace (key, img).first;
+            // drawn in memory (the same pixels as before), handed to the screen's renderer once
+            it = sprites.emplace (key, screen ? juce::NativeImageType().convert (img) : img).first;
         }
         const auto& img = it->second;
         const float w = (float) img.getWidth() / scale, hh = (float) img.getHeight() / scale;
         g.setOpacity (juce::jlimit (0.0f, 1.0f, alpha));
         g.drawImage (img, juce::Rectangle<float> (c.x - w * 0.5f, c.y - hh * 0.5f, w, hh));
         g.setOpacity (1.0f);
+    }
+
+    juce::Rectangle<float> RuneAtlas::bounds (juce::Point<float> c, float height) const
+    {
+        // the sprite's size in draw() (rounded up generously, so a rune is never skipped by mistake)
+        const float h = (float) juce::jlimit (4, 64, juce::roundToInt (height)), pad = h * 0.25f + 2.0f;
+        const float w = h * 0.6f + 2.0f * pad + 2.0f, hh = h + 2.0f * pad + 2.0f;
+        return { c.x - w * 0.5f, c.y - hh * 0.5f, w, hh };
     }
 
     void drawFloor (juce::Graphics& g, juce::Point<float> c, float rx, float ry, const Scene& s)
@@ -204,7 +213,7 @@ namespace ember::seal
                 const float a = rot * ring.dir + (float) i * tau / (float) ring.n, depth = std::sin (a);
                 if ((depth >= 0.0f) != front)
                     continue;
-                const float near = (depth + 1.0f) * 0.5f, bob = std::sin ((float) s.t * 1.6f + (float) i * 1.3f) * 4.0f;
+                const float near = (depth + 1.0f) * 0.5f, bob = s.calm ? 0.0f : std::sin ((float) s.t * 1.6f + (float) i * 1.3f) * 4.0f;
                 const auto floor = onEllipse (c, rx, ry, a, ring.r);
                 const juce::Point<float> at (floor.x, floor.y - ring.h * (1.0f + jump * 0.9f) - bob);
                 const float size = ring.size * (0.7f + 0.5f * near), alpha = lit * (0.35f + 0.65f * near);
@@ -240,7 +249,10 @@ namespace ember::seal
     {
         const float lit = s.on ? 0.7f + 0.3f * juce::jmin (1.0f, s.heat) : 0.15f;
         const float per = 2.0f * (w.getWidth() + w.getHeight()) - 40.0f, step = 15.0f;
-        const float off = (float) std::fmod (s.t * 22.0, (double) step);
+        const double t = s.calm ? 0.0 : s.t;   // calm: the border stands still
+        const float off = (float) std::fmod (t * 22.0, (double) step);
+        // only the runes in the part being repainted: the border is repainted in strips, and every other repaint of
+        // the window (Ember 60 times a second, the meters) passes through this overlay too
         int i = 0;
         for (float d = off; d < per; d += step, ++i)
         {
@@ -250,7 +262,8 @@ namespace ember::seal
             else if (d < W + H)       p = { w.getRight() - 6.0f, w.getY() + 10.0f + d - W };
             else if (d < 2 * W + H)   p = { w.getRight() - 10.0f - (d - W - H), w.getBottom() - 6.0f };
             else                      p = { w.getX() + 6.0f, w.getBottom() - 10.0f - (d - 2 * W - H) };
-            atlas.draw (g, i * 5, p, 8.0f, lit * (0.35f + 0.3f * std::sin ((float) s.t * 2.0f + (float) i * 0.7f)));
+            if (g.clipRegionIntersects (atlas.bounds (p, 8.0f).getSmallestIntegerContainer()))
+                atlas.draw (g, i * 5, p, 8.0f, lit * (0.35f + 0.3f * std::sin ((float) t * 2.0f + (float) i * 0.7f)));
         }
     }
 

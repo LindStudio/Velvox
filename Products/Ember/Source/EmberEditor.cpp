@@ -103,12 +103,17 @@ namespace ember
     void SealOverlay::update (const seal::Scene& s, bool simpleView, juce::Rectangle<float> knobArea, std::vector<juce::Rectangle<float>> plateAreas)
     {
         const bool surge = scene.sinceS < 1.2f || s.sinceS < 1.2f;
+        const bool viewChanged = simple != simpleView || knob != knobArea || scene.calm != s.calm;
         scene = s;
         simple = simpleView;
         knob = knobArea;
         plates = std::move (plateAreas);
-        if (++ticks % 2 == 0)   // the border and the knob's seal move slowly: 15 frames a second are enough
+        // calm (animation reduced / off): the border and the knob's seal stand still, only their light follows the work
+        const float lit = s.on ? juce::jmin (1.0f, s.heat) : -1.0f;
+        const bool due = s.calm ? (viewChanged || std::abs (lit - paintedLit) > 0.02f) : true;
+        if ((++ticks % 2 == 0 || viewChanged) && due)   // the border and the knob's seal move slowly: 15 frames a second are enough
         {
+            paintedLit = lit;
             repaintEdges (getLocalBounds().toFloat().reduced (6.0f), 7.0f);
             if (simple && ! knob.isEmpty())
                 repaint (knob.expanded (4.0f).getSmallestIntegerContainer());
@@ -124,7 +129,7 @@ namespace ember
         borderRunes.setScale (scale);
         sealRunes.setScale (scale);
         seal::drawRuneBorder (g, borderRunes, getLocalBounds().toFloat(), scene);
-        if (simple && ! knob.isEmpty())
+        if (simple && ! knob.isEmpty() && g.clipRegionIntersects (knob.expanded (4.0f).getSmallestIntegerContainer()))
             seal::drawMiniSeal (g, sealRunes, knob.getCentre(), knob.getWidth() * 0.5f, scene);
         // the wave of light through the panels, one after the other
         if (scene.on)
@@ -191,6 +196,8 @@ namespace ember
         const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
         const float dt = lastUpdate > 0.0 ? (float) juce::jlimit (0.0, 0.25, now - lastUpdate) : 0.0f;
         lastUpdate = now;
+        // repainted only while something shows a change (the window's runes repaint with it; silence = no repaints)
+        const float oldValue = value, oldPeak = peakHold;
         value = db;
         if (value >= peakHold)
         {
@@ -199,7 +206,8 @@ namespace ember
         }
         else if ((holdLeft -= dt) <= 0.0f)
             peakHold = std::max (value, peakHold - 4.5f * dt);
-        repaint();
+        if (std::abs (value - oldValue) > 0.005f || std::abs (peakHold - oldPeak) > 0.005f)
+            repaint();
     }
 
     DetectorMeter::DetectorMeter (EmberAudioProcessor& p) : processor (p) {}
@@ -829,6 +837,7 @@ namespace ember
         setSize (look::baseW, look::baseH);
         advanced = (bool) processor.state.state.getProperty ("advanced", false);
         setAdvanced (advanced);
+        LiveMascotView::setAnimationLevel (animationLevelFromString (settings.file().getValue ("animation", "full")));
         startTimerHz (30);
     }
 
@@ -866,7 +875,20 @@ namespace ember
         // the chamber: the back wall of the seal (Jakob 2026-11-19), cached per size and screen density
         const float scale = juce::jlimit (1.0f, 3.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
         const int cw = juce::roundToInt ((float) getWidth() * scale), ch = juce::roundToInt ((float) getHeight() * scale);
-        if (chamber.getWidth() != cw || chamber.getHeight() != ch)
+        // while the window is being resized the last wall is stretched; it is drawn anew once the size stays
+        bool rebuild = chamber.getWidth() != cw || chamber.getHeight() != ch;
+        if (rebuild && chamber.isValid())
+        {
+            const double nowMs = juce::Time::getMillisecondCounterHiRes();
+            if (chamberWanted != juce::Point<int> (cw, ch))
+            {
+                chamberWanted = { cw, ch };
+                chamberWantedSince = nowMs;
+                juce::Timer::callAfterDelay (300, [safe = juce::Component::SafePointer<EmberPanel> (this)] { if (safe != nullptr) safe->repaint(); });
+            }
+            rebuild = nowMs - chamberWantedSince > 250.0;
+        }
+        if (rebuild)
         {
             chamber = juce::Image (juce::Image::RGB, juce::jmax (1, cw), juce::jmax (1, ch), false);
             {
@@ -1181,6 +1203,15 @@ namespace ember
             size.addItem (60 + pct, juce::String (pct) + " %", editor != nullptr, percentNow == pct);
         menu.addSubMenu (tr ("Fenstergröße", "Window size"), size);
         menu.addSubMenu (tr ("Sprache", "Language"), lang);
+        {
+            // how much moves, for every EMBER window (2026-11-23: less work for the computer)
+            juce::PopupMenu anim;
+            const auto level = LiveMascotView::getAnimationLevel();
+            anim.addItem (61, tr ("Voll", "Full"), true, level == AnimationLevel::full);
+            anim.addItem (62, tr ("Reduziert", "Reduced"), true, level == AnimationLevel::reduced);
+            anim.addItem (63, tr ("Aus", "Off"), true, level == AnimationLevel::off);
+            menu.addSubMenu (tr ("Animation", "Animation"), anim);
+        }
         menu.addItem (20, tr ("Handbuch öffnen", "Open the manual"));
         menu.addItem (21, tr ("Ember-Tipp wieder zeigen", "Show Ember's tip again"));
         auto& licence = processor.getLicence();
@@ -1204,6 +1235,14 @@ namespace ember
                             {
                                 if (safe == nullptr || id == 0)
                                     return;
+                                if (id >= 61 && id <= 63)
+                                {
+                                    const auto level = id == 61 ? AnimationLevel::full : (id == 62 ? AnimationLevel::reduced : AnimationLevel::off);
+                                    settings.file().setValue ("animation", toString (level));
+                                    settings.file().saveIfNeeded();
+                                    LiveMascotView::setAnimationLevel (level);
+                                    return;
+                                }
                                 auto& lic = processor.getLicence();
                                 if (id == 40)
                                     vocalypse::ui::showActivationDialog (lic, getTopLevelComponent());
@@ -1436,18 +1475,25 @@ namespace ember
 
         meter.setValue (shownGr);
         {
+            // animation (≡ menu): off = a still seal, reduced = calm; under the licence card nothing moves
+            const auto level = LiveMascotView::getAnimationLevel();
+            const bool still = level == AnimationLevel::off, covered = licenceLock.isVisible();
+            mascot.setCovered (covered);
             const double nowS = juce::Time::getMillisecondCounterHiRes() * 0.001;
-            sealClock += lastTickS > 0.0 ? juce::jmin (0.1, nowS - lastTickS) : 0.0;
+            if (! still)
+                sealClock += lastTickS > 0.0 ? juce::jmin (0.1, nowS - lastTickS) : 0.0;
             lastTickS = nowS;
             seal::Scene sc;
             sc.t = sealClock;
-            sc.sinceS = advanced ? 99.0f : mascot.secondsSinceSwallow();
-            sc.heat = shownGr / 9.0f;
+            sc.sinceS = advanced || still ? 99.0f : mascot.secondsSinceSwallow();
+            sc.heat = still ? 0.0f : shownGr / 9.0f;
             sc.on = ! bypassed;
+            sc.calm = level != AnimationLevel::full;
             // the small seal sits on the Amount knob's cap
             const auto kb = amountBig.getBounds().toFloat();
             const auto knobArea = juce::Rectangle<float> (92.0f, 92.0f).withCentre ({ kb.getCentreX(), kb.getY() + 90.0f });
-            sealOverlay.update (sc, ! advanced, knobArea, plates());
+            if (! covered)
+                sealOverlay.update (sc, ! advanced, knobArea, plates());
         }
         if (advanced)
         {

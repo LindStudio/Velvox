@@ -1,7 +1,9 @@
 #include "EmberRig.h"
 #include "EmberRigData.h"
+#include <atomic>
 #include <cmath>
 #include <cstring>
+#include <mutex>
 
 // The drawing follows the browser prototype line by line (tools/mascot/ember_live_prototype_template.html, v17), so
 // the plugin shows exactly what Jakob approved there. Comments name the prototype's function where it helps.
@@ -57,10 +59,36 @@ namespace ember
     }
 
     // ------------------------------------------------------------------ rig data
+    namespace
+    {
+        std::mutex rigMutex;
+        std::weak_ptr<const MascotRig> rigShared;               // holds no pictures itself
+        std::atomic<const MascotRig*> rigNow { nullptr };      // the one alive, for get() (lock free: drawing threads)
+    }
+
+    std::shared_ptr<const MascotRig> MascotRig::acquire()
+    {
+        const std::lock_guard<std::mutex> lock (rigMutex);
+        if (auto s = rigShared.lock())
+            return s;
+        std::shared_ptr<const MascotRig> s (new MascotRig(), [] (const MascotRig* r)
+        {
+            const MascotRig* expected = r;
+            rigNow.compare_exchange_strong (expected, nullptr);
+            delete r;
+        });
+        rigShared = s;
+        rigNow = s.get();
+        return s;
+    }
+
     const MascotRig& MascotRig::get()
     {
-        static const MascotRig rig;
-        return rig;
+        if (auto* r = rigNow.load())
+            return *r;
+        // nobody holds it (should not happen: every user has a RigRenderer): kept alive for good rather than crash
+        jassertfalse;
+        return **new std::shared_ptr<const MascotRig> (acquire());
     }
 
     MascotRig::MascotRig()
