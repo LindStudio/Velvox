@@ -1885,10 +1885,10 @@ namespace
         for (int i = 0; i < (int) list.size(); ++i)
         {
             p.loadFactoryPreset (i);
-            check (! p.isPresetModified(), juce::String ("fresh preset not modified: ") + list[(size_t) i].nameEn);
+            check (! p.isPresetModified(), juce::String ("fresh preset not modified: ") + list[(size_t) i].name);
             for (const auto& [id, v] : list[(size_t) i].values)
                 if (auto* raw = p.state.getRawParameterValue (id))
-                    near (raw->load(), v, std::max (0.02, std::abs (v) * 0.002), juce::String (list[(size_t) i].nameEn) + " " + id);
+                    near (raw->load(), v, std::max (0.02, std::abs (v) * 0.002), juce::String (list[(size_t) i].name) + " " + id);
         }
         p.loadFactoryPreset (1);
         if (auto* thr = p.state.getParameter (pid::threshold))
@@ -1945,6 +1945,83 @@ namespace
         const auto users = userPresets();
         p.stepPreset (1);
         check (users.isEmpty() ? p.getFactoryIndex() == 0 : p.getFactoryIndex() == -1, "next after the last factory preset");
+    }
+
+    // The factory library (2026-11-23, r2/ember-presets): Default on top, 5 categories in menu order, unique names,
+    // a purpose text in both languages, every value a real setting inside its range, stepping in category order
+    void testFactoryLibrary()
+    {
+        Test t ("factory preset library: categories, names, ranges, stepping");
+        const auto& list = factoryPresets();
+        check (list.size() == 29, "29 factory presets (Default + 28)");
+        check (! list.empty() && juce::String (list[0].name) == "Default" && list[0].category == PresetCategory::none, "Default first");
+        {
+            EmberAudioProcessor fresh, p;
+            p.loadFactoryPreset (0);
+            check (sameValues (capture (fresh.state), capture (p.state)) && sameValues (capture (p.state), capture (fresh.state)),
+                   "Default = the plugin's init state");
+        }
+        juce::StringArray names;
+        int catPos = -1;
+        std::map<int, int> perCategory;
+        for (int i = 0; i < (int) list.size(); ++i)
+        {
+            const auto& fp = list[(size_t) i];
+            const juce::String name (fp.name);
+            check (name.isNotEmpty() && ! names.contains (name, true), "unique name: " + name);
+            names.add (name);
+            check (juce::String::fromUTF8 (fp.infoDe).endsWithChar ('.') && juce::String (fp.infoEn).endsWithChar ('.')
+                       && juce::String (fp.infoEn).length() < 120 && juce::String::fromUTF8 (fp.infoDe).length() < 120,
+                   name + ": one-sentence purpose in DE and EN");
+            check (presetInfo (fp).isNotEmpty() && presetName (fp) == name, name + ": name / info in the interface");
+            if (i > 0)
+            {
+                check (fp.category != PresetCategory::none, name + ": in a category");
+                int pos = 0;
+                for (const auto c : presetCategories)
+                {
+                    if (c == fp.category)
+                        break;
+                    ++pos;
+                }
+                check (pos >= catPos, name + ": sorted by category (menu and stepping order)");
+                catPos = std::max (catPos, pos);
+                ++perCategory[pos];
+            }
+            EmberAudioProcessor q;
+            for (const auto& [id, v] : fp.values)
+            {
+                auto* rp = dynamic_cast<juce::RangedAudioParameter*> (q.state.getParameter (id));
+                check (rp != nullptr && isSetting (id), name + ": " + id + " is a setting");
+                if (rp != nullptr)
+                {
+                    const auto r = rp->getNormalisableRange();
+                    check (std::isfinite (v) && v >= r.start && v <= r.end, name + ": " + id + " inside its range");
+                }
+            }
+            // a voice button never takes over a preset's own threshold (it only moves thresholds on a voice value)
+            if (i > 0)
+                if (const auto it = fp.values.find (pid::threshold); it != fp.values.end())
+                    check (it->second != voiceLowThrDb && it->second != voiceMidThrDb && it->second != voiceHighThrDb,
+                           name + ": threshold off the voice values");
+        }
+        check ((int) perCategory.size() == (int) std::size (presetCategories), "every category holds presets");
+        for (const auto c : presetCategories)
+            check (categoryName (c).isNotEmpty(), "category label");
+        // ‹ › steps through every factory preset in list (= category) order
+        EmberAudioProcessor p;
+        p.loadFactoryPreset (0);
+        bool inOrder = true;
+        for (int i = 1; i < (int) list.size(); ++i)
+        {
+            p.stepPreset (1);
+            inOrder = inOrder && p.getFactoryIndex() == i && ! p.isPresetModified();
+        }
+        check (inOrder, "next steps through all factory presets in category order");
+        p.loadFactoryPreset (0);
+        p.stepPreset (-1);
+        check (userPresets().isEmpty() ? p.getFactoryIndex() == (int) list.size() - 1 : p.getFactoryIndex() == -1,
+               "previous from Default = the last preset (or the last user preset)");
     }
 
     // Usability review 2026-11-19: AUTO keeps the user's settings and leaves "before" on A, listening is no setting,
@@ -2204,7 +2281,7 @@ namespace
                 p.loadFactoryPreset (i);
                 const float hz = real (p, pid::freq);
                 check (std::abs (hz - EmberAudioProcessor::voiceLowMidHz) > 100.0f && std::abs (hz - EmberAudioProcessor::voiceMidHighHz) > 100.0f,
-                       juce::String (factoryPresets()[(size_t) i].nameEn) + ": " + juce::String (hz, 0) + " Hz clearly inside a voice range");
+                       juce::String (factoryPresets()[(size_t) i].name) + ": " + juce::String (hz, 0) + " Hz clearly inside a voice range");
             }
             check (EmberAudioProcessor::voiceRangeOf (voiceLowHz) == 0 && EmberAudioProcessor::voiceRangeOf (voiceMidHz) == 1
                        && EmberAudioProcessor::voiceRangeOf (voiceHighHz) == 2, "each voice lights its own button");
@@ -2265,7 +2342,7 @@ namespace
             check (q.getPresetName() == presetName (factoryPresets()[4]), "B's preset name");
             q.switchSlot (0);
             check (q.getPresetName() == presetName (factoryPresets()[1]) && ! q.isPresetModified(), "A: its preset, unchanged");
-            near (real (q, pid::threshold), -28.0, 0.05, "A's values");
+            near (real (q, pid::threshold), factoryPresets()[1].values.at (pid::threshold), 0.05, "A's values");
             q.switchSlot (1);
             near (real (q, pid::range), 9.0, 0.05, "and back to B");
             // the saved state carries no stray copy of the A/B data into the parameter tree
@@ -2329,7 +2406,7 @@ namespace
             setReal (p, pid::range, 12.0f);   // an undo step that belongs to the old state
             std::thread worker ([&] { p.setStateInformation (mb.getData(), (int) mb.getSize()); });
             worker.join();
-            near (real (p, pid::threshold), -32.0, 0.05, "parameters restored at once");
+            near (real (p, pid::threshold), factoryPresets()[2].values.at (pid::threshold), 0.05, "parameters restored at once");
             juce::MemoryBlock saved;
             p.getStateInformation (saved);   // before the message thread took over: the restored A/B are saved
             EmberAudioProcessor q;
@@ -2529,22 +2606,44 @@ namespace
     //   width (octaves) link (0..1) stereo (0 L/R, 1 M/S, 2 mid, 3 side)  noengine=1 (file I/O only, CPU bench)
     //   levels=<wav> (detector level dB + smart weight, dry-aligned)
     //   auto=1 (AUTO first, as the plugin applies it) autosec=12 autostart=0  trace=<wav> (applied reduction, dB, dry-aligned)
+    //   preset=<index or English name, '_' for spaces> (a factory preset as the plugin loads it; the keys above change it)
     int processCli (const juce::StringArray& args)
     {
         double fs = 0.0;
         auto buf = loadWav (juce::File (args[1]), fs);
         if (buf == nullptr) { std::printf ("cannot read\n"); return 1; }
         std::map<juce::String, float> kv;
-        juce::String tracePath, levelsPath;
+        juce::String tracePath, levelsPath, presetKey;
         for (int i = 3; i < args.size(); ++i)
         {
             const auto k = args[i].upToFirstOccurrenceOf ("=", false, false), v = args[i].fromFirstOccurrenceOf ("=", false, false);
-            if (k == "trace") tracePath = v; else if (k == "levels") levelsPath = v; else kv[k] = v.getFloatValue();
+            if (k == "trace") tracePath = v; else if (k == "levels") levelsPath = v; else if (k == "preset") presetKey = v; else kv[k] = v.getFloatValue();
         }
         const auto has = [&] (const char* k) { return kv.count (k) > 0; };
         if (has ("gain"))
             buf->applyGain (dbToGain (kv["gain"]));
         Settings s;
+        if (presetKey.isNotEmpty())
+        {
+            // a factory preset by index or name ('_' for spaces), loaded the way the plugin loads it; the other keys
+            // then change single values on top of it
+            const auto& list = factoryPresets();
+            int index = presetKey.containsOnly ("0123456789") ? presetKey.getIntValue() : -1;
+            for (int i = 0; i < (int) list.size() && index < 0; ++i)
+                if (juce::String (list[(size_t) i].name).equalsIgnoreCase (presetKey.replaceCharacter ('_', ' ')))
+                    index = i;
+            if (! juce::isPositiveAndBelow (index, (int) list.size()))
+            {
+                std::printf ("unknown preset %s\n", presetKey.toRawUTF8());
+                return 1;
+            }
+            EmberAudioProcessor p;
+            p.loadFactoryPreset (index);
+            s = readSettings (p.state);
+            s.bypass = false;
+            s.listen = 0;
+            std::printf ("PRESET %d %s\n", index, list[(size_t) index].name);
+        }
         if (has ("auto") && kv["auto"] > 0.5f)
         {
             const double start = has ("autostart") ? kv["autostart"] : 0.0;
@@ -2969,6 +3068,25 @@ namespace
         // set but nothing found: that is a broken setup, not a pass
         check (! files.isEmpty(), "EMBER_VOCALS is set but holds no .wav file");
         int ok = 0, read = 0, engineOk = 0;
+        // every factory preset as the plugin loads it; the strength ladder of the basics is checked on what they remove
+        std::vector<Settings> presetSettings;
+        for (int i = 0; i < (int) factoryPresets().size(); ++i)
+        {
+            EmberAudioProcessor p;
+            p.loadFactoryPreset (i);
+            presetSettings.push_back (readSettings (p.state));
+        }
+        const auto presetIndex = [] (const char* name)
+        {
+            for (int i = 0; i < (int) factoryPresets().size(); ++i)
+                if (juce::String (factoryPresets()[(size_t) i].name) == name)
+                    return i;
+            return -1;
+        };
+        const int ladder[] { presetIndex ("Subtle Reduction"), presetIndex ("Gentle Vocal"), presetIndex ("Natural De-Essing"),
+                             presetIndex ("Strong Sibilance"), presetIndex ("Vocal Recording Rescue"), presetIndex ("Extreme Sibilance") };
+        double removed[std::size (ladder)] {};
+        int presetRuns = 0, presetFinite = 0;
         for (const auto& f : files)
         {
             double fs = 0.0;
@@ -2978,6 +3096,30 @@ namespace
                 continue;
             ++read;
             const auto mono = monoOf (*buf);
+            {
+                // every factory preset on 20 s of the take: finite output; energy removed (dry delayed - wet)
+                const int n = std::min ((int) mono.size(), (int) (fs * 20.0));
+                const std::vector<float> part (mono.begin(), mono.begin() + n);
+                for (int i = 0; i < (int) presetSettings.size(); ++i)
+                {
+                    E e (fs, presetSettings[(size_t) i]);
+                    const auto y = run (e, part);
+                    const int L = e.getLatencySamples();
+                    bool finite = true;
+                    double diff = 0.0;
+                    for (int k = 0; k < (int) y.size(); ++k)
+                    {
+                        finite = finite && std::isfinite (y[(size_t) k]);
+                        if (k >= L)
+                            diff += juce::square ((double) part[(size_t) (k - L)] - (double) y[(size_t) k]);
+                    }
+                    ++presetRuns;
+                    presetFinite += finite ? 1 : 0;
+                    for (int l = 0; l < (int) std::size (ladder); ++l)
+                        if (ladder[l] == i)
+                            removed[l] += diff;
+                }
+            }
             {
                 // the engine on the real take: finite, and no S nothing changes (the first 0.2 s before any voice)
                 Settings st;
@@ -3033,6 +3175,19 @@ namespace
         std::printf ("    %d of %d takes set up (%d read)\n", ok, files.size(), read);
         check (read > 0, "EMBER_VOCALS: at least one take was analysed");
         check (engineOk == files.size(), "every take went through the engine");
+        std::printf ("    factory presets: %d of %d runs finite (%d presets x %d takes)\n", presetFinite, presetRuns,
+                     (int) presetSettings.size(), read);
+        check (presetRuns == read * (int) presetSettings.size() && presetFinite == presetRuns, "every factory preset on every take: finite output");
+        bool ladderOk = true;
+        for (int l = 0; l < (int) std::size (ladder); ++l)
+        {
+            check (ladder[l] >= 0, "ladder preset exists");
+            if (l > 0)
+                ladderOk = ladderOk && removed[l] > removed[l - 1] * 1.05;
+            std::printf ("      %-22s removed %.2f dB more than Subtle\n", ladder[l] >= 0 ? factoryPresets()[(size_t) ladder[l]].name : "?",
+                         10.0 * std::log10 (std::max (1.0e-30, removed[l]) / std::max (1.0e-30, removed[0])));
+        }
+        check (ladderOk, "Subtle < Gentle < Natural < Strong < Rescue < Extreme (energy removed over all takes)");
     }
 }
 
@@ -3327,6 +3482,7 @@ int main (int argc, char** argv)
     testSwitches();
     testAllround();
     testPresets();
+    testFactoryLibrary();
     testUsability();
     testUxFixes();
     testMascotClips();
