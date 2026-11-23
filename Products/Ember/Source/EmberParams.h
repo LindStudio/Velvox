@@ -17,9 +17,13 @@ namespace ember::pid
     inline constexpr const char* mix       = "emMix";
     inline constexpr const char* output    = "emOutput";
     inline constexpr const char* mode      = "emMode";       // Split / Wideband
-    inline constexpr const char* detection = "emDetection";  // Smart / Relative / Absolute
+    inline constexpr const char* detection = "emDetection";  // Smart / Relative / Absolute / Allround
     inline constexpr const char* listen    = "emListen";     // Off / S band / Delta
     inline constexpr const char* bypass    = "emBypass";
+    // 2026-11-23 (fix/ember-dsp)
+    inline constexpr const char* width     = "emWidth";      // split band width, octaves
+    inline constexpr const char* link      = "emLink";       // stereo link, %
+    inline constexpr const char* stereo    = "emStereo";     // Stereo / Mid-Side / Mid / Side
 }
 
 namespace ember
@@ -37,12 +41,14 @@ namespace ember
         explicit ParamCache (const APVTS& state);
         Settings read() const noexcept;
         std::atomic<float> *freq, *threshold, *range, *amount, *attack, *release, *lookahead, *mix, *output,
-                           *mode, *detection, *listen, *bypass;
+                           *mode, *detection, *listen, *bypass, *width, *link, *stereo;
     };
 
     // Choice names (host / automation; the UI shows its own labels)
     inline const juce::StringArray modeChoices { "Split", "Wideband" };
-    inline const juce::StringArray detectionChoices { "Smart", "Relative", "Absolute" };
+    // Smart = for a single vocal (Pro-DS "Single Vocal"), Allround = mixes, buses, instruments
+    inline const juce::StringArray detectionChoices { "Smart", "Relative", "Absolute", "Allround" };
+    inline const juce::StringArray stereoChoices { "Stereo", "Mid/Side", "Mid", "Side" };
     inline const juce::StringArray listenChoices { "Off", "S band", "Delta" };
 
     // Stimme presets of SIMPLE (UI writes the frequency)

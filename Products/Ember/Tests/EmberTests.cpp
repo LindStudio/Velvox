@@ -168,7 +168,7 @@ namespace
     {
         Test t ("layout + defaults");
         EmberAudioProcessor p;
-        check (p.getParameters().size() == 13, "13 parameters");
+        check (p.getParameters().size() == 16, "16 parameters");
         const auto s = readSettings (p.state);
         near (s.freq, voiceMidHz, 0.5, "default freq");
         near (s.thresholdDb, voiceMidThrDb, 0.01, "default threshold");
@@ -180,15 +180,15 @@ namespace
 
     void testLatency()
     {
-        Test t ("latency is 5 ms at every rate");
+        Test t ("latency is 10 ms at every rate (the longest lookahead)");
         for (double fs : { 44100.0, 48000.0, 88200.0, 96000.0, 192000.0 })
         {
             E e (fs);
-            check (e.getLatencySamples() == (int) std::lround (0.005 * fs), "latency at " + juce::String (fs));
+            check (e.getLatencySamples() == (int) std::lround (0.010 * fs), "latency at " + juce::String (fs));
         }
         EmberAudioProcessor p;
         p.prepareToPlay (48000.0, 256);
-        check (p.getLatencySamples() == 240, "processor reports 240 samples at 48 kHz");
+        check (p.getLatencySamples() == 480, "processor reports 480 samples at 48 kHz");
     }
 
     void testNull()
@@ -1539,15 +1539,27 @@ namespace
         auto buf = loadWav (juce::File (args[1]), fs);
         if (buf == nullptr) { std::printf ("cannot read\n"); return 1; }
         std::map<juce::String, float> kv;
-        juce::String tracePath;
+        juce::String tracePath, levelsPath;
         for (int i = 3; i < args.size(); ++i)
         {
             const auto k = args[i].upToFirstOccurrenceOf ("=", false, false), v = args[i].fromFirstOccurrenceOf ("=", false, false);
-            if (k == "trace") tracePath = v; else kv[k] = v.getFloatValue();
+            if (k == "trace") tracePath = v; else if (k == "levels") levelsPath = v; else kv[k] = v.getFloatValue();
         }
         const auto has = [&] (const char* k) { return kv.count (k) > 0; };
         if (has ("gain"))
             buf->applyGain (dbToGain (kv["gain"]));
+        // tuning sweeps (bench only)
+        if (has ("t_gs")) gateSplitMs = kv["t_gs"];
+        if (has ("t_gw")) gateWideMs = kv["t_gw"];
+        if (has ("t_low")) splitLowestRatio = kv["t_low"];
+        if (has ("t_ref")) bandRefDb = kv["t_ref"];
+        if (has ("t_wref")) widthRefDb = kv["t_wref"];
+        if (has ("t_sbr")) smartBandRatio = kv["t_sbr"];
+        if (has ("t_sbmin")) smartBandMinHz = kv["t_sbmin"];
+        if (has ("t_alo")) allroundLowRatio = kv["t_alo"];
+        if (has ("t_ahi")) allroundHighRatio = kv["t_ahi"];
+        if (has ("t_an")) allroundNoneDb = kv["t_an"];
+        if (has ("t_af")) allroundFullDb = kv["t_af"];
         Settings s;
         if (has ("auto") && kv["auto"] > 0.5f)
         {
@@ -1578,7 +1590,10 @@ namespace
         if (has ("mix")) s.mix = kv["mix"];
         if (has ("mode")) s.mode = (int) kv["mode"];
         if (has ("listen")) s.listen = (int) kv["listen"];
-        if (has ("det")) { const int d = (int) kv["det"]; s.smart = d == 0; s.relative = d <= 1; }
+        if (has ("det")) { const int d = (int) kv["det"]; s.smart = d == 0 || d == 3; s.allround = d == 3; s.relative = d <= 1 || d == 3; }
+        if (has ("width")) s.widthOct = kv["width"];
+        if (has ("link")) s.stereoLink = kv["link"];
+        if (has ("stereo")) s.stereoMode = (int) kv["stereo"];
         const int block = has ("block") ? std::max (1, (int) kv["block"]) : 512;
         std::printf ("SETTINGS freq %.0f thr %.1f range %.1f amount %.2f att %.2f rel %.0f la %.2f mode %d smart %d rel %d\n",
                      s.freq, s.thresholdDb, s.rangeDb, s.amount, s.attackMs, s.releaseMs, s.lookaheadMs, s.mode, (int) s.smart, (int) s.relative);
@@ -1591,16 +1606,21 @@ namespace
         padded.clear();
         for (int ch = 0; ch < nch; ++ch)
             padded.copyFrom (ch, 0, *buf, ch, 0, N);
-        const bool wantTrace = tracePath.isNotEmpty();
-        std::vector<float> trace (wantTrace ? (size_t) (N + L) : 0, 0.0f);
+        const bool wantTrace = tracePath.isNotEmpty() || levelsPath.isNotEmpty();
+        std::vector<float> trace (wantTrace ? (size_t) (N + L) : 0, 0.0f), levels (trace.size(), 0.0f), weights (trace.size(), 0.0f);
         const int stepBlock = wantTrace ? 1 : block;
         for (int start = 0; start < padded.getNumSamples(); start += stepBlock)
         {
             const int n = std::min (stepBlock, padded.getNumSamples() - start);
             float* ch[2] { padded.getWritePointer (0, start), padded.getWritePointer (nch > 1 ? 1 : 0, start) };
-            e.process (ch, nch, n);
+            if (! has ("noengine"))   // (CPU bench: file I/O alone)
+                e.process (ch, nch, n);
             if (wantTrace)
+            {
                 trace[(size_t) start] = e.currentReductionDb.load();
+                levels[(size_t) start] = e.detectorDb.load();
+                weights[(size_t) start] = e.detectorWeight.load();
+            }
         }
         const auto write = [&] (const juce::File& file, const juce::AudioBuffer<float>& b)
         {
@@ -1614,12 +1634,23 @@ namespace
         for (int ch = 0; ch < nch; ++ch)
             out.copyFrom (ch, 0, padded, ch, L, N);
         write (juce::File (args[2]), out);
-        if (wantTrace)
+        if (levelsPath.isNotEmpty())
         {
-            const int la = juce::jlimit (0, L, (int) std::lround (s.lookaheadMs * 0.001 * fs));
+            // detector level (dB) and smart weight at input time (dry-aligned)
+            juce::AudioBuffer<float> t (2, N);
+            for (int i = 0; i < N; ++i)
+            {
+                t.setSample (0, i, levels[(size_t) i]);
+                t.setSample (1, i, weights[(size_t) i]);
+            }
+            write (juce::File (levelsPath), t);
+        }
+        if (tracePath.isNotEmpty())
+        {
+            // the engine reports the reduction applied to the sample it outputs (dry sample i comes out at i + L)
             juce::AudioBuffer<float> t (1, N);
             for (int i = 0; i < N; ++i)
-                t.setSample (0, i, i + la < N + L ? trace[(size_t) (i + la)] : 0.0f);
+                t.setSample (0, i, trace[(size_t) (i + L)]);
             write (juce::File (tracePath), t);
         }
         std::printf ("LATENCY %d\n", L);

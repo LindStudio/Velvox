@@ -711,9 +711,9 @@ namespace ember
         releaseK.setDescription (tr ("Wie schnell er nach dem S wieder loslässt. Kurz (30–40 ms) lässt den nächsten Vokal unberührt.",
                                      "How fast it lets go after the S. Short (30–40 ms) leaves the next vowel untouched."));
         lookK.setDescription (tr ("So viel früher sieht der De-Esser das S kommen und erfasst auch dessen Anfang. "
-                                  "Die Latenz bleibt immer bei 5 ms.",
+                                  "Die Latenz bleibt immer bei 10 ms.",
                                   "The de-esser sees the S coming this much earlier and also catches its start. "
-                                  "The latency always stays at 5 ms."));
+                                  "The latency always stays at 10 ms."));
         mixK.setDescription (tr ("Anteil des bearbeiteten Signals. Unter 100 % bleibt etwas vom Original-S erhalten.",
                                  "Share of the processed signal. Below 100 % some of the original S remains."));
         outK.setDescription (tr ("Ausgangspegel nach dem De-Esser.", "Output level after the de-esser."));
