@@ -6,7 +6,6 @@ namespace ember
     {
         // 4th-order Butterworth high-pass as two sections
         constexpr double q1 = 0.54119610, q2 = 1.30656296;
-        constexpr double shelfQ = 0.70710678;
         constexpr int subBlock = 16;
     }
 
@@ -59,6 +58,7 @@ namespace ember
         const double f = juce::jlimit (1000.0, fs * 0.45, (double) hz);
         hp1.setCoeffs (design::highPass (fs, f, q1));
         hp2.setCoeffs (design::highPass (fs, f, q2));
+        tiltDb = detectorTiltDbPerOct * (float) std::log2 (f / detectorTiltRefHz);
     }
 
     float Detector::process (const float* frame, int numChannels, bool relative, float* band) noexcept
@@ -85,7 +85,7 @@ namespace ember
                                                   : juce::jlimit (-60.0f, 60.0f, 10.0f * std::log10 ((sEnv + tiny) / (bodyEnv + tiny)));
         weight = weightForIndex (indexDb);
 
-        float inDb = gainToDb (peak);
+        float inDb = gainToDb (peak) + tiltDb;
         if (relative)
         {
             // Instant attack, 250 ms release: the band can never read louder relative to a voice whose
@@ -142,16 +142,16 @@ namespace ember
         listenHp2.setCoeffs (design::highPass (fs, juce::jlimit (1000.0, fs * 0.45, (double) freq.getCurrentValue()), q2));
         listenHp1.reset();
         listenHp2.reset();
-        shelf.reset();
+        bell.reset();
         for (auto& d : audioDelay)
             std::fill (d.begin(), d.end(), 0.0f);
         std::fill (envDelay.begin(), envDelay.end(), 0.0f);
         writePos = 0;
         gridPhase = 0;
-        shelfStale = false;
+        bellStale = false;
         envDb = 0.0f;
         weightSm = 0.0f;
-        updateShelf (0.0f);
+        updateBell (0.0f);
         currentReductionDb.store (0.0f, std::memory_order_relaxed);
     }
 
@@ -174,10 +174,10 @@ namespace ember
         settings.lookaheadMs = juce::jlimit (0.0f, maxLookaheadMs, finite (s.lookaheadMs, d.lookaheadMs));
         if (settings.mode != previousMode)
         {
-            // Split <-> wideband: the shelf starts from a clean state (it froze while wideband ran)
-            shelf.reset();
-            shelfDb = 0.0f;
-            shelfStale = true;
+            // Split <-> wideband: the bell starts from a clean state (it froze while wideband ran)
+            bell.reset();
+            bellDb = 0.0f;
+            bellStale = true;
         }
         freq.setTargetValue (settings.freq);
         mixSm.setTargetValue (juce::jlimit (0.0f, 1.0f, settings.mix));
@@ -189,11 +189,11 @@ namespace ember
         fallCoeff = timeConstantCoeff (smartFallMs, fs);
     }
 
-    void Engine::updateShelf (float reductionDb) noexcept
+    void Engine::updateBell (float reductionDb) noexcept
     {
-        shelfDb = reductionDb;
-        const double f = juce::jlimit (1000.0, fs * 0.45, (double) freq.getCurrentValue());
-        shelf.setCoeffs (design::highShelf (fs, f, shelfQ, -reductionDb));
+        bellDb = reductionDb;
+        const double f = juce::jlimit (1000.0, fs * 0.45, (double) freq.getCurrentValue() * splitCenterRatio);
+        bell.setCoeffs (design::peak (fs, f, splitQ, -reductionDb));
     }
 
     void Engine::process (float* const* channels, int numChannels, int numSamples) noexcept
@@ -213,11 +213,11 @@ namespace ember
 
         const int lookahead = juce::jlimit (0, latency, (int) std::lround (settings.lookaheadMs * 0.001 * fs));
         const int envLag = latency - lookahead;
-        const float amountScale = settings.amount * 2.0f;
+        const float scale = amountScale (settings.amount);
         float maxReduction = 0.0f, outPk = 0.0f, maxDet = -200.0f, weightAtMax = 0.0f;
         float envAt[subBlock];
 
-        // Sub-blocks follow a fixed 16-sample grid (gridPhase carries over between host blocks), so the shelf
+        // Sub-blocks follow a fixed 16-sample grid (gridPhase carries over between host blocks), so the bell
         // is recomputed at the same samples whatever block size the host uses
         for (int start = 0, n = 0; start < numSamples; start += n)
         {
@@ -232,7 +232,7 @@ namespace ember
                 const double fl = juce::jlimit (1000.0, fs * 0.45, (double) f);
                 listenHp1.setCoeffs (design::highPass (fs, fl, q1));
                 listenHp2.setCoeffs (design::highPass (fs, fl, q2));
-                shelfStale = true;
+                bellStale = true;
             }
 
             // 1) detection on the undelayed input, delay audio and envelope
@@ -257,7 +257,7 @@ namespace ember
                 // Level -> reduction with attack / release; the smart weight gates it afterwards with its own
                 // fast envelope, so the release never reaches into the vowel after an S
                 const float target = std::min (maxReductionDb,
-                                               std::min (settings.rangeDb, staticReductionDb (inDb, settings.thresholdDb)) * amountScale);
+                                               std::min (settings.rangeDb, staticReductionDb (inDb, settings.thresholdDb)) * scale);
                 const float coeff = target > envDb ? attackCoeff : releaseCoeff;
                 envDb = target + coeff * (envDb - target);
                 weightSm = smartWeight + (smartWeight > weightSm ? riseCoeff : fallCoeff) * (weightSm - smartWeight);
@@ -282,16 +282,16 @@ namespace ember
             }
             else
             {
-                if (onGrid && (shelfStale || std::abs (envAt[0] - shelfDb) > 0.01f || (envAt[0] < 0.001f && shelfDb >= 0.001f)))
+                if (onGrid && (bellStale || std::abs (envAt[0] - bellDb) > 0.01f || (envAt[0] < 0.001f && bellDb >= 0.001f)))
                 {
-                    updateShelf (envAt[0]);
-                    shelfStale = false;
+                    updateBell (envAt[0]);
+                    bellStale = false;
                 }
 
-                if (shelfDb < 0.001f)
+                if (bellDb < 0.001f)
                 {
-                    // A 0 dB shelf is an identity filter whose state is zero: skipping it is exact
-                    shelf.reset();
+                    // A 0 dB bell is an identity filter whose state is zero: skipping it is exact
+                    bell.reset();
                     for (int ch = 0; ch < numChannels; ++ch)
                         std::copy_n (dryScratch[ch].data(), n, wetScratch[ch].data());
                 }
@@ -299,7 +299,7 @@ namespace ember
                 {
                     for (int ch = 0; ch < numChannels; ++ch)
                         for (int k = 0; k < n; ++k)
-                            wetScratch[ch][(size_t) k] = shelf.process (dryScratch[ch][(size_t) k], ch);
+                            wetScratch[ch][(size_t) k] = bell.process (dryScratch[ch][(size_t) k], ch);
                 }
             }
 
@@ -328,7 +328,7 @@ namespace ember
             }
         }
 
-        if (! detector.isFinite() || ! shelf.isStateFinite() || ! std::isfinite (envDb)
+        if (! detector.isFinite() || ! bell.isStateFinite() || ! std::isfinite (envDb)
             || ! listenHp1.isStateFinite() || ! listenHp2.isStateFinite())
         {
             reset();

@@ -46,5 +46,8 @@ namespace ember
     inline const juce::StringArray listenChoices { "Off", "S band", "Delta" };
 
     // Stimme presets of SIMPLE (UI writes the frequency)
-    inline constexpr float voiceLowHz = 5000.0f, voiceMidHz = 6500.0f, voiceHighHz = 8000.0f;
+    // (2026-11-23, 15 takes: each button is the strongest for its own voices; the threshold goes with it, because
+    //  a deep voice's S sit lower against the voice than a high one's)
+    inline constexpr float voiceLowHz = 5000.0f, voiceMidHz = 6200.0f, voiceHighHz = 7400.0f;
+    inline constexpr float voiceLowThrDb = -35.0f, voiceMidThrDb = -32.0f, voiceHighThrDb = -33.0f;
 }

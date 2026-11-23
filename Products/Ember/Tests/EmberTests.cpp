@@ -170,8 +170,8 @@ namespace
         EmberAudioProcessor p;
         check (p.getParameters().size() == 13, "13 parameters");
         const auto s = readSettings (p.state);
-        near (s.freq, 6500.0, 0.5, "default freq");
-        near (s.thresholdDb, -30.0, 0.01, "default threshold");
+        near (s.freq, voiceMidHz, 0.5, "default freq");
+        near (s.thresholdDb, voiceMidThrDb, 0.01, "default threshold");
         near (s.rangeDb, 5.0, 0.01, "default range (gentle)");
         near (s.amount, 0.5, 1e-4, "default Amount 50 %");
         check (s.smart && s.relative && s.mode == 0 && s.listen == 0 && ! s.bypass, "default modes (Smart detection)");
@@ -254,7 +254,7 @@ namespace
                 er.process (ch, 2, std::min (256, (int) l.size() - start));
                 maxGr = std::max (maxGr, er.gainReductionDb.pull());
             }
-            near (maxGr, 4.0 * amount * 2.0, 0.05, "max reduction = range x Amount x 2 (" + juce::String (amount) + ")");
+            near (maxGr, 4.0 * amountScale (amount), 0.05, "max reduction = range x amountScale (" + juce::String (amount) + ")");
         }
     }
 
@@ -1087,7 +1087,8 @@ namespace
             const double sLoss = rangesDb (x, sR, 0) - rangesDb (y, sR, L);
             const double vLoss = rangesDb (x, vR, 0) - rangesDb (y, vR, L);
             std::printf ("    release %.0f ms: S -%.2f dB, vowel onset -%.3f dB\n", releaseMs, sLoss, vLoss);
-            check (sLoss > 4.0, "the S is taken down");
+            // (white noise up to 24 kHz: the split bell takes the S range, the air above it stays)
+            check (sLoss > 3.0, "the S is taken down");
             check (vLoss < 0.1, "the vowel after the S keeps its level (release " + juce::String (releaseMs, 0) + " ms)");
         }
     }
@@ -1146,11 +1147,11 @@ namespace
         // A/B
         p.loadFactoryPreset (0);
         p.switchSlot (1);   // B starts as a copy of A
-        near (readSettings (p.state).thresholdDb, -30.0, 0.05, "B starts as A");
+        near (readSettings (p.state).thresholdDb, voiceMidThrDb, 0.05, "B starts as A");
         if (auto* thr = p.state.getParameter (pid::threshold))
             thr->setValueNotifyingHost (thr->convertTo0to1 (-40.0f));
         p.switchSlot (0);
-        near (readSettings (p.state).thresholdDb, -30.0, 0.05, "A back");
+        near (readSettings (p.state).thresholdDb, voiceMidThrDb, 0.05, "A back");
         p.switchSlot (1);
         near (readSettings (p.state).thresholdDb, -40.0, 0.05, "B kept its change");
         p.copyActiveToOther();
@@ -1227,7 +1228,7 @@ namespace
             check (p.getAutoMessage().contains ("A"), "the message says where before is");
             p.switchSlot (0);
             near (real (p, pid::threshold), -20.0, 0.05, "A: the settings from before");
-            near (real (p, pid::freq), 6500.0, 1.0, "A: frequency from before");
+            near (real (p, pid::freq), voiceMidHz, 1.0, "A: frequency from before");
             check (p.getPresetName() == presetName (factoryPresets()[0]) && ! p.isShowingAutoResult(), "A: preset name from before");
             p.switchSlot (1);
             near (real (p, pid::threshold), r.thresholdDb, 0.1, "B: AUTO again");
@@ -1327,16 +1328,16 @@ namespace
             setReal (p, pid::freq, 8000.0f);
             check (p.canUndo(), "can undo");
             check (p.undo(), "undo");
-            near (real (p, pid::freq), 6500.0, 1.0, "frequency back");
+            near (real (p, pid::freq), voiceMidHz, 1.0, "frequency back");
             near (real (p, pid::threshold), -45.0, 0.05, "threshold still changed");
             check (p.undo(), "undo again");
-            near (real (p, pid::threshold), -30.0, 0.05, "both threshold moves were one step");
+            near (real (p, pid::threshold), voiceMidThrDb, 0.05, "both threshold moves were one step");
             check (p.canRedo() && p.redo(), "redo");
             near (real (p, pid::threshold), -45.0, 0.05, "threshold redone");
             p.loadFactoryPreset (8);
             p.undo();
             near (real (p, pid::threshold), -45.0, 0.05, "preset undone in one step");
-            near (real (p, pid::freq), 6500.0, 1.0, "frequency too");
+            near (real (p, pid::freq), voiceMidHz, 1.0, "frequency too");
             setReal (p, pid::listen, 2.0f);
             check (p.undo() && real (p, pid::listen) > 1.5f, "listening is no undo step");
         }
@@ -1526,6 +1527,102 @@ namespace
             if (listen == 0)
                 std::printf ("  max reduction %.1f dB -> %s\n", maxGr, file.getFullPathName().toRawUTF8());
         }
+        return 0;
+    }
+
+    // Offline render for listening and measuring (sound audit 2026-11-19): EmberTests --process <in.wav> <out.wav> [key=value ...]
+    //   freq thr range amount attack release la mix mode det(0 smart,1 rel,2 abs) listen gain(dB in) block
+    //   auto=1 (AUTO first, as the plugin applies it) autosec=12 autostart=0  trace=<wav> (applied reduction, dB, dry-aligned)
+    int processCli (const juce::StringArray& args)
+    {
+        double fs = 0.0;
+        auto buf = loadWav (juce::File (args[1]), fs);
+        if (buf == nullptr) { std::printf ("cannot read\n"); return 1; }
+        std::map<juce::String, float> kv;
+        juce::String tracePath;
+        for (int i = 3; i < args.size(); ++i)
+        {
+            const auto k = args[i].upToFirstOccurrenceOf ("=", false, false), v = args[i].fromFirstOccurrenceOf ("=", false, false);
+            if (k == "trace") tracePath = v; else kv[k] = v.getFloatValue();
+        }
+        const auto has = [&] (const char* k) { return kv.count (k) > 0; };
+        if (has ("gain"))
+            buf->applyGain (dbToGain (kv["gain"]));
+        Settings s;
+        if (has ("auto") && kv["auto"] > 0.5f)
+        {
+            const auto mono = monoOf (*buf);
+            const int start = (int) ((has ("autostart") ? kv["autostart"] : 0.0f) * fs);
+            const double secs = has ("autosec") ? kv["autosec"] : autoEnoughSeconds;
+            AutoCapture c;
+            c.prepare (fs);
+            c.start();
+            for (int p = start; p < (int) mono.size() && c.isCapturing() && c.getSeconds() < secs; p += 512)
+            {
+                const float* ch[1] { mono.data() + p };
+                c.push (ch, 1, std::min (512, (int) mono.size() - p));
+            }
+            const auto r = analyse (c.data(), c.getNumSamples(), fs, true);
+            std::printf ("AUTO status %d freq %.0f thr %.1f range %.1f peakHz %.0f target %.2f expected %.2f vowel %.3f mixed %.3f sVsV %.1f Sframes %d secs %.1f\n",
+                         (int) r.status, r.freq, r.thresholdDb, r.rangeDb, r.peakHz, r.targetDb, r.expectedReductionDb, r.vowelReductionDb,
+                         r.mixedReductionDb, r.sibilanceVsVowelDb, r.sibilantFrames, r.seconds);
+            if (r.status == AutoResult::Status::ok) { s.freq = r.freq; s.thresholdDb = r.thresholdDb; s.rangeDb = r.rangeDb; s.releaseMs = autoReleaseMs; }
+        }
+        if (has ("freq")) s.freq = kv["freq"];
+        if (has ("thr")) s.thresholdDb = kv["thr"];
+        if (has ("range")) s.rangeDb = kv["range"];
+        if (has ("amount")) s.amount = kv["amount"];
+        if (has ("attack")) s.attackMs = kv["attack"];
+        if (has ("release")) s.releaseMs = kv["release"];
+        if (has ("la")) s.lookaheadMs = kv["la"];
+        if (has ("mix")) s.mix = kv["mix"];
+        if (has ("mode")) s.mode = (int) kv["mode"];
+        if (has ("listen")) s.listen = (int) kv["listen"];
+        if (has ("det")) { const int d = (int) kv["det"]; s.smart = d == 0; s.relative = d <= 1; }
+        const int block = has ("block") ? std::max (1, (int) kv["block"]) : 512;
+        std::printf ("SETTINGS freq %.0f thr %.1f range %.1f amount %.2f att %.2f rel %.0f la %.2f mode %d smart %d rel %d\n",
+                     s.freq, s.thresholdDb, s.rangeDb, s.amount, s.attackMs, s.releaseMs, s.lookaheadMs, s.mode, (int) s.smart, (int) s.relative);
+
+        Engine e;
+        e.setSettings (s);
+        e.prepare (fs, block);
+        const int nch = std::min (2, buf->getNumChannels()), N = buf->getNumSamples(), L = e.getLatencySamples();
+        juce::AudioBuffer<float> padded (nch, N + L);
+        padded.clear();
+        for (int ch = 0; ch < nch; ++ch)
+            padded.copyFrom (ch, 0, *buf, ch, 0, N);
+        const bool wantTrace = tracePath.isNotEmpty();
+        std::vector<float> trace (wantTrace ? (size_t) (N + L) : 0, 0.0f);
+        const int stepBlock = wantTrace ? 1 : block;
+        for (int start = 0; start < padded.getNumSamples(); start += stepBlock)
+        {
+            const int n = std::min (stepBlock, padded.getNumSamples() - start);
+            float* ch[2] { padded.getWritePointer (0, start), padded.getWritePointer (nch > 1 ? 1 : 0, start) };
+            e.process (ch, nch, n);
+            if (wantTrace)
+                trace[(size_t) start] = e.currentReductionDb.load();
+        }
+        const auto write = [&] (const juce::File& file, const juce::AudioBuffer<float>& b)
+        {
+            file.deleteFile();
+            juce::WavAudioFormat wav;
+            std::unique_ptr<juce::OutputStream> stream (file.createOutputStream().release());
+            auto w = wav.createWriterFor (stream, juce::AudioFormatWriterOptions().withSampleRate (fs).withNumChannels (b.getNumChannels()).withBitsPerSample (32).withSampleFormat (juce::AudioFormatWriterOptions::SampleFormat::floatingPoint));
+            if (w != nullptr) w->writeFromAudioSampleBuffer (b, 0, b.getNumSamples());
+        };
+        juce::AudioBuffer<float> out (nch, N);
+        for (int ch = 0; ch < nch; ++ch)
+            out.copyFrom (ch, 0, padded, ch, L, N);
+        write (juce::File (args[2]), out);
+        if (wantTrace)
+        {
+            const int la = juce::jlimit (0, L, (int) std::lround (s.lookaheadMs * 0.001 * fs));
+            juce::AudioBuffer<float> t (1, N);
+            for (int i = 0; i < N; ++i)
+                t.setSample (0, i, i + la < N + L ? trace[(size_t) (i + la)] : 0.0f);
+            write (juce::File (tracePath), t);
+        }
+        std::printf ("LATENCY %d\n", L);
         return 0;
     }
 
@@ -1990,6 +2087,8 @@ int main (int argc, char** argv)
     for (int i = 1; i < argc; ++i)
         args.add (juce::String::fromUTF8 (argv[i]));
 
+    if (args.size() >= 3 && args[0] == "--process")
+        return processCli (args);
     if (args.size() >= 3 && args[0] == "--render")
         return render (juce::File (args[1]), juce::File (args[2]));
     if (args.size() >= 3 && args[0] == "--marketing")

@@ -18,12 +18,12 @@ namespace ember
         enum class Status { ok, tooShort, noSibilance };
         Status status = Status::tooShort;
 
-        float freq = 6500.0f;          // detection / shelf corner
-        float thresholdDb = -30.0f;
+        float freq = 6200.0f;          // detection corner (the split bell sits at splitCenterRatio x freq)
+        float thresholdDb = -32.0f;
         float rangeDb = 8.0f;
 
         // What was measured (report, tests)
-        float peakHz = 0.0f;           // strongest S frequency
+        float peakHz = 0.0f;           // centre of the S energy (log-frequency centroid 4-12 kHz)
         float sibilantMedianDb = 0.0f; // detector level of a typical S (relative detection)
         float sibilant90Db = 0.0f;
         float vowel95Db = 0.0f;        // detector level that vowels hardly exceed
@@ -57,7 +57,10 @@ namespace ember
     inline constexpr float autoMixedMaxDb = 0.5f;          // S next to a vowel: the vowel part must survive
     inline constexpr float autoMinRangeDb = 4.0f, autoMaxRangeDb = 8.0f;
     inline constexpr float autoReleaseMs = 35.0f;          // lets go before the next vowel
-    inline constexpr float autoCornerRatio = 0.8f, autoMinCornerHz = 5000.0f, autoMaxCornerHz = 9500.0f;
+    // Detection corner = 0.8 x the S centre (the split bell sits on the centre: splitCenterRatio = 1 / 0.8)
+    inline constexpr float autoCornerRatio = 1.0f / splitCenterRatio, autoMinCornerHz = 4500.0f, autoMaxCornerHz = 9500.0f;
+    inline constexpr float autoMinThresholdDb = -45.0f;   // further down EMBER would no longer work dynamically
+    inline constexpr double autoSBandHz = 4000.0;          // the S frames are judged above this
     inline constexpr double autoMinSeconds = 3.0;          // the least voice AUTO can work with
     inline constexpr double autoEnoughSeconds = 12.0;      // stops on its own after this much voice
     inline constexpr double autoQuietSeconds = 4.0;        // no new voice for this long: done (enough heard) / "press play"

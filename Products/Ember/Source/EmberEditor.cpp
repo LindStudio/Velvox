@@ -405,10 +405,24 @@ namespace ember
         const float hz = processor.state.getRawParameterValue (pid::freq)->load();
         const float x = xForHz (hz);
         const float gr = processor.engine.currentReductionDb.load();
-        auto band = r.withLeft (x);
-        g.setGradientFill (juce::ColourGradient (look::accent.withAlpha (0.10f + 0.03f * std::min (gr, 12.0f)), band.getX(), 0,
-                                                 look::accent.withAlpha (0.02f), band.getRight(), 0, false));
-        g.fillRect (band);
+        const float strong = 0.10f + 0.03f * std::min (gr, 12.0f);
+        if (std::lround (processor.state.getRawParameterValue (pid::mode)->load()) == 0)
+        {
+            // Split: the bell around the S (strongest at its centre, the air above fades back out)
+            const float xc = xForHz (hz * splitCenterRatio), xr = std::min (r.getRight(), xForHz (hz * splitCenterRatio * 2.2f));
+            auto band = r.withLeft (x).withRight (std::max (x + 1.0f, xr));
+            juce::ColourGradient grad (look::accent.withAlpha (0.4f * strong), band.getX(), 0, look::accent.withAlpha (0.0f), band.getRight(), 0, false);
+            grad.addColour (juce::jlimit (0.0, 1.0, (double) ((xc - band.getX()) / band.getWidth())), look::accent.withAlpha (strong));
+            g.setGradientFill (grad);
+            g.fillRect (band);
+        }
+        else
+        {
+            auto band = r.withLeft (x);
+            g.setGradientFill (juce::ColourGradient (look::accent.withAlpha (strong), band.getX(), 0,
+                                                     look::accent.withAlpha (0.02f), band.getRight(), 0, false));
+            g.fillRect (band);
+        }
         g.setColour (look::accent.withAlpha (dragging ? 1.0f : 0.85f));
         g.fillRect (x - 1.0f, r.getY(), 2.0f, r.getHeight());
         g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ x, r.getY() + 14.0f }));
@@ -642,9 +656,9 @@ namespace ember
         styleSegment (voiceLow, tr ("TIEF", "LOW"), 2);
         styleSegment (voiceMid, tr ("MITTEL", "MID"), 2);
         styleSegment (voiceHigh, tr ("HOCH", "HIGH"), 2);
-        voiceLow.onClick = [this] { setVoice (voiceLowHz); };
-        voiceMid.onClick = [this] { setVoice (voiceMidHz); };
-        voiceHigh.onClick = [this] { setVoice (voiceHighHz); };
+        voiceLow.onClick = [this] { setVoice (voiceLowHz, voiceLowThrDb); };
+        voiceMid.onClick = [this] { setVoice (voiceMidHz, voiceMidThrDb); };
+        voiceHigh.onClick = [this] { setVoice (voiceHighHz, voiceHighThrDb); };
         listenBtn.setButtonText ("DELTA");
         listenBtn.onClick = [this]
         {
@@ -678,15 +692,15 @@ namespace ember
 
         // ---- explanations (info card on hover)
         const auto amountText = tr ("Wie stark die S-Laute reduziert werden. 50 % = genau das, was Threshold und Range (oder AUTO) vorgeben, "
-                                    "100 % = doppelt so viel, 0 % = aus.",
+                                    "100 % = anderthalbmal so viel, 0 % = aus.",
                                     "How hard the S sounds are reduced. 50 % = exactly what Threshold and Range (or AUTO) set, "
-                                    "100 % = twice as much, 0 % = off.");
+                                    "100 % = one and a half times as much, 0 % = off.");
         amountBig.setDescription (amountText);
         amountK.setDescription (amountText);
-        freqK.setDescription (tr ("Ab dieser Frequenz sucht der De-Esser nach S-Lauten und senkt nur diesen Bereich ab. "
-                                  "Tiefe Stimmen um 5 kHz, hohe um 7–8 kHz. Auch im Spektrum mit der Maus ziehbar.",
-                                  "From this frequency up the de-esser looks for S sounds and lowers only this range. "
-                                  "Low voices around 5 kHz, high voices around 7–8 kHz. Also draggable in the spectrum."));
+        freqK.setDescription (tr ("Ab dieser Frequenz sucht der De-Esser nach S-Lauten und senkt den S-Bereich knapp darüber ab. "
+                                  "Tiefe Stimmen um 5 kHz, hohe um 7–7,5 kHz. Auch im Spektrum mit der Maus ziehbar.",
+                                  "From this frequency up the de-esser looks for S sounds and lowers the S range just above it. "
+                                  "Low voices around 5 kHz, high voices around 7–7.5 kHz. Also draggable in the spectrum."));
         threshK.setDescription (tr ("Ab diesem S-Pegel greift der De-Esser ein. Tiefer = mehr S-Laute werden erfasst. "
                                     "Auch an der S-Pegel-Anzeige rechts ziehbar.",
                                     "The S level above which the de-esser steps in. Lower = more S sounds are caught. "
@@ -704,9 +718,9 @@ namespace ember
                                  "Share of the processed signal. Below 100 % some of the original S remains."));
         outK.setDescription (tr ("Ausgangspegel nach dem De-Esser.", "Output level after the de-esser."));
         modeSeg.setInfo (tr ("Modus", "Mode"),
-                         tr ("Split: nur der Bereich über der Frequenz wird leiser, die Stimme darunter bleibt voll. "
+                         tr ("Split: nur der S-Bereich wird leiser, die Stimme darunter und die Luft darüber bleiben. "
                              "Breitband: die ganze Stimme taucht beim S kurz ab (natürlicher bei Sprache).",
-                             "Split: only the range above the frequency gets quieter, the voice below stays full. "
+                             "Split: only the S range gets quieter, the voice below and the air above stay. "
                              "Wideband: the whole voice dips briefly on each S (more natural for speech)."));
         detectSeg.setInfo (tr ("Erkennung", "Detection"),
                            tr ("Smart (empfohlen): reagiert nur, wenn wirklich ein S-Laut klingt. Helle Vokale, Luft und Atem "
@@ -752,9 +766,9 @@ namespace ember
         for (auto* m : { &meter, &advancedMeter })
             addInfo (*m, tr ("Absenkung", "Reduction"), tr ("So viel leiser werden die S-Laute gerade, in dB (Gain Reduction).",
                                                             "How much quieter the S sounds are right now, in dB (gain reduction)."));
-        addInfo (voiceLow, tr ("Tiefe Stimme", "Low voice"), tr ("S-Bereich ab 5 kHz, für tiefe und männliche Stimmen.", "S range from 5 kHz, for low and male voices."));
-        addInfo (voiceMid, tr ("Mittlere Stimme", "Mid voice"), tr ("S-Bereich ab 6,5 kHz, passt für die meisten Stimmen.", "S range from 6.5 kHz, fits most voices."));
-        addInfo (voiceHigh, tr ("Hohe Stimme", "High voice"), tr ("S-Bereich ab 8 kHz, für hohe und weibliche Stimmen.", "S range from 8 kHz, for high and female voices."));
+        addInfo (voiceLow, tr ("Tiefe Stimme", "Low voice"), tr ("S-Bereich ab 5 kHz, greift etwas früher: für tiefe und männliche Stimmen.", "S range from 5 kHz, steps in a little earlier: for low and male voices."));
+        addInfo (voiceMid, tr ("Mittlere Stimme", "Mid voice"), tr ("S-Bereich ab 6,2 kHz, passt für die meisten Stimmen.", "S range from 6.2 kHz, fits most voices."));
+        addInfo (voiceHigh, tr ("Hohe Stimme", "High voice"), tr ("S-Bereich ab 7,4 kHz, für hohe und weibliche Stimmen.", "S range from 7.4 kHz, for high and female voices."));
         addInfo (listenBtn, "Delta", tr ("Nur das hören, was entfernt wird. Hörst du Vokale, ist es zu viel.",
                                          "Hear only what is removed. If you hear vowels, it is too much."));
         addInfo (display, tr ("Spektrum", "Spectrum"), tr ("Rot markiert: der S-Bereich, der bei S-Lauten leiser wird. Die rote Kante ziehen = Frequenz "
@@ -943,17 +957,23 @@ namespace ember
         licenceLock.setBounds (getLocalBounds().withTrimmedTop (60));   // the top bar (≡ menu) stays usable
     }
 
-    void EmberPanel::setVoice (float hz)
+    void EmberPanel::setVoice (float hz, float thresholdDb)
     {
         // a click on the voice that is already lit keeps the frequency AUTO found in that range (e.g. 7.2 kHz in MID)
         const float now = processor.state.getRawParameterValue (pid::freq)->load();
         const float lowMid = 0.5f * (voiceLowHz + voiceMidHz), midHigh = 0.5f * (voiceMidHz + voiceHighHz);
         const auto rangeOf = [&] (float f) { return f < lowMid ? 0 : (f < midHigh ? 1 : 2); };
-        if (processor.getAutoPhase() == EmberAudioProcessor::AutoPhase::done && std::abs (now - processor.getLastAuto().freq) < 1.0f
-            && rangeOf (now) == rangeOf (hz))
+        const bool autoDone = processor.getAutoPhase() == EmberAudioProcessor::AutoPhase::done;
+        if (autoDone && std::abs (now - processor.getLastAuto().freq) < 1.0f && rangeOf (now) == rangeOf (hz))
             return;
         if (auto* p = processor.state.getParameter (pid::freq))
             ui::gestures::setReal (*p, hz);
+        // The voice's threshold comes along (a deep voice's S sit lower against the voice), unless AUTO set the
+        // threshold for this voice: the detector reads the same at every frequency, so AUTO's threshold still fits
+        const float thrNow = processor.state.getRawParameterValue (pid::threshold)->load();
+        if (! (autoDone && std::abs (thrNow - processor.getLastAuto().thresholdDb) < 0.05f))
+            if (auto* p = processor.state.getParameter (pid::threshold))
+                ui::gestures::setReal (*p, thresholdDb);
         refreshButtons();
     }
 

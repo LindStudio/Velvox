@@ -91,8 +91,8 @@
 <p>SIMPLE shows only what you need. Ember sits large in the middle and shows what is happening through his mood.</p>
 <table>
   <tr><th>Element</th><th>Function</th></tr>
-  <tr><td>Amount</td><td>How strongly EMBER works. 50 % is exactly what threshold and range set, 100 % is twice that, 0 % turns processing off.</td></tr>
-  <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets where the S range starts: from 5 kHz (LOW), 6.5 kHz (MID) or 8 kHz (HIGH).</td></tr>
+  <tr><td>Amount</td><td>How strongly EMBER works. 50 % is exactly what threshold and range set, 100 % is one and a half times that, 0 % turns processing off.</td></tr>
+  <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets where the S range starts: from 5 kHz (LOW), 6.2 kHz (MID) or 7.4 kHz (HIGH). The threshold is set to match (deep voices have softer S), unless AUTO has already set it.</td></tr>
   <tr><td>DELTA</td><td>Hear only what is removed.</td></tr>
   <tr><td>REDUCTION</td><td>Shows how much quieter the S sounds are right now (0 to −12 dB, gain reduction).</td></tr>
 </table>
@@ -111,13 +111,13 @@
   <tr><td>Frequency</td><td>2–16 kHz</td><td>Lower edge of the S range.</td></tr>
   <tr><td>Threshold</td><td>−60 to 0 dB</td><td>S-band level above which reduction starts.</td></tr>
   <tr><td>Range</td><td>0–24 dB</td><td>Maximum reduction.</td></tr>
-  <tr><td>Amount</td><td>0–100 %</td><td>Strength: 50 % = what threshold and range set, 100 % = twice, 0 % = off.</td></tr>
+  <tr><td>Amount</td><td>0–100 %</td><td>Strength: 50 % = what threshold and range set, 100 % = 1.5x, 0 % = off.</td></tr>
   <tr><td>Attack</td><td>0.1–20 ms</td><td>How fast EMBER reacts to an S sound.</td></tr>
   <tr><td>Release</td><td>10–400 ms</td><td>How fast the reduction recovers afterwards.</td></tr>
   <tr><td>Lookahead</td><td>0–5 ms</td><td>How far EMBER looks ahead to catch S sounds right at their start. Latency stays at 5 ms regardless.</td></tr>
   <tr><td>Mix</td><td>0–100 %</td><td>Blend of processed and unprocessed signal.</td></tr>
   <tr><td>Output</td><td>±12 dB</td><td>Output level.</td></tr>
-  <tr><td>Mode: Split</td><td></td><td>Only the range above the frequency gets quieter (dynamic high shelf).</td></tr>
+  <tr><td>Mode: Split</td><td></td><td>Only the S range gets quieter: a wide dynamic bell around the S (centred at 1.25x the frequency). The voice below and the air above stay, so the S sounds like a quieter S instead of a duller one.</td></tr>
   <tr><td>Mode: Wideband</td><td></td><td>The whole voice dips briefly.</td></tr>
   <tr><td>Detection: Smart</td><td></td><td>Default and recommended. Reacts only when a real S sound is there (see <a href="#smart">section 5</a>).</td></tr>
   <tr><td>Detection: Relative</td><td></td><td>The S is measured against the loudness of the voice – quiet and loud parts are treated alike.</td></tr>
@@ -133,8 +133,8 @@
   <li>Ember listens to about 12 seconds of singing (pauses are skipped, up to 30 seconds), holding his hand to his ear. He finishes on his own – also when you stop playback after at least 3 seconds of singing. <strong>CANCEL</strong> stops him. If no sound arrives, Ember tells you to press play.</li>
   <li>EMBER then tries settings by rendering the take:
     <ul>
-      <li>The frequency is set just below the strongest S (between 5 and 9.5 kHz).</li>
-      <li>Threshold and Range are set so that S sounds lose 2.5 to 4.5 dB, depending on how harsh they are.</li>
+      <li>EMBER finds the centre of this voice's S energy and sets the frequency just below it (between 4.5 and 9.5 kHz). The same voice gets almost the same frequency whichever part AUTO hears.</li>
+      <li>Threshold and Range are set so that S sounds lose 2.5 to 4.5 dB, depending on how harsh they are (measured in the S range). The threshold never goes below −45 dB, so EMBER stays dynamic and leaves soft f and sh sounds alone.</li>
       <li>Vowels stay untouched (0.1 dB or less).</li>
       <li>Release is set to 35 ms.</li>
       <li>Everything else stays as you set it (mode, detection, Amount, attack, lookahead, mix, output) – AUTO measures with it. Only an Amount below 25 % is set to 50 %.</li>
