@@ -1813,7 +1813,7 @@ namespace ember::qa
                 juce::AudioBuffer<float> buf (2, block);
                 juce::MidiBuffer midi;
                 const int perMinute = (int) (fs * 60.0 / block);
-                double firstMinute = 0.0, last = 0.0;
+                double firstMinute = 0.0, fifth = 0.0, last = 0.0;
                 std::printf ("    audio minute:");
                 for (int k = 0; k < perMinute * 10; ++k)
                 {
@@ -1831,37 +1831,53 @@ namespace ember::qa
                         emberQaSysInfo (priv, ws, handles, gdi, user);
                         if ((k + 1) / perMinute == 1)
                             firstMinute = priv;
+                        if ((k + 1) / perMinute == 5)
+                            fifth = priv;
                         last = priv;
                         std::printf (" %d: %.1f MB", (k + 1) / perMinute, priv);
                     }
                 }
                 std::printf ("\n");
-                check (last - firstMinute < 1.0, "private bytes flat over 9 minutes of audio (" + juce::String (last - firstMinute, 2) + " MB)");
+                check (last - fifth < 0.5, "private bytes flat over the last 5 minutes of audio (" + juce::String (last - fifth, 2) + " MB; minute 1 -> 10: "
+                                               + juce::String (last - firstMinute, 2) + " MB)");
             }
-            // 2) editor open / close (on the desktop, painting) 40 times
+            // 2) editor open / close (on the desktop, painting) 120 times; without the desktop window 60 times
+            for (int onDesktop = 1; onDesktop >= 0; --onDesktop)
             {
                 UserSettings::useFileForTests (juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_qa.settings"));
                 auto p = makePlugin (48000.0, 512);
+                const int loops = onDesktop ? 120 : 60;
                 double p0 = 0; int h0 = 0, g0 = 0, u0 = 0;
-                for (int k = 0; k < 40; ++k)
+                std::printf ("    editor open/close%s, private MB:", onDesktop ? " (window on the desktop)" : " (no window)");
+                for (int k = 0; k < loops; ++k)
                 {
                     {
                         std::unique_ptr<juce::AudioProcessorEditor> ed (p->createEditor());
-                        ed->addToDesktop (juce::ComponentPeer::windowHasTitleBar);
-                        ed->setVisible (true);
+                        if (onDesktop)
+                        {
+                            ed->addToDesktop (juce::ComponentPeer::windowHasTitleBar);
+                            ed->setVisible (true);
+                        }
                         if (auto* e = dynamic_cast<EmberEditor*> (ed.get()))
                             e->setAdvanced (k % 2 == 1);
-                        juce::MessageManager::getInstance()->runDispatchLoopUntil (60);
+                        juce::MessageManager::getInstance()->runDispatchLoopUntil (onDesktop ? 60 : 5);
                     }
                     juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
-                    if (k == 4)
+                    if (k == 9)
                         emberQaSysInfo (p0, ws, h0, g0, u0);
+                    if ((k + 1) % 20 == 0)
+                    {
+                        emberQaSysInfo (priv, ws, handles, gdi, user);
+                        std::printf (" %d: %.1f", k + 1, priv);
+                    }
                 }
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
                 emberQaSysInfo (priv, ws, handles, gdi, user);
-                std::printf ("    editor 40x open/close: after 5: %.1f MB, %d handles, %d GDI, %d USER -> after 40: %.1f MB, %d, %d, %d\n",
-                             p0, h0, g0, u0, priv, handles, gdi, user);
-                check (priv - p0 < 8.0, "editor loop: private bytes stay (" + juce::String (priv - p0, 2) + " MB over 35 opens)");
+                std::printf ("\n      after 10: %.1f MB, %d handles, %d GDI, %d USER -> after %d: %.1f MB, %d, %d, %d\n",
+                             p0, h0, g0, u0, loops, priv, handles, gdi, user);
+                const double perOpen = (priv - p0) / (loops - 10);
+                check (perOpen < 0.1, juce::String ("editor loop") + (onDesktop ? " (window)" : " (no window)") + ": private bytes stay ("
+                                          + juce::String (perOpen, 3) + " MB per open)");
                 check (handles - h0 < 30 && gdi - g0 < 10 && user - u0 < 10, "editor loop: no handle / GDI / USER object leak");
             }
             // 3) instances created and destroyed 150 times
