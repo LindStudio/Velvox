@@ -88,12 +88,23 @@ namespace ember
     // The fixed matched cut of the split band (what the engine runs) and the band's response in dB at `hz` when
     // it takes `reductionDb` off (tests, display)
     BiquadCoeffs splitBell (double sampleRate, double freq, double widthOct) noexcept;
-    double splitResponseDb (double sampleRate, double freq, double widthOct, double reductionDb, double hz) noexcept;
+    double splitResponseDb (double sampleRate, double freq, double widthOct, double reductionDb, double hz, bool tracked = true) noexcept;
+    // |gain| of a cut at its centre (clamped): the blend is scaled by 1 / (1 - it), so the centre takes exactly the
+    // asked-for depth, also far past the fixed cut (2026-11-24: a 24 dB reduction was ~1.2 dB short before)
+    double bellCentreGain (const BiquadCoeffs& c, double sampleRate, double centreHz) noexcept;
+    // The blend b that gives the gain g at the bell's centre, D = 1 - its response there: |1 - b D| = g
+    // (exact also far past the fixed cut and with the matched design's phase at its centre); g >= 1 -> exactly 0
+    inline float blendForGain (float g, float dRe, float dAbs2, float dIm2) noexcept
+    {
+        if (g >= 1.0f)
+            return 0.0f;
+        return (dRe - std::sqrt (std::max (0.0f, dAbs2 * g * g - dIm2))) / dAbs2;
+    }
     // S tracking (2026-11-24): three bells, trackSpreadOct apart around the split band's centre, each
     // trackSpreadOct x 2 narrower than the band (at least trackMinBellOct): with the S in the middle the band is
     // the middle bell; a lower or higher S moves the weight to the outer bells, so together they still cover
     // the band's width. Tracker: band-passes on the three centres (two sections each), trackEnvMs energies.
-    inline constexpr float trackSpreadOct = 0.5f, trackMinBellOct = 1.0f, trackEnvMs = 5.0f;
+    inline constexpr float trackSpreadOct = 0.5f, trackMinBellOct = 1.0f, trackEnvMs = 5.0f, trackDeadZone = 0.1f;
     struct TrackBells { double centreHz[3]; double widthOct; };
     TrackBells trackBells (double freq, double widthOct) noexcept;
     // Matched (Vicanek) cut of bandRefDb on `centreHz`, `widthOct` between its half-reduction points (widthRefDb)
@@ -325,7 +336,7 @@ namespace ember
         std::atomic<float> detectorDb { -100.0f }, detectorWeight { 0.0f };
 
     private:
-        void updateBand() noexcept;
+        void updateBand (bool tracker = true) noexcept;   // tracker = also the tracker's band-passes
         void resetTrack() noexcept;
         int lookaheadSamples (float ms) const noexcept;
 
@@ -342,6 +353,8 @@ namespace ember
         Biquad listenHp, listenHp2;  // listening to the split band: 4th-order high-pass at its lower edge
         bool listenHpLive = false;
         float bandScale = 1.0f;      // 1 / (1 - bell gain at its centre): (bell(x) - x) * bandScale = the band
+        // D = 1 - (middle) bell response at its centre (complex): the blend b with |1 - b D| = the asked-for gain
+        float dRe = 0.75f, dAbs2 = 0.5625f, dIm2 = 0.0f;
         juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> freq { 6200.0f }, width { 3.0f };
         juce::SmoothedValue<float> mixSm { 1.0f }, outSm { 1.0f }, bypassSm { 0.0f }, modeSm { 0.0f }, wetSm { 1.0f };
         juce::SmoothedValue<float> listenSm[3];

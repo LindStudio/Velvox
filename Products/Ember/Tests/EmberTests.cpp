@@ -1557,7 +1557,7 @@ namespace
         near (splitResponseDb (48000.0, 6200.0, 3.0, 5.0, shape.centreHz), -5.0, 0.05, "centre takes the reduction");
         near (splitResponseDb (48000.0, 6200.0, 3.0, 0.0, 3000.0), 0.0, 1.0e-9, "0 dB = flat");
         // width: the half-reduction points sit `width` octaves apart
-        const double lo = splitResponseDb (192000.0, 6200.0, 2.0, 6.0, splitBand (6200.0, 2.0).lowHz);
+        const double lo = splitResponseDb (192000.0, 6200.0, 2.0, 6.0, splitBand (6200.0, 2.0).lowHz, false);
         near (lo, -3.0, 0.15, "half the reduction at the lower edge");
         check (splitResponseDb (48000.0, 6200.0, 1.5, 6.0, 14000.0) > splitResponseDb (48000.0, 6200.0, 4.0, 6.0, 14000.0) + 2.0,
                "narrow leaves the air, wide takes it");
