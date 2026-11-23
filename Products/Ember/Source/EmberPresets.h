@@ -31,6 +31,7 @@ namespace ember
 
     // User presets
     juce::File userPresetFolder();
+    void setUserPresetFolderForTests (const juce::File&);   // tests: a temporary folder (empty = the real one again)
     juce::Array<juce::File> userPresets();
     bool saveUserPreset (const juce::File&, const ParamValues&);
     bool loadUserPreset (const juce::File&, ParamValues& out);

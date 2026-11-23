@@ -129,14 +129,27 @@ namespace vocalypse::ui
     }
 
     //==========================================================================
+    namespace
+    {
+        juce::Array<HoverInfo*>& allHoverInfos()
+        {
+            static juce::Array<HoverInfo*> all;
+            return all;
+        }
+    }
+
+    const juce::Array<HoverInfo*>& HoverInfo::getAllForTests() noexcept { return allHoverInfos(); }
+
     HoverInfo::HoverInfo (juce::Component& c, std::function<juce::String()> t, std::function<juce::String()> v, std::function<juce::String()> d)
         : anchor (c), title (std::move (t)), value (std::move (v)), description (std::move (d))
     {
         anchor.addMouseListener (this, true);
+        allHoverInfos().add (this);
     }
 
     HoverInfo::~HoverInfo()
     {
+        allHoverInfos().removeFirstMatchingValue (this);
         // The info card notices on its own when its anchor goes away
         anchor.removeMouseListener (this);
     }

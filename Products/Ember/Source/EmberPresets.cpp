@@ -81,8 +81,21 @@ namespace ember
         return true;
     }
 
+    namespace
+    {
+        juce::File& testPresetFolder()
+        {
+            static juce::File f;
+            return f;
+        }
+    }
+
+    void setUserPresetFolderForTests (const juce::File& f) { testPresetFolder() = f; }
+
     juce::File userPresetFolder()
     {
+        if (testPresetFolder() != juce::File())
+            return testPresetFolder();
         return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
             .getChildFile ("Lind Audio").getChildFile ("EMBER").getChildFile ("Presets");
     }

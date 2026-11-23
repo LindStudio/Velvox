@@ -49,6 +49,12 @@ namespace vocalypse::ui
         ~HoverInfo() override;
         void refresh();
         bool isShown() const noexcept { return shown; }
+        // What the card shows (tests: every control explains itself, in both languages)
+        juce::Component& getAnchor() const noexcept { return anchor; }
+        juce::String getTitle() const { return title ? title() : juce::String(); }
+        juce::String getValue() const { return value ? value() : juce::String(); }
+        juce::String getDescription() const { return description ? description() : juce::String(); }
+        static const juce::Array<HoverInfo*>& getAllForTests() noexcept;   // every live card (message thread)
 
     private:
         void mouseEnter (const juce::MouseEvent&) override;
