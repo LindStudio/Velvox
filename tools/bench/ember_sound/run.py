@@ -6,10 +6,12 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 S = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, S)
-import ana
+sys.path.insert(1, os.path.dirname(S))   # deess_metrics.py (tools/bench)
+import ana, deess_metrics as dm
 
 TAKES = sorted(glob.glob(S + '/data/takes/*.wav'))
 OUT = S + '/out'
+BASE = os.path.join(S, 'base', 'EmberTests.exe')
 os.makedirs(OUT, exist_ok=True)
 
 
@@ -34,6 +36,8 @@ def job(a):
     tr, _ = ana.load(t)
     r = ana.metrics(C, w, tr)
     r.pop('_ev')
+    d, fs = ana.load(take)
+    r['purity'] = dm.metrics(d, w, fs)['purity']
     r['log'] = p.stdout.strip()
     return name, cfg, r
 
@@ -46,12 +50,14 @@ def prods(take):
     w, _ = ana.load(pf)
     r = ana.metrics(classes(take), w)
     r.pop('_ev')
+    d, fs = ana.load(take)
+    r['purity'] = dm.metrics(d, w, fs)['purity']
     return name, 'prods', r
 
 
 KEYS = [('S_4_12', 'S4-12'), ('S_core', 'Kern'), ('S_above', 'Luft'), ('ratio', 'L/K'), ('cent', 'Schwerp'),
         ('ev_untouched', 'unber%'), ('ev_over8', '>8dB%'), ('weak_4_12', 'f/leise'), ('burst_4_12', 't/k'),
-        ('vowel_air', 'VokLuft'), ('near_air', 'nebenS'), ('vowel_gr_frames_pct', 'VokGR%')]
+        ('vowel_air', 'VokLuft'), ('vowel_pres', 'VokPres'), ('near_air', 'nebenS'), ('vowel_gr_frames_pct', 'VokGR%'), ('purity', 'Rein%'), ('retrig_per_S', 'retrig')]
 
 
 def row(rs):
@@ -75,7 +81,7 @@ def show(title, res, names=None):
         if not rs:
             continue
         o = row(rs)
-        print('%-14s' % cfg + ''.join('%9.2f' % (-o[k] if k not in ('ratio', 'cent', 'ev_untouched', 'ev_over8', 'vowel_gr_frames_pct') else o[k]) for k, _ in KEYS))
+        print('%-14s' % cfg + ''.join('%9.2f' % (-o[k] if k not in ('ratio', 'cent', 'ev_untouched', 'ev_over8', 'vowel_gr_frames_pct', 'purity', 'retrig_per_S') else o[k]) for k, _ in KEYS))
 
 
 if __name__ == '__main__':
@@ -86,7 +92,7 @@ if __name__ == '__main__':
         cfgs.append((name, [x for x in a.split(',') if x]))
     res = {}
     with ProcessPoolExecutor(max_workers=os.cpu_count()) as ex:
-        jobs = [(exe, t, c, a) for c, a in cfgs for t in TAKES]
+        jobs = [((BASE if c.startswith('B_') else exe), t, c, a) for c, a in cfgs for t in TAKES]
         pj = [ex.submit(prods, t) for t in TAKES]
         for name, cfg, r in ex.map(job, jobs):
             res.setdefault(cfg, {})[name] = r
@@ -95,6 +101,8 @@ if __name__ == '__main__':
             if x:
                 res.setdefault('prods', {})[x[0]] = x[2]
     json.dump(res, open(OUT + '/last.json', 'w'), indent=1, default=float)
+    for cfg in list(res):
+        if cfg != 'prods' and len(res[cfg]) == 0: res.pop(cfg)
     show('== alle 15 Takes (Mittel) ==', {k: v for k, v in res.items() if k != 'prods'})
     show('== nur J1-J3 (mit Pro-DS) ==', res, {'J1_chemicals', 'J2_kissed', 'J3_lonely'})
     for cfg, d in res.items():
