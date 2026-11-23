@@ -1,5 +1,6 @@
 #include "EmberEngine.h"
 #include "DSP/EqDesign.h"
+#include <complex>
 
 namespace ember
 {
@@ -74,6 +75,28 @@ namespace ember
         const double x = hi / centre;
         const double gW = std::pow (10.0, -widthRefDb / 20.0);
         return { centre, std::sqrt (gW) / (x - 1.0 / x), lo, hi };
+    }
+
+    BiquadCoeffs splitBell (double fs, double freq, double widthOct) noexcept
+    {
+        const auto shape = splitBand (freq, widthOct);
+        EqBand b;
+        b.on = true;
+        b.type = (int) EqBandType::bell;
+        b.freq = (float) std::min (shape.centreHz, fs * 0.45);
+        b.q = (float) (shape.poleQ * std::pow (10.0, bandRefDb / 40.0));   // matched cut: pole Q = q / A
+        b.gain = -bandRefDb;
+        return eqdesign::design (b, false, fs).sections[0];
+    }
+
+    double splitResponseDb (double fs, double freq, double widthOct, double reductionDb, double hz) noexcept
+    {
+        const auto c = splitBell (fs, freq, widthOct);
+        const double w = juce::MathConstants<double>::twoPi * hz / fs;
+        const std::complex<double> z1 = std::polar (1.0, -w), z2 = z1 * z1;
+        const auto h = (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2);
+        const double blend = (1.0 - std::pow (10.0, -reductionDb / 20.0)) / (1.0 - std::pow (10.0, -bandRefDb / 20.0));
+        return 20.0 * std::log10 (std::abs (1.0 + blend * (h - 1.0)));
     }
 
     // ---------------------------------------------------------------- MinAverage
@@ -337,7 +360,10 @@ namespace ember
         fs = sampleRate;
         latency = latencyFor (sampleRate);
         delaySize = latency + 1;
-        for (auto* lines : { &audioDelay, &envDelay, &bandDelay, &gateDelay0, &gateDelay1 })
+        for (auto* lines : { &audioDelay, &bandDelay })
+            for (auto& d : *lines)
+                d.assign ((size_t) delaySize, 0.0f);
+        for (auto* lines : { &envDelay, &gateDelay0, &gateDelay1 })
             for (auto& d : *lines)
                 d.assign ((size_t) delaySize, 0.0f);
 
@@ -390,7 +416,10 @@ namespace ember
         listenHp.reset();
         listenHp2.reset();
         listenHpLive = false;
-        for (auto* lines : { &audioDelay, &envDelay, &bandDelay, &gateDelay0, &gateDelay1 })
+        for (auto* lines : { &audioDelay, &bandDelay })
+            for (auto& d : *lines)
+                std::fill (d.begin(), d.end(), 0.0f);
+        for (auto* lines : { &envDelay, &gateDelay0, &gateDelay1 })
             for (auto& d : *lines)
                 std::fill (d.begin(), d.end(), 0.0f);
         for (auto& m : gate)
@@ -402,6 +431,7 @@ namespace ember
             e = 0.0f;
         laCur = laPrev = lookaheadSamples (settings.lookaheadMs);
         laFadeLeft = 0;
+        wetHold = 0;
         currentReductionDb.store (0.0f, std::memory_order_relaxed);
     }
 
@@ -439,6 +469,8 @@ namespace ember
         detector.setAllround (settings.smart && settings.allround);
         if (settings.stereoMode != activeStereoMode)
             wetSm.setTargetValue (0.0f);   // fade the processing out, switch at the bottom (process)
+        else if (wetHold <= 0)
+            wetSm.setTargetValue (1.0f);   // switched back before the fade was through
 
         const int la = lookaheadSamples (settings.lookaheadMs);
         if (la != laCur)
@@ -452,17 +484,10 @@ namespace ember
     void Engine::updateBand() noexcept
     {
         const auto shape = splitBand (freq.getCurrentValue(), width.getCurrentValue());
-        const double A = std::pow (10.0, bandRefDb / 40.0);
-        EqBand b;
-        b.on = true;
-        b.type = (int) EqBandType::bell;
-        b.freq = (float) std::min (shape.centreHz, fs * 0.45);
-        b.q = (float) (shape.poleQ * A);
-        b.gain = -bandRefDb;
-        bell.setCoeffs (eqdesign::design (b, false, fs).sections[0]);
+        bell.setCoeffs (splitBell (fs, freq.getCurrentValue(), width.getCurrentValue()));
+        bandScale = 1.0f / (1.0f - dbToGain (-bandRefDb));
         listenHp.setCoeffs (design::highPass (fs, std::min (shape.lowHz, fs * 0.45), q1));
         listenHp2.setCoeffs (design::highPass (fs, std::min (shape.lowHz, fs * 0.45), q2));
-        bandScale = 1.0f / (1.0f - dbToGain (-bandRefDb));
     }
 
     void Engine::process (float* const* channels, int numChannels, int numSamples) noexcept
@@ -511,22 +536,38 @@ namespace ember
                         g.reset();
                 for (auto& e : envDb)
                     e = 0.0f;
-                for (auto* lines : { &envDelay, &bandDelay, &gateDelay0, &gateDelay1 })
+                for (auto& d : bandDelay)
+                    std::fill (d.begin(), d.end(), 0.0f);
+                for (auto* lines : { &envDelay, &gateDelay0, &gateDelay1 })
                     for (auto& d : *lines)
                         std::fill (d.begin(), d.end(), 0.0f);
-                wetSm.setTargetValue (1.0f);
+                // fade back in once the new control has run through the delay (no reduction popping in late)
+                wetHold = latency + gateWin[1];
             }
+            if (wetHold > 0 && (wetHold -= n) <= 0)
+                wetSm.setTargetValue (1.0f);
             const int sm = numIn == 2 ? activeStereoMode : 0;
             const bool perChannel = numIn == 2 && (sm == 0 || sm == 1) && link < 0.9995f;
-            if (perChannel && ! wasPerChannel)
+            if (perChannel != wasPerChannel)
             {
-                // the second channel's control ran linked on channel 0 until now: start it from there
-                envDb[1] = envDb[0];
-                envDelay[1] = envDelay[0];
-                for (int m = 0; m < 2; ++m)
-                    gate[m][1] = gate[m][0];
-                gateDelay0[1] = gateDelay0[0];
-                gateDelay1[1] = gateDelay1[0];
+                // linked, slot 0 holds the shared control; per channel, slots 0 / 1 are the channels' own and slot 2
+                // the linked one. Every slot starts from the control that ran until now (no jump)
+                const auto copySlot = [this] (int from, int to)
+                {
+                    envDb[to] = envDb[from];
+                    envDelay[(size_t) to] = envDelay[(size_t) from];
+                    for (int g = 0; g < 2; ++g)
+                        gate[g][to] = gate[g][from];
+                    gateDelay0[(size_t) to] = gateDelay0[(size_t) from];
+                    gateDelay1[(size_t) to] = gateDelay1[(size_t) from];
+                };
+                if (perChannel)
+                {
+                    copySlot (0, 2);
+                    copySlot (0, 1);
+                }
+                else
+                    copySlot (2, 0);
             }
             wasPerChannel = perChannel;
             const bool smoothing = modeSm.isSmoothing() || wetSm.isSmoothing() || mixSm.isSmoothing() || outSm.isSmoothing()
@@ -534,14 +575,14 @@ namespace ember
 
             // Raw pointers (MSVC reloads a vector's data pointer after every float store otherwise)
             float* aDl[maxChannels] { audioDelay[0].data(), audioDelay[1].data() };
-            float* eDl[maxChannels] { envDelay[0].data(), envDelay[1].data() };
+            float* eDl[numSlots] { envDelay[0].data(), envDelay[1].data(), envDelay[2].data() };
             float* bDl[maxChannels] { bandDelay[0].data(), bandDelay[1].data() };
-            float* g0Dl[maxChannels] { gateDelay0[0].data(), gateDelay0[1].data() };
-            float* g1Dl[maxChannels] { gateDelay1[0].data(), gateDelay1[1].data() };
+            float* g0Dl[numSlots] { gateDelay0[0].data(), gateDelay0[1].data(), gateDelay0[2].data() };
+            float* g1Dl[numSlots] { gateDelay1[0].data(), gateDelay1[1].data(), gateDelay1[2].data() };
             float* io[maxChannels] { channels[0], numIn > 1 ? channels[1] : channels[0] };
             const float range = settings.rangeDb, thr = settings.thresholdDb;
             const bool smart = settings.smart;
-            const int numCtrlMax = perChannel ? 2 : 1;
+            const int linkSlot = perChannel ? 2 : 0;
             // read offsets behind the write position: audio, envelope and gates for the current / previous lookahead
             const auto envLag = [&] (int la) { return latency - la; };
             const auto gateLag = [&] (int la, int mode) { return latency - std::min (la, mode == 0 ? lead0Max : lead1Max) - (gateWin[mode] - 1); };
@@ -551,7 +592,7 @@ namespace ember
             int wp = writePos, laLeft = laFadeLeft, laPrevL = laPrev;
             const int ds = delaySize, lat = latency;
             const float aC = attackCoeff, rC = releaseCoeff, bS = bandScale;
-            float envL[maxChannels] { envDb[0], envDb[1] };
+            float envL[numSlots] { envDb[0], envDb[1], envDb[2] };
             bool hpLive = listenHpLive;
             for (int k = 0; k < n; ++k)
             {
@@ -571,14 +612,17 @@ namespace ember
                     maxDet = det.linkedDb;
                     weightAtMax = smart ? det.linkedWeight : 1.0f;
                 }
-                // fully linked: every channel gets the same reduction, worked out once
-                const int numCtrl = std::min (numCtrlMax, numProc);
+                // Fully linked: one control for all channels (slot 0). Otherwise every channel has its own (slots 0 / 1)
+                // and the linked one runs beside them (slot 2); the link blends the reductions they ask for
                 for (int c = 0; c < numProc; ++c)
                     bDl[c][wp] = det.band[c];
-                for (int c = 0; c < numCtrl; ++c)
+                const int numOwn = perChannel ? numProc : 0;
+                for (int slot = 0; slot < numOwn + 1; ++slot)
                 {
-                    const float level = perChannel ? det.levelDb[c] + link * (det.linkedDb - det.levelDb[c]) : det.linkedDb;
-                    const float w = ! smart ? 1.0f : (perChannel ? det.weight[c] + link * (det.linkedWeight - det.weight[c]) : det.linkedWeight);
+                    const int c = slot < numOwn ? slot : linkSlot;
+                    const bool own = slot < numOwn;
+                    const float level = own ? det.levelDb[c] : det.linkedDb;
+                    const float w = ! smart ? 1.0f : (own ? det.weight[c] : det.linkedWeight);
                     const float target = std::min (maxReductionDb, std::min (range, staticReductionDb (level, thr)) * scale);
                     float e = envL[c];
                     e = target + (target > e ? aC : rC) * (e - target);
@@ -608,9 +652,10 @@ namespace ember
                 const int readAudio = wrap (wp - lat, ds);
                 float dry[maxChannels] { aDl[0][readAudio], aDl[1][readAudio] }, q[maxChannels], delta[maxChannels] {}, band[maxChannels] {};
                 encode (sm, numIn, dry, q);
-                float gains[maxChannels] { 1.0f, 1.0f };
-                for (int c = 0; c < numCtrl; ++c)
+                float gains[maxChannels] { 1.0f, 1.0f }, rs[numSlots] {};
+                for (int slot = 0; slot < numOwn + 1; ++slot)
                 {
+                    const int c = slot < numOwn ? slot : linkSlot;
                     const float g0 = g0Dl[c][wrap (wp - g0LagCur, ds)], g1 = g1Dl[c][wrap (wp - g1LagCur, ds)];
                     float r = eDl[c][wrap (wp - eLagCur, ds)] * (g0 + m * (g1 - g0));
                     if (laLeft > 0)
@@ -620,6 +665,11 @@ namespace ember
                         const float rp = eDl[c][wrap (wp - eLagPrev, ds)] * (p0 + m * (p1 - p0));
                         r = rp + laMix * (r - rp);
                     }
+                    rs[c] = r;
+                }
+                for (int c = 0; c < (perChannel ? numProc : 1); ++c)
+                {
+                    const float r = perChannel ? rs[c] + link * (rs[linkSlot] - rs[c]) : rs[0];
                     maxReduction = std::max (maxReduction, r);
                     lastReduction = c == 0 ? r : std::max (lastReduction, r);
                     gains[c] = fast::reductionToGain (r);
@@ -664,13 +714,13 @@ namespace ember
             writePos = wp;
             laFadeLeft = laLeft;
             laPrev = laPrevL;
-            envDb[0] = envL[0];
-            envDb[1] = envL[1];
+            for (int c = 0; c < numSlots; ++c)
+                envDb[c] = envL[c];
             listenHpLive = hpLive;
         }
 
         bool finite = detector.isFinite() && bell.isStateFinite() && listenHp.isStateFinite() && listenHp2.isStateFinite();
-        for (int c = 0; c < maxChannels; ++c)
+        for (int c = 0; c < numSlots; ++c)
             finite = finite && std::isfinite (envDb[c]);
         if (! finite)
         {

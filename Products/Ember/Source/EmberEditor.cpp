@@ -290,7 +290,7 @@ namespace ember
 
         g.setFont (ui::monoFont (9.5f));
         g.setColour (c::textMuted);
-        for (float db : { 0.0f, -20.0f, -40.0f, -60.0f })
+        for (float db : { -10.0f, -20.0f, -30.0f, -40.0f, -50.0f })
             g.drawText (juce::String ((int) db), juce::Rectangle<float> (b.getX() - 46.0f, yFor (db) - 6.0f, 24.0f, 12.0f), juce::Justification::centredRight);
         g.setFont (ui::caps (10.5f));
         g.setColour (c::textMuted);
@@ -408,9 +408,11 @@ namespace ember
         const float strong = 0.10f + 0.03f * std::min (gr, 12.0f);
         if (std::lround (processor.state.getRawParameterValue (pid::mode)->load()) == 0)
         {
-            // Split: the bell around the S (strongest at its centre, the air above fades back out)
-            const float xc = xForHz (hz * splitCenterRatio), xr = std::min (r.getRight(), xForHz (hz * splitCenterRatio * 2.2f));
-            auto band = r.withLeft (x).withRight (std::max (x + 1.0f, xr));
+            // Split: the band around the S between its half-reduction points (Width), strongest at its centre
+            const auto shape = splitBand (hz, processor.state.getRawParameterValue (pid::width)->load());
+            const float xl = std::max (r.getX(), xForHz ((float) shape.lowHz)), xc = xForHz ((float) shape.centreHz),
+                        xr = std::min (r.getRight(), xForHz ((float) shape.highHz));
+            auto band = r.withLeft (xl).withRight (std::max (xl + 1.0f, xr));
             juce::ColourGradient grad (look::accent.withAlpha (0.4f * strong), band.getX(), 0, look::accent.withAlpha (0.0f), band.getRight(), 0, false);
             grad.addColour (juce::jlimit (0.0, 1.0, (double) ((xc - band.getX()) / band.getWidth())), look::accent.withAlpha (strong));
             g.setGradientFill (grad);
@@ -594,9 +596,12 @@ namespace ember
           lookK (p.state, pid::lookahead, "Lookahead", look::accent),
           mixK (p.state, pid::mix, "Mix", look::accent),
           outK (p.state, pid::output, "Output", look::accent),
+          widthK (p.state, pid::width, tr ("Breite", "Width"), look::accent),
+          linkK (p.state, pid::link, "Link", look::accent),
           modeSeg (p.state, pid::mode, { "Split", tr ("Breitband", "Wideband") }, look::accent),
-          detectSeg (p.state, pid::detection, { "Smart", tr ("Relativ", "Relative"), tr ("Absolut", "Absolute") }, look::accent),
-          listenSeg (p.state, pid::listen, { tr ("Aus", "Off"), tr ("S-Bereich", "S range"), "Delta" }, look::accent)
+          detectSeg (p.state, pid::detection, { "Smart", tr ("Relativ", "Relative"), tr ("Absolut", "Absolute"), "Allround" }, look::accent),
+          listenSeg (p.state, pid::listen, { tr ("Aus", "Off"), tr ("S-Bereich", "S range"), "Delta" }, look::accent),
+          stereoSeg (p.state, pid::stereo, { "L/R", "M/S", "Mid", "Side" }, look::accent)
     {
 
         // ---- top bar
@@ -678,7 +683,7 @@ namespace ember
         // ---- ADVANCED
         addChildComponent (display);
         addChildComponent (detector);
-        for (auto* k : { &freqK, &threshK, &rangeK, &amountK, &attackK, &releaseK, &lookK, &mixK, &outK })
+        for (auto* k : { &freqK, &widthK, &threshK, &rangeK, &amountK, &attackK, &releaseK, &lookK, &linkK, &mixK, &outK })
         {
             k->setDialSize (ui::dialsize::secondary);
             addChildComponent (*k);
@@ -686,8 +691,10 @@ namespace ember
         styleLabel (modeLbl, tr ("Modus", "Mode"));
         styleLabel (detectLbl, tr ("Erkennung", "Detection"));
         styleLabel (listenLbl, tr ("Abhören", "Listen"));
+        styleLabel (stereoLbl, "Stereo");
         for (juce::Component* comp : { (juce::Component*) &modeSeg, (juce::Component*) &detectSeg, (juce::Component*) &listenSeg,
-                                       (juce::Component*) &modeLbl, (juce::Component*) &detectLbl, (juce::Component*) &listenLbl })
+                                       (juce::Component*) &modeLbl, (juce::Component*) &detectLbl, (juce::Component*) &listenLbl,
+                                       (juce::Component*) &stereoSeg, (juce::Component*) &stereoLbl })
             addChildComponent (*comp);
 
         // ---- explanations (info card on hover)
@@ -717,23 +724,37 @@ namespace ember
         mixK.setDescription (tr ("Anteil des bearbeiteten Signals. Unter 100 % bleibt etwas vom Original-S erhalten.",
                                  "Share of the processed signal. Below 100 % some of the original S remains."));
         outK.setDescription (tr ("Ausgangspegel nach dem De-Esser.", "Output level after the de-esser."));
+        widthK.setDescription (tr ("Wie breit der S-Bereich ist, den Split absenkt (in Oktaven). Schmal: nur das S selbst, die Luft darüber bleibt. "
+                                   "Breit: das S und die Luft darüber. Nach unten reicht er nie unter die Frequenz der Stimme.",
+                                   "How wide the S range is that Split lowers (in octaves). Narrow: only the S itself, the air above stays. "
+                                   "Wide: the S and the air above it. It never reaches down into the voice."));
+        linkK.setDescription (tr ("Wie stark die beiden Kanäle gemeinsam arbeiten. 100 %: ein S links senkt beide Seiten gleich ab (das Stereobild bleibt). "
+                                  "0 %: jeder Kanal für sich.",
+                                  "How much the two channels work together. 100 %: an S on the left lowers both sides alike (the stereo image stays). "
+                                  "0 %: each channel on its own."));
+        stereoSeg.setInfo ("Stereo", tr ("L/R: links und rechts (mit Stereo Link). M/S: Mitte und Seiten getrennt. "
+                                         "Mid: nur die Mitte (die Leadstimme), die Seiten bleiben unberührt. Side: nur die Seiten (z. B. gedoppelte Chöre).",
+                                         "L/R: left and right (with Stereo Link). M/S: mid and sides separately. "
+                                         "Mid: only the centre (the lead vocal), the sides stay untouched. Side: only the sides (e.g. doubled backing vocals)."));
         modeSeg.setInfo (tr ("Modus", "Mode"),
                          tr ("Split: nur der S-Bereich wird leiser, die Stimme darunter und die Luft darüber bleiben. "
                              "Breitband: die ganze Stimme taucht beim S kurz ab (natürlicher bei Sprache).",
                              "Split: only the S range gets quieter, the voice below and the air above stay. "
                              "Wideband: the whole voice dips briefly on each S (more natural for speech)."));
         detectSeg.setInfo (tr ("Erkennung", "Detection"),
-                           tr ("Smart (empfohlen): reagiert nur, wenn wirklich ein S-Laut klingt. Helle Vokale, Luft und Atem "
+                           tr ("Smart (empfohlen für eine Stimme): reagiert nur, wenn wirklich ein S-Laut klingt. Helle Vokale, Luft und Atem "
                                "bleiben unberührt. Relativ: misst das S im Verhältnis zur Lautstärke der Stimme, leise und laute "
-                               "Stellen gleich. Absolut: fester Pegel wie ein klassischer De-Esser.",
-                               "Smart (recommended): reacts only when a real S sound is there. Bright vowels, air and breaths "
+                               "Stellen gleich. Absolut: fester Pegel wie ein klassischer De-Esser. Allround: für Mixe, Busse und "
+                               "Instrumente, wo unter der Stimme noch anderes klingt.",
+                               "Smart (recommended for a single voice): reacts only when a real S sound is there. Bright vowels, air and breaths "
                                "stay untouched. Relative: measures the S against the loudness of the voice, quiet and loud "
-                               "parts alike. Absolute: fixed level like a classic de-esser."));
+                               "parts alike. Absolute: fixed level like a classic de-esser. Allround: for mixes, buses and "
+                               "instruments, where more is playing under the voice."));
         listenSeg.setInfo (tr ("Abhören", "Listen"),
-                           tr ("S-Bereich: nur den Bereich hören, in dem nach S-Lauten gesucht wird (zum Einstellen der Frequenz). "
+                           tr ("S-Bereich: nur den Bereich hören, der abgesenkt wird (Split: das S-Band, Breitband: ab der Frequenz). "
                                "Delta: nur das hören, was entfernt wird. Es sollten nur S-Laute zu hören sein. "
                                "Abhören wird nie gespeichert.",
-                               "S range: hear only the range searched for S sounds (to set the frequency). "
+                               "S range: hear only the range that is lowered (Split: the S band, Wideband: from the frequency up). "
                                "Delta: hear only what is removed. You should hear nothing but S sounds. "
                                "Listening is never saved."));
 
@@ -895,7 +916,8 @@ namespace ember
                                        (juce::Component*) &attackK, (juce::Component*) &releaseK, (juce::Component*) &lookK,
                                        (juce::Component*) &mixK, (juce::Component*) &outK, (juce::Component*) &modeSeg,
                                        (juce::Component*) &detectSeg, (juce::Component*) &listenSeg, (juce::Component*) &modeLbl,
-                                       (juce::Component*) &detectLbl, (juce::Component*) &listenLbl })
+                                       (juce::Component*) &detectLbl, (juce::Component*) &listenLbl, (juce::Component*) &widthK,
+                                       (juce::Component*) &linkK, (juce::Component*) &stereoSeg, (juce::Component*) &stereoLbl })
             comp->setVisible (a);
         infoPopup.hide();
         layout();
@@ -937,17 +959,19 @@ namespace ember
             advancedMeter.setBounds (R (730, 118, 62, 222));
             detector.setBounds (R (796, 114, 76, 230));
             int x = 28;
-            for (auto* k : { &freqK, &threshK, &rangeK, &amountK, &attackK, &releaseK, &lookK, &mixK, &outK })
+            for (auto* k : { &freqK, &widthK, &threshK, &rangeK, &amountK, &attackK, &releaseK, &lookK, &linkK, &mixK, &outK })
             {
-                k->setBounds (R (x, 352, 94, 108));
-                x += 94;
+                k->setBounds (R (x, 352, 77, 108));
+                x += 77;
             }
             modeLbl.setBounds (R (40, 466, 120, 18));
-            modeSeg.setBounds (R (40, 484, 200, 30));
-            detectLbl.setBounds (R (284, 466, 120, 18));
-            detectSeg.setBounds (R (284, 484, 270, 30));
-            listenLbl.setBounds (R (598, 466, 120, 18));
-            listenSeg.setBounds (R (598, 484, 262, 30));
+            modeSeg.setBounds (R (40, 484, 150, 30));
+            detectLbl.setBounds (R (206, 466, 120, 18));
+            detectSeg.setBounds (R (206, 484, 260, 30));
+            listenLbl.setBounds (R (482, 466, 120, 18));
+            listenSeg.setBounds (R (482, 484, 200, 30));
+            stereoLbl.setBounds (R (698, 466, 120, 18));
+            stereoSeg.setBounds (R (698, 484, 172, 30));
             status.setBounds (R (40, 528, 820, 50));
         }
         infoPopup.setBounds (getLocalBounds());

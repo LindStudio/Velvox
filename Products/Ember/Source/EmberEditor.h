@@ -55,7 +55,7 @@ namespace ember
         void mouseMove (const juce::MouseEvent&) override;
         void mouseExit (const juce::MouseEvent&) override;
         void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
-        static constexpr float minDb = -60.0f, maxDb = 0.0f;
+        static constexpr float minDb = thresholdMinDb, maxDb = thresholdMaxDb;
     private:
         juce::Rectangle<float> barArea() const;
         float yFor (float db) const;
@@ -219,8 +219,9 @@ namespace ember
 
         // ADVANCED
         vocalypse::ui::Knob freqK, threshK, rangeK, amountK, attackK, releaseK, lookK, mixK, outK;
-        vocalypse::ui::Segments modeSeg, detectSeg, listenSeg;
-        juce::Label modeLbl, detectLbl, listenLbl;
+        vocalypse::ui::Knob widthK, linkK;   // 2026-11-23 (fix/ember-dsp): split band width, stereo link
+        vocalypse::ui::Segments modeSeg, detectSeg, listenSeg, stereoSeg;
+        juce::Label modeLbl, detectLbl, listenLbl, stereoLbl;
 
         vocalypse::ui::InfoPopup infoPopup;
         std::unique_ptr<AboutOverlay> about;

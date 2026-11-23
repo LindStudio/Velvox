@@ -44,6 +44,10 @@ namespace ember
                            *mode, *detection, *listen, *bypass, *width, *link, *stereo;
     };
 
+    // Threshold range (2026-11-23): the relative detector reads at most about -17 dB (an S whose band carries the
+    // whole level), so the old -60..0 range had its top 15 dB dead; -50..-10 covers every real setting
+    inline constexpr float thresholdMinDb = -50.0f, thresholdMaxDb = -10.0f;
+
     // Choice names (host / automation; the UI shows its own labels)
     inline const juce::StringArray modeChoices { "Split", "Wideband" };
     // Smart = for a single vocal (Pro-DS "Single Vocal"), Allround = mixes, buses, instruments

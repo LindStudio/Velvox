@@ -35,11 +35,6 @@
 //  - Listen S band = what is processed: in Split the band itself (4th-order high-passed at its lower edge, so the voice
 //    under it does not bleed through the gentle bell skirt), in Wideband the detector band.
 //  - Switching listen, mode, lookahead or stereo mode cross-fades (no clicks).
-// Tuning constants are plain inline variables while EMBER_TUNING is defined (bench sweeps via --process)
-#ifndef EMBER_TUNABLE
- #define EMBER_TUNABLE inline
-#endif
-
 namespace ember
 {
     using namespace vocalypse::dsp;
@@ -74,14 +69,18 @@ namespace ember
     // never goes under splitLowestRatio x freq (a wide band grows into the air, not into the presence).
     inline constexpr float splitCenterRatio = 1.25f;
     inline constexpr float minWidthOct = 1.0f, maxWidthOct = 4.0f, defaultWidthOct = 3.0f;
-    EMBER_TUNABLE float splitLowestRatio = 0.45f;
+    inline constexpr float splitLowestRatio = 0.45f;
     // The fixed matched cut the dynamic band blends towards (any reduction is a blend / extrapolation of it)
-    EMBER_TUNABLE float bandRefDb = 12.0f;
+    inline constexpr float bandRefDb = 12.0f;
     // Width is measured at this depth (the half-dB points of a widthRefDb cut)
-    EMBER_TUNABLE float widthRefDb = 6.0f;
+    inline constexpr float widthRefDb = 6.0f;
     // Centre frequency and pole Q (Regalia-Mitra form) of the split band for a detection corner and a width
     struct BandShape { double centreHz, poleQ, lowHz, highHz; };   // low / high = the half-reduction points
     BandShape splitBand (double freq, double widthOct) noexcept;
+    // The fixed matched cut of the split band (what the engine runs) and the band's response in dB at `hz` when
+    // it takes `reductionDb` off (tests, display)
+    BiquadCoeffs splitBell (double sampleRate, double freq, double widthOct) noexcept;
+    double splitResponseDb (double sampleRate, double freq, double widthOct, double reductionDb, double hz) noexcept;
     // Old split bell (2026-11-22, RBJ Q 0.4 at 1.25 x freq) - about the same as splitBand at 3 octaves
     inline constexpr float splitQ = 0.4f;
 
@@ -107,17 +106,17 @@ namespace ember
     // smartNoneDb, 1 at smartFullDb: a transition keeps its vowel, only the S itself is taken down.
     // The smart band follows the frequency (smartBandRatio x freq: 4 kHz at the default 6.2 kHz).
     inline constexpr float smartNoneDb = -1.0f, smartFullDb = 5.0f;
-    EMBER_TUNABLE float smartBandRatio = 0.65f, smartBandMinHz = 3500.0f, smartBandMaxHz = 6000.0f;
+    inline constexpr float smartBandRatio = 0.65f, smartBandMinHz = 3500.0f, smartBandMaxHz = 6000.0f;
     inline constexpr float smartEnvMs = 5.0f;
     // The smart band at the default frequency (the fixed value before 2026-11-23)
     inline constexpr float smartBandHz = 4000.0f;
     // Allround: the smart band against the band right under it (allroundLowRatio .. allroundHighRatio x freq)
     // instead of the voice body - works on mixes and instruments too, where the body is always full
-    EMBER_TUNABLE float allroundLowRatio = 0.3f, allroundHighRatio = 0.6f;
-    EMBER_TUNABLE float allroundNoneDb = 2.0f, allroundFullDb = 8.0f;
+    inline constexpr float allroundLowRatio = 0.3f, allroundHighRatio = 0.6f;
+    inline constexpr float allroundNoneDb = -6.0f, allroundFullDb = 0.0f;
     // Gate smoothing window (running minimum + moving average) in split / wideband: wideband moves the whole
     // voice, so its gate glides slower. The gate leads the audio by the lookahead (at most latency - window).
-    EMBER_TUNABLE float gateSplitMs = 2.0f, gateWideMs = 6.0f;
+    inline constexpr float gateSplitMs = 2.0f, gateWideMs = 6.0f;
     // Cross-fade time for listen / mode / lookahead / stereo mode switches
     inline constexpr float switchFadeMs = 15.0f;
 
@@ -315,17 +314,21 @@ namespace ember
         juce::SmoothedValue<float> mixSm { 1.0f }, outSm { 1.0f }, bypassSm { 0.0f }, modeSm { 0.0f }, wetSm { 1.0f };
         juce::SmoothedValue<float> listenSm[3];
         float attackCoeff = 0.0f, releaseCoeff = 0.0f;
-        float envDb[maxChannels] {};
+        // control slots: 0 / 1 = channel (or the shared one in slot 0 when fully linked), 2 = linked beside own
+        static constexpr int numSlots = maxChannels + 1;
+        float envDb[numSlots] {};
 
         // Lookahead (samples) and the cross-fade from the previous one
         int laCur = 0, laPrev = 0, laFadeLeft = 0, laFadeLen = 1;
         // Smart gate smoothing per processing channel, one per mode (cross-faded with the mode)
-        MinAverage gate[2][maxChannels];
+        MinAverage gate[2][numSlots];
         int gateWin[2] { 1, 1 };
 
         // Delay lines: audio (per input channel), envelope / gates / detector band (per processing channel)
-        std::array<std::vector<float>, maxChannels> audioDelay, envDelay, bandDelay, gateDelay0, gateDelay1;
+        std::array<std::vector<float>, maxChannels> audioDelay, bandDelay;
+        std::array<std::vector<float>, numSlots> envDelay, gateDelay0, gateDelay1;
         int writePos = 0, delaySize = 1, gridPhase = 0;
         bool wasPerChannel = false;
+        int wetHold = 0;   // samples the wet signal stays faded out after a stereo mode switch
     };
 }
