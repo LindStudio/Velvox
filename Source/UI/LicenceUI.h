@@ -9,6 +9,9 @@ namespace vocalypse::ui
     // Asks for the key from the email and activates it (a small modal card in the plugin's look; the accent comes
     // from LicenceLock::accentColourId of over's look-and-feel when it sets one)
     void showActivationDialog (licensing::Manager&, juce::Component* over);
+    // The key dialog's look (a single plugin can give its own, EMBER 2026-11-24); unset = the VOCALYPSE look.
+    // The dialog owns what this makes (it may outlive the editor).
+    void setActivationDialogLook (std::function<std::shared_ptr<juce::LookAndFeel>()> makeLook);
 
     // Trial over / key invalid: covers the plugin, says why the vocal passes through unprocessed,
     // offers the key entry and the shop. Hidden whenever the licence is fine (or not checked at all).

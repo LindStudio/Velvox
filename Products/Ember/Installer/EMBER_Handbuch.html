@@ -84,42 +84,45 @@
 <h2 id="schnellstart">1. Schnellstart</h2>
 <ol>
   <li><strong>Einfügen:</strong> Lade EMBER als Insert auf deine Gesangs- oder Sprachspur.</li>
-  <li><strong>AUTO:</strong> Spiel den Gesang ab und klicke auf <strong>AUTO</strong> (oder direkt auf Ember). Ember hört zu und stellt Frequenz, Threshold und Range für dich ein.</li>
+  <li><strong>AUTO:</strong> Spiel den Gesang ab und klicke auf <strong>AUTO</strong> (oder direkt auf Ember). Ember hört zu und stellt Frequenz, Threshold, Range und Release für dich ein.</li>
   <li><strong>Nachhören:</strong> Drück <strong>DELTA</strong>, um nur das Entfernte zu hören – das sollten ausschließlich S-Laute sein. Passe bei Bedarf <strong>Amount</strong> an.</li>
 </ol>
 
 <h2 id="simple">2. Ansicht SIMPLE</h2>
-<p>SIMPLE zeigt nur das Nötigste. Ember sitzt groß in der Mitte und zeigt dir mit seiner Laune, was gerade passiert.</p>
+<p>SIMPLE zeigt nur das Nötigste. Ember steht groß auf seinem Siegel und zeigt dir mit seiner Laune, was gerade passiert. Was er sagt (zum Beispiel während AUTO), erscheint auf der Tafel über ihm.</p>
 <table>
   <tr><th>Element</th><th>Funktion</th></tr>
-  <tr><td>Amount</td><td>Wie stark EMBER eingreift. 50 % entspricht genau dem, was Threshold und Range vorgeben, 100 % der anderthalbfachen Wirkung, 0 % schaltet die Bearbeitung ab.</td></tr>
-  <tr><td>Stimmlage: TIEF / MITTEL / HOCH</td><td>Legt fest, wo der S-Bereich beginnt: ab 5 kHz (TIEF), 6 kHz (MITTEL) oder 7,4 kHz (HOCH). Der Threshold wird passend mitgesetzt (tiefe Stimmen haben leisere S), solange er noch auf einem Stimmlagen-Wert steht (auch dem Standard). Einen Threshold, den du, ein Preset oder AUTO eingestellt hat, lässt die Stimmlage stehen; die Statuszeile sagt dir das kurz. Ein Klick auf die schon leuchtende Stimmlage nach AUTO behält die Frequenz, die AUTO in diesem Bereich gefunden hat. Es leuchtet die Stimmlage, in deren Bereich die Frequenz liegt (TIEF bis 5,75 kHz, MITTEL bis 7 kHz, darüber HOCH). Ein Klick ist ein Schritt für Rückgängig.</td></tr>
+  <tr><td>Amount</td><td>Wie stark EMBER eingreift. 50 % entspricht genau dem, was Threshold und Range vorgeben, 100 % der anderthalbfachen Wirkung, 0 % schaltet die Bearbeitung ab. Das kleine Siegel auf dem Knopf dreht sich mit dem Wert.</td></tr>
+  <tr><td>Stimmlage: TIEF / MITTEL / HOCH</td><td>Setzt die Frequenz, ab der EMBER nach S-Lauten sucht: 5 kHz (TIEF), 6 kHz (MITTEL) oder 7,4 kHz (HOCH). Der Threshold wird passend mitgesetzt (tiefe Stimmen haben leisere S), solange er noch auf einem Stimmlagen-Wert steht (auch dem Standard). Einen Threshold, den du, ein Preset oder AUTO eingestellt hat, lässt die Stimmlage stehen; die Statuszeile sagt dir das kurz. Ein Klick auf die schon leuchtende Stimmlage nach AUTO behält die Frequenz, die AUTO in diesem Bereich gefunden hat. Es leuchtet die Stimmlage, in deren Bereich die Frequenz liegt (TIEF bis 5,75 kHz, MITTEL bis 7 kHz, darüber HOCH). Ein Klick ist ein Schritt für Rückgängig.</td></tr>
   <tr><td>DELTA</td><td>Du hörst nur, was entfernt wird.</td></tr>
   <tr><td>ABSENKUNG</td><td>Zeigt, wie viel leiser die S-Laute gerade werden (0 bis −12 dB, Gain Reduction).</td></tr>
 </table>
 
 <h2 id="advanced">3. Ansicht ADVANCED</h2>
-<p>ADVANCED gibt dir Zugriff auf alle Parameter.</p>
+<p>ADVANCED gibt dir Zugriff auf alle Parameter. Frequenz und Breite stellst du direkt im Spektrum ein (wie bei FabFilter Pro-DS), alle anderen Werte mit den Reglern darunter.</p>
 <h3>Anzeigen</h3>
 <ul>
-  <li><strong>Spektrum:</strong> Der pink markierte S-Bereich zeigt, wo EMBER arbeitet. Zieh an seiner pinken Kante, um die Frequenz einzustellen (Shift = fein, Mausrad = Schritt). Die Achse zeigt 1 bis 20 kHz. Oben läuft der Verlauf der Absenkung mit.</li>
+  <li><strong>Spektrum:</strong> Der pink markierte S-Bereich zeigt, wo EMBER arbeitet; oben läuft der Verlauf der Absenkung mit. Die Achse zeigt 1 bis 20 kHz.
+    <ul>
+      <li><strong>Frequenz</strong> (2–16 kHz): Zieh die pinke Linie nach links oder rechts. Ab dieser Frequenz sucht EMBER nach S-Lauten (tiefe Stimmen um 5 kHz, hohe um 7–7,5 kHz).</li>
+      <li><strong>Breite</strong> (1–4 Okt., nur im Split-Modus): Zieh eine Kante des S-Bereichs oder dreh das Mausrad über dem Spektrum. Schmal = nur das S, breit (Standard 3 Oktaven) = das S und die Luft darüber. Liegt eine Kante außerhalb der Anzeige (über 20 kHz), stellst du die Breite mit dem Mausrad ein.</li>
+      <li>Neben der Linie stehen beide Werte, z. B. „6,00 kHz · 3,00 Okt.“. Shift = fein, Doppelklick auf Linie oder Kante = Standardwert. Im Breitband-Modus gibt es keine Breite; das Mausrad verschiebt dann die Frequenz.</li>
+    </ul></li>
   <li><strong>ABSENKUNG:</strong> Wie viel gerade weggenommen wird, in dB.</li>
   <li><strong>S-PEGEL</strong> (rechts): Pegel im S-Bereich in dB. Die pinke Linie ist der Threshold; du kannst sie mit der Maus verschieben (Shift = fein, Mausrad = Schritt, Doppelklick = Standard). Beim Ziehen steht der Wert in dB daneben. Ein grau gestreifter Balken bedeutet: Die Smart-Erkennung hört gerade keinen S-Laut.</li>
 </ul>
 <h3>Regler und Schalter</h3>
 <table>
   <tr><th>Regler</th><th>Bereich</th><th>Funktion</th></tr>
-  <tr><td>Frequenz</td><td>2–16 kHz</td><td>Untere Grenze des S-Bereichs.</td></tr>
-  <tr><td>Breite</td><td>1–4 Okt.</td><td>Nur im Split-Modus: wie breit das Band um das S ist. Schmal = nur das S, breit (Standard 3 Oktaven) = das S und die Luft darüber.</td></tr>
   <tr><td>Threshold</td><td>−50 bis −10 dB</td><td>Ab diesem Pegel im S-Bereich beginnt die Absenkung.</td></tr>
   <tr><td>Range</td><td>0–24 dB</td><td>Maximale Absenkung.</td></tr>
   <tr><td>Amount</td><td>0–100 %</td><td>Stärke der Wirkung: 50 % = was Threshold und Range einstellen, 100 % = anderthalbfach, 0 % = aus.</td></tr>
   <tr><td>Attack</td><td>0,1–20 ms</td><td>Wie schnell EMBER auf einen S-Laut reagiert.</td></tr>
   <tr><td>Release</td><td>10–400 ms</td><td>Wie schnell die Absenkung danach wieder zurückgeht.</td></tr>
-  <tr><td>Lookahead</td><td>0–10 ms</td><td>Wie weit EMBER vorausschaut, um S-Laute schon an ihrem Anfang zu erfassen (Standard 5 ms). Die Latenz bleibt dabei immer 10 ms.</td></tr>
-  <tr><td>Link</td><td>0–100 %</td><td>Stereo-Kopplung: 100 % = beide Kanäle werden gemeinsam abgesenkt (das Stereobild bleibt stehen), weniger = jeder Kanal mehr für sich.</td></tr>
   <tr><td>Mix</td><td>0–100 %</td><td>Mischung aus bearbeitetem und unbearbeitetem Signal.</td></tr>
   <tr><td>Output</td><td>±12 dB</td><td>Ausgangspegel.</td></tr>
+  <tr><td>Lookahead (kleiner Schieberegler rechts)</td><td>0–10 ms</td><td>Wie weit EMBER vorausschaut, um S-Laute schon an ihrem Anfang zu erfassen (Standard 5 ms). Die Latenz bleibt dabei immer 10 ms.</td></tr>
+  <tr><td>Stereo-Link (kleiner Schieberegler über STEREO)</td><td>0–100 %</td><td>Wie stark die beiden Kanäle gemeinsam arbeiten (bei L/R und M/S): 100 % = beide werden gemeinsam abgesenkt (das Stereobild bleibt stehen), weniger = jeder Kanal mehr für sich. Bei Mid und Side ist er abgeblendet.</td></tr>
   <tr><td>Modus: Split</td><td></td><td>Nur der S-Bereich wird leiser: ein breites dynamisches Glockenfilter um das S (Mitte beim 1,25-Fachen der Frequenz). <strong>S-Tracking:</strong> Das Band folgt jedem einzelnen S – liegt ein S etwas tiefer oder höher, rückt die Absenkung bis zu einer halben Oktave mit, so trifft sie den Kern des S und weniger die Stimme darunter. Die Stimme darunter und die Luft darüber bleiben, das S klingt danach wie ein leiseres S statt dumpfer.</td></tr>
   <tr><td>Modus: Breitband</td><td></td><td>Die ganze Stimme wird kurz abgesenkt.</td></tr>
   <tr><td>Erkennung: Smart</td><td></td><td>Standard und empfohlen. Reagiert nur, wenn wirklich ein S-Laut erklingt (siehe <a href="#smart">Abschnitt 5</a>).</td></tr>
@@ -128,7 +131,7 @@
   <tr><td>Erkennung: Allround</td><td></td><td>Für Mixe, Busse und Instrumente: reagiert auf scharfe Höhen, ohne eine einzelne Stimme zum Vergleich zu brauchen.</td></tr>
   <tr><td>Abhören: Aus</td><td></td><td>Normales Ausgangssignal.</td></tr>
   <tr><td>Abhören: S-Bereich</td><td></td><td>Du hörst nur den Bereich, den EMBER bearbeitet (im Split-Modus das Band aus Frequenz und Breite).</td></tr>
-  <tr><td>Stereo: L/R · M/S · Mid · Side</td><td></td><td>L/R = links und rechts; M/S = Mitte und Seiten getrennt; Mid = nur die Mitte (z. B. der Lead-Gesang in einem Mix); Side = nur die Seiten (z. B. breite Doppelungen oder Hall).</td></tr>
+  <tr><td>Stereo: L/R · M/S · Mid · Side</td><td></td><td>L/R = links und rechts; M/S = Mitte und Seiten getrennt (beide mit Stereo-Link); Mid = nur die Mitte (z. B. der Lead-Gesang in einem Mix); Side = nur die Seiten (z. B. breite Doppelungen oder Hall).</td></tr>
   <tr><td>Abhören: Delta</td><td></td><td>Du hörst nur, was entfernt wird.</td></tr>
 </table>
 
@@ -162,10 +165,10 @@
   <tr><th>Ember …</th><th>bedeutet</th></tr>
   <tr><td>steht ruhig da</td><td>Kein Signal.</td></tr>
   <tr><td>tanzt</td><td>Es wird gesungen oder gesprochen.</td></tr>
-  <tr><td>schnippt beim Tanzen, ein Funke und ein „S“ fliegen weg</td><td>EMBER senkt gerade einen S-Laut ab. Je stärker die Absenkung, desto kräftiger der Funke.</td></tr>
-  <tr><td>sagt „Klingt gelispelt!“</td><td>Die Absenkung liegt eine Zeit lang über 9 dB. Die Stimme kann lispeln – nimm Range oder Amount zurück.</td></tr>
-  <tr><td>schläft</td><td>Bypass ist aktiv.</td></tr>
-  <tr><td>hält den Kopf schief und lauscht</td><td>AUTO hört zu.</td></tr>
+  <tr><td>ein „S“ fliegt ihm zu und er frisst es</td><td>EMBER senkt gerade einen S-Laut ab. Je stärker die Absenkung, desto größer das S; danach läuft eine Welle über das Siegel.</td></tr>
+  <tr><td>sagt „Uff, zu viel! Dreh Amount etwas runter.“</td><td>Die Absenkung liegt eine Zeit lang über 9 dB. Die Stimme kann lispeln – nimm Range oder Amount zurück.</td></tr>
+  <tr><td>schläft</td><td>Bypass ist aktiv (oder es lief eine halbe Minute nichts).</td></tr>
+  <tr><td>hält den Kopf schief und lauscht</td><td>AUTO hört zu. Auf der Tafel über ihm steht, was er gerade tut („Ich hör zu …“, „Moment …“, „Passt!“).</td></tr>
 </table>
 
 <h2 id="presets">7. Presets und A/B</h2>
@@ -215,13 +218,13 @@
   <tr><td>Mix / Bus</td><td>Allround-Erkennung für einen ganzen Mix, eine Gruppe oder Instrumente statt einer Solostimme.</td></tr>
 </table>
 <h3>A/B-Vergleich</h3>
-<p>Mit den Slots <strong>A</strong> und <strong>B</strong> vergleichst du zwei Einstellungen. B startet als Kopie von A. Der Kopier-Knopf kopiert die aktive Einstellung in den anderen Speicher: Er heißt <strong>A → B</strong>, solange A aktiv ist, und <strong>B → A</strong>, wenn B aktiv ist. A und B (und welcher aktiv ist) werden mit dem Projekt gespeichert. Wie AUTO die Slots füllt, steht in <a href="#auto">Abschnitt 4</a>.</p>
+<p>Mit den Slots <strong>A</strong> und <strong>B</strong> vergleichst du zwei Einstellungen. B startet als Kopie von A. Der Kopier-Knopf kopiert die aktive Einstellung in den anderen Slot: Er heißt <strong>A → B</strong>, solange A aktiv ist, und <strong>B → A</strong>, wenn B aktiv ist. A und B (und welcher aktiv ist) werden mit dem Projekt gespeichert. Wie AUTO die Slots füllt, steht in <a href="#auto">Abschnitt 4</a>.</p>
 <h3>Menü (≡ oben rechts)</h3>
 <ul>
   <li><strong>Rückgängig</strong> (<span class="key">Strg</span>+<span class="key">Z</span>) und <strong>Wiederholen</strong> (<span class="key">Strg</span>+<span class="key">Umschalt</span>+<span class="key">Z</span> oder <span class="key">Strg</span>+<span class="key">Y</span>): Jede Änderung an einem Regler, ein Klick auf eine Stimmlage, ein geladenes Preset und AUTO sind je ein Schritt. Rückgängig bringt auch den Presetnamen und das * zurück. Abhören (Delta / S-Bereich) und BYPASS gehören nicht dazu.</li>
   <li><strong>Animation:</strong> Voll / Reduziert / Aus – weniger Animation spart Rechenleistung, praktisch bei vielen EMBER-Instanzen. Wird gespeichert.</li>
   <li><strong>Fenstergröße:</strong> 75 / 100 / 125 / 150 / 200 % – wird gespeichert, genau wie eine mit der Ecke unten rechts gezogene Größe.</li>
-  <li><strong>Sprache:</strong> Wie das System / Deutsch / English – wird gespeichert.</li>
+  <li><strong>Sprache:</strong> Systemsprache / Deutsch / English – wird gespeichert.</li>
   <li><strong>Handbuch öffnen</strong></li>
   <li><strong>Ember-Tipp wieder zeigen</strong></li>
   <li><strong>Lizenz:</strong> zeigt den Stand der Lizenz, dazu <strong>Lizenzschlüssel eingeben …</strong>, <strong>Diesen Computer freigeben</strong> (mit Rückfrage) und den Link zum Schlüssel.</li>
@@ -243,7 +246,7 @@
   <tr><td>Maus ruhen lassen</td><td>Zu jedem Control erscheint eine Infokarte.</td></tr>
   <tr><td>Doppelklick oder <span class="key">Alt</span> + Klick</td><td>Setzt das Control auf den Standardwert zurück.</td></tr>
   <tr><td><span class="key">Shift</span> / <span class="key">Strg</span> + Ziehen</td><td>Feineinstellung.</td></tr>
-  <tr><td>Mausrad</td><td>Ein Schritt pro Raste, mit <span class="key">Shift</span> / <span class="key">Strg</span> fein. Geht auch an der Kante im Spektrum und an der Threshold-Linie.</td></tr>
+  <tr><td>Mausrad</td><td>Ein Schritt pro Raste, mit <span class="key">Shift</span> / <span class="key">Strg</span> fein. Über dem Spektrum stellt es die Breite ein (im Breitband-Modus die Frequenz), an der Threshold-Linie den Threshold.</td></tr>
   <tr><td><span class="key">Strg</span>+<span class="key">Z</span> / <span class="key">Strg</span>+<span class="key">Umschalt</span>+<span class="key">Z</span> / <span class="key">Strg</span>+<span class="key">Y</span></td><td>Rückgängig / Wiederholen (wenn dein Host die Tasten an das Plugin weitergibt; sonst über das Menü ≡).</td></tr>
   <tr><td>Ecke unten rechts ziehen</td><td>Fenster vergrößern oder verkleinern (75 bis 200 %); feste Stufen im Menü ≡ › Fenstergröße.</td></tr>
   <tr><td>Klick auf den Wert</td><td>Wert direkt eintippen.</td></tr>

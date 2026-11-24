@@ -71,6 +71,8 @@ namespace ember
         // the panels' glass (EmberPanel::paint) as solid colours for windows of their own
         const juce::Colour glassTop { 0xff170812 }, glassBottom { 0xff0b0409 }, field { 0xff0a0408 };
         const juce::Colour ink { 0xffeee6ea };        // text on the glass (warm white)
+        const juce::Colour inkSoft { 0xffc4b5bd };    // button texts (warm grey, not the shared look's blue-grey)
+        const juce::Colour inkOff { 0xff9b8c95 };     // segments that are not chosen
     }
 
     EmberLookAndFeel::EmberLookAndFeel()
@@ -80,6 +82,7 @@ namespace ember
         setColour (juce::ResizableWindow::backgroundColourId, seal::wall);
         setColour (juce::TextButton::buttonOnColourId, look::accent);
         setColour (juce::TextButton::textColourOnId, ink);
+        setColour (juce::TextButton::textColourOffId, inkSoft);
         setColour (juce::ToggleButton::tickColourId, look::accent);
         // menus (a background that is not opaque lets the menu window have round corners)
         setColour (juce::PopupMenu::backgroundColourId, glassTop.withAlpha (0.985f));
@@ -191,6 +194,17 @@ namespace ember
             g.setFont (f);
             g.drawText (text, b.getLocalBounds(), juce::Justification::centredLeft, true);
             g.fillRect (juce::Rectangle<float> (0.0f, (float) b.getHeight() * 0.5f + f.getHeight() * 0.5f, w, 1.0f));
+            return;
+        }
+        if ((bool) b.getProperties().getWithDefault (segmentProperty, false) && ! b.getToggleState())
+        {
+            // a segment that is not chosen: warm grey (the shared look's is blue-grey); chosen ones as shared
+            auto col = highlighted ? ink : inkOff;
+            if (! b.isEnabled())
+                col = col.withMultipliedAlpha (0.5f);
+            g.setColour (col);
+            g.setFont (ui::semiBold (11.0f));
+            g.drawFittedText (b.getButtonText(), b.getLocalBounds().reduced (2, 0), juce::Justification::centred, 1, 0.8f);
             return;
         }
         if ((bool) b.getProperties().getWithDefault ("primary", false))
@@ -694,11 +708,6 @@ namespace ember
         return minHz * std::pow (maxHz / minHz, t);
     }
 
-    bool BandDisplay::nearHandle (juce::Point<float> p) const
-    {
-        return std::abs (p.x - xForHz (processor.state.getRawParameterValue (pid::freq)->load())) <= 10.0f;
-    }
-
     void BandDisplay::setHasSignal (bool s)
     {
         if (s == hasSignal)
@@ -750,9 +759,32 @@ namespace ember
                                                      look::accent.withAlpha (0.02f), band.getRight(), 0, false));
             g.fillRect (band);
         }
-        g.setColour (look::accent.withAlpha (dragging ? 1.0f : 0.85f));
+        // the band's edges (Split): thin lines with a grip in the middle, brighter while hovered or held
+        if (std::lround (processor.state.getRawParameterValue (pid::mode)->load()) == 0)
+        {
+            const auto shape = splitBand (hz, processor.state.getRawParameterValue (pid::width)->load());
+            for (auto [edgeHz, h] : { std::pair { shape.lowHz, Handle::lowEdge }, std::pair { shape.highHz, Handle::highEdge } })
+            {
+                if (edgeHz <= minHz || edgeHz >= maxHz)
+                    continue;
+                const float ex = xForHz ((float) edgeHz);
+                const bool lit = dragging == h || hover == h;
+                g.setColour (look::accentSoft.withAlpha (lit ? 0.9f : 0.35f));
+                g.fillRect (ex - 0.5f, r.getY(), 1.0f, r.getHeight());
+                const auto grip = juce::Rectangle<float> (6.0f, 22.0f).withCentre ({ ex, r.getCentreY() });
+                g.setColour (lit ? look::accentSoft : look::accent.withAlpha (0.7f));
+                g.fillRoundedRectangle (grip, 3.0f);
+            }
+        }
+        const bool markerLit = dragging == Handle::frequency || hover == Handle::frequency;
+        g.setColour (look::accent.withAlpha (markerLit ? 1.0f : 0.85f));
         g.fillRect (x - 1.0f, r.getY(), 2.0f, r.getHeight());
         g.fillEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ x, r.getY() + 14.0f }));
+        if (markerLit)
+        {
+            g.setColour (look::glow.withAlpha (0.35f));
+            g.drawEllipse (juce::Rectangle<float> (18.0f, 18.0f).withCentre ({ x, r.getY() + 14.0f }), 1.2f);
+        }
 
         // Reduction history (top, hanging down: 0 dB at the top edge, 12 dB at 45 % height); only once there is some
         const int n = (int) history.size();
@@ -776,9 +808,17 @@ namespace ember
             g.strokePath (h, juce::PathStrokeType (1.2f));
         }
 
+        // frequency and width at the marker, on the side with room
         g.setFont (ui::monoFont (11.0f));
+        const auto label = markerText();
+        const float lw = (float) juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), label) + 12.0f;
+        auto box = juce::Rectangle<float> (x + 11.0f, r.getY() + 6.0f, lw, 17.0f);
+        if (box.getRight() > r.getRight() - 4.0f)
+            box.setX (x - 11.0f - lw);
+        g.setColour (c::panelInset.withAlpha (0.75f));
+        g.fillRoundedRectangle (box, 4.0f);
         g.setColour (c::textStrong);
-        g.drawText (hzText (hz), juce::Rectangle<float> (x + 10.0f, r.getY() + 6.0f, 90.0f, 16.0f), juce::Justification::centredLeft);
+        g.drawText (label, box.reduced (6.0f, 0.0f), juce::Justification::centredLeft, false);
     }
 
     void BandDisplay::paintOverChildren (juce::Graphics& g)
@@ -805,67 +845,204 @@ namespace ember
 
         if (! hasSignal)
         {
+            // on a dark backing, so the band's edge behind it does not cut through the words
             g.setFont (ui::font (13.0f));
+            const auto hint = tr ("Spiel Audio ab – hier siehst du die Höhen deiner Stimme und den S-Bereich.",
+                                  "Play audio – this shows the highs of your voice and the S range.");
+            const float tw = std::min (r.getWidth() - 80.0f, (float) juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), hint) + 28.0f);
+            const auto box = r.withSizeKeepingCentre (tw, 34.0f);
+            g.setColour (c::panelInset.withAlpha (0.95f));
+            g.fillRoundedRectangle (box, 8.0f);
             g.setColour (c::textMuted);
-            g.drawFittedText (tr ("Spiel Audio ab – hier siehst du die Höhen deiner Stimme und den S-Bereich.",
-                                  "Play audio – this shows the highs of your voice and the S range."),
-                              r.reduced (40.0f, 0.0f).withSizeKeepingCentre (r.getWidth() - 80.0f, 40.0f).toNearestInt(),
-                              juce::Justification::centred, 2);
+            g.drawFittedText (hint, box.reduced (12.0f, 0.0f).toNearestInt(), juce::Justification::centred, 2);
         }
+    }
+
+    bool BandDisplay::isSplit() const
+    {
+        return std::lround (processor.state.getRawParameterValue (pid::mode)->load()) == 0;
+    }
+
+    float BandDisplay::widthForLowEdge (float freq, float hz)
+    {
+        // lo = 1.25 f x 2^(-n/2) (above its floor 0.45 f; below it the low edge stays where it is)
+        const float fc = splitCenterRatio * freq;
+        return juce::jlimit (minWidthOct, maxWidthOct, 2.0f * std::log2 (fc / std::max (1.0f, hz)));
+    }
+
+    float BandDisplay::widthForHighEdge (float freq, float hz)
+    {
+        // hi = lo x 2^n: with lo free, hi = 1.25 f x 2^(n/2); with lo at its floor, hi = 0.45 f x 2^n
+        const float fc = splitCenterRatio * freq;
+        const float n = 2.0f * std::log2 (std::max (1.0f, hz) / fc);
+        if (fc * std::exp2 (-0.5f * n) < splitLowestRatio * freq)
+            return juce::jlimit (minWidthOct, maxWidthOct, std::log2 (std::max (1.0f, hz) / (splitLowestRatio * freq)));
+        return juce::jlimit (minWidthOct, maxWidthOct, n);
+    }
+
+    BandDisplay::Handle BandDisplay::handleAt (juce::Point<float> p) const
+    {
+        const float hz = processor.state.getRawParameterValue (pid::freq)->load();
+        Handle best = Handle::none;
+        float bestD = 9.0f;   // grab distance, px
+        const auto consider = [&] (Handle h, float x)
+        {
+            if (x < 1.0f || x > (float) getWidth() - 1.0f)
+                return;   // an edge outside the display (e.g. the high edge above 20 kHz) cannot be grabbed here
+            if (const float d = std::abs (p.x - x); d < bestD)
+            {
+                bestD = d;
+                best = h;
+            }
+        };
+        consider (Handle::frequency, xForHz (hz));
+        if (isSplit())
+        {
+            const auto shape = splitBand (hz, processor.state.getRawParameterValue (pid::width)->load());
+            if (shape.lowHz > minHz) consider (Handle::lowEdge, xForHz ((float) shape.lowHz));
+            if (shape.highHz < maxHz) consider (Handle::highEdge, xForHz ((float) shape.highHz));
+        }
+        return best;
+    }
+
+    juce::String BandDisplay::markerText() const
+    {
+        const auto hz = hzText (processor.state.getRawParameterValue (pid::freq)->load());
+        if (! isSplit())
+            return hz;
+        auto* w = processor.state.getParameter (pid::width);
+        return hz + utf8 (" · ") + w->getCurrentValueAsText();
     }
 
     void BandDisplay::mouseMove (const juce::MouseEvent& e)
     {
-        setMouseCursor (nearHandle (e.position) ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::NormalCursor);
+        const auto h = handleAt (e.position);
+        setMouseCursor (h != Handle::none ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::NormalCursor);
+        if (h != hover)
+        {
+            hover = h;
+            repaint();
+        }
+    }
+
+    void BandDisplay::mouseExit (const juce::MouseEvent&)
+    {
+        if (hover != Handle::none)
+        {
+            hover = Handle::none;
+            repaint();
+        }
     }
 
     void BandDisplay::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
     {
-        // like the knobs: a step per notch (about 1/8 octave), Shift / Ctrl = fine
-        if (auto* p = processor.state.getParameter (pid::freq))
+        // Split: the wheel sets the width (like Q in an EQ), a quarter octave per notch; Wideband has no width: the
+        // frequency, about 1/8 octave per notch. Shift / Ctrl = fine.
+        const float fine = e.mods.isShiftDown() || e.mods.isCtrlDown() ? 0.2f : 1.0f;
+        const float notches = (w.isReversed ? -w.deltaY : w.deltaY) * fine;
+        if (isSplit())
         {
-            const float octaves = (e.mods.isShiftDown() || e.mods.isCtrlDown() ? 0.2f : 1.0f) * (w.isReversed ? -w.deltaY : w.deltaY);
-            ui::gestures::setReal (*p, juce::jlimit (2000.0f, 16000.0f, p->convertFrom0to1 (p->getValue()) * std::pow (2.0f, octaves)));
-            repaint();
+            if (auto* p = processor.state.getParameter (pid::width))
+                ui::gestures::setReal (*p, juce::jlimit (minWidthOct, maxWidthOct, p->convertFrom0to1 (p->getValue()) + 2.0f * notches));
         }
+        else if (auto* p = processor.state.getParameter (pid::freq))
+            ui::gestures::setReal (*p, juce::jlimit (2000.0f, 16000.0f, p->convertFrom0to1 (p->getValue()) * std::pow (2.0f, notches)));
+        repaint();
     }
 
     void BandDisplay::mouseDown (const juce::MouseEvent& e)
     {
-        // only the pink edge is grabbed, and it moves with the mouse from where it is (no jump to the click)
-        if (auto* p = processor.state.getParameter (pid::freq); p != nullptr && nearHandle (e.position))
+        // only the marker and the band's edges are grabbed, and they move with the mouse from where they are (no jump)
+        const auto h = handleAt (e.position);
+        auto* p = processor.state.getParameter (h == Handle::frequency ? pid::freq : pid::width);
+        if (h == Handle::none || p == nullptr)
+            return;
+        dragging = h;
+        lastDragX = e.position.x;
+        dragHz = processor.state.getRawParameterValue (pid::freq)->load();
+        if (h != Handle::frequency)
         {
-            dragging = true;
-            lastDragX = e.position.x;
-            dragHz = p->convertFrom0to1 (p->getValue());
-            p->beginChangeGesture();
-            repaint();
+            const auto shape = splitBand (dragHz, processor.state.getRawParameterValue (pid::width)->load());
+            dragEdgeX = xForHz ((float) (h == Handle::lowEdge ? shape.lowHz : shape.highHz));
         }
+        p->beginChangeGesture();
+        repaint();
     }
 
     void BandDisplay::mouseDrag (const juce::MouseEvent& e)
     {
-        if (auto* p = processor.state.getParameter (pid::freq); p != nullptr && dragging)
+        if (dragging == Handle::none)
+            return;
+        const float fine = e.mods.isShiftDown() || e.mods.isCtrlDown() ? 0.2f : 1.0f;
+        const float dx = (e.position.x - lastDragX) * fine;
+        lastDragX = e.position.x;
+        if (dragging == Handle::frequency)
         {
-            const float fine = e.mods.isShiftDown() || e.mods.isCtrlDown() ? 0.2f : 1.0f;
-            dragHz = juce::jlimit (2000.0f, 16000.0f, hzForX (xForHz (dragHz) + (e.position.x - lastDragX) * fine));
-            lastDragX = e.position.x;
-            p->setValueNotifyingHost (p->convertTo0to1 (dragHz));
-            repaint();
+            if (auto* p = processor.state.getParameter (pid::freq))
+            {
+                dragHz = juce::jlimit (2000.0f, 16000.0f, hzForX (xForHz (dragHz) + dx));
+                p->setValueNotifyingHost (p->convertTo0to1 (dragHz));
+            }
         }
+        else if (auto* p = processor.state.getParameter (pid::width))
+        {
+            // the edge follows the mouse (unrounded while held); the width is what puts the edge there
+            dragEdgeX += dx;
+            const float hz = minHz * std::pow (maxHz / minHz, (dragEdgeX - getLocalBounds().toFloat().getX()) / (float) getWidth());
+            const float n = dragging == Handle::lowEdge ? widthForLowEdge (dragHz, hz) : widthForHighEdge (dragHz, hz);
+            p->setValueNotifyingHost (p->convertTo0to1 (n));
+        }
+        repaint();
     }
 
     void BandDisplay::mouseUp (const juce::MouseEvent&)
     {
-        if (auto* p = processor.state.getParameter (pid::freq); p != nullptr && dragging)
-            p->endChangeGesture();
-        dragging = false;
+        if (dragging != Handle::none)
+            if (auto* p = processor.state.getParameter (dragging == Handle::frequency ? pid::freq : pid::width))
+                p->endChangeGesture();
+        dragging = Handle::none;
+        repaint();
     }
 
     void BandDisplay::mouseDoubleClick (const juce::MouseEvent& e)
     {
-        if (auto* p = processor.state.getParameter (pid::freq); p != nullptr && nearHandle (e.position))
+        const auto h = handleAt (e.position);
+        if (h == Handle::none)
+            return;
+        if (auto* p = processor.state.getParameter (h == Handle::frequency ? pid::freq : pid::width))
             ui::gestures::resetToDefault (*p);
+        repaint();
+    }
+
+    // ================================================================ compact slider
+    CompactSlider::CompactSlider (juce::AudioProcessorValueTreeState& state, const char* paramId, const juce::String& n) : name (n)
+    {
+        slider.setSliderStyle (juce::Slider::LinearHorizontal);
+        slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        slider.setSliderSnapsToMousePosition (false);   // a click never jumps: drag moves from where it is
+        slider.setColour (juce::Slider::trackColourId, look::accent);
+        slider.setColour (juce::Slider::rotarySliderFillColourId, look::accent);
+        slider.setMouseDragSensitivity (ui::FineSlider::normalPixels);
+        addAndMakeVisible (slider);
+        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, paramId, slider);
+        slider.bindParameter (state.getParameter (paramId));
+        slider.onValueChange = [this] { repaint(); };
+    }
+
+    void CompactSlider::resized()
+    {
+        slider.setBounds (getLocalBounds().withTrimmedTop (16).reduced (0, 0));
+    }
+
+    void CompactSlider::paint (juce::Graphics& g)
+    {
+        auto top = getLocalBounds().removeFromTop (16).toFloat();
+        g.setFont (ui::caps (10.0f));
+        g.setColour (c::knobName);
+        g.drawText (i18n::upper (name), top, juce::Justification::centredLeft, true);
+        g.setFont (ui::monoFont (10.5f));
+        g.setColour (c::textStrong);
+        g.drawText (valueText(), top, juce::Justification::centredRight, false);
     }
 
     // ================================================================ about
@@ -919,17 +1096,15 @@ namespace ember
           display (p, spectrumSource),
           detector (p),
           amountBig (p.state, pid::amount, "Amount", look::accent),
-          freqK (p.state, pid::freq, tr ("Frequenz", "Frequency"), look::accent),
           threshK (p.state, pid::threshold, "Threshold", look::accent),
           rangeK (p.state, pid::range, "Range", look::accent),
           amountK (p.state, pid::amount, "Amount", look::accent),
           attackK (p.state, pid::attack, "Attack", look::accent),
           releaseK (p.state, pid::release, "Release", look::accent),
-          lookK (p.state, pid::lookahead, "Lookahead", look::accent),
           mixK (p.state, pid::mix, "Mix", look::accent),
           outK (p.state, pid::output, "Output", look::accent),
-          widthK (p.state, pid::width, tr ("Breite", "Width"), look::accent),
-          linkK (p.state, pid::link, "Link", look::accent),
+          lookS (p.state, pid::lookahead, "Lookahead"),
+          linkS (p.state, pid::link, tr ("Stereo-Link", "Stereo Link")),
           modeSeg (p.state, pid::mode, { "Split", tr ("Breitband", "Wideband") }, look::accent),
           detectSeg (p.state, pid::detection, { "Smart", tr ("Relativ", "Relative"), tr ("Absolut", "Absolute"), "Allround" }, look::accent),
           listenSeg (p.state, pid::listen, { tr ("Aus", "Off"), tr ("S-Bereich", "S range"), "Delta" }, look::accent),
@@ -1015,11 +1190,13 @@ namespace ember
         // ---- ADVANCED
         addChildComponent (display);
         addChildComponent (detector);
-        for (auto* k : { &freqK, &widthK, &threshK, &rangeK, &amountK, &attackK, &releaseK, &lookK, &linkK, &mixK, &outK })
+        for (auto* k : { &threshK, &rangeK, &amountK, &attackK, &releaseK, &mixK, &outK })
         {
-            k->setDialSize (ui::dialsize::secondary);
+            k->setDialSize (ui::dialsize::primary);
             addChildComponent (*k);
         }
+        addChildComponent (lookS);
+        addChildComponent (linkS);
         styleLabel (modeLbl, tr ("Modus", "Mode"));
         styleLabel (detectLbl, tr ("Erkennung", "Detection"));
         styleLabel (listenLbl, tr ("Abhören", "Listen"));
@@ -1036,10 +1213,6 @@ namespace ember
                                     "100 % = one and a half times as much, 0 % = off.");
         amountBig.setDescription (amountText);
         amountK.setDescription (amountText);
-        freqK.setDescription (tr ("Ab dieser Frequenz sucht der De-Esser nach S-Lauten und senkt den S-Bereich knapp darüber ab. "
-                                  "Tiefe Stimmen um 5 kHz, hohe um 7–7,5 kHz. Auch im Spektrum mit der Maus ziehbar.",
-                                  "From this frequency up the de-esser looks for S sounds and lowers the S range just above it. "
-                                  "Low voices around 5 kHz, high voices around 7–7.5 kHz. Also draggable in the spectrum."));
         threshK.setDescription (tr ("Ab diesem S-Pegel greift der De-Esser ein. Tiefer = mehr S-Laute werden erfasst. "
                                     "Auch an der S-Pegel-Anzeige rechts ziehbar.",
                                     "The S level above which the de-esser steps in. Lower = more S sounds are caught. "
@@ -1049,24 +1222,12 @@ namespace ember
         attackK.setDescription (tr ("Wie schnell der De-Esser zupackt, wenn ein S beginnt.", "How fast the de-esser grabs when an S starts."));
         releaseK.setDescription (tr ("Wie schnell er nach dem S wieder loslässt. Kurz (30–40 ms) lässt den nächsten Vokal unberührt.",
                                      "How fast it lets go after the S. Short (30–40 ms) leaves the next vowel untouched."));
-        lookK.setDescription (tr ("So viel früher sieht der De-Esser das S kommen und erfasst auch dessen Anfang. "
-                                  "Die Latenz bleibt immer bei 10 ms.",
-                                  "The de-esser sees the S coming this much earlier and also catches its start. "
-                                  "The latency always stays at 10 ms."));
         mixK.setDescription (tr ("Anteil des bearbeiteten Signals. Unter 100 % bleibt etwas vom Original-S erhalten.",
                                  "Share of the processed signal. Below 100 % some of the original S remains."));
         outK.setDescription (tr ("Ausgangspegel nach dem De-Esser.", "Output level after the de-esser."));
-        widthK.setDescription (tr ("Wie breit der S-Bereich ist, den Split absenkt (in Oktaven). Schmal: nur das S selbst, die Luft darüber bleibt. "
-                                   "Breit: das S und die Luft darüber. Nach unten reicht er nie unter die Frequenz der Stimme.",
-                                   "How wide the S range is that Split lowers (in octaves). Narrow: only the S itself, the air above stays. "
-                                   "Wide: the S and the air above it. It never reaches down into the voice."));
-        linkK.setDescription (tr ("Wie stark die beiden Kanäle gemeinsam arbeiten. 100 %: ein S links senkt beide Seiten gleich ab (das Stereobild bleibt). "
-                                  "0 %: jeder Kanal für sich.",
-                                  "How much the two channels work together. 100 %: an S on the left lowers both sides alike (the stereo image stays). "
-                                  "0 %: each channel on its own."));
-        stereoSeg.setInfo ("Stereo", tr ("L/R: links und rechts (mit Stereo Link). M/S: Mitte und Seiten getrennt. "
+        stereoSeg.setInfo ("Stereo", tr ("L/R: links und rechts (mit Stereo-Link). M/S: Mitte und Seiten getrennt (mit Stereo-Link). "
                                          "Mid: nur die Mitte (die Leadstimme), die Seiten bleiben unberührt. Side: nur die Seiten (z. B. gedoppelte Chöre).",
-                                         "L/R: left and right (with Stereo Link). M/S: mid and sides separately. "
+                                         "L/R: left and right (with Stereo Link). M/S: mid and sides separately (with Stereo Link). "
                                          "Mid: only the centre (the lead vocal), the sides stay untouched. Side: only the sides (e.g. doubled backing vocals)."));
         modeSeg.setInfo (tr ("Modus", "Mode"),
                          tr ("Split: nur der S-Bereich wird leiser, die Stimme darunter und die Luft darüber bleiben. "
@@ -1083,57 +1244,76 @@ namespace ember
                                "parts alike. Absolute: fixed level like a classic de-esser. Allround: for mixes, buses and "
                                "instruments, where more is playing under the voice."));
         listenSeg.setInfo (tr ("Abhören", "Listen"),
-                           tr ("S-Bereich: nur den Bereich hören, der abgesenkt wird (Split: das S-Band, Breitband: ab der Frequenz). "
+                           tr ("S-Bereich: nur den Bereich hören, der abgesenkt wird (Split: der pinke S-Bereich im Spektrum, Breitband: alles ab der Frequenz). "
                                "Delta: nur das hören, was entfernt wird. Es sollten nur S-Laute zu hören sein. "
                                "Abhören wird nie gespeichert.",
-                               "S range: hear only the range that is lowered (Split: the S band, Wideband: from the frequency up). "
+                               "S range: hear only the range that is lowered (Split: the pink S range in the spectrum, Wideband: everything from the frequency up). "
                                "Delta: hear only what is removed. You should hear nothing but S sounds. "
                                "Listening is never saved."));
 
         addInfo (simpleBtn, "SIMPLE", tr ("Die einfache Ansicht: Ember, Amount, Stimmlage und Delta. Reicht für die meisten Stimmen.",
                                           "The simple view: Ember, Amount, voice and Delta. Enough for most vocals."));
-        addInfo (advancedBtn, "ADVANCED", tr ("Alle Regler, das Spektrum mit dem S-Bereich und die S-Pegel-Anzeige mit dem Threshold.",
-                                              "Every control, the spectrum with the S range and the S level meter with the threshold."));
+        addInfo (advancedBtn, "ADVANCED", tr ("Alle Einstellungen: das Spektrum mit Frequenz und Breite des S-Bereichs, die S-Pegel-Anzeige mit dem Threshold und alle Regler.",
+                                              "Every setting: the spectrum with the frequency and width of the S range, the S level meter with the threshold, and every control."));
         addInfo (autoBtn, "AUTO", tr ("Spiel deinen Gesang ab und klick auf AUTO. Ember hört 12 Sekunden Gesang zu (Pausen zählen nicht) und ist dann von selbst fertig, "
-                                      "auch wenn du nach mindestens 3 Sekunden die Wiedergabe stoppst. Er stellt nur Frequenz, Threshold, Range und Release ein, alles andere bleibt. "
+                                      "auch wenn du nach mindestens 3 Sekunden die Wiedergabe stoppst. Er stellt nur Frequenz, Threshold, Range und Release ein (und Amount auf 50 %, wenn es unter 25 % stand), alles andere bleibt. "
                                       "Deine Einstellung von vorher bleibt auf dem Slot, auf dem du warst (meist A), das Ergebnis kommt auf den anderen. Liegt dort schon eine "
                                       "andere Einstellung von dir, bleibt sie, und Strg+Z holt die vorherige zurück. Während er zuhört, bricht ein Klick ab.",
                                       "Play your vocal and click AUTO. Ember listens to 12 seconds of vocal (pauses don't count) and then finishes on his own, "
-                                      "also when you stop playback after at least 3 seconds. He sets only frequency, threshold, range and release, everything else stays. "
+                                      "also when you stop playback after at least 3 seconds. He sets only frequency, threshold, range and release (and Amount to 50 % if it was below 25 %), everything else stays. "
                                       "Your previous setting stays on the slot you were on (usually A), the result goes to the other one. If that slot already holds "
                                       "a different setting of yours, it stays, and Ctrl+Z brings back the previous one. While he listens, a click cancels."));
         addInfo (bypassBtn, "BYPASS", tr ("Schaltet den De-Esser aus, um mit dem Original zu vergleichen. Die Latenz bleibt gleich.",
                                           "Switches the de-esser off to compare with the original. The latency stays the same."));
-        addInfo (menuBtn, tr ("Menü", "Menu"), tr ("Rückgängig / Wiederholen, Fenstergröße, Sprache, Handbuch, Lizenz und Infos zu EMBER.",
-                                                   "Undo / redo, window size, language, manual, licence and about EMBER."));
+        addInfo (menuBtn, tr ("Menü", "Menu"), tr ("Rückgängig / Wiederholen, Fenstergröße, Sprache, Animation, Handbuch, Ember-Tipp, Lizenz und Infos zu EMBER.",
+                                                   "Undo / redo, window size, language, animation, manual, Ember's tip, licence and about EMBER."));
         addInfo (prevBtn, tr ("Voriges Preset", "Previous preset"), tr ("Lädt das vorige Preset.", "Loads the previous preset."));
         addInfo (nextBtn, tr ("Nächstes Preset", "Next preset"), tr ("Lädt das nächste Preset.", "Loads the next preset."));
         addInfo (presetBtn, "Preset", tr ("Werks-Presets und deine eigenen Presets (dort auch umbenennen und löschen). Ein * zeigt, dass du seit dem Laden etwas geändert hast.",
                                           "Factory presets and your own presets (rename and delete them there too). A * shows you changed something since loading."));
         addInfo (saveBtn, tr ("Preset speichern", "Save preset"), tr ("Speichert die aktuelle Einstellung als eigenes Preset.",
                                                                       "Saves the current setting as your own preset."));
-        addInfo (slotA, tr ("Vergleich A", "Compare A"), tr ("Zwei Einstellungen vergleichen: A und B merken sich je eine Einstellung. "
-                                                             "Umschalten, hören, die bessere behalten.",
-                                                             "Compare two settings: A and B each keep one setting. Switch, listen, keep the better one."));
-        addInfo (slotB, tr ("Vergleich B", "Compare B"), tr ("Beim ersten Klick startet B als Kopie von A.", "On the first click B starts as a copy of A."));
-        addInfo (slotCopy, tr ("Kopieren", "Copy"), tr ("Kopiert die aktive Einstellung in den anderen Speicher: A → B, wenn A aktiv ist, sonst B → A. "
+        addInfo (slotA, tr ("Slot A", "Slot A"), tr ("Zwei Einstellungen vergleichen: Die Slots A und B merken sich je eine Einstellung. "
+                                                     "Umschalten, hören, die bessere behalten.",
+                                                     "Compare two settings: slots A and B each keep one setting. Switch, listen, keep the better one."));
+        addInfo (slotB, tr ("Slot B", "Slot B"), tr ("Beim ersten Klick startet B als Kopie von A.", "On the first click B starts as a copy of A."));
+        addInfo (slotCopy, tr ("Kopieren", "Copy"), tr ("Kopiert die aktive Einstellung in den anderen Slot: A → B, wenn A aktiv ist, sonst B → A. "
                                                         "A und B werden mit dem Projekt gespeichert.",
                                                         "Copies the active setting into the other slot: A → B while A is active, otherwise B → A. "
                                                         "A and B are saved with the project."));
-        addInfo (mascot, "Ember", tr ("Ember zeigt, was der De-Esser tut: Er tanzt zur Stimme, und jedes S, das abgesenkt wird, fliegt ihm zu und er frisst es. Klick auf ihn startet AUTO.",
-                                      "Ember shows what the de-esser does: he dances to the vocal, and every S that is reduced flies to him and he eats it. Click him to start AUTO."));
+        addInfo (mascot, "Ember", tr ("Ember zeigt, was der De-Esser tut: Er tanzt zur Stimme, und jedes S, das abgesenkt wird, fliegt ihm zu und er frisst es. "
+                                      "Was er sagt, steht auf der Tafel über ihm. Klick auf ihn startet AUTO.",
+                                      "Ember shows what the de-esser does: he dances to the vocal, and every S that is reduced flies to him and he eats it. "
+                                      "What he says appears on the plate above him. Click him to start AUTO."));
         for (auto* m : { &meter, &advancedMeter })
             addInfo (*m, tr ("Absenkung", "Reduction"), tr ("So viel leiser werden die S-Laute gerade, in dB (Gain Reduction).",
                                                             "How much quieter the S sounds are right now, in dB (gain reduction)."));
-        addInfo (voiceLow, tr ("Tiefe Stimme", "Low voice"), tr ("S-Bereich ab 5 kHz, greift etwas früher: für tiefe und männliche Stimmen.", "S range from 5 kHz, steps in a little earlier: for low and male voices."));
-        addInfo (voiceMid, tr ("Mittlere Stimme", "Mid voice"), tr ("S-Bereich ab 6 kHz, passt für die meisten Stimmen.", "S range from 6 kHz, fits most voices."));
-        addInfo (voiceHigh, tr ("Hohe Stimme", "High voice"), tr ("S-Bereich ab 7,4 kHz, für hohe und weibliche Stimmen.", "S range from 7.4 kHz, for high and female voices."));
+        addInfo (voiceLow, tr ("Tiefe Stimme", "Low voice"), tr ("Frequenz 5 kHz, greift etwas früher: für tiefe und männliche Stimmen.", "Frequency 5 kHz, steps in a little earlier: for low and male voices."));
+        addInfo (voiceMid, tr ("Mittlere Stimme", "Mid voice"), tr ("Frequenz 6 kHz, passt für die meisten Stimmen.", "Frequency 6 kHz, fits most voices."));
+        addInfo (voiceHigh, tr ("Hohe Stimme", "High voice"), tr ("Frequenz 7,4 kHz, für hohe und weibliche Stimmen.", "Frequency 7.4 kHz, for high and female voices."));
         addInfo (listenBtn, "Delta", tr ("Nur das hören, was entfernt wird. Hörst du Vokale, ist es zu viel.",
                                          "Hear only what is removed. If you hear vowels, it is too much."));
-        addInfo (display, tr ("Spektrum", "Spectrum"), tr ("Pink markiert: der S-Bereich, der bei S-Lauten leiser wird. Die pinke Kante ziehen = Frequenz "
-                                                           "(Shift = fein, Mausrad = Schritt). Oben: wie viel in den letzten Sekunden weggenommen wurde.",
-                                                           "Pink: the S range that gets quieter on S sounds. Drag the pink edge = frequency "
-                                                           "(Shift = fine, wheel = step). Top: how much was removed over the last seconds."));
+        addInfo (display, tr ("Spektrum", "Spectrum"),
+                 tr ("Pink: der S-Bereich, der bei S-Lauten leiser wird. Oben: wie viel in den letzten Sekunden abgesenkt wurde.\n"
+                     "Pinke Linie ziehen = Frequenz: ab hier sucht der De-Esser nach S-Lauten (tiefe Stimmen um 5 kHz, hohe um 7–7,5 kHz). "
+                     "Kanten des S-Bereichs ziehen oder Mausrad = Breite in Oktaven (nur Split): schmal = nur das S, breit = auch die Luft darüber. "
+                     "Im Breitband-Modus stellt das Mausrad die Frequenz. Shift = fein, Doppelklick = Standard.",
+                     "Pink: the S range that gets quieter on S sounds. Top: how much was reduced over the last seconds.\n"
+                     "Drag the pink line = frequency: from here up the de-esser looks for S sounds (low voices around 5 kHz, high ones around 7–7.5 kHz). "
+                     "Drag the edges of the S range or use the wheel = width in octaves (Split only): narrow = only the S, wide = the air above it too. "
+                     "In Wideband mode the wheel sets the frequency. Shift = fine, double-click = default."),
+                 [this] { return display.markerText(); });
+        addInfo (lookS, "Lookahead", tr ("So viel früher sieht der De-Esser das S kommen und erfasst auch dessen Anfang. "
+                                         "Die Latenz bleibt immer bei 10 ms.",
+                                         "The de-esser sees the S coming this much earlier and also catches its start. "
+                                         "The latency always stays at 10 ms."),
+                 [this] { return lookS.valueText(); });
+        addInfo (linkS, tr ("Stereo-Link", "Stereo Link"),
+                 tr ("Wie stark die beiden Kanäle gemeinsam arbeiten (bei L/R und M/S). 100 %: Ein S links senkt beide Seiten gleich ab, "
+                     "das Stereobild bleibt. 0 %: Jeder Kanal arbeitet für sich.",
+                     "How much the two channels work together (with L/R and M/S). 100 %: an S on the left lowers both sides alike, "
+                     "the stereo image stays. 0 %: each channel works on its own."),
+                 [this] { return linkS.valueText(); });
         addInfo (detector, tr ("S-Pegel", "S level"), tr ("Wie laut die S-Laute gerade sind, in dB. Über der pinken Linie (Threshold) wird reduziert. "
                                                           "Grau gestreift = Smart erkennt keinen S-Laut. Linie ziehen = Threshold, Mausrad = Schritt, Shift = fein.",
                                                           "How loud the S sounds are right now, in dB. Above the pink line (threshold) they are reduced. "
@@ -1169,9 +1349,9 @@ namespace ember
         stopTimer();
     }
 
-    void EmberPanel::addInfo (juce::Component& comp, const juce::String& title, const juce::String& text)
+    void EmberPanel::addInfo (juce::Component& comp, const juce::String& title, const juce::String& text, std::function<juce::String()> value)
     {
-        infos.push_back (std::make_unique<ui::HoverInfo> (comp, [title] { return title; }, nullptr, [text] { return text; }));
+        infos.push_back (std::make_unique<ui::HoverInfo> (comp, [title] { return title; }, std::move (value), [text] { return text; }));
     }
 
     void EmberPanel::showInfo (juce::Component& anchor, const juce::String& title, const juce::String& value, const juce::String& text)
@@ -1252,6 +1432,14 @@ namespace ember
         g.setColour (c::textMuted);
         g.drawText (utf8 ("LIND AUDIO"), sub, juce::Justification::topLeft);
 
+        if (advanced)
+        {
+            // the knob row in three groups (level | time | output), then the two small faders
+            g.setColour (look::accent.withAlpha (0.14f));
+            for (float x : { 322.0f, 526.0f, 733.0f })
+                g.fillRect (x, 364.0f, 1.0f, 82.0f);
+        }
+
     }
 
     void EmberPanel::resized() { layout(); }
@@ -1273,13 +1461,13 @@ namespace ember
                                        (juce::Component*) &voiceLbl, (juce::Component*) &voiceLow, (juce::Component*) &voiceMid,
                                        (juce::Component*) &voiceHigh, (juce::Component*) &listenBtn })
             comp->setVisible (! a);
-        for (juce::Component* comp : { (juce::Component*) &display, (juce::Component*) &detector, (juce::Component*) &advancedMeter, (juce::Component*) &freqK,
+        for (juce::Component* comp : { (juce::Component*) &display, (juce::Component*) &detector, (juce::Component*) &advancedMeter,
                                        (juce::Component*) &threshK, (juce::Component*) &rangeK, (juce::Component*) &amountK,
-                                       (juce::Component*) &attackK, (juce::Component*) &releaseK, (juce::Component*) &lookK,
+                                       (juce::Component*) &attackK, (juce::Component*) &releaseK, (juce::Component*) &lookS,
                                        (juce::Component*) &mixK, (juce::Component*) &outK, (juce::Component*) &modeSeg,
                                        (juce::Component*) &detectSeg, (juce::Component*) &listenSeg, (juce::Component*) &modeLbl,
-                                       (juce::Component*) &detectLbl, (juce::Component*) &listenLbl, (juce::Component*) &widthK,
-                                       (juce::Component*) &linkK, (juce::Component*) &stereoSeg, (juce::Component*) &stereoLbl })
+                                       (juce::Component*) &detectLbl, (juce::Component*) &listenLbl,
+                                       (juce::Component*) &linkS, (juce::Component*) &stereoSeg, (juce::Component*) &stereoLbl })
             comp->setVisible (a);
         infoPopup.hide();
         layout();
@@ -1320,20 +1508,25 @@ namespace ember
             display.setBounds (R (28, 118, 696, 222));
             advancedMeter.setBounds (R (730, 118, 62, 222));
             detector.setBounds (R (796, 114, 76, 230));
+            // three groups of knobs (level | time | output) and, on the right above STEREO, the two small faders
             int x = 28;
-            for (auto* k : { &freqK, &widthK, &threshK, &rangeK, &amountK, &attackK, &releaseK, &lookK, &linkK, &mixK, &outK })
+            int i = 0;
+            for (auto* k : { &threshK, &rangeK, &amountK, &attackK, &releaseK, &mixK, &outK })
             {
-                k->setBounds (R (x, 352, 77, 108));
-                x += 77;
+                k->setBounds (R (x, 350, 96, 108));
+                x += 96 + (i == 2 || i == 4 ? 12 : 0);
+                ++i;
             }
+            lookS.setBounds (R (742, 366, 128, 34));
+            linkS.setBounds (R (742, 414, 128, 34));
             modeLbl.setBounds (R (40, 466, 120, 18));
-            modeSeg.setBounds (R (40, 484, 150, 30));
-            detectLbl.setBounds (R (206, 466, 120, 18));
-            detectSeg.setBounds (R (206, 484, 260, 30));
-            listenLbl.setBounds (R (482, 466, 120, 18));
-            listenSeg.setBounds (R (482, 484, 200, 30));
-            stereoLbl.setBounds (R (698, 466, 120, 18));
-            stereoSeg.setBounds (R (698, 484, 172, 30));
+            modeSeg.setBounds (R (40, 484, 140, 30));
+            detectLbl.setBounds (R (194, 466, 120, 18));
+            detectSeg.setBounds (R (194, 484, 272, 30));
+            listenLbl.setBounds (R (480, 466, 120, 18));
+            listenSeg.setBounds (R (480, 484, 214, 30));
+            stereoLbl.setBounds (R (708, 466, 120, 18));
+            stereoSeg.setBounds (R (708, 484, 162, 30));
             status.setBounds (R (40, 528, 820, 50));
         }
         infoPopup.setBounds (getLocalBounds());
@@ -1444,7 +1637,7 @@ namespace ember
     void EmberPanel::showPresetMenu()
     {
         const auto users = userPresets();   // the same list (and order) the menu was built from
-        buildPresetMenu().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presetBtn),
+        buildPresetMenu().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presetBtn).withMinimumWidth (presetBtn.getWidth()),
                             [safe = juce::Component::SafePointer<EmberPanel> (this), users] (int id)
                             {
                                 if (safe == nullptr || id == 0)
@@ -1548,7 +1741,7 @@ namespace ember
     {
         juce::PopupMenu lang;
         const auto current = settings.getLanguage();
-        lang.addItem (11, tr ("Wie das System", "Same as the system"), true, current == "system");
+        lang.addItem (11, tr ("Systemsprache", "System language"), true, current == "system");
         lang.addItem (12, "Deutsch", true, current == "de");
         lang.addItem (13, "English", true, current == "en");
         juce::PopupMenu menu;
@@ -1571,7 +1764,7 @@ namespace ember
             anim.addItem (63, tr ("Aus", "Off"), true, level == AnimationLevel::off);
             menu.addSubMenu (tr ("Animation", "Animation"), anim);
         }
-        menu.addItem (20, tr ("Handbuch öffnen", "Open the manual"));
+        menu.addItem (20, tr ("Handbuch öffnen", "Open manual"));
         menu.addItem (21, tr ("Ember-Tipp wieder zeigen", "Show Ember's tip again"));
         auto& licence = processor.getLicence();
         if (licence.isOn())
@@ -1737,6 +1930,9 @@ namespace ember
         const bool hearing = std::lround (processor.state.getRawParameterValue (pid::listen)->load()) == 2;   // Delta
         listenBtn.setToggleState (hearing, juce::dontSendNotification);
         listenBtn.setColour (juce::TextButton::buttonOnColourId, look::accent);
+        // Stereo-Link only works with two channels (L/R, M/S): dimmed for Mid / Side
+        const bool linkUsed = std::lround (processor.state.getRawParameterValue (pid::stereo)->load()) < 2;
+        linkS.setAlpha (linkUsed ? 1.0f : 0.4f);
 
         const auto name = processor.getPresetName() + (processor.isPresetModified() ? " *" : "");
         if (presetBtn.getButtonText() != name)
@@ -1826,11 +2022,13 @@ namespace ember
                                 : tr ("Delta: Du hörst nur, was entfernt wird. Stille heißt: gerade wird nichts entfernt. Zum Ausschalten nochmal auf DELTA klicken.",
                                       "Delta: you hear only what is removed. Silence means nothing is being removed. Click DELTA again to switch it off.");
             else if (listen == 1)
-                text = tr ("S-Bereich: Du hörst nur den Bereich, in dem nach S-Lauten gesucht wird. Zum Ausschalten Abhören auf Aus stellen.",
-                           "S range: you hear only the range searched for S sounds. Set Listen to Off to switch it off.");
+                text = tr ("S-Bereich: Du hörst nur den Bereich, der bei S-Lauten abgesenkt wird. Zum Ausschalten Abhören auf Aus stellen.",
+                           "S range: you hear only the range that is lowered on S sounds. Set Listen to Off to switch it off.");
             else if (advanced)
-                text = tr ("Fahr mit der Maus über einen Regler, um zu sehen, was er macht. Doppelklick setzt ihn zurück.",
-                           "Hover over a control to see what it does. Double-click resets it.");
+                text = tr ("Fahr mit der Maus über einen Regler, um zu sehen, was er macht. Im Spektrum: Linie ziehen = Frequenz, "
+                           "Kanten oder Mausrad = Breite. Doppelklick = Standard.",
+                           "Hover over a control to see what it does. In the spectrum: drag the line = frequency, "
+                           "edges or wheel = width. Double-click = default.");
             else
                 text = tr ("Spiel deinen Gesang ab und klick auf Ember oder AUTO: Er stellt den De-Esser auf deine Stimme ein.",
                            "Play your vocal and click Ember or AUTO: he tunes the de-esser to your voice.");
@@ -1882,6 +2080,7 @@ namespace ember
     {
         applyLanguage (settings->getLanguage());
         setLookAndFeel (&lnf);
+        ui::setActivationDialogLook ([] { return std::make_shared<EmberLookAndFeel>(); });   // the key dialog in EMBER's look
         setWantsKeyboardFocus (true);   // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y where the host passes the keys on
         rebuildPanel();
         setResizable (true, true);

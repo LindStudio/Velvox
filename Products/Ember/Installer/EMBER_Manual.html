@@ -83,42 +83,45 @@
 <h2 id="quickstart">1. Quick start</h2>
 <ol>
   <li><strong>Insert:</strong> Load EMBER as an insert on your vocal or speech track.</li>
-  <li><strong>AUTO:</strong> Play the vocal and click <strong>AUTO</strong> (or click Ember). Ember listens and sets frequency, threshold and range for you.</li>
+  <li><strong>AUTO:</strong> Play the vocal and click <strong>AUTO</strong> (or click Ember). Ember listens and sets frequency, threshold, range and release for you.</li>
   <li><strong>Check:</strong> Press <strong>DELTA</strong> to hear only what is removed – that should be S sounds only. Adjust <strong>Amount</strong> if needed.</li>
 </ol>
 
 <h2 id="simple">2. SIMPLE view</h2>
-<p>SIMPLE shows only what you need. Ember sits large in the middle and shows what is happening through his mood.</p>
+<p>SIMPLE shows only what you need. Ember stands large on his seal and shows what is happening through his mood. What he says (during AUTO, for example) appears on the plate above him.</p>
 <table>
   <tr><th>Element</th><th>Function</th></tr>
-  <tr><td>Amount</td><td>How strongly EMBER works. 50 % is exactly what threshold and range set, 100 % is one and a half times that, 0 % turns processing off.</td></tr>
-  <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets where the S range starts: from 5 kHz (LOW), 6 kHz (MID) or 7.4 kHz (HIGH). The threshold is set to match (deep voices have softer S) while it is still at a voice value (the default included). A threshold set by you, a preset or AUTO stays; the status line tells you briefly. After AUTO, a click on the voice that is already lit keeps the frequency AUTO found in that range. The voice whose range holds the frequency lights up (LOW up to 5.75 kHz, MID up to 7 kHz, HIGH above). One click is one undo step.</td></tr>
+  <tr><td>Amount</td><td>How strongly EMBER works. 50 % is exactly what threshold and range set, 100 % is one and a half times that, 0 % turns processing off. The small seal on the knob turns with the value.</td></tr>
+  <tr><td>LOW / MID / HIGH</td><td>Voice type. Sets the frequency from which EMBER looks for S sounds: 5 kHz (LOW), 6 kHz (MID) or 7.4 kHz (HIGH). The threshold is set to match (deep voices have softer S) while it is still at a voice value (the default included). A threshold set by you, a preset or AUTO stays; the status line tells you briefly. After AUTO, a click on the voice that is already lit keeps the frequency AUTO found in that range. The voice whose range holds the frequency lights up (LOW up to 5.75 kHz, MID up to 7 kHz, HIGH above). One click is one undo step.</td></tr>
   <tr><td>DELTA</td><td>Hear only what is removed.</td></tr>
   <tr><td>REDUCTION</td><td>Shows how much quieter the S sounds are right now (0 to −12 dB, gain reduction).</td></tr>
 </table>
 
 <h2 id="advanced">3. ADVANCED view</h2>
-<p>ADVANCED gives you access to every parameter.</p>
+<p>ADVANCED gives you access to every parameter. Frequency and width are set right in the spectrum (as in FabFilter Pro-DS), everything else with the controls below it.</p>
 <h3>Displays</h3>
 <ul>
-  <li><strong>Spectrum:</strong> The pink S range shows where EMBER works. Drag its pink edge to set the frequency (Shift = fine, wheel = step). The axis shows 1 to 20 kHz. The reduction history runs along the top.</li>
+  <li><strong>Spectrum:</strong> The pink S range shows where EMBER works; the reduction history runs along the top. The axis shows 1 to 20 kHz.
+    <ul>
+      <li><strong>Frequency</strong> (2–16 kHz): drag the pink line left or right. From this frequency up EMBER looks for S sounds (low voices around 5 kHz, high ones around 7–7.5 kHz).</li>
+      <li><strong>Width</strong> (1–4 oct, Split only): drag an edge of the S range or turn the mouse wheel over the spectrum. Narrow = only the S, wide (default 3 octaves) = the S and the air above it. If an edge lies outside the display (above 20 kHz), set the width with the wheel.</li>
+      <li>Both values are shown next to the line, e.g. "6.00 kHz · 3.00 oct". Shift = fine, double-click on the line or an edge = default. Wideband has no width; there the wheel moves the frequency.</li>
+    </ul></li>
   <li><strong>REDUCTION:</strong> How much is being removed right now, in dB.</li>
   <li><strong>S LEVEL</strong> (right): level in the S range in dB. The pink line is the threshold; you can drag it (Shift = fine, wheel = step, double-click = default). While you drag, its value in dB is shown next to it. A grey striped bar means Smart detection hears no S sound at the moment.</li>
 </ul>
 <h3>Controls</h3>
 <table>
   <tr><th>Control</th><th>Range</th><th>Function</th></tr>
-  <tr><td>Frequency</td><td>2–16 kHz</td><td>Lower edge of the S range.</td></tr>
-  <tr><td>Width</td><td>1–4 oct</td><td>Split only: how wide the band around the S is. Narrow = only the S, wide (default 3 oct) = the S and the air above it.</td></tr>
   <tr><td>Threshold</td><td>−50 to −10 dB</td><td>S-band level above which reduction starts.</td></tr>
   <tr><td>Range</td><td>0–24 dB</td><td>Maximum reduction.</td></tr>
   <tr><td>Amount</td><td>0–100 %</td><td>Strength: 50 % = what threshold and range set, 100 % = 1.5x, 0 % = off.</td></tr>
   <tr><td>Attack</td><td>0.1–20 ms</td><td>How fast EMBER reacts to an S sound.</td></tr>
   <tr><td>Release</td><td>10–400 ms</td><td>How fast the reduction recovers afterwards.</td></tr>
-  <tr><td>Lookahead</td><td>0–10 ms</td><td>How far EMBER looks ahead to catch S sounds right at their start (default 5 ms). Latency stays at 10 ms regardless.</td></tr>
-  <tr><td>Link</td><td>0–100 %</td><td>Stereo link: 100 % = both channels are reduced together (the image stays put), lower = each channel more on its own.</td></tr>
   <tr><td>Mix</td><td>0–100 %</td><td>Blend of processed and unprocessed signal.</td></tr>
   <tr><td>Output</td><td>±12 dB</td><td>Output level.</td></tr>
+  <tr><td>Lookahead (small fader on the right)</td><td>0–10 ms</td><td>How far EMBER looks ahead to catch S sounds right at their start (default 5 ms). Latency stays at 10 ms regardless.</td></tr>
+  <tr><td>Stereo Link (small fader above STEREO)</td><td>0–100 %</td><td>How much the two channels work together (with L/R and M/S): 100 % = both are reduced together (the image stays put), lower = each channel more on its own. Dimmed for Mid and Side.</td></tr>
   <tr><td>Mode: Split</td><td></td><td>Only the S range gets quieter: a wide dynamic bell around the S (centred at 1.25x the frequency). <strong>S tracking:</strong> the band follows each individual S – if an S sits a little lower or higher, the reduction moves with it by up to half an octave, so it hits the core of the S and less of the voice below. The voice below and the air above stay, so the S sounds like a quieter S instead of a duller one.</td></tr>
   <tr><td>Mode: Wideband</td><td></td><td>The whole voice dips briefly.</td></tr>
   <tr><td>Detection: Smart</td><td></td><td>Default and recommended. Reacts only when a real S sound is there (see <a href="#smart">section 5</a>).</td></tr>
@@ -127,7 +130,7 @@
   <tr><td>Detection: Allround</td><td></td><td>For mixes, buses and instruments: reacts to harsh highs without needing a single voice to compare against.</td></tr>
   <tr><td>Listen: Off</td><td></td><td>Normal output.</td></tr>
   <tr><td>Listen: S range</td><td></td><td>Hear only the range EMBER works on (in Split the band set by Frequency and Width).</td></tr>
-  <tr><td>Stereo: L/R · M/S · Mid · Side</td><td></td><td>L/R = left and right; M/S = middle and sides separately; Mid = only the middle (e.g. the lead vocal in a mix); Side = only the sides (e.g. wide doubles or reverb).</td></tr>
+  <tr><td>Stereo: L/R · M/S · Mid · Side</td><td></td><td>L/R = left and right; M/S = middle and sides separately (both with Stereo Link); Mid = only the middle (e.g. the lead vocal in a mix); Side = only the sides (e.g. wide doubles or reverb).</td></tr>
   <tr><td>Listen: Delta</td><td></td><td>Hear only what is removed.</td></tr>
 </table>
 
@@ -161,10 +164,10 @@
   <tr><th>Ember …</th><th>means</th></tr>
   <tr><td>stands still</td><td>No signal.</td></tr>
   <tr><td>dances</td><td>Someone is singing or speaking.</td></tr>
-  <tr><td>snaps while dancing, a spark and an "S" fly off</td><td>EMBER is reducing an S sound. The stronger the reduction, the bigger the spark.</td></tr>
-  <tr><td>says "Sounds lispy!"</td><td>Reduction has been above 9 dB for a while. The voice may lisp – lower Range or Amount.</td></tr>
-  <tr><td>sleeps</td><td>Bypass is on.</td></tr>
-  <tr><td>tilts his head and listens</td><td>AUTO is listening.</td></tr>
+  <tr><td>an "S" flies to him and he eats it</td><td>EMBER is reducing an S sound. The stronger the reduction, the bigger the S; then a wave runs over the seal.</td></tr>
+  <tr><td>says "Whoa, too much! Turn Amount down a bit."</td><td>Reduction has been above 9 dB for a while. The voice may lisp – lower Range or Amount.</td></tr>
+  <tr><td>sleeps</td><td>Bypass is on (or nothing has played for half a minute).</td></tr>
+  <tr><td>tilts his head and listens</td><td>AUTO is listening. The plate above him says what he is doing ("Listening …", "One moment …", "Got it!").</td></tr>
 </table>
 
 <h2 id="presets">7. Presets and A/B</h2>
@@ -220,8 +223,8 @@
   <li><strong>Undo</strong> (<span class="key">Ctrl</span>+<span class="key">Z</span>) and <strong>Redo</strong> (<span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">Z</span> or <span class="key">Ctrl</span>+<span class="key">Y</span>): every change to a control, a click on a voice, a loaded preset and AUTO are one step each. Undo also brings back the preset name and the *. Listening (Delta / S range) and BYPASS are not part of it.</li>
   <li><strong>Animation:</strong> Full / Reduced / Off – less animation saves computer power, useful with many EMBER instances. Remembered.</li>
   <li><strong>Window size:</strong> 75 / 100 / 125 / 150 / 200 % – remembered, like a size dragged with the bottom-right corner.</li>
-  <li><strong>Language:</strong> system / Deutsch / English – remembered.</li>
-  <li><strong>Open the manual</strong></li>
+  <li><strong>Language:</strong> System language / Deutsch / English – remembered.</li>
+  <li><strong>Open manual</strong></li>
   <li><strong>Show Ember's tip again</strong></li>
   <li><strong>Licence:</strong> shows the licence status, plus <strong>Enter licence key …</strong>, <strong>Release this computer</strong> (asks first) and the link to get a key.</li>
   <li><strong>About EMBER</strong> (a click or <span class="key">Esc</span> closes it)</li>
@@ -242,7 +245,7 @@
   <tr><td>Rest the mouse</td><td>Every control shows an info card.</td></tr>
   <tr><td>Double-click or <span class="key">Alt</span> + click</td><td>Resets the control to its default.</td></tr>
   <tr><td><span class="key">Shift</span> / <span class="key">Ctrl</span> + drag</td><td>Fine adjustment.</td></tr>
-  <tr><td>Mouse wheel</td><td>One step per notch, fine with <span class="key">Shift</span> / <span class="key">Ctrl</span>. Also works on the edge in the spectrum and on the threshold line.</td></tr>
+  <tr><td>Mouse wheel</td><td>One step per notch, fine with <span class="key">Shift</span> / <span class="key">Ctrl</span>. Over the spectrum it sets the width (in Wideband the frequency), on the threshold line the threshold.</td></tr>
   <tr><td><span class="key">Ctrl</span>+<span class="key">Z</span> / <span class="key">Ctrl</span>+<span class="key">Shift</span>+<span class="key">Z</span> / <span class="key">Ctrl</span>+<span class="key">Y</span></td><td>Undo / redo (when your host passes the keys on to the plugin; otherwise use the ≡ menu).</td></tr>
   <tr><td>Drag the bottom-right corner</td><td>Make the window bigger or smaller (75 to 200 %); fixed steps under ≡ › Window size.</td></tr>
   <tr><td>Click the value</td><td>Type a value.</td></tr>

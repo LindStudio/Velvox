@@ -69,11 +69,14 @@ namespace ember
         bool dragging = false, hover = false;
     };
 
-    // ADVANCED display: input / output spectrum (zoomed to minHz..maxHz, where the frequency is set), the S range
-    // (drag its edge = frequency), reduction history
+    // ADVANCED display: input / output spectrum (zoomed to minHz..maxHz, where the frequency is set), the S range and
+    // the reduction history in one picture, like FabFilter Pro-DS / Pro-Q. Frequency AND width are set here
+    // (2026-11-24, the two knobs are gone): drag the pink marker = frequency, drag a band edge or the mouse wheel
+    // = width (Split; in Wideband the wheel moves the frequency), Shift = fine, double-click on a handle = default.
     class BandDisplay final : public juce::Component
     {
     public:
+        enum class Handle { none, frequency, lowEdge, highEdge };
         BandDisplay (EmberAudioProcessor&, vocalypse::ui::SpectrumSource&);
         void paint (juce::Graphics&) override;
         void paintOverChildren (juce::Graphics&) override;
@@ -83,22 +86,46 @@ namespace ember
         void mouseUp (const juce::MouseEvent&) override;
         void mouseDoubleClick (const juce::MouseEvent&) override;
         void mouseMove (const juce::MouseEvent&) override;
+        void mouseExit (const juce::MouseEvent&) override;
         void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
         void pushReduction (float db);
         void setHasSignal (bool);   // no audio for a while: a hint instead of an empty black box
         void refresh() { spectrum.refresh(); repaint(); }
         float xForHz (float hz) const;
         float hzForX (float x) const;
-        bool nearHandle (juce::Point<float>) const;   // only the edge is grabbed (a click elsewhere does nothing)
+        Handle handleAt (juce::Point<float>) const;   // only the marker and the band's edges are grabbed
+        juce::String markerText() const;               // "6,00 kHz · 3,00 Okt." (Split) / "6,00 kHz" (Wideband)
         static constexpr float minHz = 1000.0f, maxHz = 20000.0f;
+        // the width (octaves) that puts the split band's low / high edge at hz, for a detection frequency
+        static float widthForLowEdge (float freq, float hz);
+        static float widthForHighEdge (float freq, float hz);
 
     private:
+        bool isSplit() const;
         EmberAudioProcessor& processor;
         vocalypse::ui::SpectrumView spectrum;
         std::array<float, 240> history {};
         int head = 0;
-        float lastDragX = 0.0f, dragHz = 0.0f;
-        bool dragging = false, hasSignal = true;
+        float lastDragX = 0.0f, dragHz = 0.0f, dragEdgeX = 0.0f;
+        Handle dragging = Handle::none, hover = Handle::none;
+        bool hasSignal = true;
+    };
+
+    // A small fader for a setting that is rarely touched (2026-11-24: Lookahead and Stereo Link left the knob row):
+    // name and value on one line, a slim track under it; the same gestures as a knob (drag, Shift = fine,
+    // double-click = default, wheel, click on the value = type, right-click = menu).
+    class CompactSlider final : public juce::Component
+    {
+    public:
+        CompactSlider (juce::AudioProcessorValueTreeState&, const char* paramId, const juce::String& name);
+        void paint (juce::Graphics&) override;
+        void resized() override;
+        juce::String valueText() { return slider.getTextFromValue (slider.getValue()); }
+        const juce::String& getName() const noexcept { return name; }
+        vocalypse::ui::FineSlider slider;
+    private:
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+        juce::String name;
     };
 
     class EmberPanel;
@@ -243,7 +270,7 @@ namespace ember
         void savePresetAs();
         void showNotice (const juce::String&);   // a short note in the status line (a few seconds)
         void warn (const juce::String& title, const juce::String& message);
-        void addInfo (juce::Component&, const juce::String& title, const juce::String& text);
+        void addInfo (juce::Component&, const juce::String& title, const juce::String& text, std::function<juce::String()> value = nullptr);
 
         EmberAudioProcessor& processor;
         UserSettings& settings;
@@ -280,9 +307,9 @@ namespace ember
         juce::Label voiceLbl;
         juce::Label status;
 
-        // ADVANCED
-        vocalypse::ui::Knob freqK, threshK, rangeK, amountK, attackK, releaseK, lookK, mixK, outK;
-        vocalypse::ui::Knob widthK, linkK;   // 2026-11-23 (fix/ember-dsp): split band width, stereo link
+        // ADVANCED (2026-11-24: frequency and width are set in the display; Lookahead and Stereo Link are small faders)
+        vocalypse::ui::Knob threshK, rangeK, amountK, attackK, releaseK, mixK, outK;
+        CompactSlider lookS, linkS;
         vocalypse::ui::Segments modeSeg, detectSeg, listenSeg, stereoSeg;
         juce::Label modeLbl, detectLbl, listenLbl, stereoLbl;
 

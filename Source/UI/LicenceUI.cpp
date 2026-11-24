@@ -15,6 +15,17 @@ namespace vocalypse::ui
         {
             return lf.isColourSpecified (LicenceLock::accentColourId) ? lf.findColour (LicenceLock::accentColourId) : colours::fire;
         }
+
+        std::function<std::shared_ptr<juce::LookAndFeel>()>& dialogLook()
+        {
+            static std::function<std::shared_ptr<juce::LookAndFeel>()> make;
+            return make;
+        }
+    }
+
+    void setActivationDialogLook (std::function<std::shared_ptr<juce::LookAndFeel>()> makeLook)
+    {
+        dialogLook() = std::move (makeLook);
     }
 
     void showActivationDialog (licensing::Manager& m, juce::Component* over)
@@ -27,7 +38,9 @@ namespace vocalypse::ui
                                          juce::MessageBoxIconType::NoIcon, over);
         // The plugin's look (the window is its own desktop window and may outlive the editor: it owns its look,
         // which the modal callback keeps alive until the window is gone)
-        auto look = std::make_shared<VocalypseLookAndFeel>();
+        std::shared_ptr<juce::LookAndFeel> look = dialogLook() ? dialogLook()() : nullptr;
+        if (look == nullptr)
+            look = std::make_shared<VocalypseLookAndFeel>();
         if (over != nullptr)
         {
             const auto a = accentOf (over->getLookAndFeel());

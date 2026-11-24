@@ -2531,6 +2531,54 @@ namespace
         vocalypse::i18n::overrideSystemLanguage (std::nullopt);
         check ((bool) p.state.state.getProperty ("advanced", false), "view stored in the state");
 
+        // GUI round 2026-11-24: frequency and width are set in the spectrum (no knobs for them), Lookahead and
+        // Stereo-Link are small faders, the spark on the star and the braziers are gone
+        {
+            for (float f : { voiceLowHz, voiceMidHz, voiceHighHz, 3000.0f, 12000.0f })
+                for (float n : { 1.0f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f })
+                {
+                    const auto shape = splitBand (f, n);
+                    near (BandDisplay::widthForHighEdge (f, (float) shape.highHz), n, 0.01, "high edge -> width " + juce::String (f) + " / " + juce::String (n));
+                    if (shape.lowHz > splitLowestRatio * f * 1.001)   // the low edge moves only above its floor
+                        near (BandDisplay::widthForLowEdge (f, (float) shape.lowHz), n, 0.01, "low edge -> width " + juce::String (f) + " / " + juce::String (n));
+                }
+            vocalypse::i18n::overrideSystemLanguage (vocalypse::i18n::Language::german);
+            std::unique_ptr<juce::AudioProcessorEditor> base (p.createEditor());
+            auto* ed = dynamic_cast<EmberEditor*> (base.get());
+            ed->setAdvanced (true);
+            int knobs = 0, compact = 0;
+            bool freqOrWidthKnob = false;
+            juce::StringArray compactIds;
+            BandDisplay* display = nullptr;
+            for (auto* c : ed->getPanel().getChildren())
+            {
+                if (auto* k = dynamic_cast<vocalypse::ui::Knob*> (c); k != nullptr && k->isVisible())
+                {
+                    ++knobs;
+                    freqOrWidthKnob = freqOrWidthKnob || k->getParamId() == juce::String (pid::freq) || k->getParamId() == juce::String (pid::width);
+                }
+                if (auto* cs = dynamic_cast<CompactSlider*> (c); cs != nullptr && cs->isVisible())
+                {
+                    ++compact;
+                    if (auto* prm = cs->slider.getParameter()) compactIds.add (prm->getParameterID());
+                }
+                if (auto* d = dynamic_cast<BandDisplay*> (c)) display = d;
+            }
+            check (knobs == 7 && ! freqOrWidthKnob, "ADVANCED: 7 knobs, none for frequency or width (" + juce::String (knobs) + ")");
+            check (compact == 2 && compactIds.contains (pid::lookahead) && compactIds.contains (pid::link), "Lookahead and Stereo-Link as small faders");
+            check (display != nullptr && display->markerText().contains ("kHz") && display->markerText().contains ("Okt."),
+                   "the marker shows frequency and width: " + (display != nullptr ? display->markerText() : juce::String()));
+            if (display != nullptr)
+            {
+                const float x = display->xForHz (p.state.getRawParameterValue (pid::freq)->load());
+                check (display->handleAt ({ x + 2.0f, 50.0f }) == BandDisplay::Handle::frequency, "the marker is grabbed");
+                const auto shape = splitBand (p.state.getRawParameterValue (pid::freq)->load(), p.state.getRawParameterValue (pid::width)->load());
+                check (display->handleAt ({ display->xForHz ((float) shape.lowHz) - 2.0f, 50.0f }) == BandDisplay::Handle::lowEdge, "the low edge is grabbed");
+                check (display->handleAt ({ 5.0f, 50.0f }) == BandDisplay::Handle::none, "elsewhere nothing is grabbed");
+            }
+            vocalypse::i18n::overrideSystemLanguage (std::nullopt);
+        }
+
         // Language switch in the menu: rebuilds the panel, keeps the view, is remembered
         {
             std::unique_ptr<juce::AudioProcessorEditor> base (p.createEditor());
