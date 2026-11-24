@@ -544,13 +544,18 @@ namespace velvox::automix
                 }
             }
 
+            // S sounds lifted by the chain clearly above the original: more than 2 dB, plus what EQ 1 lifts in the
+            // S band (2026-10-29 high-end budget: an air lift raises the S frames against the vowels by itself - fighting
+            // that with the de-esser's high shelf only takes the air back), never beyond -6 dB against the vowels
+            const float sAllowed = std::max (-8.0f, std::min (-6.0f, r.original.sibilanceVsVowelDb + 2.0f
+                                                                     + std::max (0.0f, AutoMixPlanner::deessEqLiftDb (plan, plan.get (pid::deessFreq, r.profile.deessDetectorHz)))));
+
             // De-esser: S sounds controlled, but no lisp
             if (plan.on (pid::deessOn) && m.sibilanceValid && r.profile.sibilanceValid)
             {
                 const float thr = plan.get (pid::deessThreshold);
                 // Too strong in absolute terms, or lifted by the chain clearly above the original
-                const bool tooStrong = m.sibilanceVsVowelDb > -3.0f
-                                    || m.sibilanceVsVowelDb > std::max (-8.0f, r.original.sibilanceVsVowelDb + 2.0f);
+                const bool tooStrong = m.sibilanceVsVowelDb > -3.0f || m.sibilanceVsVowelDb > sAllowed;
                 if (tooStrong && thr > -55.0f && plan.get (pid::deessRange) < 8.0f)
                 {
                     plan.set (pid::deessThreshold, thr - 3.0f);
@@ -568,8 +573,7 @@ namespace velvox::automix
 
             // The chain itself (compression, presence, saturation) can lift S sounds:
             // then a gentle de-esser is set up even if the recording did not need one
-            if (! plan.on (pid::deessOn) && m.sibilanceValid
-                && m.sibilanceVsVowelDb > std::max (-8.0f, r.original.sibilanceVsVowelDb + 2.0f))
+            if (! plan.on (pid::deessOn) && m.sibilanceValid && m.sibilanceVsVowelDb > sAllowed)
             {
                 AutoMixPlanner::configureDeEsser (plan, r.profile, current.count (pid::inputGain) ? current.at (pid::inputGain) : 0.0f, 4.0f);
                 plan.decisions.push_back ({ dsp::ModuleId::deess, false,
@@ -581,9 +585,13 @@ namespace velvox::automix
                 changed = true;
             }
 
-            // Brightness: the chain must not make an already bright voice brighter
+            // Brightness: the chain must not make an already bright voice brighter (2026-10-29: only once the render is
+            // in the brighter half of the top window - a dark take lifted by 5 dB into the window is the goal, not a fault)
             bool airAdjusted = false;
-            if (auto air = roleBand (plan, current, dsp::EqRole::air); m.topDb > r.original.topDb + 5.0f && air.has_value() && air->on && air->gain > 0.0f)
+            const float liftBefore = AutoMixPlanner::deessEqLiftDb (plan, plan.get (pid::deessFreq, r.profile.deessDetectorHz));
+            if (auto air = roleBand (plan, current, dsp::EqRole::air);
+                m.topDb > r.original.topDb + 5.0f && m.topDb > 0.5f * (autoeq::topWindow.lo + autoeq::topWindow.hi)
+                && air.has_value() && air->on && air->gain > 0.0f)
             {
                 const auto before = *air;
                 air->gain = std::max (0.0f, air->gain - 1.5f);
@@ -613,6 +621,10 @@ namespace velvox::automix
                     changed = true;
                 }
             }
+            // 2026-10-29: the de-esser's threshold follows what EQ 1 now adds in its detector band (see configureDeEsser)
+            if (plan.on (pid::deessOn))
+                if (const float shift = AutoMixPlanner::deessEqLiftDb (plan, plan.get (pid::deessFreq, r.profile.deessDetectorHz)) - liftBefore; std::abs (shift) > 0.05f)
+                    plan.set (pid::deessThreshold, juce::jlimit (-60.0f, -3.0f, plan.get (pid::deessThreshold) + shift));
             // ... and must not dull it either
             if (m.topDb < r.original.topDb - 5.0f && plan.on (pid::smoothOn) && plan.get (pid::smoothAmount) > 20.0f)
             {

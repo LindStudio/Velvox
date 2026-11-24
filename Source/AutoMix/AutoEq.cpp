@@ -191,13 +191,26 @@ namespace velvox::automix::autoeq
                 case EqRole::autoTone: return { ctx.harsh || p.presenceDb > presenceWindow.hi ? cut : 0.0f,
                                                 ctx.harsh || p.presenceDb > presenceWindow.hi ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : 3.0f) * scale };
                 // A take that is already brighter above 2 kHz than finished vocals never gets its highs lifted,
-                // even when 10-16 kHz is low (the shelf would lift the harsh range with it)
-                default:               return { cut, ctx.harsh || p.topDb > topWindow.hi ? 0.0f : (ctx.noisy || ctx.sibilant ? 2.0f : maxBroadBoostDb) * scale };
+                // even when 10-16 kHz is low (the shelf would lift the harsh range with it).
+                // 2026-10-29 high-end budget: S sounds no longer halve the lift - the de-esser is planned for them (from
+                // -9 dB against the vowels) and controls them. A harsh take gets a small lift (the presence term keeps
+                // 2-5 kHz in check), a noisy one 3 dB (2 dB under 22 dB SNR) - Room Noise cleans the gaps first.
+                default:
+                {
+                    if (p.topDb > topWindow.hi)
+                        return { cut, 0.0f };
+                    float hi = maxBroadBoostDb;
+                    if (ctx.harsh)
+                        hi = 2.0f;
+                    if (ctx.noisy)
+                        hi = std::min (hi, p.snrValid && p.snrDb < 22.0f ? 2.0f : 3.0f);
+                    return { cut, hi * scale };
+                }
             }
         }
     }
 
-    float tonalPenalty (const Levels& l, bool highVoice, float margin)
+    float tonalPenalty (const Levels& l, bool highVoice, float margin, float airAim)
     {
         const float m = margin;
         const auto w = [] (float v, float lo, float hi, float s)
@@ -208,7 +221,7 @@ namespace velvox::automix::autoeq
         return 0.6f * w (l.body, highVoice ? -200.0f : bodyWindow.lo + m, bodyWindow.hi - m, 2.0f)
              + 0.8f * w (l.lowMid, lowMidWindow.lo + m, lowMidWindow.hi - m, 2.0f)
              + 1.0f * w (l.top, topWindow.lo + m, topWindow.hi - m, 2.0f)
-             + 0.4f * w (l.air, airWindow.lo + m, airWindow.hi - m, 3.0f)
+             + 0.8f * w (l.air, airWindow.lo + m + airAim, airWindow.hi - m, 2.0f)   // 2026-10-29: was 0.4 / 3 dB - too weak to lift the air
              + 1.0f * w (l.presence, presenceWindow.lo + m, presenceWindow.hi - m, 2.0f);
     }
 
@@ -220,9 +233,9 @@ namespace velvox::automix::autoeq
 
         // Best gain of one broad role on a 0.5 dB grid in [lo, hi]: the smallest total of the
         // predicted tonal penalty plus the size of the move. Returns g0 when nothing is clearly better.
-        float optimise (const std::function<Levels (float)>& predict, bool highVoice, float lo, float hi, float g0)
+        float optimise (const std::function<Levels (float)>& predict, bool highVoice, float lo, float hi, float g0, float airAim)
         {
-            const auto cost = [&] (float g) { return tonalPenalty (predict (g), highVoice, planningMargin) + costPerDb * std::abs (g); };
+            const auto cost = [&] (float g) { return tonalPenalty (predict (g), highVoice, planningMargin, airAim) + costPerDb * std::abs (g); };
             const float c0 = cost (g0);
             float best = g0, bestCost = c0;
             for (float g = std::ceil (lo * 2.0f) / 2.0f; g <= hi + 1.0e-4f; g += 0.5f)
@@ -258,7 +271,7 @@ namespace velvox::automix::autoeq
                     return g < 0.0f ? both ("Die Aufnahme ist sehr hell (über 2 kHz: {0}) - ein breiter Shelf nimmt die Schärfe.",
                                             "The recording is very bright (above 2 kHz: {0}) - a broad shelf takes off the harshness.", { db (l.top) })
                                     : both ("Wenig Höhen (über 2 kHz: {0}, über 10 kHz: {1})", "Few highs (above 2 kHz: {0}, above 10 kHz: {1})", { db (l.top), db (l.air) })
-                                          + (ctx.noisy || ctx.sibilant ? both (" - begrenzt wegen Rauschen/S-Lauten.", " - limited because of noise/sibilance.")
+                                          + (ctx.noisy || ctx.harsh ? both (" - begrenzt wegen Rauschen/Schärfe.", " - limited because of noise/harshness.")
                                                                        : both (" - etwas Glanz hilft der Stimme durch dichte Dance-Mixe.", " - a little sheen helps the voice through dense dance mixes."));
             }
         }
@@ -338,7 +351,7 @@ namespace velvox::automix::autoeq
                 const auto applied = bandsWithout (role);
                 const auto make = [&] (float g) { return shapeOf (role, g, ctx, applied, has ? &keep : nullptr); };
                 const auto predict = [&] (float g) { auto b = applied; b.push_back (make (g)); return levelsOf (spec, b); };
-                const float g = optimise (predict, highVoice, lo, hi, g0);
+                const float g = optimise (predict, highVoice, lo, hi, g0, role == EqRole::air ? airAimDb : 0.0f);
                 if (g == g0)
                     continue;
                 if (has && std::abs (g) < 0.25f)
@@ -434,7 +447,7 @@ namespace velvox::automix::autoeq
             return out;
         const auto& p = *ctx.profile;
         const bool highVoice = p.pitchValid && p.f0LowHz > 250.0f;
-        if (tonalPenalty (rendered, highVoice) <= 0.0f)
+        if (tonalPenalty (rendered, highVoice, 0.0f, airAimDb) <= 0.0f)
             return out;
         int budget = ctx.budget;
 
@@ -474,7 +487,7 @@ namespace velvox::automix::autoeq
                 r.air += m.air - modelAtRender.air;
                 return r;
             };
-            const float g = std::clamp (optimise (predict, highVoice, std::min (lo, g0), std::max (hi, g0), g0), lo, hi);
+            const float g = std::clamp (optimise (predict, highVoice, std::min (lo, g0), std::max (hi, g0), g0, role == EqRole::air ? airAimDb : 0.0f), lo, hi);
             if (std::abs (g - g0) < 0.5f || (! has && std::abs (g) < minMoveDb))
                 continue;
 

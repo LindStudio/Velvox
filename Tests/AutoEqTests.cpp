@@ -38,6 +38,7 @@ public:
         analysisTests();
         modelTests();
         moveTests();
+        highEndMoveTests();
         plannerTests();
         engineTests();
     }
@@ -118,7 +119,7 @@ public:
         };
         VocalSpec res; res.seconds = 14.0; res.resonanceHz = 1800.0f; res.resonanceDb = 16.0f;
 
-        beginTest ("Planner: a resonance gets a notch in an auto-mix role band, explained; SMOOTH stays gentle");
+        beginTest ("Planner: a resonance gets a notch in an auto-mix role band, explained; no SMOOTH for it");
         {
             const auto cur = defaults();
             const auto plan = planOf (res, cur);
@@ -134,9 +135,10 @@ public:
             expect (std::any_of (plan.decisions.begin(), plan.decisions.end(), [] (const Decision& d)
                                  { return d.module == dsp::ModuleId::eq && i18n::show (d.title, i18n::Language::english).startsWith ("Resonance")
                                           && i18n::show (d.title, i18n::Language::english).contains ("narrow"); }), "and in English");
-            // 2026-10-29: SMOOTH runs on every vocal as basic care; a resonance the EQ already notches does not raise it
-            expect (plan.on (pid::smoothOn) && std::abs (plan.get (pid::smoothAmount) - 20.0f) < 0.01f,
-                    "SMOOTH only gently (20 %) for a resonance the EQ already notches (not harsh)");
+            // 2026-10-29 high-end budget: one problem, one tool - a resonance the EQ already notches is no reason for
+            // SMOOTH (it no longer runs as basic care on every take)
+            expect (! plan.on (pid::smoothOn) || plan.get (pid::smoothAmount) >= 30.0f,
+                    "no gentle SMOOTH for a resonance the EQ already notches: " + juce::String (plan.get (pid::smoothAmount)));
             for (auto& b : autoBands (plan, cur))
                 expect (autoeq::withinLimits (b), "limits: " + autoeq::titleOf (b.bandRole(), b));
             expect ((int) autoBands (plan, cur).size() <= autoeq::maxBands, "at most 6 auto-mix bands");
@@ -437,6 +439,57 @@ public:
                     checkLimits (autoeq::planMoves (ctx), budget, "budget " + juce::String (budget));
                 }
             }
+        }
+    }
+
+    void highEndMoveTests()
+    {
+        const auto find = [] (const std::vector<autoeq::Move>& moves, dsp::EqRole role) -> const autoeq::Move*
+        {
+            for (auto& m : moves)
+                if (m.role == role)
+                    return &m;
+            return nullptr;
+        };
+        const auto airOf = [] (const VocalProfile& p, const std::vector<autoeq::Move>& moves)
+        {
+            std::vector<dsp::EqBand> bands;
+            for (auto& m : moves) bands.push_back (m.band);
+            return autoeq::levelsOf (p.spectrumDb, bands).air;
+        };
+
+        // 2026-10-29 high-end budget: finished professional vocals sit at -17 dB air; the window floor (-22) is no aim
+        beginTest ("Auto EQ moves: the air is aimed above the window floor, also with S sounds");
+        {
+            VocalSpec s; s.seconds = 14.0; s.tiltDb = 1.5f;
+            const auto p = profileOf (s);
+            const float air0 = autoeq::levelsOf (p.spectrumDb, {}).air;
+            logMessage ("    take: top " + juce::String (p.topDb, 1) + ", air " + juce::String (air0, 1));
+            expect (air0 > autoeq::airWindow.lo && air0 < autoeq::airWindow.lo + autoeq::airAimDb, "the take's air lies just inside the window");
+            autoeq::Context c;
+            c.profile = &p;
+            const auto moves = autoeq::planMoves (c);
+            const auto* air = find (moves, dsp::EqRole::air);
+            expect (air != nullptr && air->band.gain >= 1.0f, "a high lift towards finished vocals");
+            expect (airOf (p, moves) >= autoeq::airWindow.lo + autoeq::airAimDb - 1.5f, "air on the model " + juce::String (airOf (p, moves), 1));
+
+            // S sounds: the de-esser is planned for them - the lift is no longer halved
+            VocalSpec d; d.seconds = 14.0; d.tiltDb = -4.0f;
+            const auto pd = profileOf (d);
+            autoeq::Context sib;
+            sib.profile = &pd;
+            sib.sibilant = true;
+            const auto* lift = find (autoeq::planMoves (sib), dsp::EqRole::air);
+            expect (lift != nullptr && lift->band.gain > 2.0f, "sibilant dark take: more than 2 dB: " + juce::String (lift != nullptr ? lift->band.gain : 0.0f, 1));
+            // Noise keeps its limit, clearly noisy takes the old one
+            auto noisy = sib;
+            noisy.noisy = true;
+            auto pn = pd;
+            pn.snrValid = true;
+            pn.snrDb = 20.0f;
+            noisy.profile = &pn;
+            const auto* n = find (autoeq::planMoves (noisy), dsp::EqRole::air);
+            expect (n == nullptr || n->band.gain <= 2.0f, "noise under 22 dB SNR: at most 2 dB");
         }
     }
 

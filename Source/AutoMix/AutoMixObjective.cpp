@@ -64,7 +64,7 @@ namespace velvox::automix
         b.tonal = 0.6f * window (m.bodyDb, highVoice ? -200.0f : bodyWindow.lo, bodyWindow.hi)
                 + 0.8f * window (m.lowMidDb, lowMidWindow.lo, lowMidWindow.hi)
                 + 1.0f * window (m.topDb, topWindow.lo, topWindow.hi)
-                + 0.4f * window (m.airDb, airWindow.lo, airWindow.hi, 3.0f)
+                + 0.8f * window (m.airDb, airWindow.lo, airWindow.hi, 2.0f)   // 2026-10-29 high-end budget: was 0.4 / 3 dB
                 + 0.8f * window (m.presenceDb, presenceWindow.lo, 100.0f);
 
         // ---- Dynamics: a lead vocal in an EDM mix sits steady and upfront. Calibrated on the

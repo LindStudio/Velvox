@@ -48,7 +48,12 @@ namespace velvox::automix::autoeq
     Levels levelsOf (const std::vector<float>& spectrumDb, const std::vector<dsp::EqBand>& bands);
     // The objective's tonal + harshness terms for these levels (the target curve as one number;
     // a high voice - lowest notes above 250 Hz - only pays for too much body)
-    float tonalPenalty (const Levels& levels, bool highVoice, float margin = 0.0f);   // margin: windows narrowed by it
+    // margin: windows narrowed by it; airAim: the floor of the air window raised by it
+    float tonalPenalty (const Levels& levels, bool highVoice, float margin = 0.0f, float airAim = 0.0f);
+    // 2026-10-29 high-end budget: the high shelf (role air) aims the air this far above the window floor (-22 -> -19 dB;
+    // finished professional vocals sit at -17.3 .. -14.6). Only the air move does - the other roles must not cut the
+    // core to raise the air relative to it. The window itself stays the objective's and Vocal Check's range.
+    inline constexpr float airAimDb = 3.0f;
     // Total magnitude (dB) of `bands` at `freq`
     float responseDb (const std::vector<dsp::EqBand>& bands, float freq);
 

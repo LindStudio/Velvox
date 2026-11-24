@@ -4,6 +4,21 @@ Versionierung nach [SemVer](https://semver.org/lang/de/): MAJOR.MINOR.PATCH. Vor
 
 ## [Unveröffentlicht – auf dem Weg zu 1.0] – Branch `feature/modules-0.7`
 
+### Auto Mix: Höhen-Budget – nicht mehr dumpf (Jakob, 2026-10-29)
+Jakob: „Auto Mix klingt dumpf.“ Präsenz und Höhen lagen schon im Profi-Bereich, die Luft (10–16 kHz) nicht: viele
+kleine Höhenverluste summierten sich, nichts baute sie wieder auf.
+- **Smooth nur noch bei gemessener Resonanz oder Schärfe** (nicht mehr als Grundpflege auf jeder Stimme).
+- **Luft:** Die EQ-Züge zielen 3 dB über die Fenster-Untergrenze (−19 statt −22 dB; Profis −17), der Luft-Term zählt
+  doppelt. S-Laute halbieren die Anhebung nicht mehr (der De-Esser kümmert sich), bei Rauschen 3 dB (unter 22 dB
+  Rauschabstand 2 dB), bei Schärfe 2 dB.
+- **De-Esser frisst die Luft nicht mehr:** Seine Schwelle folgt dem, was EQ 1 in seinem Band anhebt, und die
+  Prüfung lässt die S-Laute um diese Anhebung steigen (höchstens bis −6 dB gegenüber den Vokalen).
+- **Hellere Effekte:** Hall-Ton 9 kHz (10 kHz bei dunkler Luft), Delay-High-Cut 7/8 kHz, Doubler-Ton 12 kHz; dunkler
+  nur bei S-Lauten oder Schärfe (7 / 6 / 9 kHz).
+- **Analyse:** „Wenig Höhen“ und „Betonte obere Mitten“ an den Rändern der Zielfenster (über 2 kHz unter −11 dB,
+  2–5 kHz über −5 dB) statt an den alten, dunklen Schwellen.
+- Jakobs Vergleichs-Vocal: Luft nach dem Mix −20,0 → −17,1 dB, Höhen −10,1 → −9,4 dB, Präsenz −11,3 → −11,6 dB.
+
 ### Auto Mix an Profi-Vocals ausgerichtet (Jakob, 2026-10-29)
 Jakob: „Auto Mix nimmt immer Höhen raus, Profis boosten eher; nimmt nie Breath Control/Smooth.“ Gemessen an
 8 fertigen Profi-Vocals und 23 trockenen Stimmen.

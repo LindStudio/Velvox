@@ -914,12 +914,14 @@ namespace velvox::automix
                  both ("250-500 Hz liegt bei {0} gegenüber 300 Hz-2 kHz (Maximum um {1}).", "250-500 Hz is at {0} against 300 Hz-2 kHz (maximum around {1}).",
                        { db (p.lowMidDb), hz (p.lowMidPeakHz) }), 20.0f + p.lowMidDb);
 
-        if (p.topDb < -16.0f)
-            add ("dull", p.topDb < -20.0f ? C::likely : C::possible, both ("Wenig Höhen und Präsenz", "Few highs and little presence"),
+        // 2026-10-29: at the edges of the auto mix's target windows (AutoEq.h, finished professional vocals) - the
+        // old thresholds (-16 / -2 dB) were from the darker windows and missed dull takes the EQ already lifted
+        if (p.topDb < autoeq::topWindow.lo)
+            add ("dull", p.topDb < autoeq::topWindow.lo - 5.0f ? C::likely : C::possible, both ("Wenig Höhen und Präsenz", "Few highs and little presence"),
                  both ("Alles über 2 kHz liegt bei {0} gegenüber dem Kern der Stimme.", "Everything above 2 kHz is at {0} against the core of the voice.",
                        { db (p.topDb) }), 25.0f - p.topDb * 0.5f);
-        else if (p.presenceDb > -2.0f)
-            add ("harsh", p.presenceDb > 1.0f ? C::likely : C::possible, both ("Betonte obere Mitten", "Emphasized upper mids"),
+        else if (p.presenceDb > autoeq::presenceWindow.hi)
+            add ("harsh", p.presenceDb > autoeq::presenceWindow.hi + 3.0f ? C::likely : C::possible, both ("Betonte obere Mitten", "Emphasized upper mids"),
                  both ("2-5 kHz liegt bei {0} gegenüber dem Kern der Stimme - kann scharf klingen.", "2-5 kHz is at {0} against the core of the voice - can sound harsh.",
                        { db (p.presenceDb) }), 25.0f + p.presenceDb);
 

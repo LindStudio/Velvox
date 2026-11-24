@@ -91,5 +91,8 @@ namespace velvox::automix
         // vowel levels. `range` in dB. Also used by the verification when the
         // chain itself has made the S sounds more prominent.
         static void configureDeEsser (MixPlan& plan, const VocalProfile& profile, float inputGainDb, float range);
+        // What EQ 1 of the plan adds (dB) in the de-esser's detector band above `detectorHz` (+-6 dB): the
+        // threshold follows it, so a high lift does not make the de-esser act on the vowels
+        static float deessEqLiftDb (const MixPlan& plan, float detectorHz);
     };
 }

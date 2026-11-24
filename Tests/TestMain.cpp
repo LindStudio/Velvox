@@ -194,6 +194,8 @@ static int runAutoMixOnFile (const juce::File& input, const juce::File& outDir, 
         << "  top " << juce::String (r.original.topDb, 1) << " -> " << juce::String (r.processed.topDb, 1) << ", body " << juce::String (r.original.bodyDb, 1)
         << " -> " << juce::String (r.processed.bodyDb, 1) << ", S vs vowels " << juce::String (r.original.sibilanceVsVowelDb, 1) << " -> "
         << juce::String (r.processed.sibilanceVsVowelDb, 1) << ", mono loss " << juce::String (r.processed.monoLossDb, 2) << " dB\n"
+        << "  presence " << juce::String (r.original.presenceDb, 1) << " -> " << juce::String (r.processed.presenceDb, 1)
+        << ", air " << juce::String (r.original.airDb, 1) << " -> " << juce::String (r.processed.airDb, 1) << "\n"
         << "RESULT (whole file)\n"
         << "  " << juce::String (wholeIn.lufs, 1) << " -> " << juce::String (wholeOut.lufs, 1) << " LUFS, peak " << juce::String (wholeIn.peakDb, 1) << " -> "
         << juce::String (wholeOut.peakDb, 1) << " dBFS (before clip guard)\n\nVALUES\n";

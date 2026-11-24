@@ -121,6 +121,7 @@ public:
         plannerTests();
         engineTests();
         optimizerTests();
+        highEndTests();
         workflowTests();
         editorTests();
         languageTests();
@@ -352,10 +353,10 @@ public:
                 expect (eqGain (darkPlan, dsp::EqRole::autoTone) >= 0.0f, "no presence cut on a dark voice: " + juce::String (eqGain (darkPlan, dsp::EqRole::autoTone)));
                 expect (eqGain (darkPlan, dsp::EqRole::air) >= 0.0f, "no high cut on a dark voice");
                 expect (eqGain (darkPlan, dsp::EqRole::autoTone) + eqGain (darkPlan, dsp::EqRole::air) > 0.0f, "the dark voice gets brighter");
-                // SMOOTH on every vocal with enough material, gently where nothing sticks out
+                // 2026-10-29 (high-end budget): SMOOTH only where a resonance or harshness is measured - as "basic
+                // care" it took 1-10 kHz down on every take, one of the small losses that made the mix dull
                 const auto cleanPlan = AutoMixPlanner::plan (c, {});
-                expectEquals (cleanPlan.get (pid::smoothOn), 1.0f, "SMOOTH as basic care");
-                expect (cleanPlan.get (pid::smoothAmount) <= 20.0f, "gently: " + juce::String (cleanPlan.get (pid::smoothAmount)));
+                expectEquals (cleanPlan.get (pid::smoothOn), 0.0f, "no SMOOTH on a take without resonance or harshness");
                 // Room noise: gently, and never on a take with room / reverb (its floor is the tail)
                 const auto noisyPlan = AutoMixPlanner::plan (pn, {});
                 expect (noisyPlan.get (pid::denoiseOn) < 0.5f || noisyPlan.get (pid::denoiseAmount) <= 50.0f,
@@ -545,6 +546,15 @@ public:
                         + " LUFS, peak " + juce::String (out.peakDb, 1) + " dBFS, comp GR " + juce::String (out.compGrMedianDb, 1)
                         + " dB, top " + juce::String (r.original.topDb, 1) + " -> " + juce::String (out.topDb, 1)
                         + " dB, rounds " + juce::String (r.iterations) + ", modules " + juce::String ((int) r.plan.activeModules().size()));
+            {
+                juce::StringArray modules;
+                for (auto& slot : r.plan.routing)
+                    modules.add (juce::String (dsp::moduleKey (slot.id)) + (slot.instance > 0 ? "2" : ""));
+                logMessage ("      presence " + juce::String (r.original.presenceDb, 1) + " -> " + juce::String (out.presenceDb, 1)
+                            + ", air " + juce::String (r.original.airDb, 1) + " -> " + juce::String (out.airDb, 1)
+                            + ", chain " + modules.joinIntoString (" ") + ", variant "
+                            + (r.chosenCandidate >= 0 && r.chosenCandidate < (int) r.candidates.size() ? i18n::show (r.candidates[(size_t) r.chosenCandidate].name) : juce::String ("-")));
+            }
 
             expect (out.peakDb <= -0.9f, "headroom: peak " + juce::String (out.peakDb));
             const float target = AutoMixEngine::targetLufs (r.original.lufs);
@@ -833,6 +843,130 @@ public:
                         expect (std::any_of (r.adjustments.begin(), r.adjustments.end(), [&] (auto& a) { return a.contains (chosen.name); }),
                                 "the report names the chosen variant");
                 }
+            }
+        }
+    }
+
+    //==========================================================================
+    // 2026-10-29 (Jakob: "Auto Mix klingt dumpf, nimmt immer Höhen raus"): after the window calibration presence
+    // and top reached the professional range, but 10-16 kHz stayed about 9 dB under finished vocals. Small losses
+    // stacked (SMOOTH everywhere, the de-esser's shelf, dark returns, a capped and weakly weighted air lift) and
+    // nothing rebuilt them. The high-end budget: lose nothing without a measured reason, lift the air into the window.
+    void highEndTests()
+    {
+        const auto profileFor = [] (const VocalSpec& s) { return VocalProfiler::analyse (makeVocal (s)); };
+
+        beginTest ("High end: SMOOTH only where a resonance or harshness is measured");
+        {
+            VocalSpec s; s.seconds = 14.0;
+            const auto clean = profileFor (s);
+            expect (! clean.hasIssue ("harsh"), "the test take is not harsh");
+            const auto plain = AutoMixPlanner::plan (clean, defaults());
+            expectEquals (plain.get (pid::smoothOn), 0.0f, "nothing sticks out -> no SMOOTH");
+            expect (! plain.routing.contains (ModuleId::smooth), "and not in the chain");
+
+            auto harsh = clean;
+            harsh.issues.push_back ({ "harsh", "Betonte obere Mitten", "", Confidence::likely, 10.0f });
+            const auto ph = AutoMixPlanner::plan (harsh, defaults());
+            expectEquals (ph.get (pid::smoothOn), 1.0f, "harsh -> SMOOTH");
+            expectWithinAbsoluteError (ph.get (pid::smoothAmount), 45.0f, 0.01f, "clearly harsh -> 45 %");
+
+            auto resonant = clean;
+            Resonance r; r.hz = 3200.0f; r.excessDb = 9.0f; r.sustained = false;   // comes and goes: no notch
+            resonant.resonances.push_back (r);
+            const auto pr = AutoMixPlanner::plan (resonant, defaults());
+            expectEquals (pr.get (pid::smoothOn), 1.0f, "a resonance the EQ does not notch -> SMOOTH");
+            expectWithinAbsoluteError (pr.get (pid::smoothAmount), 30.0f, 0.01f, "30 %");
+        }
+
+        beginTest ("High end: the analysis flags dull / harsh at the edges of the target windows");
+        {
+            int between = 0;
+            for (float tilt : { -6.0f, -4.0f, -3.0f, -2.0f, -1.0f, 0.0f, 1.5f, 3.0f, 4.0f, 5.0f })
+            {
+                VocalSpec s; s.seconds = 14.0; s.tiltDb = tilt;
+                const auto p = profileFor (s);
+                logMessage ("    tilt " + juce::String (tilt, 1) + ": presence " + juce::String (p.presenceDb, 1) + ", top " + juce::String (p.topDb, 1)
+                            + ", air " + juce::String (p.airDb, 1) + (p.hasIssue ("dull") ? " dull" : "") + (p.hasIssue ("harsh") ? " harsh" : ""));
+                const bool dull = p.topDb < autoeq::topWindow.lo;
+                expect (p.hasIssue ("dull") == dull, "dull exactly below the top window: " + juce::String (p.topDb, 1));
+                expect (p.hasIssue ("harsh") == (! dull && p.presenceDb > autoeq::presenceWindow.hi),
+                              "harsh exactly above the presence window: " + juce::String (p.presenceDb, 1));
+                if (p.topDb < autoeq::topWindow.lo && p.topDb >= -16.0f)
+                    ++between;
+            }
+            expect (between > 0, "a take lies between the old dull threshold (-16 dB) and the window");
+        }
+
+        beginTest ("High end: the softer-highs variant only for a take above the top window");
+        {
+            const auto softer = [] (const std::vector<std::pair<juce::String, MixPlan>>& cands)
+            {
+                return std::any_of (cands.begin(), cands.end(), [] (auto& c) { return i18n::show (c.first).startsWith (juce::String::fromUTF8 ("Höhen sanfter")); });
+            };
+            for (float tilt : { -3.0f, 0.0f, 1.5f })
+            {
+                VocalSpec s; s.seconds = 12.0; s.tiltDb = tilt;
+                const auto p = profileFor (s);
+                if (p.topDb > autoeq::topWindow.hi)
+                    continue;
+                expect (! softer (AutoMixEngine::candidatesFor (AutoMixPlanner::plan (p, defaults()), p)),
+                        "top " + juce::String (p.topDb, 1) + " dB is inside the window -> no softer-highs variant");
+            }
+        }
+
+        beginTest ("High end: reverb, delay and doubler returns stay open; darker only on S sounds / harshness");
+        {
+            VocalSpec s; s.seconds = 14.0;
+            const auto open = AutoMixPlanner::plan (profileFor (s), defaults());
+            expect (open.on (pid::reverbOn) && open.on (pid::delayOn) && open.on (pid::doublerOn), "the clean take gets all three");
+            expect (open.get (pid::reverbDamping) >= 8500.0f, "reverb tone " + juce::String (open.get (pid::reverbDamping)));
+            expect (open.get (pid::delayHighCut) >= 7000.0f, "delay high cut " + juce::String (open.get (pid::delayHighCut)));
+            expect (open.get (pid::doublerTone) >= 11000.0f, "doubler tone " + juce::String (open.get (pid::doublerTone)));
+
+            VocalSpec sib = s; sib.sibilance = 1.6f;
+            const auto ps = AutoMixPlanner::plan (profileFor (sib), defaults());
+            expect (ps.get (pid::reverbDamping) < open.get (pid::reverbDamping) && ps.get (pid::reverbDamping) >= 6500.0f,
+                    "S sounds: a darker tail, still open: " + juce::String (ps.get (pid::reverbDamping)));
+            if (ps.on (pid::delayOn))
+                expect (ps.get (pid::delayHighCut) < open.get (pid::delayHighCut) && ps.get (pid::delayHighCut) >= 5500.0f,
+                        "S sounds: darker repeats: " + juce::String (ps.get (pid::delayHighCut)));
+        }
+
+        beginTest ("High end: a dark vocal ends near the professional air window, a noisy one is not made hissy");
+        {
+            struct Take { const char* name; VocalSpec spec; float minAir; };
+            std::vector<Take> takes;
+            { VocalSpec s; s.seconds = 12.0; s.tiltDb = -4.0f; takes.push_back ({ "dark", s, autoeq::airWindow.lo + 2.0f }); }
+            // Its 10-16 kHz is mostly the S sounds, which the de-esser has to take down: the air is kept, not lifted
+            { VocalSpec s; s.seconds = 12.0; s.tiltDb = -4.0f; s.sibilance = 0.6f; takes.push_back ({ "dark sibilant", s, 1.0f }); }
+            { VocalSpec s; s.seconds = 12.0; s.tiltDb = -4.0f; s.noiseDb = -42.0f; takes.push_back ({ "dark noisy", s, -100.0f }); }
+            for (auto& t : takes)
+            {
+                const auto r = AutoMixEngine::run (makeVocal (t.spec), defaults());
+                expect (r.ok, r.error);
+                if (! r.ok)
+                    continue;
+                const auto& out = r.processed;
+                juce::StringArray chain;
+                for (auto& slot : r.plan.routing)
+                    chain.add (juce::String (dsp::moduleKey (slot.id)) + (slot.instance > 0 ? "2" : ""));
+                const float lift = airGain (r.plan) + airGain (r.plan, 1);
+                logMessage (juce::String ("    ") + t.name + ": presence " + juce::String (r.original.presenceDb, 1) + " -> " + juce::String (out.presenceDb, 1)
+                            + ", top " + juce::String (r.original.topDb, 1) + " -> " + juce::String (out.topDb, 1)
+                            + ", air " + juce::String (r.original.airDb, 1) + " -> " + juce::String (out.airDb, 1)
+                            + ", S " + juce::String (r.original.sibilanceVsVowelDb, 1) + " -> " + juce::String (out.sibilanceVsVowelDb, 1)
+                            + ", shelf " + juce::String (lift, 1) + " dB, chain " + chain.joinIntoString (" ")
+                            + ", variant " + i18n::show (r.candidates[(size_t) r.chosenCandidate].name));
+                // minAir > 0: the most the air may lose against the take
+                const float minAir = t.minAir > 0.0f ? r.original.airDb - t.minAir : t.minAir;
+                expect (out.airDb >= minAir, juce::String (t.name) + ": air after the mix " + juce::String (out.airDb, 1) + " dB");
+                expect (out.topDb <= autoeq::topWindow.hi, juce::String (t.name) + ": not brighter than finished vocals above 2 kHz");
+                if (r.profile.sibilanceValid && out.sibilanceValid)
+                    expect (out.sibilanceVsVowelDb <= std::max (r.profile.sibilanceVsVowelDb + 2.5f, -8.0f),
+                            juce::String (t.name) + ": S sounds controlled " + juce::String (out.sibilanceVsVowelDb, 1));
+                if (juce::String (t.name) == "dark noisy")
+                    expect (lift <= 3.0f, "noise: the air lift stays limited: " + juce::String (lift, 1));
             }
         }
     }

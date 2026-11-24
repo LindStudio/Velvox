@@ -181,11 +181,30 @@ namespace velvox::automix
         return s;
     }
 
+    float AutoMixPlanner::deessEqLiftDb (const MixPlan& plan, float detectorHz)
+    {
+        if (! plan.on (pid::eqOn))
+            return 0.0f;
+        auto values = plan.values;
+        const auto access = eqbands::accessFor (values);
+        std::vector<dsp::EqBand> bands;
+        for (int i = 0; i < dsp::maxEqBands; ++i)
+            if (const auto b = eqbands::readBand (access, 0, i); b.on)
+                bands.push_back (b);
+        // The detector is a high pass: the EQ over its band, sampled just above the corner and an octave up
+        return juce::jlimit (-6.0f, 6.0f, 0.5f * (autoeq::responseDb (bands, detectorHz * 1.2f)
+                                                  + autoeq::responseDb (bands, std::min (16000.0f, detectorHz * 2.0f))));
+    }
+
     void AutoMixPlanner::configureDeEsser (MixPlan& plan, const VocalProfile& p, float inGain, float range)
     {
         // Threshold between the detector level on vowels (90th percentile) and on
         // S sounds (median): S sounds are reduced, vowels stay untouched
-        const float vowel = p.sibBandVowelP90Db + inGain, sib = p.sibBandSibilantP50Db + inGain;
+        // 2026-10-29 high-end budget: measured on the input, but the de-esser listens behind EQ 1 - a high lift there
+        // raises the vowels in its detector band as well, and a threshold that ignores it turns the de-esser into a
+        // permanent high cut that eats the air the EQ just added. The threshold moves with the EQ above its frequency.
+        const float eqLift = deessEqLiftDb (plan, p.deessDetectorHz);
+        const float vowel = p.sibBandVowelP90Db + inGain + eqLift, sib = p.sibBandSibilantP50Db + inGain + eqLift;
         const float threshold = p.sibBandSibilantP50Db > -99.0f ? std::max (0.5f * (vowel + sib), vowel + 1.0f) : -30.0f;
         plan.set (pid::deessOn, 1.0f);
         plan.set (pid::deessMode, 0.0f);
@@ -229,6 +248,11 @@ namespace velvox::automix
         const bool compressed = p.heavilyCompressed;
         const bool roomy = likely (p, "reverberant");
         const bool someRoom = p.reverberant;
+        // 2026-10-29 high-end budget: the returns (reverb tone, delay high cut, doubler tone) used to sit at
+        // 5-8 kHz and pulled every mix darker. Open by default, wider still where the air is below the window;
+        // darker only where S sounds or harshness would ring in the tails.
+        const bool edgy = sibilant || harsh;
+        const bool darkAir = p.airDb < autoeq::airWindow.lo;
 
         // ================= Clean-up first: room noise and breaths (0.7) =================
         plan.set (pid::denoiseOn, 0.0f);
@@ -476,14 +500,13 @@ namespace velvox::automix
                 highRes = &r;
                 break;
             }
-        // 2026-10-29 (Jakob: "Smooth hilft bei jeder Vocal"): SMOOTH only takes down what sticks out, so it runs on
-        // every vocal with enough material - gently (20 %) where nothing stands out, more on harsh or resonant ones
-        const bool smooth = p.enoughMaterial;
+        // 2026-10-29 high-end budget: SMOOTH only where a resonance or harshness is measured. As "basic care" on
+        // every take (20 % across 1-10 kHz) it was one of the small high losses that stacked into a dull mix.
+        const bool smooth = p.enoughMaterial && (harsh || highRes != nullptr);
         plan.set (pid::smoothOn, smooth ? 1.0f : 0.0f);
         if (smooth)
         {
-            const bool marked = harsh || highRes != nullptr;
-            const float amount = likely (p, "harsh") || (highRes != nullptr && highRes->strong) ? 45.0f : (marked ? 30.0f : 20.0f);
+            const float amount = likely (p, "harsh") || (highRes != nullptr && highRes->strong) ? 45.0f : 30.0f;
             plan.set (pid::smoothAmount, amount);
             plan.set (pid::smoothSensitivity, 50.0f);
             plan.set (pid::smoothLow, 1000.0f);
@@ -495,12 +518,13 @@ namespace velvox::automix
             decide (M::smooth, both ("Resonanzkontrolle {0} %", "Resonance control {0} %", { juce::String ((int) amount) }),
                     highRes != nullptr ? both ("Schmale Spitze um {0} - SMOOTH senkt sie nur, wenn sie hervorsticht.",
                                                "Narrow peak around {0} - SMOOTH lowers it only when it sticks out.", { hz (highRes->hz) })
-                                       : harsh ? both ("Betonte obere Mitten ({0}) - SMOOTH glättet nur die herausstechenden Bänder.",
-                                                       "Emphasized upper mids ({0}) - SMOOTH smooths only the bands that stick out.", { db (p.presenceDb) })
-                                               : both ("Sanft als Grundpflege: SMOOTH glättet nur Resonanzen, die beim Singen kurz hervorstechen.",
-                                                       "Gentle, as basic care: SMOOTH only smooths resonances that briefly stick out while singing."),
-                    marked);
+                                       : both ("Betonte obere Mitten ({0}) - SMOOTH glättet nur die herausstechenden Bänder.",
+                                               "Emphasized upper mids ({0}) - SMOOTH smooths only the bands that stick out.", { db (p.presenceDb) }),
+                    true);
         }
+        else if (p.enoughMaterial)
+            plan.notes.push_back (both ("SMOOTH bleibt aus: keine Resonanz und keine Schärfe gemessen - die Höhen bleiben, wie sie sind.",
+                                        "SMOOTH stays off: no resonance and no harshness measured - the highs stay as they are."));
 
         // ================= Saturation: density and colour =================
         const bool sat = ! p.distortionLikely && ! (compressed && harsh);
@@ -539,7 +563,7 @@ namespace velvox::automix
             plan.set (pid::doublerDelay, 14.0f);
             plan.set (pid::doublerDetune, 7.0f);
             plan.set (pid::doublerMonoSafe, 100.0f);   // mono sum stays exactly the original
-            plan.set (pid::doublerTone, 8000.0f);
+            plan.set (pid::doublerTone, edgy ? 9000.0f : 12000.0f);
             decide (M::doubler, both ("Breite: Doubler 20 %, mono-sicher", "Width: Doubler 20 %, mono-safe"),
                     both ("Leichte Doppelung links/rechts. \"Mono safe\" 100 %: In Mono klingt die Stimme exakt wie ohne Doubler.",
                           "Light doubling left/right. \"Mono safe\" 100 %: in mono the voice sounds exactly as without the Doubler."), false);
@@ -593,7 +617,7 @@ namespace velvox::automix
             plan.set (pid::reverbDecay, decay);
             plan.set (pid::reverbPreDelay, preDelay);
             plan.set (pid::reverbSize, 55.0f);
-            plan.set (pid::reverbDamping, harsh ? 5500.0f : 6500.0f);
+            plan.set (pid::reverbDamping, edgy ? 7000.0f : (darkAir ? 10000.0f : 9000.0f));
             plan.set (pid::reverbLowCut, 300.0f);
             plan.set (pid::reverbWidth, 100.0f);
             plan.set (pid::reverbDuckAmount, 6.0f);
@@ -624,7 +648,7 @@ namespace velvox::automix
                 const float delayMix = (spoken ? 6.0f : 9.0f) - (density == BeatDensity::dense ? 2.0f : 0.0f);
                 plan.set (pid::delayMix, delayMix);
                 plan.set (pid::delayLowCut, 350.0f);
-                plan.set (pid::delayHighCut, 5000.0f);
+                plan.set (pid::delayHighCut, edgy ? 6000.0f : (darkAir ? 8000.0f : 7000.0f));
                 plan.set (pid::delayPingPong, 1.0f);
                 plan.set (pid::delayDuckAmount, 9.0f);
                 plan.set (pid::delayDuckThreshold, duckThreshold);
