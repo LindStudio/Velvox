@@ -41,17 +41,16 @@
 //    band-passes around the band behind a high-pass at its lower edge, 5 ms energies) finds where the energy of the current S sits and the blend
 //    weights follow it, so the band sits on every S ("sh" lower, "s" higher). Only the weights move: no
 //    coefficient modulation, and with no reduction the output is still bit-exact.
+//
+// 2026-11-24 (r3 evenness, docs/products/ember-r2/GLEICHMAESSIGKEIT.md):
+//  - Every S is judged against the voice right now (60 ms) or against the vowel of the last 250 ms at most
+//    refVowelDb under it, whichever is louder: an S right after a loud vowel no longer reads quieter than the same S
+//    after a pause (the spread of the reduction across the S was the last measured gap to Pro-DS).
+//  - Weak gate (smart, single vocal): the S band has to come within weakNoneDb .. weakFullDb of the voice level of
+//    the last seconds, so quiet fricatives stay untouched as before.
 namespace ember
 {
     using namespace vocalypse::dsp;
-
-    // r3 research (test-only knobs, EmberTests --process rxN=value; unset = the shipped behaviour)
-    namespace rx
-    {
-        inline float val[16] {};
-        inline bool on[16] {};
-        inline float get (int i, float fallback) noexcept { return on[i] ? val[i] : fallback; }
-    }
 
     struct Settings
     {
@@ -139,6 +138,11 @@ namespace ember
     // absolute mode for a voice peaking at -18 dBFS. Below fullFloorDb (near-silence) nothing is de-essed.
     inline constexpr float referenceDb = -18.0f;
     inline constexpr float fullFloorDb = -60.0f;
+    // The reference the band is read against (2026-11-24 r3): max (voice now, voice of the last 250 ms - refVowelDb)
+    inline constexpr float refNowReleaseMs = 60.0f, refVowelReleaseMs = 250.0f, refVowelDb = 10.0f;
+    // Weak gate: the S band (5 ms RMS) against the voice level (log mean of the 250 ms envelope over voiceLevelMs,
+    // only while the voice is no more than voiceGateDb under that level): weight 0 at weakNoneDb, 1 at weakFullDb
+    inline constexpr float voiceLevelMs = 10000.0f, voiceGateDb = 30.0f, weakNoneDb = -28.0f, weakFullDb = -22.0f;
     // Smart detection (2026-11-13, measured against FabFilter Pro-DS on 9 real takes): the energy above the
     // smart band against the body of the voice (150 Hz - 3 kHz), smartEnvMs RMS envelopes. Real S sit at
     // +1 .. +20 dB, vowels under -13 dB, the loud S-into-vowel transitions at -10 .. -1 dB. Weight 0 at
@@ -287,46 +291,23 @@ namespace ember
         float getSibilanceWeight() const noexcept { return weight; }
         static float weightForIndex (float indexDb) noexcept { return weightForIndex (indexDb, false); }
         static float weightForIndex (float indexDb, bool allround) noexcept;
+        // The weak gate for an S band energy (mean square) against a voice level (log2 of the envelope)
+        static float weakWeight (float sEnergy, float voiceLog2) noexcept;
 
     private:
-        float levelFor (float peak, float fullEnvValue, bool relative) const noexcept;
+        float levelFor (float peak, float fullEnvValue, float nowEnvValue, bool relative) const noexcept;
+        // voice level (log2 of the 250 ms envelope, mean over voiceLevelMs while the voice is present); every 4th sample
+        void updateVoice (float& lg, float& n, float env) const noexcept;
         float indexFor (float sE, float bE) const noexcept;
-        float refFor (float slow, float fastE) const noexcept;
         void designBands() noexcept;
 
         double fs = 44100.0, freqHz = 6200.0;
         bool allround = false;
         // stage 1 / 2: lanes [band L, band R, smart L, smart R] and [body L, body R, -, -]
         Biquad4 bandIdx1, bandIdx2, body1, body2;
-        float fullEnv = 0.0f, fullRelease = 0.0f, envCoeff = 0.0f;
-        int fullHoldN = 0, fullHold = 0, fullHoldCh[maxChannels] {};
-        int refMode = 0;
-        float fastEnv = 0.0f, fastEnvCh[maxChannels] {}, fastRelease = 0.0f, refBlend = 0.0f;
-        bool forceAbs = false;
-        float maxOffset = 0.0f;   // > 0: ref = max (fast, slow x maxOffset)
-        // voice reference: gated running mean of log2 (fullEnv) while the voice is present (warm-up = cumulative mean)
-        bool vrOn = false, wgOn = false;
-        float wgLog = 0.0f, wgN = 0.0f, wgNone = -30.0f, wgW = 6.0f, absGate = 1.0f;
-        float vrLog = 0.0f, vrLogCh[maxChannels] {}, vrMinCoeff = 0.0f, vrN = 0.0f, vrNCh[maxChannels] {};
-        float voiceRef (float& lg, float& cnt, float fe) const noexcept
-        {
-            if (fe >= 0.001f)
-            {
-                cnt += 1.0f;
-                const float k = std::max (1.0f / cnt, vrMinCoeff);
-                lg += k * (fast::log2 (fe) - lg);
-            }
-            return cnt > 0.0f ? fast::exp2 (lg) : fe;
-        }
-        float slowRef = 0.0f, slowRefCh[maxChannels] {}, slowCoeff = 0.0f, slowFloor = 0.25f;
-        bool slowOn = false;
-        float slowFor (float& sr, float fe) const noexcept
-        {
-            if (! slowOn)
-                return fe;
-            sr = fe + slowCoeff * (sr - fe);
-            return std::max (sr, fe * slowFloor);
-        }
+        float fullEnv = 0.0f, fullRelease = 0.0f, envCoeff = 0.0f, nowEnv = 0.0f, nowRelease = 0.0f;
+        float nowEnvCh[maxChannels] {}, voiceLog = 0.0f, voiceN = 0.0f, voiceLogCh[maxChannels] {}, voiceNCh[maxChannels] {};
+        float voiceMinCoeff = 0.0f, voiceMaxN = 1.0f, weak = 1.0f, weakCh[maxChannels] {};
         float sEnv = 0.0f, bodyEnv = 0.0f;   // energies (mean square), linked
         float fullEnvCh[maxChannels] {}, sEnvCh[maxChannels] {}, bodyEnvCh[maxChannels] {};
         float indexDb = -60.0f, weight = 0.0f, tiltDb = 0.0f, weightCh[maxChannels] {};
@@ -399,7 +380,6 @@ namespace ember
         // control slots: 0 / 1 = channel (or the shared one in slot 0 when fully linked), 2 = linked beside own
         static constexpr int numSlots = maxChannels + 1;
         float envDb[numSlots] {};
-        int grHoldN = 0, grHold[numSlots] {};
 
         // Lookahead (samples) and the cross-fade from the previous one
         int laCur = 0, laPrev = 0, laFadeLeft = 0, laFadeLen = 1;
