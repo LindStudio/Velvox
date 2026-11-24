@@ -1,6 +1,17 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
-## STAND 2026-11-24 – S-Tracking gemergt, Presets nachgemessen (Branch feature/ember-fixes) – HIER WEITERMACHEN
+## STAND 2026-11-24 – Gleichmäßigkeit wie Pro-DS (Branch r3/ember-evenness, nicht gemergt) – HIER WEITERMACHEN
+- Neuer Detektor-Bezug: jedes S wird gegen die Stimme jetzt (60 ms) bzw. höchstens 10 dB unter dem Vokal davor
+  gemessen, dazu ein Schutz für leise Reibelaute (S-Band gegen den Stimmpegel der letzten 10 s).
+  Details, Kandidaten, Messungen: `docs/products/ember-r2/GLEICHMAESSIGKEIT.md`.
+- Streuung über die S (iqr): **J1–J3 1,69 → 1,23 (Pro-DS 1,27), alle 15 Takes 1,99 → 1,34**; leise Reibelaute
+  −0,30 → −0,00 dB (wie Pro-DS), unberührte S 12 → 6 %, weniger Neu-Einsätze. Kosten: etwas tiefer (Kern +0,1 / +0,2
+  dB), S-Schwerpunkt auf J1–J3 dunkler (−146 → −190 Hz, Pro-DS −145).
+- Presets nachgemessen: 4 Männer-Presets zurück auf ihre Tiefe (Range −1 dB), Default unverändert.
+- Tests 2009 bestanden, 0 fehlgeschlagen (mit `EMBER_VOCALS`; QA 381), pluginval 10 SUCCESS, CPU ≈ 0,38 % (vorher 0,37 %).
+- Hör-Set: `C:\Users\Shadow\dev\velvox-bench\2026-11-24\evenness`. Offen: Hörurteil, danach mergen.
+
+## STAND 2026-11-24 – S-Tracking gemergt, Presets nachgemessen (Branch feature/ember-fixes)
 - r2/ember-research gemergt: **S-Tracking** (das Split-Band folgt jedem S, `Settings::trackS`, Standard an) und exakte
   Split-Tiefe an der Bandmitte. Details: `docs/products/ember-r2/DSP_FORSCHUNG.md`.
 - CPU der Engine jetzt ≈ **0,37 % eines Kerns** (vorher 0,28 %).

@@ -227,3 +227,11 @@ Nicht geändert (kein Preset, ändert Stimmlagen-Logik und AUTO-Bezug) → offen
 ### 8.4 CPU
 Engine mit S-Tracking ≈ **0,37 % eines Kerns** (vorher 0,28 %; `cpu.py`, J1 stereo 44,1 kHz, Messung aus
 DSP_FORSCHUNG.md). Die Presets ändern daran nichts (gleiche Engine-Pfade).
+
+## 9. Nachmessung mit dem neuen Detektor-Bezug (2026-11-24, Branch `r3/ember-evenness`)
+Gleiche Methode wie Abschnitt 8. Der Detektor misst jedes S gegen die Stimme jetzt statt gegen den Vokal davor
+(Gleichmäßigkeit, `GLEICHMAESSIGKEIT.md`). Alle 29 Presets werden gleichmäßiger und lassen leise Reibelaute fast
+unberührt, sind aber 0,02–0,9 dB stärker. **4 Männer-Presets nachgestellt** (mehr als 0,5 dB stärker): Male Rap
+Range 6 → 5, Deep Male Vocal 5 → 4, Aggressive Rap 8 → 7, Modern Pop Male 5,5 → 4,5 (S-Kern −4,25 / −3,48 / −6,25 /
+−3,40, vorher −4,23 / −3,55 / −5,99 / −3,36). Default unverändert (S-Kern −3,68 → −4,15). Tabelle und Gründe:
+`GLEICHMAESSIGKEIT.md` Abschnitt „Presets“; Endmessung `tools/bench/ember_presets/final_measurements.txt`.
