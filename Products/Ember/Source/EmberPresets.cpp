@@ -6,17 +6,18 @@ namespace ember
 {
     const std::vector<FactoryPreset>& factoryPresets()
     {
-        // Values in real units; detection 0 = Smart, mode 0 = Split / 1 = Wideband
+        // Values in real units; detection 0 = Smart, mode 0 = Split / 1 = Wideband. Thresholds as the detector reads
+        // since 2026-11-23 (the same at every frequency, detectorTiltDbPerOct)
         static const std::vector<FactoryPreset> presets {
             { "Standard", "Default", {} },
-            { "Sanft", "Gentle", { { pid::threshold, -26.0f }, { pid::range, 3.0f }, { pid::release, 40.0f } } },
-            { "Pop-Gesang", "Pop vocal", { { pid::freq, 6800.0f }, { pid::threshold, -31.0f }, { pid::range, 5.0f }, { pid::release, 35.0f } } },
-            { "Rap", "Rap", { { pid::freq, 5600.0f }, { pid::threshold, -33.0f }, { pid::range, 6.0f }, { pid::release, 30.0f } } },
-            { "Tiefe Stimme", "Deep voice", { { pid::freq, 5000.0f }, { pid::threshold, -30.0f }, { pid::range, 5.0f } } },
-            { "Hohe Stimme", "High voice", { { pid::freq, 8000.0f }, { pid::threshold, -30.0f }, { pid::range, 5.0f } } },
-            { "Backing Vocals", "Backing vocals", { { pid::freq, 6200.0f }, { pid::threshold, -36.0f }, { pid::range, 8.0f }, { pid::amount, 60.0f } } },
-            { "Sprache / Podcast", "Speech / podcast", { { pid::freq, 5500.0f }, { pid::threshold, -30.0f }, { pid::range, 5.0f }, { pid::mode, 1.0f }, { pid::release, 50.0f } } },
-            { "Kräftig", "Strong", { { pid::threshold, -40.0f }, { pid::range, 9.0f }, { pid::release, 45.0f } } },
+            { "Sanft", "Gentle", { { pid::threshold, -28.0f }, { pid::range, 3.0f }, { pid::release, 40.0f } } },
+            { "Pop-Gesang", "Pop vocal", { { pid::freq, 6800.0f }, { pid::threshold, -32.0f }, { pid::range, 5.0f }, { pid::release, 35.0f } } },
+            { "Rap", "Rap", { { pid::freq, 5600.0f }, { pid::threshold, -34.5f }, { pid::range, 6.0f }, { pid::release, 30.0f } } },
+            { "Tiefe Stimme", "Deep voice", { { pid::freq, voiceLowHz }, { pid::threshold, voiceLowThrDb }, { pid::range, 5.0f } } },
+            { "Hohe Stimme", "High voice", { { pid::freq, voiceHighHz }, { pid::threshold, voiceHighThrDb }, { pid::range, 5.0f } } },
+            { "Backing Vocals", "Backing vocals", { { pid::freq, 6200.0f }, { pid::threshold, -37.0f }, { pid::range, 8.0f }, { pid::amount, 60.0f } } },
+            { "Sprache / Podcast", "Speech / podcast", { { pid::freq, 5500.0f }, { pid::threshold, -31.5f }, { pid::range, 5.0f }, { pid::mode, 1.0f }, { pid::release, 50.0f } } },
+            { "Kräftig", "Strong", { { pid::threshold, -38.0f }, { pid::range, 7.0f }, { pid::release, 45.0f } } },
         };
         return presets;
     }

@@ -1,5 +1,24 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
+## STAND 2026-11-23 – Klang verbessert (Branch feature/ember-sound, nicht committet)
+Jakob: „verbessere den algorithmus“. Grundlage: Klangtest `docs/products/EMBER_KLANG_TEST.md` (19.11.), gemessen mit
+`EmberTests --process` über 15 echte Takes (Skripte `run.py`/`grp.py` im Session-Scratchpad, Takes aus dem Klangtest).
+- **Split = breite dynamische Glocke** um das S (Mitte 1,25 × Frequenz, Güte 0,4) statt offenem High-Shelf.
+  AUTO, 15 Takes: S-Kern −3,3 dB (gleich), Luft über dem S −2,5 statt −4,5 dB, S-Farbe −77 statt −605 Hz
+  (Pro-DS −145 Hz). J1–J3: S-Kern −4,1 dB (Pro-DS −3,7). Vokale weiter 0,00 dB.
+- **Detektor gleicht die Frequenz aus** (+5 dB pro Oktave, Bezug 6,5 kHz): Threshold bedeutet überall dasselbe.
+- **Stimmlage-Knöpfe** setzen Frequenz + Threshold: TIEF 5 kHz/−35, MITTEL 6,2 kHz/−32 (= Standard), HOCH 7,4 kHz/−33;
+  nach AUTO bleibt dessen Threshold. Jeder Knopf ist für seine Stimmgruppe der stärkste (vorher war HOCH immer der schwächste).
+  Tiefe Stimmen ohne AUTO: S-Kern −2,0 dB mit Standard, −3,3 mit TIEF (vorher −0,5 / −1,4).
+- **AUTO:** Frequenz aus der Mitte der S-Energie (log. Schwerpunkt 3–12 kHz) statt dem Maximum → pro Stimme stabil
+  (F01: 5,5–6,6 statt 5,0–8,7 kHz); Ecke 4,5–9,5 kHz; Erfolg im S-Band gemessen; Threshold nie unter −45 dB (vorher 3 von
+  15 Takes bei −60); Threshold nach dem Verkleinern der Range neu gesucht → Ziel wird getroffen (vorher 0,6 dB zu wenig).
+- **Amount 100 % = 1,5-fach** (vorher doppelt). Presets an den neuen Detektor angepasst, „Kräftig“ −38 dB / Range 7.
+- Spektrum zeigt im Split-Modus die Glocke. Texte, Handbuch DE/EN, Shop-Text angepasst.
+- 296 Tests grün (356 mit EMBER_VOCALS, 15/15 Takes), pluginval 10 SUCCESS. Nicht installiert.
+- Hörbeispiele: Drive `Plugins/01 EMBER De-Esser/Hoertest/2026-11-23_Glocke_neu` (vorher / neu / Pro-DS, je mit DELTA).
+- Offen: Jakobs Hörurteil; danach committen, in feature/ember-live-mascot bzw. feature/ember-deesser übernehmen.
+
 ## STAND 2026-11-15 – HIER WEITERMACHEN
 **Später am 15.11. – Politur** (Jakob: „poliere das gesamte plugin, alle meldungen, bugs, sicherheitslücken, popups“;
 VOCALYPSE gibt es nicht mehr, nur EMBER). Zwei unabhängige Code-Reviews (Audio/Logik, UI/Texte/Lizenz), Funde geprüft:
@@ -120,7 +139,8 @@ einzeln verkaufen, später ein Hub, der alle verbindet. Plan-Seite: https://clau
   Unter −60 dBFS (fast Stille) wird nie reduziert.
 - Kennlinie 4:1 mit 6 dB Soft-Knee, Range begrenzt, **Amount** skaliert das Ergebnis (50 % = wie eingestellt,
   100 % = doppelt, 0 % = aus), höchstens 24 dB.
-- Split: dynamisches High-Shelf ab der Frequenz. Ohne Reduktion wird das Shelf übersprungen, also bit-genau.
+- Split: breite dynamische Glocke um das S (Mitte 1,25 × Frequenz, Güte 0,4; bis 2026-11-22 High-Shelf ab der Frequenz).
+  Ohne Reduktion wird die Glocke übersprungen, also bit-genau.
   Breitband: die ganze Stimme taucht kurz ab.
 - Lookahead 0–5 ms bei **fester Latenz von 5 ms** (der Host sieht nie eine Änderung).
 - Hören: Aus / S-Band (der Detektor-Bereich) / Delta (was entfernt wird). Dazu Mix, Output und Bypass (Host-Bypass,

@@ -109,25 +109,22 @@ namespace ember
             return r;
         }
 
-        // S range: 1/6-octave smoothed average S spectrum and its peak between 4 and 12 kHz. The corner sits just
-        // below the peak (autoCornerRatio), kept within 5-9.5 kHz so the presence range of the voice (2-5 kHz)
-        // is never touched (Jakob 2026-11-10: "nur subtil die S-Laute wegnehmen, nicht die Stimme zerstören")
-        std::vector<double> smooth ((size_t) bins, 0.0);
-        for (int b = 1; b < bins; ++b)
+        // Where the S of this voice sit: the energy centre (on a log-frequency scale) of the average S spectrum
+        // between 3 and 12 kHz. The peak of that spectrum (used until 2026-11-22) jumped between the two humps of
+        // s and sh: the same singer got 5.0 or 8.7 kHz depending on which 12 s AUTO heard; the centre moves by
+        // under 20 % on every one of 15 takes (3 kHz instead of 4 kHz as the lower edge: deep S are not pushed up).
+        // The split bell sits on it, the detection corner autoCornerRatio below
+        // (Jakob 2026-11-10: "nur subtil die S-Laute wegnehmen, nicht die Stimme zerstören")
         {
-            const double hz = b * fs / n;
-            const int lo = binOf (hz / std::pow (2.0, 1.0 / 12.0)), hi = binOf (hz * std::pow (2.0, 1.0 / 12.0));
-            double s = 0.0;
-            for (int k = lo; k <= hi; ++k)
-                s += sibSpectrum[(size_t) k];
-            smooth[(size_t) b] = s / (hi - lo + 1);
+            const int bLo = binOf (3000.0), bHi = binOf (std::min (12000.0, fs * 0.45));
+            double sum = 0.0, logSum = 0.0;
+            for (int b = bLo; b <= bHi; ++b)
+            {
+                sum += sibSpectrum[(size_t) b];
+                logSum += sibSpectrum[(size_t) b] * std::log2 (b * fs / n);
+            }
+            r.peakHz = sum > 0.0 ? (float) std::exp2 (logSum / sum) : 7000.0f;
         }
-        const int bLo = binOf (4000.0), bHi = binOf (std::min (12000.0, fs * 0.45));
-        int peak = bLo;
-        for (int b = bLo; b <= bHi; ++b)
-            if (smooth[(size_t) b] > smooth[(size_t) peak])
-                peak = b;
-        r.peakHz = (float) (peak * fs / n);
         r.freq = juce::jlimit (autoMinCornerHz, autoMaxCornerHz, r.peakHz * autoCornerRatio);
         r.freq = std::round (r.freq / 50.0f) * 50.0f;
 
@@ -188,6 +185,36 @@ namespace ember
         for (int f = 0; f < numFrames; ++f)
             inEnergy[(size_t) f] = std::pow (10.0, rmsDb[(size_t) f] / 10.0) * n;
 
+        // The S frames are judged in the S band (above autoSBandHz), vowels and mixed frames over the full band:
+        // what the S loses up there is what is heard as "less sharp". Judged over the full band, the target
+        // looked unreachable for some voices and the search pushed the threshold to the floor (3 of 15 takes at
+        // -60 dB, where EMBER no longer works dynamically)
+        Biquad sb1, sb2;
+        sb1.setCoeffs (design::highPass (fs, autoSBandHz, 0.54119610));
+        sb2.setCoeffs (design::highPass (fs, autoSBandHz, 1.30656296));
+        std::vector<float> sBand;
+        const auto sBandEnergy = [&] (const float* x, int len, std::vector<double>& perFrame)
+        {
+            sb1.reset();
+            sb2.reset();
+            sBand.resize ((size_t) len);
+            for (int i = 0; i < len; ++i)
+                sBand[(size_t) i] = sb2.process (sb1.process (x[i], 0), 0);
+            perFrame.assign ((size_t) numFrames, 0.0);
+            for (int f = 0; f < numFrames; ++f)
+            {
+                if (kind[(size_t) f] != 2)
+                    continue;
+                double e = 0.0;
+                const float* p = sBand.data() + (size_t) f * (size_t) hop;
+                for (int i = 0; i < n; ++i)
+                    e += (double) p[i] * p[i];
+                perFrame[(size_t) f] = e;
+            }
+        };
+        std::vector<double> sInBand, sOutBand;
+        sBandEnergy (mono, numSamples, sInBand);
+
         struct Measured
         {
             float sRed = 0.0f, vRed = 0.0f, mRed = 0.0f;
@@ -220,6 +247,7 @@ namespace ember
                 e.process (ch, 1, std::min (4096, (int) y.size() - start));
             }
             Measured m;
+            sBandEnergy (y.data() + lat, numSamples, sOutBand);
             double sIn = 0.0, sOut = 0.0, vIn = 0.0, vOut = 0.0, mIn = 0.0, mOut = 0.0;
             for (int f = 0; f < numFrames; ++f)
             {
@@ -231,9 +259,9 @@ namespace ember
                     out += (double) p[i] * p[i];
                 if (kind[(size_t) f] == 2)
                 {
-                    sIn += inEnergy[(size_t) f];
-                    sOut += out;
-                    m.sFrames.push_back ((float) (10.0 * std::log10 (std::max (1.0e-20, inEnergy[(size_t) f]) / std::max (1.0e-20, out))));
+                    sIn += sInBand[(size_t) f];
+                    sOut += sOutBand[(size_t) f];
+                    m.sFrames.push_back ((float) (10.0 * std::log10 (std::max (1.0e-20, sInBand[(size_t) f]) / std::max (1.0e-20, sOutBand[(size_t) f]))));
                 }
                 else if (kind[(size_t) f] == 1)
                 {
@@ -252,32 +280,40 @@ namespace ember
             return m;
         };
 
-        // Search with the range already capped: many S taken down a little instead of a few slammed hard
-        const float searchRange = autoMaxRangeDb;
-        float lo = -60.0f, hi = 0.0f;   // more reduction at lo
-        for (int it = 0; it < 9; ++it)
+        // Threshold for a given range: the S reach the target, then raised until the voice is left alone. Never
+        // below autoMinThresholdDb: further down EMBER stops being dynamic (every hiss, also a soft f or sh, loses
+        // the same) - a voice whose S are that tame gets less than the target instead
+        const auto searchThreshold = [&] (float range)
         {
-            const float mid = 0.5f * (lo + hi);
-            (measure (mid, searchRange).sRed > r.targetDb ? lo : hi) = mid;
-        }
-        float thr = 0.5f * (lo + hi);
-        if (! measure (thr, searchRange).keepsVoice())
-        {
-            lo = thr; hi = 0.0f;   // raise until the voice is left alone
+            float lo = autoMinThresholdDb, hi = 0.0f;   // more reduction at lo
             for (int it = 0; it < 8; ++it)
             {
                 const float mid = 0.5f * (lo + hi);
-                (measure (mid, searchRange).keepsVoice() ? hi : lo) = mid;
+                (measure (mid, range).sRed > r.targetDb ? lo : hi) = mid;
             }
-            thr = hi;
-        }
-        r.thresholdDb = juce::jlimit (-60.0f, 0.0f, std::round (thr * 2.0f) * 0.5f);
+            float thr = 0.5f * (lo + hi);
+            if (! measure (thr, range).keepsVoice())
+            {
+                lo = thr; hi = 0.0f;   // raise until the voice is left alone
+                for (int it = 0; it < 7; ++it)
+                {
+                    const float mid = 0.5f * (lo + hi);
+                    (measure (mid, range).keepsVoice() ? hi : lo) = mid;
+                }
+                thr = hi;
+            }
+            return juce::jlimit (autoMinThresholdDb, 0.0f, std::round (thr * 2.0f) * 0.5f);
+        };
 
-        // Range: room for the strong S of this take, never more than autoMaxRangeDb
-        const auto atThr = measure (r.thresholdDb, searchRange);
+        // First with the widest range, which then shrinks to the room the strong S of this take need (many S
+        // taken down a little instead of a few slammed hard); the threshold is searched again with that range so
+        // the target is still met (until 2026-11-22 the range shrank last and AUTO fell 0.6 dB short)
+        const float firstThr = searchThreshold (autoMaxRangeDb);
+        const auto atThr = measure (firstThr, autoMaxRangeDb);
         // (the measured reduction is the range-capped one times Amount: back to range units)
-        const float amountScale = juce::jlimit (0.1f, 2.0f, base.amount * 2.0f);
-        r.rangeDb = juce::jlimit (autoMinRangeDb, autoMaxRangeDb, std::round (percentile (atThr.sFrames, 0.9f) / amountScale + 1.0f));
+        const float scale = juce::jlimit (0.1f, 2.0f, amountScale (base.amount));
+        r.rangeDb = juce::jlimit (autoMinRangeDb, autoMaxRangeDb, std::round (percentile (atThr.sFrames, 0.9f) / scale + 1.0f));
+        r.thresholdDb = r.rangeDb < autoMaxRangeDb ? searchThreshold (r.rangeDb) : firstThr;
         const auto final = measure (r.thresholdDb, r.rangeDb);
         r.expectedReductionDb = final.sRed;
         r.vowelReductionDb = final.vRed;

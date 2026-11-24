@@ -92,8 +92,8 @@
 <p>SIMPLE zeigt nur das Nötigste. Ember sitzt groß in der Mitte und zeigt dir mit seiner Laune, was gerade passiert.</p>
 <table>
   <tr><th>Element</th><th>Funktion</th></tr>
-  <tr><td>Amount</td><td>Wie stark EMBER eingreift. 50 % entspricht genau dem, was Threshold und Range vorgeben, 100 % der doppelten Wirkung, 0 % schaltet die Bearbeitung ab.</td></tr>
-  <tr><td>Stimmlage: TIEF / MITTEL / HOCH</td><td>Legt fest, wo der S-Bereich beginnt: ab 5 kHz (TIEF), 6,5 kHz (MITTEL) oder 8 kHz (HOCH).</td></tr>
+  <tr><td>Amount</td><td>Wie stark EMBER eingreift. 50 % entspricht genau dem, was Threshold und Range vorgeben, 100 % der anderthalbfachen Wirkung, 0 % schaltet die Bearbeitung ab.</td></tr>
+  <tr><td>Stimmlage: TIEF / MITTEL / HOCH</td><td>Legt fest, wo der S-Bereich beginnt: ab 5 kHz (TIEF), 6,2 kHz (MITTEL) oder 7,4 kHz (HOCH). Der Threshold wird passend mitgesetzt (tiefe Stimmen haben leisere S), außer AUTO hat ihn schon eingestellt.</td></tr>
   <tr><td>DELTA</td><td>Du hörst nur, was entfernt wird.</td></tr>
   <tr><td>ABSENKUNG</td><td>Zeigt, wie viel leiser die S-Laute gerade werden (0 bis −12 dB, Gain Reduction).</td></tr>
 </table>
@@ -112,13 +112,13 @@
   <tr><td>Frequenz</td><td>2–16 kHz</td><td>Untere Grenze des S-Bereichs.</td></tr>
   <tr><td>Threshold</td><td>−60 bis 0 dB</td><td>Ab diesem Pegel im S-Bereich beginnt die Absenkung.</td></tr>
   <tr><td>Range</td><td>0–24 dB</td><td>Maximale Absenkung.</td></tr>
-  <tr><td>Amount</td><td>0–100 %</td><td>Stärke der Wirkung: 50 % = was Threshold und Range einstellen, 100 % = doppelt, 0 % = aus.</td></tr>
+  <tr><td>Amount</td><td>0–100 %</td><td>Stärke der Wirkung: 50 % = was Threshold und Range einstellen, 100 % = anderthalbfach, 0 % = aus.</td></tr>
   <tr><td>Attack</td><td>0,1–20 ms</td><td>Wie schnell EMBER auf einen S-Laut reagiert.</td></tr>
   <tr><td>Release</td><td>10–400 ms</td><td>Wie schnell die Absenkung danach wieder zurückgeht.</td></tr>
   <tr><td>Lookahead</td><td>0–5 ms</td><td>Wie weit EMBER vorausschaut, um S-Laute schon an ihrem Anfang zu erfassen. Die Latenz bleibt dabei immer 5 ms.</td></tr>
   <tr><td>Mix</td><td>0–100 %</td><td>Mischung aus bearbeitetem und unbearbeitetem Signal.</td></tr>
   <tr><td>Output</td><td>±12 dB</td><td>Ausgangspegel.</td></tr>
-  <tr><td>Modus: Split</td><td></td><td>Nur der Bereich oberhalb der Frequenz wird leiser (dynamisches High-Shelf).</td></tr>
+  <tr><td>Modus: Split</td><td></td><td>Nur der S-Bereich wird leiser: ein breites dynamisches Glockenfilter um das S (Mitte beim 1,25-Fachen der Frequenz). Die Stimme darunter und die Luft darüber bleiben, das S klingt danach wie ein leiseres S statt dumpfer.</td></tr>
   <tr><td>Modus: Breitband</td><td></td><td>Die ganze Stimme wird kurz abgesenkt.</td></tr>
   <tr><td>Erkennung: Smart</td><td></td><td>Standard und empfohlen. Reagiert nur, wenn wirklich ein S-Laut erklingt (siehe <a href="#smart">Abschnitt 5</a>).</td></tr>
   <tr><td>Erkennung: Relativ</td><td></td><td>Das S wird im Verhältnis zur Lautheit der Stimme gemessen – leise und laute Stellen werden gleich behandelt.</td></tr>
@@ -134,8 +134,8 @@
   <li>Ember hört etwa 12 Sekunden Gesang zu (Pausen werden übersprungen, maximal 30 Sekunden). Ember hält dabei die Hand ans Ohr. Er ist von selbst fertig – auch wenn du die Wiedergabe nach mindestens 3 Sekunden Gesang anhältst. Ein Klick auf <strong>ABBRECHEN</strong> bricht ab. Kommt kein Ton an, sagt Ember dir, dass du Play drücken sollst.</li>
   <li>Danach probiert EMBER Einstellungen aus, indem es die Aufnahme durchrechnet:
     <ul>
-      <li>Die Frequenz wird knapp unter das stärkste S gelegt (zwischen 5 und 9,5 kHz).</li>
-      <li>Threshold und Range werden so gesetzt, dass S-Laute je nach Schärfe um 2,5 bis 4,5 dB leiser werden.</li>
+      <li>EMBER sucht die Mitte der S-Energie dieser Stimme und legt die Frequenz knapp darunter (zwischen 4,5 und 9,5 kHz). Dieselbe Stimme bekommt so auch bei verschiedenen Ausschnitten fast dieselbe Frequenz.</li>
+      <li>Threshold und Range werden so gesetzt, dass S-Laute je nach Schärfe um 2,5 bis 4,5 dB leiser werden (gemessen im S-Bereich). Der Threshold geht nie unter −45 dB, damit EMBER dynamisch bleibt und leise f- und sch-Laute in Ruhe lässt.</li>
       <li>Vokale bleiben unberührt (höchstens 0,1 dB).</li>
       <li>Release wird auf 35 ms gesetzt.</li>
       <li>Alles andere bleibt, wie du es eingestellt hast (Modus, Erkennung, Amount, Attack, Lookahead, Mix, Output) – AUTO misst damit. Nur ein Amount unter 25 % wird auf 50 % gesetzt.</li>

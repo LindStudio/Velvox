@@ -177,7 +177,7 @@ namespace ember
         void timerCallback() override;
         void layout();
         void autoClicked();
-        void setVoice (float hz);
+        void setVoice (float hz, float thresholdDb);
         void refreshButtons();
         void showPresetMenu();
         void savePresetAs();
