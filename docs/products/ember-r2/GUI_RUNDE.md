@@ -130,3 +130,35 @@ Preset-Tabelle – nicht betroffen.
   is on A.“ → „Your previous setting is on A.“ (DE „Vorher liegt auf A.“ ist ok).
 - Der Speichern-Dialog ist der Windows-Dateidialog (nicht stylbar).
 - Hörurteil/Sichtprüfung im DAW (FL/Ableton/Reaper) steht aus.
+
+## Nachbesserung (nach Jakobs Test im Standalone, 24.11.2026)
+
+Bilder: `C:\Users\Shadow\dev\velvox-bench\2026-11-24\gui_round\after2`. Neu darin: `real_*` (Editor wirklich auf dem
+Desktop, Timer laufen, nichts erzwungen, Bild nach 0,6 s und 3 s; mit und ohne benutztes AUTO; `real_bypass_auto_*` /
+`real_bypass_after_*` = BYPASS an, AUTO an bzw. abgebrochen), `card_option_*` (Karte einer Segment-Option, 100/150 %).
+
+1. **Keine Infokarte über dem Spektrum.** Das Spektrum hat keine schwebende Karte mehr; solange die Maus darüber ist,
+   steht seine Erklärung in der Infozeile unten (Split und Breitband je eigener Text). Allgemein erscheint keine Karte,
+   solange irgendwo eine Maustaste gedrückt ist, und 1,2 s nach dem Loslassen (globaler Maus-Beobachter im Panel) –
+   gilt für Knöpfe, kleine Regler, S-Pegel-Linie, Segmente.
+2. **Leere Tafel – Ursache:** Mit BYPASS an schläft Ember (`Mode::sleep`), und im Schlaf lief `talkStep` nicht. Sagte er
+   dann etwas (z. B. AUTO: „Ich hör zu …“), blieb der getippte Text bei 0 Zeichen stehen und wurde nie beendet –
+   `isTalking()` blieb für immer wahr, die Tafel stand als leerer Rahmen da. Jakobs Einstellung hatte BYPASS an
+   (im Standalone nachgestellt und abfotografiert). Die alte Sprechblase hatte denselben Fehler, zeigte bei leerem Text
+   aber einfach nichts. In den Snapshots fiel es nicht auf, weil dort BYPASS aus war.
+   **Fix:** Im Schlaf tippt der Text weiter (ohne Mund und Geste) und geht nach seiner Zeit; die Tafel zeigt sich nur,
+   wenn es etwas zu lesen gibt, sonst blendet sie ganz aus. Test „text plate: with BYPASS on …“.
+3. **Segmente MODUS, ERKENNUNG, ABHÖREN, STEREO:** Jede der 13 Optionen hat einen eigenen Text (DE/EN). Über einer
+   Option zeigt die Karte genau diese („ERKENNUNG · Absolut“, ihr Text, und „Gewählt ist gerade: Smart.“, wenn eine
+   andere gewählt ist); wandert die Maus zur Nachbaroption, wechselt die Karte sofort. Über dem Gruppennamen: die
+   gewählte Option. Nach einem Klick steht der Text der neu gewählten Option in der Infozeile. Texte in
+   `EmberPanel::optionTexts`; Test: jede Option hat ihren eigenen Text, DE ≠ EN, > 40 Zeichen. In 100 % und 150 %
+   nichts abgeschnitten (`card_option_*`).
+
+Außerdem: `--gui-shots` legt sein Test-Preset nur noch mit einem Aufräum-Objekt an (wird auch bei frühem Abbruch
+gelöscht); geprüft, dass im echten Preset-Ordner nichts liegen bleibt.
+
+Tests: **1951 bestanden, 0 fehlgeschlagen** (ohne `EMBER_VOCALS`). pluginval 1.0.4, Strenge 10, mit GUI: **SUCCESS**.
+
+Offen: Die Karte einer Segment-Option steht über der Knopfreihe und kann den unteren Rand des Spektrums überdecken –
+nur beim Überfahren der Segmente, nicht beim Arbeiten im Spektrum.

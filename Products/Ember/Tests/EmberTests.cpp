@@ -2622,10 +2622,15 @@ namespace
             const std::pair<const char*, int> groups[] { { pid::mode, 2 }, { pid::detection, 4 }, { pid::listen, 3 }, { pid::stereo, 4 } };
             for (auto [id, n] : groups)
             {
-                vocalypse::i18n::overrideSystemLanguage (vocalypse::i18n::Language::german);
-                const auto de = EmberPanel::optionTexts (id);
-                vocalypse::i18n::overrideSystemLanguage (vocalypse::i18n::Language::english);
-                const auto en = EmberPanel::optionTexts (id);
+                std::vector<EmberPanel::OptionText> de, en;
+                {
+                    vocalypse::i18n::ScopedLanguage sl (vocalypse::i18n::Language::german);
+                    de = EmberPanel::optionTexts (id);
+                }
+                {
+                    vocalypse::i18n::ScopedLanguage sl (vocalypse::i18n::Language::english);
+                    en = EmberPanel::optionTexts (id);
+                }
                 check ((int) de.size() == n && (int) en.size() == n, juce::String (id) + ": one text per option");
                 juce::StringArray seen;
                 for (size_t i = 0; i < de.size() && i < en.size(); ++i)
