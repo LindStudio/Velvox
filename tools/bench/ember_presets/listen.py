@@ -1,7 +1,7 @@
 """Listening set: per preset 1 fitting take, 20 s excerpt with the most S, processed + delta (from the bench renders)."""
-import os, pickle, numpy as np, soundfile as sf
+import os, sys, pickle, numpy as np, soundfile as sf
 from presets import P, key
-OUT = 'C:/Users/Shadow/dev/velvox-bench/2026-11-24/presets'
+OUT = sys.argv[1] if len(sys.argv) > 1 else 'C:/Users/Shadow/dev/velvox-bench/2026-11-24/presets_v2'
 os.makedirs(OUT, exist_ok=True)
 CAT = {'none': 'Default', 'basics': 'VocalBasics', 'male': 'MaleVocals', 'female': 'FemaleVocals', 'genre': 'Genre', 'special': 'SpecialPurpose'}
 TAKE = {'Default': 'J1_chemicals', 'Gentle Vocal': 'F08', 'Natural De-Essing': 'J2_kissed', 'Transparent': 'F01', 'Subtle Reduction': 'F22',
