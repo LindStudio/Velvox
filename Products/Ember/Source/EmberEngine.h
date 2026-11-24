@@ -35,6 +35,12 @@
 //  - Listen S band = what is processed: in Split the band itself (4th-order high-passed at its lower edge, so the voice
 //    under it does not bleed through the gentle bell skirt), in Wideband the detector band.
 //  - Switching listen, mode, lookahead or stereo mode cross-fades (no clicks).
+//
+// 2026-11-24 (r2 research, docs/products/ember-r2/DSP_FORSCHUNG.md):
+//  - S tracking: the split band is a blend of three fixed matched bells half an octave apart. A tracker (three
+//    band-passes around the band behind a high-pass at its lower edge, 5 ms energies) finds where the energy of the current S sits and the blend
+//    weights follow it, so the band sits on every S ("sh" lower, "s" higher). Only the weights move: no
+//    coefficient modulation, and with no reduction the output is still bit-exact.
 namespace ember
 {
     using namespace vocalypse::dsp;
@@ -60,6 +66,8 @@ namespace ember
         float stereoLink = 1.0f;     // 0 = every channel on its own, 1 = fully linked
         int stereoMode = 0;          // 0 = stereo (L/R), 1 = mid/side, 2 = mid only, 3 = side only
         bool allround = false;       // with smart: compare against the band under the S (mixes, buses, instruments)
+        // added 2026-11-24 (r2 research)
+        bool trackS = true;          // split band follows each S (false = one fixed bell, the band before 2026-11-24)
     };
 
     // Fixed latency = the longest lookahead
@@ -80,7 +88,30 @@ namespace ember
     // The fixed matched cut of the split band (what the engine runs) and the band's response in dB at `hz` when
     // it takes `reductionDb` off (tests, display)
     BiquadCoeffs splitBell (double sampleRate, double freq, double widthOct) noexcept;
-    double splitResponseDb (double sampleRate, double freq, double widthOct, double reductionDb, double hz) noexcept;
+    double splitResponseDb (double sampleRate, double freq, double widthOct, double reductionDb, double hz, bool tracked = true) noexcept;
+    // |gain| of a cut at its centre (clamped): the blend is scaled by 1 / (1 - it), so the centre takes exactly the
+    // asked-for depth, also far past the fixed cut (2026-11-24: a 24 dB reduction was ~1.2 dB short before)
+    double bellCentreGain (const BiquadCoeffs& c, double sampleRate, double centreHz) noexcept;
+    // The blend b that gives the gain g at the bell's centre, D = 1 - its response there: |1 - b D| = g
+    // (exact also far past the fixed cut and with the matched design's phase at its centre); g >= 1 -> exactly 0
+    inline float blendForGain (float g, float dRe, float dAbs2, float dIm2) noexcept
+    {
+        if (g >= 1.0f)
+            return 0.0f;
+        return (dRe - std::sqrt (std::max (0.0f, dAbs2 * g * g - dIm2))) / dAbs2;
+    }
+    // S tracking (2026-11-24): three bells, trackSpreadOct apart around the split band's centre, each
+    // trackSpreadOct x 2 narrower than the band (at least trackMinBellOct): with the S in the middle the band is
+    // the middle bell; a lower or higher S moves the weight to the outer bells, so together they still cover
+    // the band's width. Tracker: band-passes on the three centres (two sections each), trackEnvMs energies.
+    inline constexpr float trackSpreadOct = 0.5f, trackMinBellOct = 1.0f, trackEnvMs = 5.0f, trackDeadZone = 0.1f;
+    struct TrackBells { double centreHz[3]; double widthOct; };
+    TrackBells trackBells (double freq, double widthOct) noexcept;
+    // Matched (Vicanek) cut of bandRefDb on `centreHz`, `widthOct` between its half-reduction points (widthRefDb)
+    BiquadCoeffs bellAt (double sampleRate, double centreHz, double widthOct) noexcept;
+    // Blend weights of the three bells for tracker energies e[0..2] (low, middle, high): a triangle around the
+    // energy centroid; silence -> the middle bell
+    void trackWeights (const float* e, float* w) noexcept;
     // Old split bell (2026-11-22, RBJ Q 0.4 at 1.25 x freq) - about the same as splitBand at 3 octaves
     inline constexpr float splitQ = 0.4f;
 
@@ -305,7 +336,8 @@ namespace ember
         std::atomic<float> detectorDb { -100.0f }, detectorWeight { 0.0f };
 
     private:
-        void updateBand() noexcept;
+        void updateBand (bool tracker = true) noexcept;   // tracker = also the tracker's band-passes
+        void resetTrack() noexcept;
         int lookaheadSamples (float ms) const noexcept;
 
         double fs = 44100.0;
@@ -313,10 +345,16 @@ namespace ember
         Settings settings;
         int activeStereoMode = 0;    // the stereo mode the filters run in (switches while the wet signal is faded out)
         Detector detector;
-        Biquad bell;                 // fixed matched cut of bandRefDb (double: it is the audio path)
+        // Split band: three fixed matched cuts of bandRefDb (lanes 0..2: low, middle, high) per processing channel,
+        // blended by the tracker weights; the tracker's band-passes on the same centres (two sections)
+        Biquad4 bells[maxChannels], trackBp1[maxChannels], trackBp2[maxChannels], trackHp[maxChannels];
+        float trackE[3] {}, trackCoeff = 0.0f;
+        bool trackOn = true;
         Biquad listenHp, listenHp2;  // listening to the split band: 4th-order high-pass at its lower edge
         bool listenHpLive = false;
         float bandScale = 1.0f;      // 1 / (1 - bell gain at its centre): (bell(x) - x) * bandScale = the band
+        // D = 1 - (middle) bell response at its centre (complex): the blend b with |1 - b D| = the asked-for gain
+        float dRe = 0.75f, dAbs2 = 0.5625f, dIm2 = 0.0f;
         juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> freq { 6200.0f }, width { 3.0f };
         juce::SmoothedValue<float> mixSm { 1.0f }, outSm { 1.0f }, bypassSm { 0.0f }, modeSm { 0.0f }, wetSm { 1.0f };
         juce::SmoothedValue<float> listenSm[3];
@@ -334,6 +372,7 @@ namespace ember
         // Delay lines: audio (per input channel), envelope / gates / detector band (per processing channel)
         std::array<std::vector<float>, maxChannels> audioDelay, bandDelay;
         std::array<std::vector<float>, numSlots> envDelay, gateDelay0, gateDelay1;
+        std::array<std::vector<float>, 3> trackDelay;   // tracker weights (linked), lead the audio like the envelope
         int writePos = 0, delaySize = 1, gridPhase = 0;
         bool wasPerChannel = false;
         int wetHold = 0;   // samples the wet signal stays faded out after a stereo mode switch

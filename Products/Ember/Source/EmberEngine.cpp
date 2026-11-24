@@ -9,7 +9,7 @@ namespace ember
         // 4th-order Butterworth high-pass as two sections
         constexpr double q1 = 0.54119610, q2 = 1.30656296;
         // Coefficients (frequency / width smoothing) are updated on a fixed 16-sample grid
-        constexpr int subBlock = 16;
+        constexpr int subBlock = 16, glideBlock = 4;
         constexpr float tiny = 1.0e-12f;
 
         int wrap (int i, int size) noexcept { return i < 0 ? i + size : (i >= size ? i - size : i); }
@@ -89,14 +89,67 @@ namespace ember
         return eqdesign::design (b, false, fs).sections[0];
     }
 
-    double splitResponseDb (double fs, double freq, double widthOct, double reductionDb, double hz) noexcept
+    BiquadCoeffs bellAt (double fs, double centreHz, double widthOct) noexcept
     {
-        const auto c = splitBell (fs, freq, widthOct);
-        const double w = juce::MathConstants<double>::twoPi * hz / fs;
-        const std::complex<double> z1 = std::polar (1.0, -w), z2 = z1 * z1;
-        const auto h = (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2);
-        const double blend = (1.0 - std::pow (10.0, -reductionDb / 20.0)) / (1.0 - std::pow (10.0, -bandRefDb / 20.0));
-        return 20.0 * std::log10 (std::abs (1.0 + blend * (h - 1.0)));
+        // Regalia-Mitra pole Q for half the dB of a widthRefDb cut at +-widthOct / 2 (see splitBand)
+        const double x = std::exp2 (0.5 * widthOct), gW = std::pow (10.0, -widthRefDb / 20.0);
+        EqBand b;
+        b.on = true;
+        b.type = (int) EqBandType::bell;
+        b.freq = (float) std::min (centreHz, fs * 0.45);
+        b.q = (float) (std::sqrt (gW) / (x - 1.0 / x) * std::pow (10.0, bandRefDb / 40.0));
+        b.gain = -bandRefDb;
+        return eqdesign::design (b, false, fs).sections[0];
+    }
+
+    TrackBells trackBells (double freq, double widthOct) noexcept
+    {
+        const auto shape = splitBand (freq, widthOct);
+        TrackBells t;
+        for (int k = 0; k < 3; ++k)
+            t.centreHz[k] = shape.centreHz * std::exp2 ((k - 1) * (double) trackSpreadOct);
+        t.widthOct = std::max ((double) trackMinBellOct, std::log2 (shape.highHz / shape.lowHz) - 2.0 * trackSpreadOct);
+        return t;
+    }
+
+    void trackWeights (const float* e, float* w) noexcept
+    {
+        const float sum = e[0] + e[1] + e[2];
+        float u = sum > tiny ? (e[1] + 2.0f * e[2]) / sum : 1.0f;   // energy centroid, 0 = low .. 2 = high
+        // a dead zone around the middle: an S (or a test tone) on the band centre gets exactly the middle bell, not a
+        // blend nudged by the band-passes' slightly unequal skirts
+        const float d = u - 1.0f, ad = std::max (0.0f, std::abs (d) - trackDeadZone) / (1.0f - trackDeadZone);
+        u = 1.0f + (d < 0.0f ? -ad : ad);
+        w[0] = std::max (0.0f, 1.0f - u);
+        w[1] = 1.0f - std::abs (u - 1.0f);
+        w[2] = std::max (0.0f, u - 1.0f);
+    }
+
+    namespace
+    {
+        std::complex<double> responseAt (const BiquadCoeffs& c, double fs, double hz) noexcept
+        {
+            const double w = juce::MathConstants<double>::twoPi * hz / fs;
+            const std::complex<double> z1 = std::polar (1.0, -w), z2 = z1 * z1;
+            return (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2);
+        }
+    }
+
+    double bellCentreGain (const BiquadCoeffs& c, double fs, double centreHz) noexcept
+    {
+        return juce::jlimit (0.05, 0.9, std::abs (responseAt (c, fs, std::min (centreHz, fs * 0.45))));
+    }
+
+    double splitResponseDb (double fs, double freq, double widthOct, double reductionDb, double hz, bool tracked) noexcept
+    {
+        // the band as the engine runs it for an S in the middle of the band: the middle bell (tracked) or the one
+        // fixed bell, blended so its centre takes exactly reductionDb
+        const auto tb = trackBells (freq, widthOct);
+        const auto c = tracked ? bellAt (fs, tb.centreHz[1], tb.widthOct) : splitBell (fs, freq, widthOct);
+        const double fc = std::min (tracked ? tb.centreHz[1] : splitBand (freq, widthOct).centreHz, fs * 0.45);
+        const auto d = 1.0 - responseAt (c, fs, fc);
+        const double blend = blendForGain ((float) std::pow (10.0, -reductionDb / 20.0), (float) d.real(), (float) std::norm (d), (float) (d.imag() * d.imag()));
+        return 20.0 * std::log10 (std::abs (1.0 + blend * (responseAt (c, fs, hz) - 1.0)));
     }
 
     // ---------------------------------------------------------------- MinAverage
@@ -366,6 +419,9 @@ namespace ember
         for (auto* lines : { &envDelay, &gateDelay0, &gateDelay1 })
             for (auto& d : *lines)
                 d.assign ((size_t) delaySize, 0.0f);
+        for (auto& d : trackDelay)
+            d.assign ((size_t) delaySize, 0.0f);
+        trackCoeff = timeConstantCoeff (trackEnvMs, fs);
 
         gateWin[0] = juce::jlimit (1, latency + 1, (int) std::lround (gateSplitMs * 0.001 * fs));
         gateWin[1] = juce::jlimit (1, latency + 1, (int) std::lround (gateWideMs * 0.001 * fs));
@@ -412,7 +468,7 @@ namespace ember
         detector.setAllround (settings.smart && settings.allround);
         detector.setFrequency (freq.getCurrentValue());
         updateBand();
-        bell.reset();
+        resetTrack();
         listenHp.reset();
         listenHp2.reset();
         listenHpLive = false;
@@ -433,6 +489,22 @@ namespace ember
         laFadeLeft = 0;
         wetHold = 0;
         currentReductionDb.store (0.0f, std::memory_order_relaxed);
+    }
+
+    void Engine::resetTrack() noexcept
+    {
+        for (int c = 0; c < maxChannels; ++c)
+        {
+            bells[c].reset();
+            trackBp1[c].reset();
+            trackBp2[c].reset();
+            trackHp[c].reset();
+        }
+        for (auto& e : trackE)
+            e = 0.0f;
+        // the middle bell until the tracker has heard something
+        for (int k = 0; k < 3; ++k)
+            std::fill (trackDelay[(size_t) k].begin(), trackDelay[(size_t) k].end(), k == 1 ? 1.0f : 0.0f);
     }
 
     void Engine::setSettings (const Settings& s) noexcept
@@ -467,6 +539,11 @@ namespace ember
         attackCoeff = timeConstantCoeff (std::max (0.01f, settings.attackMs), fs);
         releaseCoeff = timeConstantCoeff (std::max (1.0f, settings.releaseMs), fs);
         detector.setAllround (settings.smart && settings.allround);
+        if (settings.trackS != trackOn)
+        {
+            trackOn = settings.trackS;
+            updateBand();
+        }
         if (settings.stereoMode != activeStereoMode)
             wetSm.setTargetValue (0.0f);   // fade the processing out, switch at the bottom (process)
         else if (wetHold <= 0)
@@ -481,11 +558,41 @@ namespace ember
         }
     }
 
-    void Engine::updateBand() noexcept
+    void Engine::updateBand (bool tracker) noexcept
     {
-        const auto shape = splitBand (freq.getCurrentValue(), width.getCurrentValue());
-        bell.setCoeffs (splitBell (fs, freq.getCurrentValue(), width.getCurrentValue()));
-        bandScale = 1.0f / (1.0f - dbToGain (-bandRefDb));
+        const double f = freq.getCurrentValue(), w = width.getCurrentValue();
+        const auto shape = splitBand (f, w);
+        const auto tb = trackBells (f, w);
+        // tracker band-passes: each covers the half octave around its bell (constant peak gain, RBJ)
+        const double bpQ = 1.0 / (2.0 * std::sinh (0.5 * std::log (2.0) * trackSpreadOct));
+        for (int k = 0; k < 3; ++k)
+        {
+            const auto bellK = trackOn ? bellAt (fs, tb.centreHz[k], tb.widthOct) : splitBell (fs, f, w);
+            const double w0 = juce::MathConstants<double>::twoPi * std::min (tb.centreHz[k], fs * 0.45) / fs;
+            const double al = std::sin (w0) / (2.0 * bpQ), a0 = 1.0 + al;
+            BiquadCoeffs bp;
+            bp.b0 = al / a0; bp.b1 = 0.0; bp.b2 = -al / a0; bp.a1 = -2.0 * std::cos (w0) / a0; bp.a2 = (1.0 - al) / a0;
+            for (int c = 0; c < maxChannels; ++c)
+            {
+                bells[c].setLane (k, bellK);
+                if (! tracker)
+                    continue;
+                trackBp1[c].setLane (k, bp);
+                trackBp2[c].setLane (k, bp);
+                trackHp[c].setLane (k, design::highPass (fs, std::min (shape.lowHz, fs * 0.45), 0.7071));
+            }
+        }
+        // 1 / (1 - the middle bell's real gain at its centre): the blend then takes exactly the asked-for depth at
+        // the centre, also far past the fixed cut (a nominal -12 dB that is really -11.8 dB would leave a 24 dB
+        // reduction ~1 dB short)
+        {
+            const auto mid = trackOn ? bellAt (fs, tb.centreHz[1], tb.widthOct) : splitBell (fs, f, w);
+            bandScale = (float) (1.0 / (1.0 - bellCentreGain (mid, fs, trackOn ? tb.centreHz[1] : shape.centreHz)));
+            const auto d = 1.0 - responseAt (mid, fs, std::min (trackOn ? tb.centreHz[1] : shape.centreHz, fs * 0.45));
+            dRe = (float) d.real();
+            dAbs2 = (float) std::norm (d);
+            dIm2 = (float) (d.imag() * d.imag());
+        }
         listenHp.setCoeffs (design::highPass (fs, std::min (shape.lowHz, fs * 0.45), q1));
         listenHp2.setCoeffs (design::highPass (fs, std::min (shape.lowHz, fs * 0.45), q2));
     }
@@ -514,15 +621,22 @@ namespace ember
 
         for (int start = 0, n = 0; start < numSamples; start += n)
         {
-            n = std::min (subBlock - gridPhase, numSamples - start);
+            // while freq / width glide the coefficients follow every glideBlock samples (finer steps: the three bells
+            // stepping every 16 samples were audible as a faint tick on a fast Width sweep), else on the 16 grid
+            const bool gliding = freq.isSmoothing() || width.isSmoothing();
+            const int grid = gliding ? glideBlock : subBlock;
+            gridPhase %= grid;
+            n = std::min (grid - gridPhase, numSamples - start);
             const bool onGrid = gridPhase == 0;
-            gridPhase = (gridPhase + n) % subBlock;
-            if (onGrid && (freq.isSmoothing() || width.isSmoothing()))
+            gridPhase = (gridPhase + n) % grid;
+            if (onGrid && gliding)
             {
-                freq.skip (subBlock);
-                width.skip (subBlock);
+                freq.skip (grid);
+                width.skip (grid);
                 detector.setFrequency (freq.getCurrentValue());
-                updateBand();
+                // while freq / width glide the tracker keeps its band-passes (stepping them would jolt its energies
+                // and with them the band); they follow once at the end of the glide
+                updateBand (! freq.isSmoothing() && ! width.isSmoothing());
             }
 
             // Stereo mode switch: once the processing is faded out, the filters change domain
@@ -530,7 +644,7 @@ namespace ember
             {
                 activeStereoMode = settings.stereoMode;
                 detector.reset();
-                bell.reset();
+                resetTrack();
                 for (auto& m : gate)
                     for (auto& g : m)
                         g.reset();
@@ -579,6 +693,8 @@ namespace ember
             float* bDl[maxChannels] { bandDelay[0].data(), bandDelay[1].data() };
             float* g0Dl[numSlots] { gateDelay0[0].data(), gateDelay0[1].data(), gateDelay0[2].data() };
             float* g1Dl[numSlots] { gateDelay1[0].data(), gateDelay1[1].data(), gateDelay1[2].data() };
+            float* tDl[3] { trackDelay[0].data(), trackDelay[1].data(), trackDelay[2].data() };
+            const bool track = trackOn;
             float* io[maxChannels] { channels[0], numIn > 1 ? channels[1] : channels[0] };
             const float range = settings.rangeDb, thr = settings.thresholdDb;
             const bool smart = settings.smart;
@@ -591,7 +707,7 @@ namespace ember
 
             int wp = writePos, laLeft = laFadeLeft, laPrevL = laPrev;
             const int ds = delaySize, lat = latency;
-            const float aC = attackCoeff, rC = releaseCoeff, bS = bandScale;
+            const float aC = attackCoeff, rC = releaseCoeff, bS = bandScale, dR = dRe, dA2 = dAbs2, dI2 = dIm2;
             float envL[numSlots] { envDb[0], envDb[1], envDb[2] };
             bool hpLive = listenHpLive;
             for (int k = 0; k < n; ++k)
@@ -616,6 +732,39 @@ namespace ember
                 // and the linked one runs beside them (slot 2); the link blends the reductions they ask for
                 for (int c = 0; c < numProc; ++c)
                     bDl[c][wp] = det.band[c];
+                // S tracker: energy of the S on the three bell centres -> blend weights (linked), into the delay
+                if (track)
+                {
+                    alignas (16) float te[4];
+                   #if EMBER_SSE
+                    __m128 acc = _mm_setzero_ps();
+                    for (int c = 0; c < numProc; ++c)
+                    {
+                        const __m128 v = trackHp[c].process (trackBp2[c].process (trackBp1[c].process (_mm_set1_ps (p[c]))));
+                        acc = _mm_add_ps (acc, _mm_mul_ps (v, v));
+                    }
+                    _mm_store_ps (te, acc);
+                   #else
+                    te[0] = te[1] = te[2] = te[3] = 0.0f;
+                    for (int c = 0; c < numProc; ++c)
+                    {
+                        const float in[4] { p[c], p[c], p[c], p[c] };
+                        float t1[4], t2[4];
+                        trackBp1[c].process (in, t1);
+                        trackBp2[c].process (t1, t2);
+                        trackHp[c].process (t2, t1);
+                        std::copy (t1, t1 + 4, t2);
+                        for (int kk = 0; kk < 3; ++kk)
+                            te[kk] += t2[kk] * t2[kk];
+                    }
+                   #endif
+                    float tw[3];
+                    for (int kk = 0; kk < 3; ++kk)
+                        trackE[kk] = te[kk] + trackCoeff * (trackE[kk] - te[kk]);
+                    trackWeights (trackE, tw);
+                    for (int kk = 0; kk < 3; ++kk)
+                        tDl[kk][wp] = tw[kk];
+                }
                 const int numOwn = perChannel ? numProc : 0;
                 for (int slot = 0; slot < numOwn + 1; ++slot)
                 {
@@ -653,6 +802,21 @@ namespace ember
                 float dry[maxChannels] { aDl[0][readAudio], aDl[1][readAudio] }, q[maxChannels], delta[maxChannels] {}, band[maxChannels] {};
                 encode (sm, numIn, dry, q);
                 float gains[maxChannels] { 1.0f, 1.0f }, rs[numSlots] {};
+                // bell weights (they lead the audio like the envelope; cross-faded with a lookahead change)
+                float bw[3] { 0.0f, 1.0f, 0.0f };
+                if (track)
+                {
+                    const int rc = wrap (wp - eLagCur, ds);
+                    for (int kk = 0; kk < 3; ++kk)
+                        bw[kk] = tDl[kk][rc];
+                    if (laLeft > 0)
+                    {
+                        const float laMix = 1.0f - (float) laLeft / (float) laFadeLen;
+                        const int rp = wrap (wp - eLagPrev, ds);
+                        for (int kk = 0; kk < 3; ++kk)
+                            bw[kk] = tDl[kk][rp] + laMix * (bw[kk] - tDl[kk][rp]);
+                    }
+                }
                 for (int slot = 0; slot < numOwn + 1; ++slot)
                 {
                     const int c = slot < numOwn ? slot : linkSlot;
@@ -680,8 +844,18 @@ namespace ember
                 {
                     const float g = gains[perChannel ? c : 0];
                     // split: x + c (bell(x) - x), c = (1 - g) / (1 - bell gain); wideband: g x
-                    const float diff = bell.process (q[c], c) - q[c];
-                    const float dSplit = (1.0f - g) * bS * diff;
+                    // the three bells, blended: diff = (blended bell)(x) - x
+                    alignas (16) float bo[4];
+                   #if EMBER_SSE
+                    _mm_store_ps (bo, bells[c].process (_mm_set1_ps (q[c])));
+                   #else
+                    {
+                        const float in[4] { q[c], q[c], q[c], q[c] };
+                        bells[c].process (in, bo);
+                    }
+                   #endif
+                    const float diff = bw[0] * (bo[0] - q[c]) + bw[1] * (bo[1] - q[c]) + bw[2] * (bo[2] - q[c]);
+                    const float dSplit = blendForGain (g, dR, dA2, dI2) * diff;
                     const float dWide = (g - 1.0f) * q[c];
                     delta[c] = dSplit + m * (dWide - dSplit);
                     if (hpLive)
@@ -719,7 +893,11 @@ namespace ember
             listenHpLive = hpLive;
         }
 
-        bool finite = detector.isFinite() && bell.isStateFinite() && listenHp.isStateFinite() && listenHp2.isStateFinite();
+        bool finite = detector.isFinite() && listenHp.isStateFinite() && listenHp2.isStateFinite();
+        for (int c = 0; c < maxChannels; ++c)
+            finite = finite && bells[c].isFinite() && trackBp1[c].isFinite() && trackBp2[c].isFinite() && trackHp[c].isFinite();
+        for (float e : trackE)
+            finite = finite && std::isfinite (e);
         for (int c = 0; c < numSlots; ++c)
             finite = finite && std::isfinite (envDb[c]);
         if (! finite)
