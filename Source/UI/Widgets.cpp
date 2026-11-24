@@ -102,11 +102,21 @@ namespace vocalypse::ui
 
     void InfoPopup::paint (juce::Graphics& g)
     {
+        // a colour the look sets, else the design's own
+        const auto tint = [this] (int id, juce::Colour fallback)
+        {
+            return getLookAndFeel().isColourSpecified (id) ? getLookAndFeel().findColour (id) : fallback;
+        };
         const auto r = getLocalBounds().toFloat().reduced (1.0f);
-        g.setColour (colours::raised.withAlpha (0.97f));
+        g.setColour (tint (backgroundColourId, colours::raised.withAlpha (0.97f)));
         g.fillRoundedRectangle (r, 12.0f);
-        drawGlow (g, { r.getX() + 30.0f, r.getY() }, 120.0f, 0.10f, colours::teal);
+        drawGlow (g, { r.getX() + 30.0f, r.getY() }, 120.0f, 0.10f, tint (glowColourId, colours::teal));
         drawGlass (g, r, 12.0f, 0.02f);
+        if (getLookAndFeel().isColourSpecified (outlineColourId))
+        {
+            g.setColour (getLookAndFeel().findColour (outlineColourId));
+            g.drawRoundedRectangle (r, 12.0f, 1.0f);
+        }
 
         auto inner = r.reduced (16.0f, 16.0f);
         auto head = inner.removeFromTop (20.0f);
@@ -115,14 +125,17 @@ namespace vocalypse::ui
             const auto valueFont = display (15.0f, true);
             const float vw = (float) juce::GlyphArrangement::getStringWidthInt (valueFont, value) + 4.0f;
             g.setFont (valueFont);
-            g.setColour (colours::cyan);
+            g.setColour (tint (valueColourId, colours::cyan));
             g.drawText (value, head.removeFromRight (vw), juce::Justification::centredRight, false);
         }
         g.setColour (colours::text);
         g.setFont (font (14.5f, true));
         g.drawText (title, head, juce::Justification::centredLeft, true);
         inner.removeFromTop (4.0f);
-        g.setGradientFill (auroraGradient (inner.getTopLeft(), inner.getTopLeft().translated (36.0f, 0.0f)));
+        if (getLookAndFeel().isColourSpecified (barColourId))
+            g.setColour (getLookAndFeel().findColour (barColourId));
+        else
+            g.setGradientFill (auroraGradient (inner.getTopLeft(), inner.getTopLeft().translated (36.0f, 0.0f)));
         g.fillRoundedRectangle (inner.getX(), inner.getY(), 36.0f, 2.0f, 1.0f);
         inner.removeFromTop (8.0f);
         layoutText (text, inner.getWidth()).draw (g, inner);

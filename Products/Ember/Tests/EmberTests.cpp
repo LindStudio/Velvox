@@ -4,6 +4,7 @@
 //   EmberTests --snapshots <dir>        PNGs of SIMPLE and ADVANCED (both languages)
 //   EmberTests --marketing <take.wav> <dir>   website pictures (2x) of both views, captured at the strongest S
 //   EmberTests --rig <dir>                     the live rig (FIGUR_ANIMIEREN.md): rest pose + test poses as PNG, 600 px
+//   EmberTests --gui-shots <dir>               views, menus, dialogs, info card, text plate (DE/EN, 100/150 %)
 //   EmberTests --frames <dir>                  the same SIMPLE frames every run (1x, 1.25x): compare before / after a GUI change
 //   EmberTests --bench [s] [scales=1,1.25] [counts=1,4] [front=yes|no|both] [min=1] [hosted=1] [hz=60] [anim=full|reduced|off]   GUI CPU
 //   EmberTests --mascot-loops <dir>            website loops of Ember (listening, dancing with/without S sparks, idle, lispy, sleeping), 2x
@@ -3245,6 +3246,184 @@ void emberRunQa (bool full, int& passed, int& failed);   // EmberQaTests.cpp
 // Visual check for GUI optimisations (2026-11-23): the same frames of the SIMPLE view every run (seeded Ember, fixed
 // time steps, the seal's clock set directly), through the screen's renderer (createComponentSnapshot), at 1x and 1.25x.
 // Compare two runs pixel by pixel (before / after a change).
+// EmberTests --gui-shots <dir>: the views and everything that opens on top of them (menus, dialogs, the info card,
+// the text plate), German and English, at 100 % and 150 % (GUI round 2026-11-24: look at what the user sees)
+static void writePng (const juce::Image& img, const juce::File& file)
+{
+    if (! img.isValid())
+    {
+        std::printf ("  (no picture for %s)\n", file.getFileName().toRawUTF8());
+        return;
+    }
+    juce::PNGImageFormat png;
+    file.deleteFile();
+    juce::FileOutputStream out (file);
+    if (out.openedOk())
+        png.writeImageToStream (img, out);
+}
+
+template <typename T>
+static T* findOnDesktop()
+{
+    auto& d = juce::Desktop::getInstance();
+    for (int i = d.getNumComponents(); --i >= 0;)
+        if (auto* c = dynamic_cast<T*> (d.getComponent (i)))
+            return c;
+    return nullptr;
+}
+
+static juce::Component* findMenuWindow()
+{
+    auto& d = juce::Desktop::getInstance();
+    for (int i = d.getNumComponents(); --i >= 0;)
+        if (auto* c = d.getComponent (i); c != nullptr && c->getName() == "menu" && c->isVisible())
+            return c;
+    return nullptr;
+}
+
+static void settle (EmberEditor& ed, int ticks = 40)
+{
+    for (int i = 0; i < ticks; ++i)
+    {
+        ed.tickForTest();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (5);
+    }
+}
+
+static juce::Image shotOpenMenu()
+{
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    juce::Image img;
+    if (auto* w = findMenuWindow())
+        img = w->createComponentSnapshot (w->getLocalBounds(), true, 1.0f);
+    juce::PopupMenu::dismissAllActiveMenus();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    return img;
+}
+
+[[maybe_unused]] static juce::Image shotMenu (juce::PopupMenu menu, juce::Component& target)
+{
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&target));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    juce::Image img;
+    if (auto* w = findMenuWindow())
+        img = w->createComponentSnapshot (w->getLocalBounds(), true, 1.0f);
+    juce::PopupMenu::dismissAllActiveMenus();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    return img;
+}
+
+static juce::Image shotAlert()
+{
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    juce::Image img;
+    if (auto* a = findOnDesktop<juce::AlertWindow>())
+    {
+        img = a->createComponentSnapshot (a->getLocalBounds(), true, 1.0f);
+        a->exitModalState (0);
+    }
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+    return img;
+}
+
+static int guiShots (const juce::File& dir)
+{
+    dir.createDirectory();
+    const auto settingsFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_guishots.settings");
+    settingsFile.deleteFile();
+    UserSettings::useFileForTests (settingsFile);   // AUTO not used yet: Ember's tip shows
+    EmberAudioProcessor p;
+    p.prepareToPlay (48000.0, 512);
+    // a user preset, so the menu shows the rename / delete entries
+    userPresetFolder().createDirectory();
+    const auto userFile = userPresetFolder().getChildFile ("GUI shot preset" + juce::String (presetExtension));
+    const bool madeUser = ! userFile.existsAsFile();
+    if (madeUser)
+        p.saveUserPreset (userFile);
+    for (auto lang : { vocalypse::i18n::Language::german, vocalypse::i18n::Language::english })
+    {
+        vocalypse::i18n::overrideSystemLanguage (lang);
+        const juce::String sfx = lang == vocalypse::i18n::Language::german ? "de" : "en";
+        std::unique_ptr<juce::AudioProcessorEditor> base (p.createEditor());
+        auto* ed = dynamic_cast<EmberEditor*> (base.get());
+        if (ed == nullptr)
+            return 1;
+        for (int pct : { 100, 150 })
+        {
+            ed->setSize (look::baseW * pct / 100, look::baseH * pct / 100);
+            for (bool adv : { false, true })
+            {
+                ed->setAdvanced (adv);
+                settle (*ed);
+                if (! adv)
+                    for (int i = 0; i < 60; ++i)
+                        ed->getPanel().getMascot().stepForTest (0.05f);   // the tip typed in completely
+                writePng (ed->createComponentSnapshot (ed->getLocalBounds()),
+                          dir.getChildFile (juce::String (adv ? "advanced_" : "simple_") + sfx + (pct == 100 ? "" : "_150") + ".png"));
+            }
+        }
+        ed->setSize (look::baseW, look::baseH);
+        // SIMPLE with a long message on the plate (half typed and complete)
+        ed->setAdvanced (false);
+        settle (*ed);
+        auto& m = ed->getPanel().getMascot();
+        m.setBubble (vocalypse::i18n::tr ("Ich hör nichts – drück Play in deiner DAW!", "I can't hear anything – press play in your DAW!"));
+        for (int i = 0; i < 18; ++i)
+            m.stepForTest (0.05f);
+        writePng (ed->createComponentSnapshot (ed->getLocalBounds()), dir.getChildFile ("plate_typing_" + sfx + ".png"));
+        for (int i = 0; i < 40; ++i)
+            m.stepForTest (0.05f);
+        writePng (ed->createComponentSnapshot (ed->getLocalBounds()), dir.getChildFile ("plate_" + sfx + ".png"));
+
+        auto& panel = ed->getPanel();
+        // the menus as they open (and their submenus)
+        panel.showPresetMenu();
+        writePng (shotOpenMenu(), dir.getChildFile ("menu_preset_" + sfx + ".png"));
+        panel.showMainMenu();
+        writePng (shotOpenMenu(), dir.getChildFile ("menu_main_" + sfx + ".png"));
+       #ifdef EMBER_MENU_BUILDERS
+        int subIndex = 0;
+        for (const auto& menu : { panel.buildPresetMenu(), panel.buildMainMenu() })
+            for (juce::PopupMenu::MenuItemIterator it (menu); it.next();)
+                if (auto* sub = it.getItem().subMenu.get(); sub != nullptr && subIndex < 8)
+                    writePng (shotMenu (*sub, panel), dir.getChildFile ("menu_sub" + juce::String (++subIndex) + "_" + sfx + ".png"));
+       #endif
+
+        // the dialogs: rename (with its text field), delete (question), a warning, the licence key
+        panel.renamePreset (userFile);
+        writePng (shotAlert(), dir.getChildFile ("dialog_rename_" + sfx + ".png"));
+        panel.deletePreset (userFile);
+        writePng (shotAlert(), dir.getChildFile ("dialog_delete_" + sfx + ".png"));
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions().withIconType (juce::MessageBoxIconType::WarningIcon)
+                                          .withTitle (vocalypse::i18n::tr ("Preset laden", "Load preset"))
+                                          .withMessage (vocalypse::i18n::tr ("„X“ ließ sich nicht laden. Die Datei fehlt oder ist kein EMBER-Preset.",
+                                                                             "“X” could not be loaded. The file is missing or is not an EMBER preset."))
+                                          .withButton ("OK"), [] (int) {});   // no parent: the default look
+        writePng (shotAlert(), dir.getChildFile ("dialog_warning_" + sfx + ".png"));
+        vocalypse::ui::showActivationDialog (p.getLicence(), ed);
+        writePng (shotAlert(), dir.getChildFile ("dialog_licence_" + sfx + ".png"));
+
+        // the info card on a knob (ADVANCED) and on the spectrum
+        ed->setAdvanced (true);
+        settle (*ed, 4);
+        for (auto* c : panel.getChildren())
+            if (auto* k = dynamic_cast<vocalypse::ui::Knob*> (c); k != nullptr && k->isVisible() && k->getParamId() == juce::String (pid::release))
+                panel.showInfo (*k, k->getLabel(), "60 ms", vocalypse::i18n::tr ("Wie schnell er nach dem S wieder loslässt. Kurz (30–40 ms) lässt den nächsten Vokal unberührt.",
+                                                                                   "How fast it lets go after the S. Short (30–40 ms) leaves the next vowel untouched."));
+        for (auto* c : panel.getChildren())
+            if (dynamic_cast<vocalypse::ui::InfoPopup*> (c) != nullptr)
+                c->setAlpha (1.0f);
+        writePng (ed->createComponentSnapshot (ed->getLocalBounds()), dir.getChildFile ("info_" + sfx + ".png"));
+        panel.hideInfo (panel);
+    }
+    if (madeUser)
+        userFile.deleteFile();
+    vocalypse::i18n::overrideSystemLanguage (std::nullopt);
+    settingsFile.deleteFile();
+    std::printf ("GUI shots in %s\n", dir.getFullPathName().toRawUTF8());
+    return 0;
+}
+
 static int framesDump (const juce::File& dir, const juce::StringArray& args)
 {
     dir.createDirectory();
@@ -3476,6 +3655,8 @@ int main (int argc, char** argv)
         return rigPictures (juce::File (args[1]), args.size() >= 3 && args[2] == "transparent");
     if (args.size() >= 1 && args[0] == "--bench")
         return bench (args.size() >= 2 ? juce::jmax (2, args[1].getIntValue()) : 8, args);
+    if (args.size() >= 2 && args[0] == "--gui-shots")
+        return guiShots (juce::File (args[1]));
     if (args.size() >= 2 && args[0] == "--frames")
         return framesDump (juce::File (args[1]), args);
     if (args.size() >= 2 && args[0] == "--mascot-loops")

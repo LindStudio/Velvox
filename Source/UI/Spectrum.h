@@ -54,6 +54,8 @@ namespace vocalypse::ui
     class SpectrumView : public juce::Component
     {
     public:
+        // A plugin's look can light the curve in its own colour (EMBER 2026-11-24: pink); unset = the aurora
+        enum ColourIds { curveColourId = 0x2a11c201 };
         explicit SpectrumView (const SpectrumSource* source = nullptr) : spectrum (source)
         {
             setInterceptsMouseClicks (false, false);

@@ -103,31 +103,74 @@ namespace ember
 
     class EmberPanel;
 
-    // EMBER's own look on top of the shared one: the "fire" action button (AUTO) burns pink like the seal
+    // EMBER's own look on top of the shared one (the shared VOCALYPSE look stays as it is): the "fire" action button
+    // (AUTO) burns pink like the seal, and everything that opens on top of the plugin is in its style (2026-11-24,
+    // Jakob: "die Popups sind noch im blauen Stil von damals"): menus, dialogs, tooltips, the info card, text fields,
+    // scroll bars, the spectrum's light. No blue, teal or violet anywhere.
     class EmberLookAndFeel final : public vocalypse::ui::VocalypseLookAndFeel
     {
     public:
-        EmberLookAndFeel() { setColour (vocalypse::ui::LicenceLock::accentColourId, look::accent); }   // the lock card in pink
+        EmberLookAndFeel();
         void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour& background,
                                    bool highlighted, bool down) override;
+        void drawButtonText (juce::Graphics&, juce::TextButton&, bool highlighted, bool down) override;
+
+        // menus: a dark rounded panel with a thin pink edge, a pink highlight, pink ticks
+        juce::Font getPopupMenuFont() override;
+        void drawPopupMenuBackground (juce::Graphics&, int width, int height) override;
+        void drawPopupMenuSectionHeader (juce::Graphics&, const juce::Rectangle<int>&, const juce::String&) override;
+        void drawPopupMenuItem (juce::Graphics&, const juce::Rectangle<int>& area, bool isSeparator, bool isActive,
+                                bool isHighlighted, bool isTicked, bool hasSubMenu, const juce::String& text,
+                                const juce::String& shortcutKeyText, const juce::Drawable* icon, const juce::Colour* textColour) override;
+        void getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator, int standardMenuItemHeight,
+                                        int& idealWidth, int& idealHeight) override;
+        int getPopupMenuBorderSize() override { return 6; }
+
+        // dialogs (rename / delete preset, licence, messages)
+        void drawAlertBox (juce::Graphics&, juce::AlertWindow&, const juce::Rectangle<int>& textArea, juce::TextLayout&) override;
+        juce::Font getAlertWindowTitleFont() override;
+        juce::Font getAlertWindowMessageFont() override;
+        juce::Font getAlertWindowFont() override;
+        int getAlertWindowButtonHeight() override { return 32; }
+
+        void drawTooltip (juce::Graphics&, const juce::String& text, int width, int height) override;
+        void drawTextEditorOutline (juce::Graphics&, int width, int height, juce::TextEditor&) override;
+        void fillTextEditorBackground (juce::Graphics&, int width, int height, juce::TextEditor&) override;
+        void drawCornerResizer (juce::Graphics&, int w, int h, bool isMouseOver, bool isMouseDragging) override;
+    };
+
+    // While an EMBER window is open, its look is also the default one of this plugin binary: windows that open on
+    // their own (a message box without a parent, a menu) then never fall back to JUCE's grey / blue default.
+    // Each editor holds one; the last to close restores JUCE's default.
+    struct EmberDefaultLook
+    {
+        EmberDefaultLook() { juce::LookAndFeel::setDefaultLookAndFeel (&look); }
+        ~EmberDefaultLook()
+        {
+            if (&juce::LookAndFeel::getDefaultLookAndFeel() == &look)
+                juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+        }
+        EmberLookAndFeel look;
     };
 
     // The window's part of the seal, on top of the controls (clicks pass through): runes running round the edge,
-    // a wave of pink light through the panels when Ember swallows an S, a small seal turning on the Amount knob.
-    // Repaints only those strips, so the controls underneath are not redrawn every frame.
+    // a wave of pink light through the panels when Ember swallows an S, a small seal on the Amount knob that turns
+    // with the knob only (2026-11-24). Repaints only those strips, so the controls underneath are not redrawn every frame.
     class SealOverlay final : public juce::Component
     {
     public:
         SealOverlay() { setInterceptsMouseClicks (false, false); }
         void update (const seal::Scene& scene, bool simple, juce::Rectangle<float> knob, std::vector<juce::Rectangle<float>> plates);
         void paint (juce::Graphics&) override;
+        std::function<float()> knobAngle;   // the Amount knob's shown angle (clockwise from 12 o'clock), read when painting
     private:
         void repaintEdges (juce::Rectangle<float>, float width);
         seal::Scene scene;
         seal::RuneAtlas borderRunes { seal::pink, true }, sealRunes { seal::pinkLight, true };
         bool simple = true;
         int ticks = 0;
-        float paintedLit = -1.0f;   // calm (animation reduced / off): repainted only when the light changes
+        float paintedLit = -1.0f;      // calm (animation reduced / off): the border is repainted only when the light changes
+        float paintedKnobLit = -1.0f, paintedAngle = -100.0f;   // the knob's seal: only when its light or the knob changes
         juce::Rectangle<float> knob;
         std::vector<juce::Rectangle<float>> plates;
     };
@@ -156,6 +199,7 @@ namespace ember
         static void applyLanguage (const juce::String& preference);
 
         EmberAudioProcessor& processor;
+        juce::SharedResourcePointer<EmberDefaultLook> defaultLook;   // before lnf: outlives the panel's popups
         EmberLookAndFeel lnf;
         juce::SharedResourcePointer<UserSettings> settings;
         std::unique_ptr<EmberPanel> panel;
@@ -179,6 +223,14 @@ namespace ember
         LiveMascotView& getMascot() noexcept { return mascot; }
         SealOverlay& getSealOverlay() noexcept { return sealOverlay; }   // EmberTests --frames
         bool keyPressed (const juce::KeyPress&) override;   // Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo
+        // The preset menu and the ≡ menu, the preset dialogs (public for EmberTests --gui-shots)
+       #define EMBER_MENU_BUILDERS 1
+        juce::PopupMenu buildPresetMenu();
+        juce::PopupMenu buildMainMenu();
+        void showPresetMenu();
+        void showMainMenu();
+        void renamePreset (const juce::File&);
+        void deletePreset (const juce::File&);
 
     private:
         class AboutOverlay;
@@ -187,14 +239,10 @@ namespace ember
         void autoClicked();
         void setVoice (int voice);
         void refreshButtons();
-        void showPresetMenu();
         void showPresetInfo();   // the loaded factory preset's one-line purpose in the status line
         void savePresetAs();
-        void renamePreset (const juce::File&);
-        void deletePreset (const juce::File&);
         void showNotice (const juce::String&);   // a short note in the status line (a few seconds)
         void warn (const juce::String& title, const juce::String& message);
-        void showMainMenu();
         void addInfo (juce::Component&, const juce::String& title, const juce::String& text);
 
         EmberAudioProcessor& processor;

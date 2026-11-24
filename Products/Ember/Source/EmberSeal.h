@@ -56,18 +56,17 @@ namespace ember::seal
     };
 
     // The circle lying on the floor: centre, radii of the ellipse (perspective). drawFloor = the calm part (rings,
-    // star, seals, light), renewed only every few frames; drawFloorLive = what moves fast (running dashes, the spark
-    // on the star, the wave after an S), drawn every frame on top.
+    // star, seals, light), renewed only every few frames; drawFloorLive = what moves fast (running dashes, the wave
+    // after an S), drawn every frame on top.
     void drawFloor (juce::Graphics&, juce::Point<float> centre, float rx, float ry, const Scene&);
     void drawFloorLive (juce::Graphics&, juce::Point<float> centre, float rx, float ry, const Scene&);
     // The letters above the floor circle; back = the half behind Ember, front = the half in front of him
     void drawFloatingRunes (juce::Graphics&, RuneAtlas&, juce::Point<float> centre, float rx, float ry, const Scene&, bool front);
-    // A fire bowl on a pillar (pink flames), flickering by the time alone
-    void drawBrazier (juce::Graphics&, juce::Point<float> bowlTop, const Scene&, int seed);
 
     // Window parts
     void drawRuneBorder (juce::Graphics&, RuneAtlas&, juce::Rectangle<float> window, const Scene&);
-    void drawMiniSeal (juce::Graphics&, RuneAtlas&, juce::Point<float> centre, float radius, const Scene&);
+    // The small seal on the Amount knob; it turns with the knob only (angle in radians, clockwise from 12 o'clock)
+    void drawMiniSeal (juce::Graphics&, RuneAtlas&, juce::Point<float> centre, float radius, float angle, const Scene&);
 
     // The static back wall of the chamber (bricks, pillars, chains, floor), drawn once per size
     void drawChamber (juce::Graphics&, juce::Rectangle<float> window, juce::Rectangle<float> stage);

@@ -64,7 +64,6 @@ namespace ember::seal
             g.strokePath (p, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
-        float hash (int i) { const float s = std::sin ((float) i * 12.9898f) * 43758.5453f; return s - std::floor (s); }
     }
 
     const juce::Path& rune (int index)
@@ -142,7 +141,7 @@ namespace ember::seal
         for (auto [k, w, a] : { std::tuple { 1.0f, 2.4f, .95f }, { .953f, 1.2f, .8f }, { .873f, 2.0f, .9f }, { .653f, 1.6f, .85f }, { .4f, 1.2f, .7f } })
             glowStroke (g, ellipsePath (c, rx * k, ry * k), pink, w, a * lit);
 
-        // the pentagram, turning slowly; a spark runs along its lines
+        // the pentagram, turning slowly (Jakob 2026-11-24: no spark running along its lines any more)
         std::array<juce::Point<float>, 5> pts;
         for (int i = 0; i < 5; ++i)
             pts[(size_t) i] = onEllipse (c, rx, ry, -juce::MathConstants<float>::halfPi + (float) i * tau / 5.0f + rot * 0.5f, .873f);
@@ -167,7 +166,7 @@ namespace ember::seal
 
     void drawFloorLive (juce::Graphics& g, juce::Point<float> c, float rx, float ry, const Scene& s)
     {
-        const float lit = s.lit(), rot = s.rotation(), heat = s.on ? juce::jmin (1.0f, s.heat) : 0.0f;
+        const float lit = s.lit(), heat = s.on ? juce::jmin (1.0f, s.heat) : 0.0f;
         // energy running round the outer band (dashes that move)
         {
             juce::Path arc, dashed;
@@ -177,19 +176,6 @@ namespace ember::seal
             juce::PathStrokeType (2.0f).createDashedStroke (dashed, arc, dashes, 2);
             g.setColour (pinkLight.withAlpha ((0.45f + 0.4f * heat) * lit));
             g.fillPath (dashed);
-        }
-        // a spark running along the star's lines
-        {
-            std::array<juce::Point<float>, 5> pts;
-            for (int i = 0; i < 5; ++i)
-                pts[(size_t) i] = onEllipse (c, rx, ry, -juce::MathConstants<float>::halfPi + (float) i * tau / 5.0f + rot * 0.5f, .873f);
-            const double run = s.t * 0.9;
-            const int seg = (int) std::fmod (run, 5.0);
-            const float u = (float) (run - std::floor (run));
-            const auto a0 = pts[(size_t) ((seg * 2) % 5)], a1 = pts[(size_t) (((seg + 1) * 2) % 5)];
-            const auto sp = a0 + (a1 - a0) * u;
-            g.setGradientFill (juce::ColourGradient (pinkLight.withAlpha (lit), sp.x, sp.y, pinkLight.withAlpha (0.0f), sp.x + 12.0f, sp.y, true));
-            g.fillEllipse (sp.x - 12.0f, sp.y - 12.0f, 24.0f, 24.0f);
         }
         // the wave after each swallowed S runs outward
         if (const float w = s.wave(); w > 0.0f && s.on)
@@ -223,28 +209,6 @@ namespace ember::seal
             }
     }
 
-    void drawBrazier (juce::Graphics& g, juce::Point<float> top, const Scene& s, int seed)
-    {
-        if (! s.on)
-            return;
-        const float t = (float) s.t, heat = juce::jmin (1.0f, s.heat);
-        g.setGradientFill (juce::ColourGradient (pink.withAlpha (0.35f), top.x, top.y - 10.0f, pink.withAlpha (0.0f), top.x + 24.0f, top.y - 10.0f, true));
-        g.fillEllipse (top.x - 24.0f, top.y - 70.0f, 48.0f, 90.0f);
-        for (int k = 0; k < 6; ++k)
-        {
-            const float ph = hash (seed * 31 + k) * 6.0f, flick = 0.75f + 0.25f * std::sin (t * (7.0f + (float) k) + ph);
-            const float h = (26.0f + 8.0f * (float) (k % 3) + 18.0f * heat) * flick, w = 9.0f + (float) (k % 2) * 4.0f;
-            const float x = top.x + (hash (seed * 17 + k) - 0.5f) * 30.0f + std::sin (t * 3.0f + ph) * 2.5f;
-            juce::Path f;
-            f.startNewSubPath (x - w * 0.5f, top.y);
-            f.quadraticTo (x - w * 0.6f, top.y - h * 0.5f, x + std::sin (t * 5.0f + ph) * 3.0f, top.y - h);
-            f.quadraticTo (x + w * 0.6f, top.y - h * 0.5f, x + w * 0.5f, top.y);
-            f.closeSubPath();
-            g.setGradientFill (juce::ColourGradient (pinkLight.withAlpha (0.85f), x, top.y, pink.withAlpha (0.0f), x, top.y - h, false));
-            g.fillPath (f);
-        }
-    }
-
     void drawRuneBorder (juce::Graphics& g, RuneAtlas& atlas, juce::Rectangle<float> w, const Scene& s)
     {
         const float lit = s.on ? 0.7f + 0.3f * juce::jmin (1.0f, s.heat) : 0.15f;
@@ -267,9 +231,11 @@ namespace ember::seal
         }
     }
 
-    void drawMiniSeal (juce::Graphics& g, RuneAtlas& atlas, juce::Point<float> c, float r, const Scene& s)
+    void drawMiniSeal (juce::Graphics& g, RuneAtlas& atlas, juce::Point<float> c, float r, float angle, const Scene& s)
     {
-        const float lit = s.on ? 0.55f + 0.35f * juce::jmin (1.0f, s.heat) : 0.12f, rot = s.rotation() * 2.0f;
+        // turned only by the knob (Jakob 2026-11-24: "nur mitdrehen, wenn man ihn bewegt"): one star point sits on the
+        // knob's value dot. angle: the knob's angle, clockwise from 12 o'clock
+        const float lit = s.on ? 0.55f + 0.35f * juce::jmin (1.0f, s.heat) : 0.12f, rot = angle;
         g.setColour (pink.withAlpha (0.5f * lit));
         g.drawEllipse (c.x - r, c.y - r, 2 * r, 2 * r, 1.2f);
         g.drawEllipse (c.x - r * .87f, c.y - r * .87f, 2 * r * .87f, 2 * r * .87f, 1.0f);
@@ -307,7 +273,7 @@ namespace ember::seal
             g.drawLine (cx + (float) i * 30.0f, floorY, cx + (float) i * 95.0f, w.getBottom(), 1.0f);
         for (float y = floorY + 8.0f, st = 9.0f; y < w.getBottom(); y += st, st *= 1.28f)
             g.drawLine (w.getX(), y, w.getRight(), y, 1.0f);
-        // pillars at the stage's sides, chains between
+        // pillars at the stage's sides (no fire bowls on them since 2026-11-24), chains between
         for (float px : { stage.getX() + 24.0f, stage.getRight() - 28.0f })
         {
             juce::ColourGradient gg (juce::Colour (0xff07030a), px - 28.0f, 0, juce::Colour (0xff07030a), px + 28.0f, 0, false);
@@ -316,10 +282,6 @@ namespace ember::seal
             g.fillRect (px - 24.0f, stage.getY() + 100.0f, 48.0f, stage.getHeight() * 0.74f - 100.0f);
             g.setColour (juce::Colour (0xff140810));
             g.fillRect (px - 31.0f, stage.getY() + 90.0f, 62.0f, 14.0f);
-            g.setColour (juce::Colour (0xff1c1016));
-            juce::Path bowl;
-            bowl.addQuadrilateral (px - 28.0f, stage.getY() + 70.0f, px + 28.0f, stage.getY() + 70.0f, px + 16.0f, stage.getY() + 90.0f, px - 16.0f, stage.getY() + 90.0f);
-            g.fillPath (bowl);
         }
         g.setColour (juce::Colour (0xff1e1a1e));
         for (float chx : { stage.getX() + stage.getWidth() * 0.24f, stage.getX() + stage.getWidth() * 0.78f })

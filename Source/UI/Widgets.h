@@ -22,6 +22,9 @@ namespace vocalypse::ui
     class InfoPopup final : public juce::Component
     {
     public:
+        // A plugin's look can tint the card (EMBER 2026-11-24: pink instead of teal / cyan); unset = the VOCALYPSE design
+        enum ColourIds { backgroundColourId = 0x2a11c101, glowColourId = 0x2a11c102, valueColourId = 0x2a11c103,
+                         barColourId = 0x2a11c104, outlineColourId = 0x2a11c105 };
         InfoPopup();
         void show (juce::Rectangle<int> anchorInParent, const juce::String& title, const juce::String& value, const juce::String& text);
         void hide();
@@ -170,6 +173,7 @@ namespace vocalypse::ui
     public:
         HSlider (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent);
         ~HSlider() override;
+        void setDescription (const juce::String& text) { description = text; }   // the info card's text
         void resized() override;
         void paint (juce::Graphics&) override;
         void parentHierarchyChanged() override { slider.sendLookAndFeelChange(); }

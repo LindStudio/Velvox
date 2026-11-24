@@ -151,17 +151,24 @@ namespace vocalypse::ui
         fill.lineTo (r.getRight(), r.getBottom());
         fill.lineTo (r.getX(), r.getBottom());
         fill.closeSubPath();
-        // Aurora light (teal lows -> blue highs), fading into the dark towards the floor
-        g.setGradientFill (auroraGradient (r.getTopLeft(), r.getTopRight(), 0.30f * intensity));
+        // Aurora light (teal lows -> blue highs), fading into the dark towards the floor; or the look's own colour
+        const bool tinted = getLookAndFeel().isColourSpecified (curveColourId);
+        const auto tint = tinted ? getLookAndFeel().findColour (curveColourId) : juce::Colour();
+        const auto light = [&] (float alpha)
+        {
+            return tinted ? juce::ColourGradient (tint.withAlpha (alpha * 0.8f), r.getX(), 0.0f, tint.brighter (0.3f).withAlpha (alpha), r.getRight(), 0.0f, false)
+                          : auroraGradient (r.getTopLeft(), r.getTopRight(), alpha);
+        };
+        g.setGradientFill (light (0.30f * intensity));
         g.fillPath (fill);
         g.setGradientFill (juce::ColourGradient (colours::background.withAlpha (0.0f), 0.0f, r.getY() + r.getHeight() * 0.15f,
                                                  colours::background.withAlpha (0.92f), 0.0f, r.getBottom(), false));
         g.fillPath (fill);
 
-        g.setGradientFill (auroraGradient (r.getTopLeft(), r.getTopRight(), 0.14f * intensity));
+        g.setGradientFill (light (0.14f * intensity));
         g.strokePath (outPath, juce::PathStrokeType (7.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        auto core = auroraGradient (r.getTopLeft(), r.getTopRight(), 0.95f * intensity);
-        core.addColour (0.45, colours::teal.interpolatedWith (juce::Colours::white, 0.35f).withAlpha (0.95f * intensity));
+        auto core = light (0.95f * intensity);
+        core.addColour (0.45, (tinted ? tint : colours::teal).interpolatedWith (juce::Colours::white, 0.35f).withAlpha (0.95f * intensity));
         g.setGradientFill (core);
         g.strokePath (outPath, juce::PathStrokeType (1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 

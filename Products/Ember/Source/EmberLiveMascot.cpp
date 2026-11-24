@@ -1,5 +1,6 @@
 #include "EmberLiveMascot.h"
 #include "Text/I18n.h"
+#include "UI/Theme.h"
 #include <cmath>
 #include <cstring>
 
@@ -471,10 +472,6 @@ namespace ember
             if (sealStage)
             {
                 runeAtlas.setScale (scale);
-                const auto tb = juce::Time::getMillisecondCounterHiRes();
-                seal::drawBrazier (g, { bounds.getX() + 24.0f, bounds.getY() + 72.0f }, sc, 1);
-                seal::drawBrazier (g, { bounds.getRight() - 28.0f, bounds.getY() + 72.0f }, sc, 2);
-                runesMs += juce::Time::getMillisecondCounterHiRes() - tb;
                 const auto tf = juce::Time::getMillisecondCounterHiRes();
                 // the calm floor in a layer of its own, only as big as what it draws (the light pool, the rings, the
                 // light pillars rising 260 px from the star's points), placed on whole pixels: the same pixels as a
@@ -565,7 +562,8 @@ namespace ember
         const juce::ScopedLock rl (renderLock);
         sealStage = on;
         // on the seal he stands a little higher and smaller, so the circle fits under his feet
-        renderer.fitHeight = on ? 0.80f : 0.86f;
+        // (0.74 since 2026-11-24: room for the text plate above his horns)
+        renderer.fitHeight = on ? 0.74f : 0.86f;
         renderer.fitFeet = on ? 0.86f : 0.97f;
         figure = {};
         stillKey.clear();
@@ -575,7 +573,7 @@ namespace ember
 
     juce::AffineTransform LiveMascotView::toStage() const
     {
-        return RigRenderer::fitTransform (stageArea(), sealStage ? 0.80f : 0.86f, sealStage ? 0.86f : 0.97f);
+        return RigRenderer::fitTransform (stageArea(), sealStage ? 0.74f : 0.86f, sealStage ? 0.86f : 0.97f);
     }
 
     seal::Scene LiveMascotView::scene() const
@@ -621,7 +619,10 @@ namespace ember
         {
             bubble = text;
             if (getAnimationLevel() == AnimationLevel::off)
-                repaint();      // he does not speak: the bubble just shows
+            {
+                plateAlpha = text.isNotEmpty() ? 1.0f : 0.0f;
+                repaint();      // he does not speak: the text just shows
+            }
             else
                 brain.say (text);
         }
@@ -675,6 +676,7 @@ namespace ember
             // a still picture: drawn again only when something it shows changes
             const auto key = juce::String ((int) input.bypass) + "|" + getLocalBounds().toString() + "|" + juce::String (renderScale)
                              + "|" + juce::String ((int) sealStage) + "|" + juce::String (backdropScale);
+            plateAlpha = bubble.isNotEmpty() ? 1.0f : 0.0f;   // still: the plate shows or not, no fade
             if (key != stillKey || shownLevel != level)
             {
                 stillKey = key;
@@ -684,7 +686,7 @@ namespace ember
             return;
         }
         if (shownLevel == AnimationLevel::off)
-            repaint();          // the bubble and the S come back
+            repaint();          // the text plate and the S come back
         shownLevel = level;
         stillKey.clear();
         brain.setFewerParticles (level == AnimationLevel::reduced);
@@ -712,6 +714,11 @@ namespace ember
             lastEaten = brain.eatenCount();
         }
         heat += ((input.bypass ? 0.0f : input.reductionDb / 9.0f) - heat) * std::min (1.0f, dt * 6.0f);
+        // the text plate fades in and out (a quarter of a second) instead of popping
+        const float plateTarget = brain.isTalking() || bubble.isNotEmpty() ? 1.0f : 0.0f;
+        plateAlpha += (plateTarget - plateAlpha) * std::min (1.0f, dt * 8.0f);
+        if (std::abs (plateTarget - plateAlpha) < 0.01f)
+            plateAlpha = plateTarget;
     }
 
     void LiveMascotView::paint (juce::Graphics& g)
@@ -733,6 +740,8 @@ namespace ember
         const bool onScreen = getPeer() != nullptr;
         if (onScreen)
             screenScale = scale;
+        else
+            plateAlpha = brain.isTalking() || bubble.isNotEmpty() ? 1.0f : 0.0f;   // snapshots: no fade
         bool fits, any;
         {
             const juce::ScopedLock fl (frameLock);
@@ -774,7 +783,7 @@ namespace ember
             g.drawImage (paintBackdrop, bounds, juce::RectanglePlacement::stretchToFit);
         if (! still)
             paintEffects (g);
-        paintBubble (g);
+        paintPlate (g);
     }
 
     // the S, notes, Z, steam, crumbs, sound rings (prototype: drawEats / drawFx / drawRings)
@@ -858,40 +867,63 @@ namespace ember
         }
     }
 
-    // the speech bubble above his right shoulder, typing as he speaks
-    void LiveMascotView::paintBubble (juce::Graphics& g)
+    // The text plate (2026-11-24, Jakob: the speech bubble did not fit the seal): a small dark plate hanging between
+    // the chains above Ember, in the panels' style, at a fixed place; the text types in while he speaks.
+    juce::Rectangle<float> LiveMascotView::plateArea() const
     {
-        // while he says something it types in; otherwise the editor's bubble stays as it is
+        const auto r = getLocalBounds().toFloat();
+        return juce::Rectangle<float> (std::min (r.getWidth() - 16.0f, 312.0f), 40.0f).withCentre ({ r.getCentreX(), r.getY() + 30.0f });
+    }
+
+    void LiveMascotView::paintPlate (juce::Graphics& g)
+    {
+        // while he says something it types in; otherwise the editor's text stays as it is
         const bool talking = brain.isTalking() && getAnimationLevel() != AnimationLevel::off;
-        const auto text = talking ? brain.shownText() : bubble;
         const auto full = talking ? brain.fullText() : bubble;
-        if (text.isEmpty())
+        if (full.isNotEmpty())
+            plateText = full;
+        if (plateAlpha <= 0.01f || plateText.isEmpty())
             return;
-        const auto anchor = juce::Point<float> (700.0f, 205.0f).transformedBy (RigRenderer::headTransform (brain.pose()))
-                                                               .transformedBy (toStage());
-        const float fontH = juce::jlimit (11.0f, 15.0f, getHeight() * 0.04f);
-        const juce::Font font (juce::FontOptions (fontH, juce::Font::bold));
-        const float maxW = std::min (getWidth() * 0.46f, 240.0f);
-        auto& lay = bubbleLayout;   // the bubble's size, laid out again only for a new text
-        if (lay.text != full || lay.fontH != fontH || lay.maxW != maxW)
+        const auto box = plateArea();
+        auto& lay = plateLayout;   // laid out again only for a new text
+        if (lay.text != plateText || lay.area != box)
         {
-            juce::GlyphArrangement ga;
-            ga.addFittedText (font, full, 0, 0, maxW, 200, juce::Justification::topLeft, 4);
-            lay = { full, fontH, maxW, ga.getBoundingBox (0, -1, true) };
+            lay.text = plateText;
+            lay.area = box;
+            lay.glyphs.clear();
+            // the info line's font; a long text takes two lines (smaller) rather than running out of the plate
+            const auto inner = box.reduced (14.0f, 4.0f);
+            auto f = vocalypse::ui::font (12.5f);
+            if (juce::GlyphArrangement::getStringWidth (f, plateText) > inner.getWidth())
+                f = vocalypse::ui::font (11.0f);
+            lay.glyphs.addFittedText (f, plateText, inner.getX(), inner.getY(), inner.getWidth(), inner.getHeight(),
+                                      juce::Justification::centred, 2, 0.9f);
         }
-        const auto size = lay.size;
-        auto box = juce::Rectangle<float> (size.getWidth() + 22, size.getHeight() + 16);
-        box.setPosition (juce::jlimit (6.0f, getWidth() - box.getWidth() - 6.0f, anchor.x), std::max (6.0f, anchor.y - box.getHeight()));
-        juce::Path p;
-        p.addRoundedRectangle (box, 12.0f);
-        p.addTriangle (box.getX() + 14, box.getBottom() - 1, box.getX() + 28, box.getBottom() - 1, box.getX() + 16, box.getBottom() + 8);
-        g.setColour (juce::Colours::black.withAlpha (0.35f));
-        g.fillPath (p, juce::AffineTransform::translation (0, 4));
-        g.setColour (juce::Colour (0xfffff7f1));
-        g.fillPath (p);
-        g.setColour (juce::Colour (0xff2a0f12));
-        g.setFont (font);
-        g.drawFittedText (text, box.reduced (11, 8).toNearestInt(), juce::Justification::topLeft, 4);
+        const float a = juce::jlimit (0.0f, 1.0f, plateAlpha);
+        // the plate: dark glass like the panels, a thin pink edge, two short chain links it hangs from
+        g.setColour (juce::Colour (0xff1e1a1e).withMultipliedAlpha (a));
+        for (float x : { box.getX() + 22.0f, box.getRight() - 22.0f })
+            for (int k = 0; k < 2; ++k)
+                g.drawEllipse (x - (k % 2 ? 2.5f : 5.0f), box.getY() - 15.0f + (float) k * 8.0f, k % 2 ? 5.0f : 10.0f, 12.0f, 2.0f);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xf0140610).withMultipliedAlpha (a), 0, box.getY(),
+                                                 juce::Colour (0xf5080308).withMultipliedAlpha (a), 0, box.getBottom(), false));
+        g.fillRoundedRectangle (box, 10.0f);
+        g.setColour (seal::pink.withAlpha (0.45f * a));
+        g.drawRoundedRectangle (box.reduced (0.5f), 10.0f, 1.0f);
+        g.setColour (vocalypse::ui::colours::textStrong.withAlpha (a));
+        // typing: the first glyphs of the finished layout, so the words never move while they appear
+        const int total = lay.glyphs.getNumGlyphs();
+        int n = total;
+        if (talking && brain.fullText().isNotEmpty())
+            n = juce::roundToInt ((float) total * (float) brain.shownText().length() / (float) brain.fullText().length());
+        if (n >= total)
+            lay.glyphs.draw (g);
+        else if (n > 0)
+        {
+            auto part = lay.glyphs;
+            part.removeRangeOfGlyphs (n, -1);
+            part.draw (g);
+        }
     }
 
     bool LiveMascotView::hitsFigure (juce::Point<float> p) const

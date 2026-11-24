@@ -66,11 +66,101 @@ namespace ember
     }
 
     // ================================================================ look
+    namespace
+    {
+        // the panels' glass (EmberPanel::paint) as solid colours for windows of their own
+        const juce::Colour glassTop { 0xff170812 }, glassBottom { 0xff0b0409 }, field { 0xff0a0408 };
+        const juce::Colour ink { 0xffeee6ea };        // text on the glass (warm white)
+    }
+
+    EmberLookAndFeel::EmberLookAndFeel()
+    {
+        using C = juce::Colour;
+        setColour (ui::LicenceLock::accentColourId, look::accent);   // the lock card in pink
+        setColour (juce::ResizableWindow::backgroundColourId, seal::wall);
+        setColour (juce::TextButton::buttonOnColourId, look::accent);
+        setColour (juce::TextButton::textColourOnId, ink);
+        setColour (juce::ToggleButton::tickColourId, look::accent);
+        // menus (a background that is not opaque lets the menu window have round corners)
+        setColour (juce::PopupMenu::backgroundColourId, glassTop.withAlpha (0.985f));
+        setColour (juce::PopupMenu::textColourId, ink);
+        setColour (juce::PopupMenu::headerTextColourId, look::accentSoft);
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, look::accent.withAlpha (0.22f));
+        setColour (juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+        // dialogs, text fields, tooltips
+        setColour (juce::AlertWindow::backgroundColourId, glassTop);
+        setColour (juce::AlertWindow::textColourId, ink);
+        setColour (juce::AlertWindow::outlineColourId, look::accent.withAlpha (0.55f));
+        setColour (juce::TextEditor::backgroundColourId, field);
+        setColour (juce::TextEditor::textColourId, ink);
+        setColour (juce::TextEditor::highlightedTextColourId, juce::Colours::white);
+        setColour (juce::TextEditor::outlineColourId, look::accent.withAlpha (0.3f));
+        setColour (juce::TextEditor::focusedOutlineColourId, look::accent.withAlpha (0.85f));
+        setColour (juce::TextEditor::highlightColourId, look::accent.withAlpha (0.35f));
+        setColour (juce::TextEditor::shadowColourId, C (0x00000000));
+        setColour (juce::CaretComponent::caretColourId, look::accentSoft);
+        setColour (juce::Label::textWhenEditingColourId, ink);
+        setColour (juce::Label::backgroundWhenEditingColourId, field);
+        setColour (juce::Label::outlineWhenEditingColourId, look::accent.withAlpha (0.6f));
+        setColour (juce::Slider::textBoxHighlightColourId, look::accent.withAlpha (0.35f));
+        setColour (juce::ComboBox::backgroundColourId, field);
+        setColour (juce::ComboBox::outlineColourId, look::accent.withAlpha (0.3f));
+        setColour (juce::ComboBox::focusedOutlineColourId, look::accent.withAlpha (0.85f));
+        setColour (juce::ComboBox::arrowColourId, look::accentSoft);
+        setColour (juce::ComboBox::textColourId, ink);
+        setColour (juce::TooltipWindow::backgroundColourId, glassTop);
+        setColour (juce::TooltipWindow::textColourId, ink);
+        setColour (juce::TooltipWindow::outlineColourId, look::accent.withAlpha (0.5f));
+        setColour (juce::ScrollBar::thumbColourId, look::accent.withAlpha (0.5f));
+        setColour (juce::ScrollBar::trackColourId, C (0x00000000));
+        setColour (juce::ScrollBar::backgroundColourId, C (0x00000000));
+        setColour (juce::ListBox::backgroundColourId, field);
+        setColour (juce::ListBox::outlineColourId, look::accent.withAlpha (0.3f));
+        setColour (juce::ListBox::textColourId, ink);
+        setColour (juce::ProgressBar::foregroundColourId, look::accent);
+        setColour (juce::ProgressBar::backgroundColourId, field);
+        // the shared info card and spectrum in pink
+        setColour (ui::InfoPopup::backgroundColourId, glassTop.withAlpha (0.97f));
+        setColour (ui::InfoPopup::glowColourId, look::accent);
+        setColour (ui::InfoPopup::valueColourId, look::accentSoft);
+        setColour (ui::InfoPopup::barColourId, look::accent);
+        setColour (ui::InfoPopup::outlineColourId, look::accent.withAlpha (0.35f));
+        setColour (ui::SpectrumView::curveColourId, look::accent);
+    }
+
     void EmberLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& background, bool highlighted, bool down)
     {
-        if (! (bool) b.getProperties().getWithDefault ("fire", false))
+        const auto& props = b.getProperties();
+        const bool fire = (bool) props.getWithDefault ("fire", false) || (bool) props.getWithDefault ("primary", false);
+        if (! fire)
         {
-            VocalypseLookAndFeel::drawButtonBackground (g, b, background, highlighted, down);
+            if ((bool) props.getWithDefault (segmentProperty, false) || (bool) props.getWithDefault ("link", false))
+            {
+                VocalypseLookAndFeel::drawButtonBackground (g, b, background, highlighted, down);
+                return;
+            }
+            // plain buttons (here and in the dialogs): a ghost with a faint pink edge; switched on (DELTA, BYPASS) in
+            // their own colour, never the shared look's blue
+            auto r = b.getLocalBounds().toFloat().reduced (0.5f);
+            const float corner = std::min (8.0f, r.getHeight() * 0.5f);
+            const bool flatL = b.isConnectedOnLeft(), flatR = b.isConnectedOnRight();
+            juce::Path shape;
+            shape.addRoundedRectangle (r.getX(), r.getY(), r.getWidth(), r.getHeight(), corner, corner, ! flatL, ! flatR, ! flatL, ! flatR);
+            if (b.getToggleState())
+            {
+                const auto on = b.findColour (juce::TextButton::buttonOnColourId);
+                g.setColour (on.withAlpha (0.1f));
+                g.strokePath (shape, juce::PathStrokeType (5.0f));
+                g.setColour (on.withAlpha (down ? 0.3f : 0.2f));
+                g.fillPath (shape);
+                g.setColour (on.withAlpha (0.8f));
+                g.strokePath (shape, juce::PathStrokeType (1.2f));
+                return;
+            }
+            g.setColour (juce::Colours::white.withAlpha (down ? 0.08f : (highlighted ? 0.05f : 0.02f)));
+            g.fillPath (shape);
+            g.setColour (look::accent.withAlpha (! b.isEnabled() ? 0.1f : (highlighted ? 0.45f : 0.22f)));
+            g.strokePath (shape, juce::PathStrokeType (1.0f));
             return;
         }
         auto r = b.getLocalBounds().toFloat().reduced (0.5f);
@@ -87,6 +177,201 @@ namespace ember
         g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha ((down ? 0.0f : (highlighted ? 0.28f : 0.14f)) * a), r.getX(), r.getY(),
                                                  juce::Colours::white.withAlpha (0.0f), r.getX(), r.getCentreY(), false));
         g.fillRoundedRectangle (r, corner);
+    }
+
+    void EmberLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool highlighted, bool down)
+    {
+        if ((bool) b.getProperties().getWithDefault ("link", false))
+        {
+            // a link in pink (the shared look draws it cyan)
+            const auto f = ui::font (12.5f);
+            const auto text = b.getButtonText();
+            const float w = std::min ((float) b.getWidth(), (float) juce::GlyphArrangement::getStringWidthInt (f, text));
+            g.setColour (! b.isEnabled() ? c::textFaint : highlighted ? ink : look::accentSoft);
+            g.setFont (f);
+            g.drawText (text, b.getLocalBounds(), juce::Justification::centredLeft, true);
+            g.fillRect (juce::Rectangle<float> (0.0f, (float) b.getHeight() * 0.5f + f.getHeight() * 0.5f, w, 1.0f));
+            return;
+        }
+        if ((bool) b.getProperties().getWithDefault ("primary", false))
+        {
+            g.setColour (b.isEnabled() ? c::fireInk : c::textFaint);
+            g.setFont (getTextButtonFont (b, b.getHeight()));
+            g.drawFittedText (b.getButtonText(), b.getLocalBounds().reduced (8, 0), juce::Justification::centred, 1, 0.9f);
+            return;
+        }
+        VocalypseLookAndFeel::drawButtonText (g, b, highlighted, down);
+    }
+
+    juce::Font EmberLookAndFeel::getPopupMenuFont()
+    {
+        return ui::medium (11.0f);   // x 1.35 (EMBER's text scale): the size of the panel's own texts
+    }
+
+    void EmberLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
+    {
+        const auto r = juce::Rectangle<float> ((float) width, (float) height).reduced (0.5f);
+        g.setGradientFill (juce::ColourGradient (glassTop, 0.0f, 0.0f, glassBottom, 0.0f, (float) height, false));
+        g.fillRoundedRectangle (r, 9.0f);
+        g.setColour (look::accent.withAlpha (0.45f));
+        g.drawRoundedRectangle (r, 9.0f, 1.0f);
+    }
+
+    void EmberLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g, const juce::Rectangle<int>& area, const juce::String& name)
+    {
+        const auto r = area.toFloat().reduced (14.0f, 0.0f).withTrimmedTop (6.0f);
+        g.setFont (ui::caps (8.5f));
+        g.setColour (look::accentSoft.withAlpha (0.9f));
+        g.drawText (i18n::upper (name), r, juce::Justification::centredLeft, true);
+    }
+
+    void EmberLookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator, int standardMenuItemHeight,
+                                                      int& idealWidth, int& idealHeight)
+    {
+        if (isSeparator)
+        {
+            idealWidth = 50;
+            idealHeight = 11;
+            return;
+        }
+        const auto f = getPopupMenuFont();
+        idealHeight = standardMenuItemHeight > 0 ? standardMenuItemHeight : juce::roundToInt (f.getHeight() * 1.75f);
+        idealWidth = juce::GlyphArrangement::getStringWidthInt (f, text) + idealHeight * 2 + 16;
+    }
+
+    void EmberLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area, bool isSeparator, bool isActive,
+                                              bool isHighlighted, bool isTicked, bool hasSubMenu, const juce::String& text,
+                                              const juce::String& shortcutKeyText, const juce::Drawable* icon, const juce::Colour* textColour)
+    {
+        if (isSeparator)
+        {
+            const auto r = area.toFloat().reduced (12.0f, 0.0f);
+            g.setColour (look::accent.withAlpha (0.22f));
+            g.fillRect (r.withHeight (1.0f).withCentre (r.getCentre()));
+            return;
+        }
+        const auto r = area.toFloat().reduced (5.0f, 1.0f);
+        auto colour = textColour != nullptr ? *textColour : findColour (juce::PopupMenu::textColourId);
+        if (isHighlighted && isActive)
+        {
+            g.setColour (findColour (juce::PopupMenu::highlightedBackgroundColourId));
+            g.fillRoundedRectangle (r, 6.0f);
+            colour = findColour (juce::PopupMenu::highlightedTextColourId);
+        }
+        else if (! isActive)
+            colour = colour.withMultipliedAlpha (0.45f);
+        auto row = r.reduced (6.0f, 0.0f);
+        const auto mark = row.removeFromLeft (16.0f);
+        if (icon != nullptr)
+            icon->drawWithin (g, mark, juce::RectanglePlacement::centred | juce::RectanglePlacement::onlyReduceInSize, 1.0f);
+        else if (isTicked)
+        {
+            // the chosen entry: a small pink diamond (the seal's colour), not a grey tick
+            juce::Path d;
+            const auto cpt = mark.getCentre();
+            d.addQuadrilateral (cpt.x, cpt.y - 4.5f, cpt.x + 4.5f, cpt.y, cpt.x, cpt.y + 4.5f, cpt.x - 4.5f, cpt.y);
+            g.setColour (look::accent.withMultipliedAlpha (isActive ? 1.0f : 0.5f));
+            g.fillPath (d);
+        }
+        row.removeFromLeft (6.0f);
+        if (hasSubMenu)
+        {
+            const auto arrow = row.removeFromRight (10.0f);
+            juce::Path p;
+            p.startNewSubPath (arrow.getX() + 2.0f, arrow.getCentreY() - 4.0f);
+            p.lineTo (arrow.getX() + 6.0f, arrow.getCentreY());
+            p.lineTo (arrow.getX() + 2.0f, arrow.getCentreY() + 4.0f);
+            g.setColour (isHighlighted ? colour : look::accentSoft.withMultipliedAlpha (isActive ? 0.9f : 0.4f));
+            g.strokePath (p, juce::PathStrokeType (1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        g.setColour (colour);
+        g.setFont (getPopupMenuFont());
+        g.drawFittedText (text, row.toNearestInt(), juce::Justification::centredLeft, 1, 0.9f);
+        if (shortcutKeyText.isNotEmpty())
+        {
+            g.setFont (ui::font (9.5f));
+            g.setColour (colour.withMultipliedAlpha (0.6f));
+            g.drawText (shortcutKeyText, row, juce::Justification::centredRight, true);
+        }
+    }
+
+    juce::Font EmberLookAndFeel::getAlertWindowTitleFont() { return ui::semiBold (12.5f); }
+    juce::Font EmberLookAndFeel::getAlertWindowMessageFont() { return ui::font (11.0f); }
+    juce::Font EmberLookAndFeel::getAlertWindowFont() { return ui::font (10.0f); }
+
+    void EmberLookAndFeel::drawAlertBox (juce::Graphics& g, juce::AlertWindow& alert, const juce::Rectangle<int>&, juce::TextLayout& textLayout)
+    {
+        // the panels' dark glass with a thin pink edge and a pink line on top; the icon as a small pink sign
+        const auto r = alert.getLocalBounds().toFloat();
+        g.setGradientFill (juce::ColourGradient (glassTop, 0.0f, 0.0f, glassBottom, 0.0f, r.getBottom(), false));
+        g.fillRect (r);
+        {
+            juce::ColourGradient top (look::accent.withAlpha (0.0f), r.getX(), 0.0f, look::accent.withAlpha (0.0f), r.getRight(), 0.0f, false);
+            top.addColour (0.5, look::accent.withAlpha (0.9f));
+            g.setGradientFill (top);
+            g.fillRect (r.withHeight (2.0f));
+        }
+        g.setColour (alert.findColour (juce::AlertWindow::outlineColourId));
+        g.drawRect (r, 1.0f);
+
+        int iconSpace = 0;
+        if (alert.getAlertType() != juce::MessageBoxIconType::NoIcon)
+        {
+            iconSpace = 80;   // what AlertWindow keeps free for it
+            const auto badge = juce::Rectangle<float> (30.0f, 30.0f).withCentre ({ 40.0f, 46.0f });
+            g.setColour (look::accent.withAlpha (0.16f));
+            g.fillEllipse (badge);
+            g.setColour (look::accent.withAlpha (0.8f));
+            g.drawEllipse (badge, 1.4f);
+            const auto type = alert.getAlertType();
+            g.setColour (look::accentSoft);
+            g.setFont (ui::semiBold (12.0f));
+            g.drawText (type == juce::MessageBoxIconType::WarningIcon ? "!" : (type == juce::MessageBoxIconType::QuestionIcon ? "?" : "i"),
+                        badge, juce::Justification::centred, false);
+        }
+        g.setColour (alert.findColour (juce::AlertWindow::textColourId));
+        textLayout.draw (g, juce::Rectangle<int> (iconSpace, 30, alert.getWidth() - iconSpace,
+                                                  alert.getHeight() - getAlertWindowButtonHeight() - 20).toFloat().reduced (iconSpace > 0 ? 0.0f : 10.0f, 0.0f));
+    }
+
+    void EmberLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height)
+    {
+        const auto r = juce::Rectangle<int> (width, height).toFloat();
+        g.setColour (glassTop);
+        g.fillRect (r);
+        g.setColour (look::accent.withAlpha (0.5f));
+        g.drawRect (r, 1.0f);
+        juce::AttributedString s;
+        s.setJustification (juce::Justification::centredLeft);
+        s.append (text, ui::font (13.5f), ink.withAlpha (0.92f));
+        juce::TextLayout layout;
+        layout.createLayoutWithBalancedLineLengths (s, (float) width - 20.0f);
+        layout.draw (g, r.reduced (10.0f, 7.0f));
+    }
+
+    void EmberLookAndFeel::fillTextEditorBackground (juce::Graphics& g, int width, int height, juce::TextEditor& te)
+    {
+        g.setColour (te.findColour (juce::TextEditor::backgroundColourId));
+        g.fillRoundedRectangle (juce::Rectangle<float> ((float) width, (float) height), 5.0f);
+    }
+
+    void EmberLookAndFeel::drawTextEditorOutline (juce::Graphics& g, int width, int height, juce::TextEditor& te)
+    {
+        if (! te.isEnabled())
+            return;
+        const bool focused = te.hasKeyboardFocus (true) && ! te.isReadOnly();
+        g.setColour (te.findColour (focused ? juce::TextEditor::focusedOutlineColourId : juce::TextEditor::outlineColourId));
+        g.drawRoundedRectangle (juce::Rectangle<float> ((float) width, (float) height).reduced (0.5f), 5.0f, focused ? 1.5f : 1.0f);
+    }
+
+    void EmberLookAndFeel::drawCornerResizer (juce::Graphics& g, int w, int h, bool isMouseOver, bool isMouseDragging)
+    {
+        g.setColour (look::accent.withAlpha (isMouseOver || isMouseDragging ? 0.6f : 0.25f));
+        for (float i = 0.0f; i < 2.0f; i += 1.0f)
+        {
+            const float o = 4.0f + i * 4.0f;
+            g.drawLine ((float) w - o, (float) h - 2.0f, (float) w - 2.0f, (float) h - o, 1.0f);
+        }
     }
 
     // ================================================================ seal overlay
@@ -111,12 +396,20 @@ namespace ember
         // calm (animation reduced / off): the border and the knob's seal stand still, only their light follows the work
         const float lit = s.on ? juce::jmin (1.0f, s.heat) : -1.0f;
         const bool due = s.calm ? (viewChanged || std::abs (lit - paintedLit) > 0.02f) : true;
-        if ((++ticks % 2 == 0 || viewChanged) && due)   // the border and the knob's seal move slowly: 15 frames a second are enough
+        if ((++ticks % 2 == 0 || viewChanged) && due)   // the border moves slowly: 15 frames a second are enough
         {
             paintedLit = lit;
             repaintEdges (getLocalBounds().toFloat().reduced (6.0f), 7.0f);
-            if (simple && ! knob.isEmpty())
-                repaint (knob.expanded (4.0f).getSmallestIntegerContainer());
+        }
+        // the knob's seal stands still (2026-11-24): drawn again only when the knob turns or its light changes
+        // (the knob repaints itself while it turns; this catches a change of the light alone)
+        const float knobLit = s.on ? juce::jmin (1.0f, s.heat) : -1.0f;
+        const float angle = knobAngle ? knobAngle() : 0.0f;
+        if (simple && ! knob.isEmpty() && (viewChanged || std::abs (knobLit - paintedKnobLit) > 0.03f || std::abs (angle - paintedAngle) > 0.002f))
+        {
+            paintedKnobLit = knobLit;
+            paintedAngle = angle;
+            repaint (knob.expanded (4.0f).getSmallestIntegerContainer());
         }
         if (surge)
             for (auto& r : plates)
@@ -130,7 +423,7 @@ namespace ember
         sealRunes.setScale (scale);
         seal::drawRuneBorder (g, borderRunes, getLocalBounds().toFloat(), scene);
         if (simple && ! knob.isEmpty() && g.clipRegionIntersects (knob.expanded (4.0f).getSmallestIntegerContainer()))
-            seal::drawMiniSeal (g, sealRunes, knob.getCentre(), knob.getWidth() * 0.5f, scene);
+            seal::drawMiniSeal (g, sealRunes, knob.getCentre(), knob.getWidth() * 0.5f, knobAngle ? knobAngle() : 0.0f, scene);
         // the wave of light through the panels, one after the other
         if (scene.on)
             for (size_t i = 0; i < plates.size(); ++i)
@@ -847,6 +1140,15 @@ namespace ember
                                                           "Grey stripes = Smart hears no S sound. Drag the line = threshold, wheel = step, Shift = fine."));
 
         addAndMakeVisible (sealOverlay);
+        sealOverlay.knobAngle = [this]
+        {
+            // where the knob shows its value dot (its animated position, the same as the dot)
+            auto& sl = amountBig.slider;
+            const auto rp = sl.getRotaryParameters();
+            const double pos = (double) sl.getProperties().getWithDefault (ui::VocalypseLookAndFeel::animPosProperty,
+                                                                            sl.valueToProportionOfLength (sl.getValue()));
+            return rp.startAngleRadians + (float) pos * (rp.endAngleRadians - rp.startAngleRadians);
+        };
         addChildComponent (infoPopup);
         about = std::make_unique<AboutOverlay>();
         about->setWantsKeyboardFocus (true);
@@ -1097,9 +1399,10 @@ namespace ember
             showNotice (presetName (factory[(size_t) i]) + ": " + presetInfo (factory[(size_t) i]));
     }
 
-    void EmberPanel::showPresetMenu()
+    juce::PopupMenu EmberPanel::buildPresetMenu()
     {
         juce::PopupMenu menu;
+        menu.setLookAndFeel (&getLookAndFeel());   // the plugin's look, also when the menu is its own desktop window
         menu.addSectionHeader (tr ("Werks-Presets", "Factory presets"));
         const auto& factory = factoryPresets();
         // "Default" on top, then one submenu per category (ticked while one of its presets is loaded)
@@ -1135,7 +1438,13 @@ namespace ember
         menu.addSubMenu (tr ("Preset umbenennen", "Rename preset"), rename, ! users.isEmpty());
         menu.addSubMenu (tr ("Preset löschen", "Delete preset"), remove, ! users.isEmpty());
         menu.addItem (1001, tr ("Preset-Ordner öffnen", "Open preset folder"));
-        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presetBtn),
+        return menu;
+    }
+
+    void EmberPanel::showPresetMenu()
+    {
+        const auto users = userPresets();   // the same list (and order) the menu was built from
+        buildPresetMenu().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presetBtn),
                             [safe = juce::Component::SafePointer<EmberPanel> (this), users] (int id)
                             {
                                 if (safe == nullptr || id == 0)
@@ -1235,7 +1544,7 @@ namespace ember
                               });
     }
 
-    void EmberPanel::showMainMenu()
+    juce::PopupMenu EmberPanel::buildMainMenu()
     {
         juce::PopupMenu lang;
         const auto current = settings.getLanguage();
@@ -1280,7 +1589,13 @@ namespace ember
         }
         menu.addSeparator();
         menu.addItem (30, tr ("Über EMBER …", "About EMBER …"));
-        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (menuBtn),
+        menu.setLookAndFeel (&getLookAndFeel());
+        return menu;
+    }
+
+    void EmberPanel::showMainMenu()
+    {
+        buildMainMenu().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (menuBtn),
                             [this, safe = juce::Component::SafePointer<EmberPanel> (this)] (int id)
                             {
                                 if (safe == nullptr || id == 0)

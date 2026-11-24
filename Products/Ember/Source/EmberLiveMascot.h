@@ -30,7 +30,7 @@ namespace ember
         void update (const MascotInput& in, float dt, juce::Point<float> mouthInPicture);
         void lookAt (juce::Point<float> pictureTarget, float forSeconds);   // cursor or a turned knob, in the 1024 space
         void setHover (bool h) noexcept { hover = h; }
-        void say (const juce::String& text);                                 // types into the bubble, mouth talks
+        void say (const juce::String& text);                                 // types onto the text plate, mouth talks
         void wake() noexcept;
         void setFewerParticles (bool f) noexcept { fewer = f; }              // animation "reduced": fewer crumbs
 
@@ -72,7 +72,7 @@ namespace ember
 
     // How much moves (≡ menu, a user setting for all windows; 2026-11-23): full = as designed (60 / 30 fps);
     // reduced = 30 fps, the seal's letters, the circle and the border stand still, fewer crumbs; off = Ember stands in
-    // his rest pose on a still seal, drawn again only when something he shows changes (bypass, bubble, size).
+    // his rest pose on a still seal, drawn again only when something he shows changes (bypass, text plate, size).
     enum class AnimationLevel { full = 0, reduced = 1, off = 2 };
     AnimationLevel animationLevelFromString (const juce::String&);
     juce::String toString (AnimationLevel);
@@ -89,7 +89,11 @@ namespace ember
         void setCovered (bool c) noexcept { covered = c; }
 
         void setInput (const MascotInput& in) { input = in; }
-        void setBubble (const juce::String& text);      // a new text: Ember says it (animation off: it just shows)
+        // A new text: Ember says it, typed onto the text plate above him (animation off: it just shows). Empty: the
+        // plate fades out. The plate hangs fixed between the chains (2026-11-24: no speech bubble on him any more).
+        void setBubble (const juce::String& text);
+        juce::Rectangle<float> plateArea() const;      // where the text plate hangs (this view's coordinates)
+        juce::String plateTextForTest() const { return plateText; }
         void setCompact (bool c) { compact = c; }
         // The pink seal stage (2026-11-19): Ember stands on the summoning circle, its letters float round him.
         // Off = the plain stage (tests, old look).
@@ -122,7 +126,7 @@ namespace ember
         juce::AffineTransform toStage() const;   // picture -> view, with this stage's fit
         seal::Scene scene() const;
         void paintEffects (juce::Graphics&);
-        void paintBubble (juce::Graphics&);
+        void paintPlate (juce::Graphics&);
 
         // Drawing the figure costs 3-15 ms a frame; on the message thread (the host's whole UI) that made the DAW
         // stutter with two or three windows open (bench 2026-11-19). The figure is drawn on a thread of its own into
@@ -170,7 +174,11 @@ namespace ember
         float renderScale = 0, wantedScale = 0;   // frames are drawn at renderScale; a new density waits until the
         double wantedSince = 0;                   // window has stopped resizing (paint stretches the last frame)
         juce::Path sGlyph;                    // the flying S at 100 px (made once, scaled per frame)
-        struct BubbleLayout { juce::String text; float fontH = 0, maxW = 0; juce::Rectangle<float> size; } bubbleLayout;
+        // the text plate: its text laid out once per text (typing shows the first glyphs of it, so nothing moves),
+        // the text it shows (kept while it fades out) and how much it shows (0..1)
+        struct PlateLayout { juce::String text; juce::Rectangle<float> area; juce::GlyphArrangement glyphs; } plateLayout;
+        juce::String plateText;
+        float plateAlpha = 0.0f;
         bool covered = false;
         AnimationLevel shownLevel = AnimationLevel::full;
         juce::String stillKey;                // animation off: what the still picture shows
