@@ -94,6 +94,7 @@ namespace ember
         void setBubble (const juce::String& text);
         juce::Rectangle<float> plateArea() const;      // where the text plate hangs (this view's coordinates)
         juce::String plateTextForTest() const { return plateText; }
+        float plateAlphaForTest() const noexcept { return plateAlpha; }
         void setCompact (bool c) { compact = c; }
         // The pink seal stage (2026-11-19): Ember stands on the summoning circle, its letters float round him.
         // Off = the plain stage (tests, old look).

@@ -323,6 +323,18 @@ namespace ember
         }
         if (hover && mode == Mode::idle) { lowLid.target = std::max (lowLid.target, 0.18f); browY.target = -2.5f; }
         if (isTalking() && mode != Mode::sleep) { action = -1; talkStep (dt); }
+        else if (isTalking())
+        {
+            // asleep (BYPASS): no mouth and no gesture, but the text still types in and goes after its time. Before
+            // 2026-11-24 the typing stood still here and the text never ended: with BYPASS on, AUTO's "Ich hör zu …"
+            // left the plate as an empty frame for good (Jakob's standalone test).
+            talkT += dt;
+            talkShown = std::min ((float) talkText.length(), talkShown + dt * 24.0f);
+            if (talkEnd < 0 && (int) talkShown >= talkText.length())
+                talkEnd = talkT;
+            if (talkEnd >= 0 && talkT - talkEnd > 1.6f)
+                talkText.clear();
+        }
 
         for (auto* s : { &head, &headX, &headY, &earL, &earR, &tail, &armL, &armR, &lean, &bob, &squash, &lookX, &lookY,
                          &lid, &lowLid, &mouth, &mouthW, &pupil, &browY, &browTilt })
@@ -715,7 +727,9 @@ namespace ember
         }
         heat += ((input.bypass ? 0.0f : input.reductionDb / 9.0f) - heat) * std::min (1.0f, dt * 6.0f);
         // the text plate fades in and out (a quarter of a second) instead of popping
-        const float plateTarget = brain.isTalking() || bubble.isNotEmpty() ? 1.0f : 0.0f;
+        // shown only while there is something to read: an empty frame is never left standing
+        const bool talkingVisible = brain.isTalking() && getAnimationLevel() != AnimationLevel::off;
+        const float plateTarget = (talkingVisible && brain.fullText().trim().isNotEmpty()) || bubble.trim().isNotEmpty() ? 1.0f : 0.0f;
         plateAlpha += (plateTarget - plateAlpha) * std::min (1.0f, dt * 8.0f);
         if (std::abs (plateTarget - plateAlpha) < 0.01f)
             plateAlpha = plateTarget;

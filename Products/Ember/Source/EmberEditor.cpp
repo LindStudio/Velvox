@@ -1089,6 +1089,126 @@ namespace ember
         }
     };
 
+
+    // ================================================================ option texts
+    juce::String EmberPanel::groupName (const juce::String& id)
+    {
+        if (id == pid::mode) return tr ("Modus", "Mode");
+        if (id == pid::detection) return tr ("Erkennung", "Detection");
+        if (id == pid::listen) return tr ("Abhören", "Listen");
+        return "Stereo";
+    }
+
+    std::vector<EmberPanel::OptionText> EmberPanel::optionTexts (const juce::String& id)
+    {
+        if (id == pid::mode)
+            return {
+                { "Split", tr ("Nur der S-Bereich wird leiser. Die Stimme darunter und die Luft darüber bleiben unberührt – das S klingt danach "
+                               "wie ein leiseres S. Für Gesang die beste Wahl.",
+                               "Only the S range gets quieter. The voice below and the air above stay untouched – the S then sounds like a "
+                               "softer S. The best choice for singing.") },
+                { tr ("Breitband", "Wideband"), tr ("Die ganze Stimme wird bei jedem S kurz leiser. Klingt bei Sprache und Podcasts oft "
+                                                    "natürlicher. Eine Breite gibt es in diesem Modus nicht.",
+                                                    "The whole voice dips briefly on each S. Often sounds more natural for speech and podcasts. "
+                                                    "There is no width in this mode.") } };
+        if (id == pid::detection)
+            return {
+                { "Smart", tr ("Empfohlen für eine einzelne Stimme. Greift nur ein, wenn wirklich ein S-Laut klingt – helle Vokale, Luft und "
+                               "Atem bleiben unberührt.",
+                               "Recommended for a single voice. Steps in only when a real S sound is there – bright vowels, air and "
+                               "breaths stay untouched.") },
+                { tr ("Relativ", "Relative"), tr ("Misst das S im Verhältnis zur Lautstärke der Stimme: Leise und laute Stellen werden gleich "
+                                                  "behandelt. Prüft aber nicht, ob es wirklich ein S-Laut ist.",
+                                                  "Measures the S against the loudness of the voice: quiet and loud parts are treated alike. "
+                                                  "It does not check whether it really is an S sound.") },
+                { tr ("Absolut", "Absolute"), tr ("Fester Pegel wie bei einem klassischen De-Esser: Alles im S-Bereich über dem Threshold wird "
+                                                  "abgesenkt, egal wie laut die Stimme gerade ist.",
+                                                  "A fixed level like a classic de-esser: everything in the S range above the threshold is "
+                                                  "lowered, however loud the voice is at the moment.") },
+                { "Allround", tr ("Für Mixe, Busse und Instrumente, wo unter der Stimme noch anderes klingt. Reagiert auf scharfe Höhen, "
+                                  "ohne eine einzelne Stimme zum Vergleich zu brauchen.",
+                                  "For mixes, buses and instruments, where more is playing under the voice. Reacts to harsh highs "
+                                  "without needing a single voice to compare with.") } };
+        if (id == pid::listen)
+            return {
+                { tr ("Aus", "Off"), tr ("Du hörst das bearbeitete Signal – so, wie es aus EMBER herauskommt.",
+                                         "You hear the processed signal, just as it leaves EMBER.") },
+                { tr ("S-Bereich", "S range"), tr ("Du hörst nur den Bereich, der abgesenkt wird (Split: der pinke S-Bereich, Breitband: alles "
+                                                   "ab der Frequenz). Hilft beim Finden von Frequenz und Breite. Wird nie gespeichert.",
+                                                   "You hear only the range that is lowered (Split: the pink S range, Wideband: everything from "
+                                                   "the frequency up). Helps to find frequency and width. Never saved.") },
+                { "Delta", tr ("Du hörst nur, was entfernt wird. Das sollten nur S-Laute sein – hörst du Vokale, ist es zu viel. "
+                               "Wird nie gespeichert.",
+                               "You hear only what is removed. It should be nothing but S sounds – if you hear vowels, it is too much. "
+                               "Never saved.") } };
+        return {
+            { "L/R", tr ("Links und rechts werden getrennt gemessen; Stereo-Link legt fest, wie stark beide gemeinsam absenken. "
+                         "Der Standard für Stereospuren.",
+                         "Left and right are measured separately; Stereo Link sets how much the two lower together. "
+                         "The default for stereo tracks.") },
+            { "M/S", tr ("Mitte und Seiten werden getrennt bearbeitet (mit Stereo-Link). Gut, wenn die S-Laute in der Mitte und an den "
+                         "Seiten verschieden stark sind.",
+                         "Mid and sides are processed separately (with Stereo Link). Useful when the S sounds differ between the "
+                         "centre and the sides.") },
+            { "Mid", tr ("Nur die Mitte wird bearbeitet, z. B. die Leadstimme in einem Mix. Die Seiten bleiben unberührt.",
+                         "Only the centre is processed, e.g. the lead vocal in a mix. The sides stay untouched.") },
+            { "Side", tr ("Nur die Seiten werden bearbeitet, z. B. gedoppelte Chöre oder breiter Hall. Die Mitte bleibt unberührt.",
+                          "Only the sides are processed, e.g. doubled backing vocals or wide reverb. The centre stays untouched.") } };
+    }
+
+    juce::String EmberPanel::spectrumHelp (bool split)
+    {
+        return split ? tr ("Spektrum – Linie ziehen: Frequenz (ab hier sucht EMBER nach S-Lauten). Kanten ziehen oder Mausrad: Breite. "
+                           "Shift = fein, Doppelklick = Standard. Oben: die Absenkung der letzten Sekunden.",
+                           "Spectrum – drag the line: frequency (EMBER looks for S sounds from here up). Drag the edges or use the wheel: "
+                           "width. Shift = fine, double-click = default. Top: the reduction of the last seconds.")
+                     : tr ("Spektrum – Linie ziehen oder Mausrad: Frequenz (ab hier sucht EMBER nach S-Lauten). Breitband hat keine Breite. "
+                           "Shift = fein, Doppelklick = Standard. Oben: die Absenkung der letzten Sekunden.",
+                           "Spectrum – drag the line or use the wheel: frequency (EMBER looks for S sounds from here up). Wideband has no "
+                           "width. Shift = fine, double-click = default. Top: the reduction of the last seconds.");
+    }
+
+    ui::Segments* EmberPanel::segmentsFor (juce::Component& anchor)
+    {
+        const std::pair<ui::Segments*, juce::Label*> groups[] { { &modeSeg, &modeLbl }, { &detectSeg, &detectLbl },
+                                                                { &listenSeg, &listenLbl }, { &stereoSeg, &stereoLbl } };
+        for (auto [seg, lbl] : groups)
+            if (&anchor == seg || &anchor == lbl)
+                return seg;
+        return nullptr;
+    }
+
+    int EmberPanel::hoveredOption (ui::Segments& seg) const
+    {
+        int i = 0;
+        for (auto* ch : seg.getChildren())
+            if (dynamic_cast<juce::Button*> (ch) != nullptr)
+            {
+                if (ch->isMouseOver (false))
+                    return i;
+                ++i;
+            }
+        return -1;
+    }
+
+    void EmberPanel::showOptionCard (ui::Segments& seg, juce::Component& anchor, int option)
+    {
+        const auto texts = optionTexts (seg.getParamId());
+        const int chosen = seg.getSelectedSegment();
+        if (! juce::isPositiveAndBelow (option, (int) texts.size()))
+            option = chosen;
+        if (! juce::isPositiveAndBelow (option, (int) texts.size()))
+            return;
+        auto text = texts[(size_t) option].text;
+        if (option != chosen && juce::isPositiveAndBelow (chosen, (int) texts.size()))
+            text << "\n" << i18n::format (tr ("Gewählt ist gerade: {0}.", "Currently chosen: {0}."), { texts[(size_t) chosen].name });
+        cardGroup = &seg;
+        cardOption = option;
+        infoPopup.toFront (false);
+        infoPopup.show (getLocalArea (&anchor, anchor.getLocalBounds()), i18n::upper (groupName (seg.getParamId())) + utf8 (" · ") + texts[(size_t) option].name,
+                        {}, text);
+    }
+
     // ================================================================ panel
     EmberPanel::EmberPanel (EmberAudioProcessor& p, UserSettings& s, std::function<void (juce::String)> lang)
         : processor (p), settings (s), onLanguage (std::move (lang)),
@@ -1201,6 +1321,11 @@ namespace ember
         styleLabel (detectLbl, tr ("Erkennung", "Detection"));
         styleLabel (listenLbl, tr ("Abhören", "Listen"));
         styleLabel (stereoLbl, "Stereo");
+        for (auto* l : { &modeLbl, &detectLbl, &listenLbl, &stereoLbl })
+        {
+            l->setInterceptsMouseClicks (true, false);   // hover = the chosen option's card
+            infos.push_back (std::make_unique<ui::HoverInfo> (*l, [l] { return l->getText(); }, nullptr, [] { return juce::String ("-"); }));
+        }
         for (juce::Component* comp : { (juce::Component*) &modeSeg, (juce::Component*) &detectSeg, (juce::Component*) &listenSeg,
                                        (juce::Component*) &modeLbl, (juce::Component*) &detectLbl, (juce::Component*) &listenLbl,
                                        (juce::Component*) &stereoSeg, (juce::Component*) &stereoLbl })
@@ -1336,6 +1461,7 @@ namespace ember
         addChildComponent (licenceLock);
         licenceLock.setLicence (&processor.getLicence());
 
+        juce::Desktop::getInstance().addGlobalMouseListener (&dragWatch);
         setWantsKeyboardFocus (true);   // Ctrl+Z / Ctrl+Shift+Z
         setSize (look::baseW, look::baseH);
         advanced = (bool) processor.state.state.getProperty ("advanced", false);
@@ -1347,6 +1473,7 @@ namespace ember
     EmberPanel::~EmberPanel()
     {
         stopTimer();
+        juce::Desktop::getInstance().removeGlobalMouseListener (&dragWatch);
     }
 
     void EmberPanel::addInfo (juce::Component& comp, const juce::String& title, const juce::String& text, std::function<juce::String()> value)
@@ -1356,12 +1483,26 @@ namespace ember
 
     void EmberPanel::showInfo (juce::Component& anchor, const juce::String& title, const juce::String& value, const juce::String& text)
     {
+        // the spectrum is never covered: its explanation is in the info line while the mouse is over it (2026-11-24)
+        if (&anchor == &display || display.isParentOf (&anchor))
+            return;
+        // no card while a mouse button is held or right after it is let go (a drag ends, the mouse rests)
+        const bool sameCard = infoPopup.isShowingFor (getLocalArea (&anchor, anchor.getLocalBounds()));
+        if (! sameCard && (dragWatch.quiet() || juce::ModifierKeys::currentModifiers.isAnyMouseButtonDown()))
+            return;
+        if (auto* seg = segmentsFor (anchor))
+        {
+            showOptionCard (*seg, anchor, &anchor == seg ? hoveredOption (*seg) : -1);
+            return;
+        }
+        cardGroup = nullptr;
         infoPopup.toFront (false);
         infoPopup.show (getLocalArea (&anchor, anchor.getLocalBounds()), title, value, text);
     }
 
     void EmberPanel::hideInfo (juce::Component&)
     {
+        cardGroup = nullptr;
         infoPopup.hide();
     }
 
@@ -2014,7 +2155,9 @@ namespace ember
         else
         {
             mascot.setBubble (settings.wasAutoUsed() || bypassed ? juce::String() : tr ("Klick mich für AUTO!", "Click me for AUTO!"));
-            if (bypassed)
+            if (advanced && display.isMouseOver (true))
+                text = spectrumHelp (std::lround (processor.state.getRawParameterValue (pid::mode)->load()) == 0);
+            else if (bypassed)
                 text = tr ("Bypass: Der De-Esser ist aus, das Signal läuft unbearbeitet durch.", "Bypass: the de-esser is off, the signal passes through unprocessed.");
             else if (listen == 2)
                 text = advanced ? tr ("Delta: Du hörst nur, was entfernt wird. Stille heißt: gerade wird nichts entfernt. Zum Ausschalten Abhören auf Aus stellen.",
@@ -2060,6 +2203,23 @@ namespace ember
         }
         if (advanced)
         {
+            if (cardGroup != nullptr && infoPopup.isVisible())
+                if (const int h = hoveredOption (*cardGroup); h >= 0 && h != cardOption)
+                    showOptionCard (*cardGroup, *cardGroup, h);
+            int gi = 0;
+            for (auto* seg : { &modeSeg, &detectSeg, &listenSeg, &stereoSeg })
+            {
+                const int chosen = seg->getSelectedSegment();
+                if (chosen != lastChoice[(size_t) gi] && lastChoice[(size_t) gi] != -2 && seg->isMouseOver (true))
+                {
+                    const auto texts = optionTexts (seg->getParamId());
+                    if (juce::isPositiveAndBelow (chosen, (int) texts.size()))
+                        showNotice (groupName (seg->getParamId()) + utf8 (" · ") + texts[(size_t) chosen].name + ": " + texts[(size_t) chosen].text);
+                    if (cardGroup == seg && infoPopup.isVisible())
+                        showOptionCard (*seg, *seg, hoveredOption (*seg));   // the "chosen" note goes
+                }
+                lastChoice[(size_t) gi++] = chosen;
+            }
             advancedMeter.setValue (shownGr);
             display.setHasSignal (now - lastSignal < 2.0);
             spectrumSource.update (processor.getCurrentSampleRate());

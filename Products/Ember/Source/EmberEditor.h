@@ -259,6 +259,16 @@ namespace ember
         void renamePreset (const juce::File&);
         void deletePreset (const juce::File&);
 
+        // ADVANCED segment groups (2026-11-24): every option has its own explanation; the card shows the option under
+        // the mouse (the group's label: the chosen one), a click puts the chosen one's text into the info line
+        struct OptionText { juce::String name, text; };
+        static std::vector<OptionText> optionTexts (const juce::String& paramId);   // in the interface language
+        static juce::String groupName (const juce::String& paramId);
+        bool isInfoCardShowing() const { return infoPopup.isVisible(); }
+        juce::String getStatusText() const { return status.getText(); }
+        static juce::String spectrumHelp (bool split);   // the info line while the mouse is over the spectrum
+        void showOptionCard (vocalypse::ui::Segments&, juce::Component& anchor, int option);   // option -1: the chosen one
+
     private:
         class AboutOverlay;
         void timerCallback() override;
@@ -271,6 +281,22 @@ namespace ember
         void showNotice (const juce::String&);   // a short note in the status line (a few seconds)
         void warn (const juce::String& title, const juce::String& message);
         void addInfo (juce::Component&, const juce::String& title, const juce::String& text, std::function<juce::String()> value = nullptr);
+        vocalypse::ui::Segments* segmentsFor (juce::Component& anchor);   // the group of a segment group or its label
+        int hoveredOption (vocalypse::ui::Segments&) const;              // -1: none
+
+        // a mouse button anywhere in the window: no info card while it is held or just after (2026-11-24, Jakob:
+        // the card covered the spectrum while he dragged the line)
+        struct DragWatch final : juce::MouseListener
+        {
+            void mouseDown (const juce::MouseEvent&) override { lastUp = 0.0; held = true; }
+            void mouseUp (const juce::MouseEvent&) override { held = false; lastUp = juce::Time::getMillisecondCounterHiRes() * 0.001; }
+            bool quiet() const { return held || juce::Time::getMillisecondCounterHiRes() * 0.001 - lastUp < 1.2; }
+            double lastUp = 0.0;
+            bool held = false;
+        } dragWatch;
+        vocalypse::ui::Segments* cardGroup = nullptr;   // the group the card shows an option of
+        int cardOption = -1;
+        std::array<int, 4> lastChoice { -2, -2, -2, -2 };   // to put a newly chosen option's text into the info line
 
         EmberAudioProcessor& processor;
         UserSettings& settings;

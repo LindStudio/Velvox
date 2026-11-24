@@ -2593,6 +2593,75 @@ namespace
         }
     }
 
+
+    // GUI round, follow-up (Jakob's standalone test 2026-11-24)
+    void testGuiFollowUp()
+    {
+        {
+            Test t ("text plate: with BYPASS on the text still types and goes; an empty plate fades out");
+            LiveMascotView v;
+            v.setSize (520, 402);
+            MascotInput in;
+            in.bypass = true;   // Ember sleeps: before, the typing stood still and the plate stayed an empty frame
+            v.setInput (in);
+            v.setBubble (juce::String::fromUTF8 ("Ich hör zu …"));
+            for (int i = 0; i < 20; ++i) v.stepForTest (0.05f);
+            check (v.getBrain().shownText().isNotEmpty(), "asleep, the text types in");
+            check (v.plateAlphaForTest() > 0.9f, "the plate shows while there is text");
+            v.setBubble ({});
+            for (int i = 0; i < 80; ++i) v.stepForTest (0.05f);
+            check (! v.getBrain().isTalking(), "the said text goes after its time, also asleep");
+            check (v.plateAlphaForTest() <= 0.0f, "nothing to say: the plate is gone completely");
+            in.bypass = false;
+            v.setInput (in);
+            for (int i = 0; i < 20; ++i) v.stepForTest (0.05f);
+            check (v.plateAlphaForTest() <= 0.0f, "and stays gone without text");
+        }
+        {
+            Test t ("segment groups: every option has its own text, German and English");
+            const std::pair<const char*, int> groups[] { { pid::mode, 2 }, { pid::detection, 4 }, { pid::listen, 3 }, { pid::stereo, 4 } };
+            for (auto [id, n] : groups)
+            {
+                vocalypse::i18n::overrideSystemLanguage (vocalypse::i18n::Language::german);
+                const auto de = EmberPanel::optionTexts (id);
+                vocalypse::i18n::overrideSystemLanguage (vocalypse::i18n::Language::english);
+                const auto en = EmberPanel::optionTexts (id);
+                check ((int) de.size() == n && (int) en.size() == n, juce::String (id) + ": one text per option");
+                juce::StringArray seen;
+                for (size_t i = 0; i < de.size() && i < en.size(); ++i)
+                {
+                    check (de[i].name.isNotEmpty() && de[i].text.length() > 40 && en[i].text.length() > 40, juce::String (id) + " " + en[i].name + ": texts");
+                    check (de[i].text != en[i].text, juce::String (id) + " " + en[i].name + ": German and English differ");
+                    check (! seen.contains (de[i].text), juce::String (id) + " " + en[i].name + ": its own text");
+                    seen.add (de[i].text);
+                }
+            }
+            check (EmberPanel::spectrumHelp (true) != EmberPanel::spectrumHelp (false), "spectrum help for Split and Wideband");
+            vocalypse::i18n::overrideSystemLanguage (std::nullopt);
+        }
+        {
+            Test t ("info cards: never over the spectrum; a segment group shows the option card");
+            EmberAudioProcessor p;
+            p.prepareToPlay (48000.0, 512);
+            std::unique_ptr<juce::AudioProcessorEditor> base (p.createEditor());
+            auto* ed = dynamic_cast<EmberEditor*> (base.get());
+            ed->setAdvanced (true);
+            auto& panel = ed->getPanel();
+            BandDisplay* display = nullptr;
+            vocalypse::ui::Segments* detect = nullptr;
+            for (auto* c : panel.getChildren())
+            {
+                if (auto* d = dynamic_cast<BandDisplay*> (c)) display = d;
+                if (auto* sg = dynamic_cast<vocalypse::ui::Segments*> (c); sg != nullptr && sg->getParamId() == juce::String (pid::detection)) detect = sg;
+            }
+            if (display != nullptr)
+                panel.showInfo (*display, "Spektrum", {}, "x");
+            check (display != nullptr && ! panel.isInfoCardShowing(), "no card over the spectrum");
+            if (detect != nullptr)
+                panel.showInfo (*detect, "Erkennung", {}, "x");
+            check (detect != nullptr && panel.isInfoCardShowing(), "the detection group shows a card");
+        }
+    }
     // ------------------------------------------------------------ real takes
     std::vector<float> monoOf (const juce::AudioBuffer<float>& b)
     {
@@ -3374,6 +3443,57 @@ static juce::Image shotAlert()
     return img;
 }
 
+// The SIMPLE view the way the plugin really runs: the editor on the desktop, its timers ticking, nothing forced;
+// snapshots after a few seconds (with Ember's tip and, AUTO used, without it)
+static void guiRealPath (const juce::File& dir, EmberAudioProcessor& p, const juce::String& sfx)
+{
+    for (bool autoUsed : { false, true })
+    {
+        juce::SharedResourcePointer<UserSettings> us;
+        us->file().setValue ("autoUsed", autoUsed);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+        if (auto* e = dynamic_cast<EmberEditor*> (ed.get()))
+            e->setAdvanced (false);
+        ed->setSize (look::baseW, look::baseH);
+        ed->setTopLeftPosition (60, 60);
+        ed->addToDesktop (juce::ComponentPeer::windowHasTitleBar);
+        ed->setVisible (true);
+        for (double t : { 0.6, 3.0 })
+        {
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (t < 1.0 ? 600 : 2400);
+            writePng (ed->createComponentSnapshot (ed->getLocalBounds()),
+                      dir.getChildFile ("real_simple_" + juce::String (autoUsed ? "autoused_" : "") + sfx + "_" + juce::String (t, 1) + "s.png"));
+        }
+        ed->removeFromDesktop();
+        us->file().setValue ("autoUsed", false);
+    }
+    // BYPASS on, then AUTO (Jakob's case: the plate stayed an empty frame), then AUTO cancelled: the plate must go
+    {
+        juce::SharedResourcePointer<UserSettings> us;
+        us->file().setValue ("autoUsed", true);
+        auto* bp = p.state.getParameter (pid::bypass);
+        bp->setValueNotifyingHost (1.0f);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+        if (auto* e = dynamic_cast<EmberEditor*> (ed.get()))
+            e->setAdvanced (false);
+        ed->setSize (look::baseW, look::baseH);
+        ed->setTopLeftPosition (60, 60);
+        ed->addToDesktop (juce::ComponentPeer::windowHasTitleBar);
+        ed->setVisible (true);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (800);
+        p.startAuto();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (3000);
+        writePng (ed->createComponentSnapshot (ed->getLocalBounds()), dir.getChildFile ("real_bypass_auto_" + sfx + ".png"));
+        p.cancelAuto();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (3500);
+        writePng (ed->createComponentSnapshot (ed->getLocalBounds()), dir.getChildFile ("real_bypass_after_" + sfx + ".png"));
+        ed->removeFromDesktop();
+        ed.reset();
+        bp->setValueNotifyingHost (0.0f);
+        us->file().setValue ("autoUsed", false);
+    }
+}
+
 static int guiShots (const juce::File& dir)
 {
     dir.createDirectory();
@@ -3385,8 +3505,9 @@ static int guiShots (const juce::File& dir)
     // a user preset, so the menu shows the rename / delete entries
     userPresetFolder().createDirectory();
     const auto userFile = userPresetFolder().getChildFile ("GUI shot preset" + juce::String (presetExtension));
-    const bool madeUser = ! userFile.existsAsFile();
-    if (madeUser)
+    // removed again whatever happens (also on an early return): it must never stay in the user's real preset folder
+    struct RemoveAfter { juce::File file; bool made; ~RemoveAfter() { if (made) file.deleteFile(); } } removeUser { userFile, ! userFile.existsAsFile() };
+    if (removeUser.made)
         p.saveUserPreset (userFile);
     for (auto lang : { vocalypse::i18n::Language::german, vocalypse::i18n::Language::english })
     {
@@ -3396,6 +3517,7 @@ static int guiShots (const juce::File& dir)
         auto* ed = dynamic_cast<EmberEditor*> (base.get());
         if (ed == nullptr)
             return 1;
+        guiRealPath (dir, p, sfx);
         for (int pct : { 100, 150 })
         {
             ed->setSize (look::baseW * pct / 100, look::baseH * pct / 100);
@@ -3463,9 +3585,22 @@ static int guiShots (const juce::File& dir)
                 c->setAlpha (1.0f);
         writePng (ed->createComponentSnapshot (ed->getLocalBounds()), dir.getChildFile ("info_" + sfx + ".png"));
         panel.hideInfo (panel);
+        // a segment option's own card (Absolut while Smart is chosen), at 100 and 150 %
+        for (int pct : { 100, 150 })
+        {
+            ed->setSize (look::baseW * pct / 100, look::baseH * pct / 100);
+            settle (*ed, 2);
+            for (auto* c : panel.getChildren())
+                if (auto* sg = dynamic_cast<vocalypse::ui::Segments*> (c); sg != nullptr && sg->getParamId() == juce::String (pid::detection))
+                    panel.showOptionCard (*sg, *sg, 2);
+            for (auto* c : panel.getChildren())
+                if (dynamic_cast<vocalypse::ui::InfoPopup*> (c) != nullptr)
+                    c->setAlpha (1.0f);
+            writePng (ed->createComponentSnapshot (ed->getLocalBounds()), dir.getChildFile ("card_option_" + sfx + (pct == 100 ? "" : "_150") + ".png"));
+            panel.hideInfo (panel);
+        }
+        ed->setSize (look::baseW, look::baseH);
     }
-    if (madeUser)
-        userFile.deleteFile();
     vocalypse::i18n::overrideSystemLanguage (std::nullopt);
     settingsFile.deleteFile();
     std::printf ("GUI shots in %s\n", dir.getFullPathName().toRawUTF8());
@@ -3773,6 +3908,7 @@ int main (int argc, char** argv)
     testLiveBrain();
     testMascotFrames (snapshotDir);
     testEditor (snapshotDir);
+    testGuiFollowUp();
     testRealTakes();
     emberRunQa (false, passed, failed);
 
