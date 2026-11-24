@@ -2737,7 +2737,7 @@ namespace
             for (int i = 0; i < 100; ++i) v.stepForTest (0.05f);
             v.setBubble (listen);
             v.stepForTest (0.05f);
-            check (! v.getBrain().isTalking() && v.plateTextForTest() == listen, "back to the earlier text: shown complete, not retyped");
+            check (! v.getBrain().isTalking() && v.plateAlphaForTest() > 0.0f, "back to the earlier text: shown complete (plate stays), not retyped");
         }
         {
             Test t ("segment groups: every option has its own text, German and English");

@@ -162,3 +162,70 @@ Tests: **1951 bestanden, 0 fehlgeschlagen** (ohne `EMBER_VOCALS`). pluginval 1.0
 
 Offen: Die Karte einer Segment-Option steht über der Knopfreihe und kann den unteren Rand des Spektrums überdecken –
 nur beim Überfahren der Segmente, nicht beim Arbeiten im Spektrum.
+
+## Nachbesserung 2 (Mund, AUTO-Texte, Ketten, Runen, Kreis; 24.11.2026)
+
+Bilder: `C:\Users\Shadow\dev\velvox-bench\2026-11-24\gui_round\after3`. Darin:
+- `screen\`: echte Bildschirmfotos des Standalone (Fenster 75 %, wie bei Jakob), vorher (Build 7410adb) und nachher:
+  - `vorher_simple.png` / `nachher_simple.png`
+  - `vorher_advanced_nach_umschalten.png` / `nachher_advanced_nach_umschalten.png`
+  - `nachher_sprechen_*.png` und `nachher_sprechen_75prozent_streifen.png` (AUTO, „Ich hör zu …“, alle 120 ms)
+- `talk\`: Gesichtsausschnitte alle 70 ms über den echten Bildschirmweg (`EmberTests --talk-shots <ordner> <skala>`) für
+  „Ich hör zu …“ (Zuhören) und „Klick mich für AUTO!“ (Ruhe), 75 % und 100 %; Mundöffnung und Bildänderung pro Bild
+  in `talk_0.75.txt` / `talk_1.0.txt`.
+- Die übrigen Bilder neu mit `--gui-shots`; neu ist `real_advanced_*`.
+
+1. **Mund bewegt sich beim Sprechen.** Ursache: Er sprach schon, aber zu kurz und zu klein. Mit 24 Zeichen/s war
+   „Ich hör zu …“ nach einer halben Sekunde fertig getippt (Mund danach zu, der Text steht nur noch). Die Silben
+   öffneten den Mund nur auf 0,6–1,1 und schlossen ihn kaum. Bei 75 % Fenstergröße (≈ 7 px Öffnung) und beim Zuhören
+   (Kopf gedreht) war das praktisch nicht zu sehen.
+   - Tippen mit höchstens 15 Zeichen/s; eine kurze Zeile dauert mindestens ~1,5 s.
+   - Jede Silbe öffnet weit (0,85–1,25) und schließt sich in ihrer zweiten Hälfte fast ganz: der Mund klappt sichtbar.
+   - Die Mundöffnung ist um 20 % größer gezeichnet (`drawMouth`: 30 → 36 Bild-px).
+   - Bewegt sich bis zum letzten getippten Zeichen, in jeder Laune außer Schlaf (BYPASS).
+   - Gemessen auf dem echten Bildschirmweg: Mund bis 1,16 offen, Gesicht ändert sich von Bild zu Bild
+     (`talk_*.txt`).
+   - Tests: Zeile dauert ≥ 1,2 s, Mund ≥ 0,85 offen und ≥ 3-mal auf/zu (Zuhören und Ruhe); das gezeichnete Gesicht bei
+     75 % unterscheidet sich zwischen zu und offen.
+2. **AUTO-Meldung tippt nicht dauernd neu.**
+   - „Ich hör nichts“ kommt laut Processor ohnehin erst nach 4 s ohne neue Stimme (und nie mehr, sobald 3 s Stimme
+     da sind); eine kurze Pause schaltet nicht um.
+   - Wechselt die Meldung trotzdem hin und her, wird ein Text, den Ember in den letzten 20 s schon gesagt hat, nicht
+     neu getippt: er steht sofort vollständig da.
+   - Test: „the plate: the same AUTO text again is not typed anew“.
+3. **Text der vorherigen Einstellung** (EmberProcessor):
+   - „Vorher liegt auf A.“ → „Deine vorherige Einstellung liegt auf A.“ / „Your previous setting is on A.“ (B ebenso).
+   - „Vorher: Strg+Z. …“ → „Deine vorherige Einstellung holt Strg+Z zurück; deine Einstellung auf B bleibt.“ /
+     „Ctrl+Z brings back your previous setting; your setting on B stays.“
+4. **Ketten weg.** Die Ketten im Hintergrund der SIMPLE-Bühne sind entfernt. Die Tafel schwebt für sich: weicher
+   Schatten darunter, feiner pinker Lichtstreif an der Oberkante, keine Kettenglieder mehr.
+5. **Runen am Rand ruckelten.** Drei Ursachen:
+   - (a) Die Buchstaben wurden vom Anfang des Weges gezählt: Jedes Mal, wenn der Lauf einen Abstand (15 px) weiter
+     war, sprang jeder Buchstabe auf den seines Nachbarn, alle 0,7 s sichtbar.
+   - (b) Bewegt wurde nur bei jedem zweiten Takt des 30-Hz-Timers: 15 ungleichmäßige Schritte pro Sekunde.
+   - (c) Wo der Weg sich schließt, sprangen Runen.
+
+   Jetzt:
+   - Jede Rune behält Buchstaben und Funkeln auf dem ganzen Weg.
+   - Die Bewegung kommt von der Bildschirm-Taktung (`VBlankAttachment` mit Zeitstempel), etwa 30 Schritte/s nach
+     echter Zeit, mit Sub-Pixel-Positionen.
+   - Die Runen blenden an der Nahtstelle weich ein und aus.
+   - Gemessen (75/100/150 %): Schritte 33,2–33,6 ms = 0,73 px, gleichmäßig. Vorher: 15 Schritte/s, ≈1,5 px, ungleichmäßig.
+6. **Innerer Runenring auf dem Bodensiegel entfernt** (der gegenläufige, vorne nach rechts laufende); der äußere bleibt.
+7. **Kreis in ADVANCED zwischen Spektrum und S-Pegel.**
+   - Ursache: Beim Umschalten SIMPLE → ADVANCED zeichnete das Fenster-Overlay noch einmal im SIMPLE-Zustand. Dabei
+     kam das kleine Siegel des Amount-Knopfs (der Knopf ist in ADVANCED versteckt, seine Stelle liegt genau dort) an
+     diese Stelle, und es wurde nie wieder übermalt.
+   - Ebenso blieben die Kanten der SIMPLE-Glasplatten stehen, weil das Panel beim Umschalten nicht neu gezeichnet wurde.
+   - In Snapshots nicht sichtbar, nur auf dem Bildschirm: `screen\vorher_advanced_nach_umschalten.png` zeigt Kreis und
+     Plattenkante.
+   - Fix: Das Overlay kennt die Ansicht sofort (`setSimpleView`) und zeichnet die alte Knopfstelle neu; das Panel wird
+     beim Umschalten ganz neu gezeichnet. `screen\nachher_advanced_nach_umschalten.png`: nichts mehr.
+
+Ergebnisse:
+- `EmberTests` mit `EMBER_VOCALS` (15/15 Takes): **2124 bestanden, 0 fehlgeschlagen**.
+- pluginval 10 mit GUI: **SUCCESS**.
+- GUI-CPU (`--bench 6 scales=1,1.25 front=yes anim=full hz=60`, Ausgangsstand 3a9bbe3 und jetzt abwechselnd je 2×):
+  - 100 %: UI 18,5 / 14,8 → 12,5 / 16,4 %, Prozess 67,5 / 56,2 → 54,4 / 62,5 %
+  - 125 %: UI 19,3 / 20,5 → 18,5 / 19,3 %, Prozess 68,2 / 68,9 → 63,3 / 57,3 %
+  - Nicht höher, obwohl der Rand jetzt 30 statt 15 Mal pro Sekunde gezeichnet wird.
