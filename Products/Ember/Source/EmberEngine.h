@@ -45,6 +45,14 @@ namespace ember
 {
     using namespace vocalypse::dsp;
 
+    // r3 research (test-only knobs, EmberTests --process rxN=value; unset = the shipped behaviour)
+    namespace rx
+    {
+        inline float val[16] {};
+        inline bool on[16] {};
+        inline float get (int i, float fallback) noexcept { return on[i] ? val[i] : fallback; }
+    }
+
     struct Settings
     {
         float freq = 6200.0f;        // detection corner, Hz (the split band sits on splitCenterRatio x freq)
@@ -283,6 +291,7 @@ namespace ember
     private:
         float levelFor (float peak, float fullEnvValue, bool relative) const noexcept;
         float indexFor (float sE, float bE) const noexcept;
+        float refFor (float slow, float fastE) const noexcept;
         void designBands() noexcept;
 
         double fs = 44100.0, freqHz = 6200.0;
@@ -290,6 +299,34 @@ namespace ember
         // stage 1 / 2: lanes [band L, band R, smart L, smart R] and [body L, body R, -, -]
         Biquad4 bandIdx1, bandIdx2, body1, body2;
         float fullEnv = 0.0f, fullRelease = 0.0f, envCoeff = 0.0f;
+        int fullHoldN = 0, fullHold = 0, fullHoldCh[maxChannels] {};
+        int refMode = 0;
+        float fastEnv = 0.0f, fastEnvCh[maxChannels] {}, fastRelease = 0.0f, refBlend = 0.0f;
+        bool forceAbs = false;
+        float maxOffset = 0.0f;   // > 0: ref = max (fast, slow x maxOffset)
+        // voice reference: gated running mean of log2 (fullEnv) while the voice is present (warm-up = cumulative mean)
+        bool vrOn = false, wgOn = false;
+        float wgLog = 0.0f, wgN = 0.0f, wgNone = -30.0f, wgW = 6.0f, absGate = 1.0f;
+        float vrLog = 0.0f, vrLogCh[maxChannels] {}, vrMinCoeff = 0.0f, vrN = 0.0f, vrNCh[maxChannels] {};
+        float voiceRef (float& lg, float& cnt, float fe) const noexcept
+        {
+            if (fe >= 0.001f)
+            {
+                cnt += 1.0f;
+                const float k = std::max (1.0f / cnt, vrMinCoeff);
+                lg += k * (fast::log2 (fe) - lg);
+            }
+            return cnt > 0.0f ? fast::exp2 (lg) : fe;
+        }
+        float slowRef = 0.0f, slowRefCh[maxChannels] {}, slowCoeff = 0.0f, slowFloor = 0.25f;
+        bool slowOn = false;
+        float slowFor (float& sr, float fe) const noexcept
+        {
+            if (! slowOn)
+                return fe;
+            sr = fe + slowCoeff * (sr - fe);
+            return std::max (sr, fe * slowFloor);
+        }
         float sEnv = 0.0f, bodyEnv = 0.0f;   // energies (mean square), linked
         float fullEnvCh[maxChannels] {}, sEnvCh[maxChannels] {}, bodyEnvCh[maxChannels] {};
         float indexDb = -60.0f, weight = 0.0f, tiltDb = 0.0f, weightCh[maxChannels] {};
@@ -362,6 +399,7 @@ namespace ember
         // control slots: 0 / 1 = channel (or the shared one in slot 0 when fully linked), 2 = linked beside own
         static constexpr int numSlots = maxChannels + 1;
         float envDb[numSlots] {};
+        int grHoldN = 0, grHold[numSlots] {};
 
         // Lookahead (samples) and the cross-fade from the previous one
         int laCur = 0, laPrev = 0, laFadeLeft = 0, laFadeLen = 1;

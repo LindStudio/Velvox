@@ -2659,6 +2659,9 @@ namespace
             if (k == "trace") tracePath = v; else if (k == "levels") levelsPath = v; else if (k == "preset") presetKey = v; else kv[k] = v.getFloatValue();
         }
         const auto has = [&] (const char* k) { return kv.count (k) > 0; };
+        for (const auto& [k, v] : kv)   // r3 research knobs rx0..rx15
+            if (k.startsWith ("rx") && k.substring (2).containsOnly ("0123456789"))
+                if (const int i = k.substring (2).getIntValue(); i >= 0 && i < 16) { rx::val[i] = v; rx::on[i] = true; }
         if (has ("gain"))
             buf->applyGain (dbToGain (kv["gain"]));
         Settings s;

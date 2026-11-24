@@ -52,13 +52,14 @@ namespace ember
     float staticReductionDb (float inDb, float thresholdDb) noexcept
     {
         const float over = inDb - thresholdDb;
-        const float slope = 1.0f - 1.0f / ratio;
-        if (over <= -kneeDb * 0.5f)
+        const float rt = rx::get (3, ratio), kn = rx::get (4, kneeDb);
+        const float slope = 1.0f - 1.0f / rt;
+        if (over <= -kn * 0.5f)
             return 0.0f;
-        if (over >= kneeDb * 0.5f)
+        if (over >= kn * 0.5f)
             return slope * over;
-        const float x = over + kneeDb * 0.5f;
-        return slope * x * x / (2.0f * kneeDb);
+        const float x = over + kn * 0.5f;
+        return slope * x * x / (2.0f * kn);
     }
 
     BandShape splitBand (double freq, double widthOct) noexcept
@@ -246,7 +247,23 @@ namespace ember
     void Detector::prepare (double sampleRate)
     {
         fs = sampleRate;
-        fullRelease = timeConstantCoeff (250.0f, fs);
+        fullRelease = timeConstantCoeff (rx::get (0, 250.0f), fs);
+        fullHoldN = (int) std::lround (rx::get (1, 0.0f) * 0.001 * fs);
+        refMode = (int) rx::get (2, 0.0f);
+        fastRelease = timeConstantCoeff (rx::get (8, 60.0f), fs);
+        refBlend = rx::get (7, 0.0f);
+        forceAbs = rx::get (6, 0.0f) > 0.5f;
+        maxOffset = rx::on[12] ? dbToGain (-rx::val[12]) : 0.0f;
+        vrOn = rx::get (13, 0.0f) > 0.0f;
+        wgOn = rx::on[14];
+        wgNone = rx::get (14, -30.0f);
+        wgW = rx::get (15, 6.0f);
+        if (wgOn && ! vrOn)
+            vrMinCoeff = (float) (1.0 / (3000.0 * 0.001 * fs));
+        vrMinCoeff = vrOn ? (float) (1.0 / (rx::val[13] * 0.001 * fs)) : 0.0f;
+        slowOn = rx::get (9, 0.0f) > 0.0f;
+        slowCoeff = timeConstantCoeff (std::max (1.0f, rx::get (9, 1.0f)), fs);
+        slowFloor = dbToGain (rx::get (10, -12.0f));
         envCoeff = timeConstantCoeff (smartEnvMs, fs);
         designBands();
         reset();
@@ -257,8 +274,20 @@ namespace ember
         for (auto* f : { &bandIdx1, &bandIdx2, &body1, &body2 })
             f->reset();
         fullEnv = sEnv = bodyEnv = 0.0f;
+        fullHold = 0;
+        fastEnv = 0.0f;
+        slowRef = 0.0f;
+        vrLog = vrN = 0.0f;
+        wgLog = wgN = 0.0f;
+        absGate = 1.0f;
         for (int c = 0; c < maxChannels; ++c)
+        {
+            vrLogCh[c] = vrNCh[c] = 0.0f;
+            slowRefCh[c] = 0.0f;
+            fastEnvCh[c] = 0.0f;
             fullEnvCh[c] = sEnvCh[c] = bodyEnvCh[c] = 0.0f;
+            fullHoldCh[c] = 0;
+        }
         indexDb = -60.0f;
         weight = 0.0f;
         indexPhase = 0;
@@ -317,6 +346,19 @@ namespace ember
         return fast::gainToDb (std::max (peak, 1.0e-9f) / env) + tiltDb + referenceDb;
     }
 
+    float Detector::refFor (float slow, float fastE) const noexcept
+    {
+        if (maxOffset > 0.0f)
+            return std::max (fastE, slow * maxOffset);
+        if (refBlend <= 0.0f)
+            return slow;
+        if (refBlend >= 1.0f)
+            return fastE;
+        if (slow < 1.0e-9f || fastE < 1.0e-9f)
+            return slow;
+        return fast::exp2 ((1.0f - refBlend) * fast::log2 (slow) + refBlend * fast::log2 (fastE));
+    }
+
     float Detector::indexFor (float sE, float bE) const noexcept
     {
         if (sE < tiny && bE < tiny)
@@ -347,7 +389,7 @@ namespace ember
         float peak = 0.0f, full = 0.0f, hiSq = 0.0f, bodySq = 0.0f;
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            const float ax = std::abs (frame[ch]), ab = std::abs (a[ch]), h = a[2 + ch], bd = b[ch];
+            const float ax = refMode == 1 && ! allround ? std::abs (b[ch]) : std::abs (frame[ch]), ab = std::abs (a[ch]), h = a[2 + ch], bd = b[ch];
             peak = std::max (peak, ab);
             full = std::max (full, ax);
             hiSq += h * h;
@@ -355,10 +397,13 @@ namespace ember
             out.band[ch] = a[ch];
             if (perChannel)
             {
-                fullEnvCh[ch] = ax > fullEnvCh[ch] ? ax : ax + fullRelease * (fullEnvCh[ch] - ax);
+                if (ax > fullEnvCh[ch]) { fullEnvCh[ch] = ax; fullHoldCh[ch] = fullHoldN; }
+                else if (fullHoldCh[ch] > 0) --fullHoldCh[ch];
+                else fullEnvCh[ch] = ax + fullRelease * (fullEnvCh[ch] - ax);
+                fastEnvCh[ch] = ax > fastEnvCh[ch] ? ax : ax + fastRelease * (fastEnvCh[ch] - ax);
                 sEnvCh[ch] = h * h + envCoeff * (sEnvCh[ch] - h * h);
                 bodyEnvCh[ch] = bd * bd + envCoeff * (bodyEnvCh[ch] - bd * bd);
-                out.levelDb[ch] = levelFor (ab, fullEnvCh[ch], relative);
+                out.levelDb[ch] = levelFor (ab, vrOn ? voiceRef (vrLogCh[ch], vrNCh[ch], fullEnvCh[ch]) : refFor (slowFor (slowRefCh[ch], fullEnvCh[ch]), fastEnvCh[ch]), relative && ! forceAbs);
                 if (indexDue)
                     weightCh[ch] = weightForIndex (indexFor (sEnvCh[ch], bodyEnvCh[ch]), allround);
                 out.weight[ch] = weightCh[ch];
@@ -376,14 +421,28 @@ namespace ember
 
         // Instant attack, 250 ms release: the band can never read louder relative to a voice whose
         // onset the envelope has not caught yet
-        fullEnv = full > fullEnv ? full : full + fullRelease * (fullEnv - full);
-        out.linkedDb = levelFor (peak, fullEnv, relative);
-        out.linkedWeight = weight;
+        if (full > fullEnv) { fullEnv = full; fullHold = fullHoldN; }
+        else if (fullHold > 0) --fullHold;
+        else fullEnv = full + fullRelease * (fullEnv - full);
+        fastEnv = full > fastEnv ? full : full + fastRelease * (fastEnv - full);
+        out.linkedDb = levelFor (peak, vrOn ? voiceRef (vrLog, vrN, fullEnv) : refFor (slowFor (slowRef, fullEnv), fastEnv), relative && ! forceAbs);
+        if (wgOn)
+        {
+            const float vref = voiceRef (wgLog, wgN, fullEnv);
+            if (indexDue)
+            {
+                // the S band (5 ms RMS) against the voice level of the last seconds: weak fricatives stay
+                const float d = 3.0103f * fast::log2 (sEnv + tiny) - fast::gainToDb (std::max (vref, 1.0e-9f));
+                const float t = juce::jlimit (0.0f, 1.0f, (d - wgNone) / wgW);
+                absGate = t * t * (3.0f - 2.0f * t);
+            }
+        }
+        out.linkedWeight = wgOn ? weight * absGate : weight;
         if (! perChannel)
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 out.levelDb[ch] = out.linkedDb;
-                out.weight[ch] = weight;
+                out.weight[ch] = out.linkedWeight;
             }
     }
 
@@ -537,6 +596,7 @@ namespace ember
         for (int l = 0; l < 3; ++l)
             listenSm[l].setTargetValue (settings.listen == l ? 1.0f : 0.0f);
         attackCoeff = timeConstantCoeff (std::max (0.01f, settings.attackMs), fs);
+        grHoldN = (int) std::lround (rx::get (5, 0.0f) * 0.001 * fs);
         releaseCoeff = timeConstantCoeff (std::max (1.0f, settings.releaseMs), fs);
         detector.setAllround (settings.smart && settings.allround);
         if (settings.trackS != trackOn)
@@ -774,7 +834,9 @@ namespace ember
                     const float w = ! smart ? 1.0f : (own ? det.weight[c] : det.linkedWeight);
                     const float target = std::min (maxReductionDb, std::min (range, staticReductionDb (level, thr)) * scale);
                     float e = envL[c];
-                    e = target + (target > e ? aC : rC) * (e - target);
+                    if (target > e) { e = target + aC * (e - target); grHold[c] = grHoldN; }
+                    else if (grHold[c] > 0) --grHold[c];
+                    else e = target + rC * (e - target);
                     envL[c] = e;
                     eDl[c][wp] = e;
                     g0Dl[c][wp] = gate[0][c].process (w);
