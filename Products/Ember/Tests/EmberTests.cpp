@@ -1861,6 +1861,69 @@ namespace
         }
     }
 
+    // 2026-11-24 (r3 evenness, GLEICHMAESSIGKEIT.md): the same S takes the same reduction whether a loud vowel comes
+    // right before it or a pause, and quiet fricatives far under the voice stay untouched
+    void testEvenness()
+    {
+        Test t ("evenness: the same S after a vowel or after a pause, quiet fricatives untouched");
+        const double fs = 48000.0;
+        juce::Random rnd (21);
+        Biq h1, h2;
+        h1.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 5000.0, 0.54));
+        h2.b.setCoeffs (vocalypse::dsp::design::highPass (fs, 5000.0, 1.31));
+        double phase = 0.0;
+        std::vector<float> x;
+        const auto vowel = [&] (double secs, float amp)
+        {
+            for (int k = 0; k < (int) (fs * secs); ++k)
+            {
+                phase += 200.0 / fs;
+                float v = 0.0f;
+                for (int h = 1; h * 200 < 4000; ++h)
+                    v += (h * 200 < 1000 ? 1.0f : 0.25f) / h * (float) std::sin (juce::MathConstants<double>::twoPi * phase * h);
+                x.push_back (amp * v);
+            }
+        };
+        const auto pause = [&] (double secs) { x.insert (x.end(), (size_t) (fs * secs), 0.0f); };
+        const auto sBurst = [&] (double secs, float amp)
+        {
+            const int s0 = (int) x.size(), n = (int) (fs * secs), ramp = (int) (fs * 0.008);
+            for (int k = 0; k < n; ++k)
+                x.push_back (amp * h2.run (h1.run (rnd.nextFloat() * 2.0f - 1.0f)) * std::min ({ 1.0f, k / (float) ramp, (n - k) / (float) ramp }));
+            return std::make_pair (s0 + ramp, s0 + n - ramp);
+        };
+        // a few seconds of singing first (the voice level), then: S after a pause, S right after a loud vowel, a quiet
+        // fricative 36 dB under the S, each repeated
+        std::vector<std::pair<int, int>> afterPause, afterVowel, weakF;
+        for (int rep = 0; rep < 6; ++rep) { vowel (0.35, 0.25f); pause (0.15); }
+        for (int rep = 0; rep < 4; ++rep)
+        {
+            pause (0.4);
+            afterPause.push_back (sBurst (0.09, 0.12f));
+            pause (0.05);
+            vowel (0.3, 0.25f);
+            afterVowel.push_back (sBurst (0.09, 0.12f));
+            pause (0.05);
+            vowel (0.3, 0.25f);
+            pause (0.05);
+            weakF.push_back (sBurst (0.09, 0.12f * 0.0158f));   // -36 dB
+            pause (0.05);
+            vowel (0.3, 0.25f);
+        }
+        Settings s;   // the defaults, smart single vocal
+        E e (fs, s);
+        const auto y = run (e, x);
+        const int L = e.getLatencySamples();
+        const double lp = rangesDb (x, afterPause, 0) - rangesDb (y, afterPause, L);
+        const double lv = rangesDb (x, afterVowel, 0) - rangesDb (y, afterVowel, L);
+        const double lw = rangesDb (x, weakF, 0) - rangesDb (y, weakF, L);
+        std::printf ("    S after a pause -%.2f dB, right after a vowel -%.2f dB, quiet fricative -%.3f dB\n", lp, lv, lw);
+        check (lp > 2.0 && lv > 2.0, "both S are taken down");
+        check (std::abs (lp - lv) < 0.5, "the S right after a loud vowel takes (almost) the same as after a pause");
+        check (lw < 0.05, "a fricative 36 dB under the S keeps its level");
+        check (Detector::weakWeight (1.0f, 0.0f) == 1.0f && Detector::weakWeight (1.0e-4f, 0.0f) == 0.0f, "weak gate: open at the voice level, shut 40 dB under it");
+    }
+
     void testAllround()
     {
         Test t ("Allround: de-esses inside a mix, where comparing against the voice body fails");
@@ -3903,6 +3966,7 @@ int main (int argc, char** argv)
     testListenBand();
     testSwitches();
     testTracking();
+    testEvenness();
     testAllround();
     testPresets();
     testFactoryLibrary();

@@ -246,7 +246,10 @@ namespace ember
     void Detector::prepare (double sampleRate)
     {
         fs = sampleRate;
-        fullRelease = timeConstantCoeff (250.0f, fs);
+        fullRelease = timeConstantCoeff (refVowelReleaseMs, fs);
+        nowRelease = timeConstantCoeff (refNowReleaseMs, fs);
+        voiceMaxN = (float) (voiceLevelMs * 0.001 * fs / 4.0);   // updated every 4th sample
+        voiceMinCoeff = 1.0f / voiceMaxN;
         envCoeff = timeConstantCoeff (smartEnvMs, fs);
         designBands();
         reset();
@@ -256,9 +259,13 @@ namespace ember
     {
         for (auto* f : { &bandIdx1, &bandIdx2, &body1, &body2 })
             f->reset();
-        fullEnv = sEnv = bodyEnv = 0.0f;
+        fullEnv = sEnv = bodyEnv = nowEnv = voiceLog = voiceN = 0.0f;
+        weak = 1.0f;
         for (int c = 0; c < maxChannels; ++c)
-            fullEnvCh[c] = sEnvCh[c] = bodyEnvCh[c] = 0.0f;
+        {
+            fullEnvCh[c] = sEnvCh[c] = bodyEnvCh[c] = nowEnvCh[c] = voiceLogCh[c] = voiceNCh[c] = 0.0f;
+            weakCh[c] = 1.0f;
+        }
         indexDb = -60.0f;
         weight = 0.0f;
         indexPhase = 0;
@@ -271,6 +278,27 @@ namespace ember
         const float none = allroundGate ? allroundNoneDb : smartNoneDb, full = allroundGate ? allroundFullDb : smartFullDb;
         const float t = juce::jlimit (0.0f, 1.0f, (idx - none) / (full - none));
         return t * t * (3.0f - 2.0f * t);
+    }
+
+    float Detector::weakWeight (float sE, float voiceLog2) noexcept
+    {
+        const float d = 3.0103f * fast::log2 (sE + tiny) - 6.0205999f * voiceLog2;
+        const float t = juce::jlimit (0.0f, 1.0f, (d - weakNoneDb) / (weakFullDb - weakNoneDb));
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    void Detector::updateVoice (float& lg, float& n, float env) const noexcept
+    {
+        // the voice is present: above the floor and no more than voiceGateDb under its own level (pauses, tails and
+        // breaths do not drag the level down); until voiceLevelMs of voice were heard it is a plain mean
+        constexpr float floorGain = 1.0e-5f, gateLog2 = voiceGateDb / 6.0205999f;
+        if (env < floorGain)
+            return;
+        const float l = fast::log2 (env);
+        if (n > 0.0f && l < lg - gateLog2)
+            return;
+        n = std::min (n + 1.0f, voiceMaxN);
+        lg += std::max (1.0f / n, voiceMinCoeff) * (l - lg);
     }
 
     void Detector::setFrequency (float hz) noexcept
@@ -306,7 +334,7 @@ namespace ember
         tiltDb = detectorTiltDbPerOct * (float) std::log2 (f / detectorTiltRefHz);
     }
 
-    float Detector::levelFor (float peak, float env, bool relative) const noexcept
+    float Detector::levelFor (float peak, float env, float nowE, bool relative) const noexcept
     {
         if (! relative)
             return fast::gainToDb (std::max (peak, 1.0e-9f)) + tiltDb;
@@ -314,7 +342,9 @@ namespace ember
         constexpr float floorGain = 0.001f;   // fullFloorDb
         if (env < floorGain)
             return -200.0f;
-        return fast::gainToDb (std::max (peak, 1.0e-9f) / env) + tiltDb + referenceDb;
+        // against the voice now, or the vowel of the last 250 ms at most refVowelDb under it (env >= nowE always)
+        constexpr float vowelGain = 0.31622777f;   // -refVowelDb
+        return fast::gainToDb (std::max (peak, 1.0e-9f) / std::max (nowE, env * vowelGain)) + tiltDb + referenceDb;
     }
 
     float Detector::indexFor (float sE, float bE) const noexcept
@@ -356,12 +386,20 @@ namespace ember
             if (perChannel)
             {
                 fullEnvCh[ch] = ax > fullEnvCh[ch] ? ax : ax + fullRelease * (fullEnvCh[ch] - ax);
+                nowEnvCh[ch] = ax > nowEnvCh[ch] ? ax : ax + nowRelease * (nowEnvCh[ch] - ax);
                 sEnvCh[ch] = h * h + envCoeff * (sEnvCh[ch] - h * h);
                 bodyEnvCh[ch] = bd * bd + envCoeff * (bodyEnvCh[ch] - bd * bd);
-                out.levelDb[ch] = levelFor (ab, fullEnvCh[ch], relative);
+                out.levelDb[ch] = levelFor (ab, fullEnvCh[ch], nowEnvCh[ch], relative);
                 if (indexDue)
+                {
                     weightCh[ch] = weightForIndex (indexFor (sEnvCh[ch], bodyEnvCh[ch]), allround);
-                out.weight[ch] = weightCh[ch];
+                    if (! allround)
+                    {
+                        updateVoice (voiceLogCh[ch], voiceNCh[ch], fullEnvCh[ch]);
+                        weakCh[ch] = voiceNCh[ch] > 0.0f ? weakWeight (sEnvCh[ch], voiceLogCh[ch]) : 1.0f;
+                    }
+                }
+                out.weight[ch] = allround ? weightCh[ch] : weightCh[ch] * weakCh[ch];
             }
         }
 
@@ -377,13 +415,20 @@ namespace ember
         // Instant attack, 250 ms release: the band can never read louder relative to a voice whose
         // onset the envelope has not caught yet
         fullEnv = full > fullEnv ? full : full + fullRelease * (fullEnv - full);
-        out.linkedDb = levelFor (peak, fullEnv, relative);
-        out.linkedWeight = weight;
+        nowEnv = full > nowEnv ? full : full + nowRelease * (nowEnv - full);
+        out.linkedDb = levelFor (peak, fullEnv, nowEnv, relative);
+        // Weak gate (single vocal): quiet fricatives far under the voice level of the last seconds keep their S
+        if (indexDue && ! allround)
+        {
+            updateVoice (voiceLog, voiceN, fullEnv);
+            weak = voiceN > 0.0f ? weakWeight (sEnv, voiceLog) : 1.0f;
+        }
+        out.linkedWeight = allround ? weight : weight * weak;
         if (! perChannel)
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 out.levelDb[ch] = out.linkedDb;
-                out.weight[ch] = weight;
+                out.weight[ch] = out.linkedWeight;
             }
     }
 
@@ -400,9 +445,11 @@ namespace ember
     bool Detector::isFinite() const noexcept
     {
         bool ok = bandIdx1.isFinite() && bandIdx2.isFinite() && body1.isFinite() && body2.isFinite()
-               && std::isfinite (fullEnv) && std::isfinite (sEnv) && std::isfinite (bodyEnv);
+               && std::isfinite (fullEnv) && std::isfinite (sEnv) && std::isfinite (bodyEnv) && std::isfinite (nowEnv)
+               && std::isfinite (voiceLog);
         for (int c = 0; c < maxChannels; ++c)
-            ok = ok && std::isfinite (fullEnvCh[c]) && std::isfinite (sEnvCh[c]) && std::isfinite (bodyEnvCh[c]);
+            ok = ok && std::isfinite (fullEnvCh[c]) && std::isfinite (sEnvCh[c]) && std::isfinite (bodyEnvCh[c])
+                    && std::isfinite (nowEnvCh[c]) && std::isfinite (voiceLogCh[c]);
         return ok;
     }
 

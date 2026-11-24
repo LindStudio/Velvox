@@ -41,6 +41,13 @@
 //    band-passes around the band behind a high-pass at its lower edge, 5 ms energies) finds where the energy of the current S sits and the blend
 //    weights follow it, so the band sits on every S ("sh" lower, "s" higher). Only the weights move: no
 //    coefficient modulation, and with no reduction the output is still bit-exact.
+//
+// 2026-11-24 (r3 evenness, docs/products/ember-r2/GLEICHMAESSIGKEIT.md):
+//  - Every S is judged against the voice right now (60 ms) or against the vowel of the last 250 ms at most
+//    refVowelDb under it, whichever is louder: an S right after a loud vowel no longer reads quieter than the same S
+//    after a pause (the spread of the reduction across the S was the last measured gap to Pro-DS).
+//  - Weak gate (smart, single vocal): the S band has to come within weakNoneDb .. weakFullDb of the voice level of
+//    the last seconds, so quiet fricatives stay untouched as before.
 namespace ember
 {
     using namespace vocalypse::dsp;
@@ -131,6 +138,11 @@ namespace ember
     // absolute mode for a voice peaking at -18 dBFS. Below fullFloorDb (near-silence) nothing is de-essed.
     inline constexpr float referenceDb = -18.0f;
     inline constexpr float fullFloorDb = -60.0f;
+    // The reference the band is read against (2026-11-24 r3): max (voice now, voice of the last 250 ms - refVowelDb)
+    inline constexpr float refNowReleaseMs = 60.0f, refVowelReleaseMs = 250.0f, refVowelDb = 10.0f;
+    // Weak gate: the S band (5 ms RMS) against the voice level (log mean of the 250 ms envelope over voiceLevelMs,
+    // only while the voice is no more than voiceGateDb under that level): weight 0 at weakNoneDb, 1 at weakFullDb
+    inline constexpr float voiceLevelMs = 10000.0f, voiceGateDb = 30.0f, weakNoneDb = -28.0f, weakFullDb = -22.0f;
     // Smart detection (2026-11-13, measured against FabFilter Pro-DS on 9 real takes): the energy above the
     // smart band against the body of the voice (150 Hz - 3 kHz), smartEnvMs RMS envelopes. Real S sit at
     // +1 .. +20 dB, vowels under -13 dB, the loud S-into-vowel transitions at -10 .. -1 dB. Weight 0 at
@@ -279,9 +291,13 @@ namespace ember
         float getSibilanceWeight() const noexcept { return weight; }
         static float weightForIndex (float indexDb) noexcept { return weightForIndex (indexDb, false); }
         static float weightForIndex (float indexDb, bool allround) noexcept;
+        // The weak gate for an S band energy (mean square) against a voice level (log2 of the envelope)
+        static float weakWeight (float sEnergy, float voiceLog2) noexcept;
 
     private:
-        float levelFor (float peak, float fullEnvValue, bool relative) const noexcept;
+        float levelFor (float peak, float fullEnvValue, float nowEnvValue, bool relative) const noexcept;
+        // voice level (log2 of the 250 ms envelope, mean over voiceLevelMs while the voice is present); every 4th sample
+        void updateVoice (float& lg, float& n, float env) const noexcept;
         float indexFor (float sE, float bE) const noexcept;
         void designBands() noexcept;
 
@@ -289,7 +305,9 @@ namespace ember
         bool allround = false;
         // stage 1 / 2: lanes [band L, band R, smart L, smart R] and [body L, body R, -, -]
         Biquad4 bandIdx1, bandIdx2, body1, body2;
-        float fullEnv = 0.0f, fullRelease = 0.0f, envCoeff = 0.0f;
+        float fullEnv = 0.0f, fullRelease = 0.0f, envCoeff = 0.0f, nowEnv = 0.0f, nowRelease = 0.0f;
+        float nowEnvCh[maxChannels] {}, voiceLog = 0.0f, voiceN = 0.0f, voiceLogCh[maxChannels] {}, voiceNCh[maxChannels] {};
+        float voiceMinCoeff = 0.0f, voiceMaxN = 1.0f, weak = 1.0f, weakCh[maxChannels] {};
         float sEnv = 0.0f, bodyEnv = 0.0f;   // energies (mean square), linked
         float fullEnvCh[maxChannels] {}, sEnvCh[maxChannels] {}, bodyEnvCh[maxChannels] {};
         float indexDb = -60.0f, weight = 0.0f, tiltDb = 0.0f, weightCh[maxChannels] {};
