@@ -45,6 +45,9 @@ namespace ember
             return;
         wake();
         talkText = text; talkShown = 0; talkT = 0; talkEnd = -1; syl = 0;
+        // slow enough to see him speak (2026-11-24, Jakob: "der Mund bewegt sich nicht" - at 24 characters a second
+        // "Ich hör zu …" was over in half a second): about 15 a second, a short line takes at least ~1.5 s
+        talkRate = juce::jlimit (8.0f, 15.0f, (float) text.length() / 1.5f);
         gesture = rnd.nextBool() ? -1 : 1;
         gestureAt = 0.3f + rnd.nextFloat() * 0.6f;
     }
@@ -79,7 +82,7 @@ namespace ember
         talkT += dt;
         if (talkEnd < 0)
         {
-            talkShown = std::min ((float) talkText.length(), talkShown + dt * 24.0f);
+            talkShown = std::min ((float) talkText.length(), talkShown + dt * talkRate);
             const int n = (int) talkShown;
             const auto ch = n > 0 ? talkText[n - 1] : ' ';
             syl -= dt;
@@ -91,11 +94,13 @@ namespace ember
             {
                 if (syl <= 0)
                 {
-                    syl = 0.085f + rnd.nextFloat() * 0.07f;
-                    sylOpen = 0.6f + rnd.nextFloat() * 0.5f; sylWide = 0.62f + rnd.nextFloat() * 0.38f;
+                    // a syllable: open wide enough to read at 75 % window size, then closing a little
+                    syl = 0.11f + rnd.nextFloat() * 0.08f;
+                    sylOpen = 0.85f + rnd.nextFloat() * 0.4f; sylWide = 0.62f + rnd.nextFloat() * 0.38f;
                 }
-                const float phase = 1.0f - std::max (0.0f, syl) / 0.12f;
-                mouth.target = sylOpen * (1 - 0.3f * phase); mouthW.target = sylWide;
+                const float phase = 1.0f - std::max (0.0f, syl) / 0.15f;
+                // open for the first part of each syllable, nearly closed for the rest: the mouth visibly flaps
+                mouth.target = phase < 0.55f ? sylOpen : 0.15f * sylOpen; mouthW.target = sylWide;
             }
             if (n >= talkText.length())
                 talkEnd = talkT;
@@ -329,7 +334,7 @@ namespace ember
             // 2026-11-24 the typing stood still here and the text never ended: with BYPASS on, AUTO's "Ich hör zu …"
             // left the plate as an empty frame for good (Jakob's standalone test).
             talkT += dt;
-            talkShown = std::min ((float) talkText.length(), talkShown + dt * 24.0f);
+            talkShown = std::min ((float) talkText.length(), talkShown + dt * talkRate);
             if (talkEnd < 0 && (int) talkShown >= talkText.length())
                 talkEnd = talkT;
             if (talkEnd >= 0 && talkT - talkEnd > 1.6f)
@@ -635,8 +640,17 @@ namespace ember
                 plateAlpha = text.isNotEmpty() ? 1.0f : 0.0f;
                 repaint();      // he does not speak: the text just shows
             }
+            else if (const auto it = recentlySaid.find (text); text.isNotEmpty() && it != recentlySaid.end() && clock - it->second < 20.0)
+            {
+                brain.stopTalking();   // he said exactly this a moment ago (AUTO: "listening" / "can't hear" back and
+                repaint();             // forth at pauses): it just shows, complete, no retyping
+            }
             else
+            {
                 brain.say (text);
+                if (text.isNotEmpty())
+                    recentlySaid[text] = clock;
+            }
         }
     }
 
@@ -881,8 +895,8 @@ namespace ember
         }
     }
 
-    // The text plate (2026-11-24, Jakob: the speech bubble did not fit the seal): a small dark plate hanging between
-    // the chains above Ember, in the panels' style, at a fixed place; the text types in while he speaks.
+    // The text plate (2026-11-24, Jakob: the speech bubble did not fit the seal): a small dark plate floating
+    // above Ember, in the panels' style, at a fixed place; the text types in while he speaks.
     juce::Rectangle<float> LiveMascotView::plateArea() const
     {
         const auto r = getLocalBounds().toFloat();
@@ -914,16 +928,21 @@ namespace ember
                                       juce::Justification::centred, 2, 0.9f);
         }
         const float a = juce::jlimit (0.0f, 1.0f, plateAlpha);
-        // the plate: dark glass like the panels, a thin pink edge, two short chain links it hangs from
-        g.setColour (juce::Colour (0xff1e1a1e).withMultipliedAlpha (a));
-        for (float x : { box.getX() + 22.0f, box.getRight() - 22.0f })
-            for (int k = 0; k < 2; ++k)
-                g.drawEllipse (x - (k % 2 ? 2.5f : 5.0f), box.getY() - 15.0f + (float) k * 8.0f, k % 2 ? 5.0f : 10.0f, 12.0f, 2.0f);
+        // the plate floats on its own (2026-11-24: no chains): dark glass like the panels, a thin pink edge, a soft
+        // shadow under it and a faint pink glow along its top edge
+        g.setColour (juce::Colours::black.withAlpha (0.35f * a));
+        g.fillRoundedRectangle (box.translated (0.0f, 4.0f).expanded (2.0f), 12.0f);
         g.setGradientFill (juce::ColourGradient (juce::Colour (0xf0140610).withMultipliedAlpha (a), 0, box.getY(),
                                                  juce::Colour (0xf5080308).withMultipliedAlpha (a), 0, box.getBottom(), false));
         g.fillRoundedRectangle (box, 10.0f);
         g.setColour (seal::pink.withAlpha (0.45f * a));
         g.drawRoundedRectangle (box.reduced (0.5f), 10.0f, 1.0f);
+        {
+            juce::ColourGradient top (seal::pinkLight.withAlpha (0.0f), box.getX() + 12.0f, 0.0f, seal::pinkLight.withAlpha (0.0f), box.getRight() - 12.0f, 0.0f, false);
+            top.addColour (0.5, seal::pinkLight.withAlpha (0.55f * a));
+            g.setGradientFill (top);
+            g.fillRect (juce::Rectangle<float> (box.getX() + 12.0f, box.getY(), box.getWidth() - 24.0f, 1.0f));
+        }
         g.setColour (vocalypse::ui::colours::textStrong.withAlpha (a));
         // typing: the first glyphs of the finished layout, so the words never move while they appear
         const int total = lay.glyphs.getNumGlyphs();

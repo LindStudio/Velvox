@@ -190,8 +190,20 @@ namespace ember
         void update (const seal::Scene& scene, bool simple, juce::Rectangle<float> knob, std::vector<juce::Rectangle<float>> plates);
         void paint (juce::Graphics&) override;
         std::function<float()> knobAngle;   // the Amount knob's shown angle (clockwise from 12 o'clock), read when painting
+        static inline std::vector<double>* stepLogForTest = nullptr;   // EmberTests --talk-shots: the border's time per step
+        void setSimpleView (bool s)
+        {
+            if (s == simple)
+                return;
+            simple = s;
+            if (! knob.isEmpty())
+                repaint (knob.expanded (4.0f).getSmallestIntegerContainer());
+        }
     private:
         void repaintEdges (juce::Rectangle<float>, float width);
+        void onFrame (double frameTime);
+        juce::VBlankAttachment vblank { this, [this] (double frameTime) { onFrame (frameTime); } };
+        double borderTime = 0.0, lastFrame = 0.0, lastUpdate = 0.0;
         seal::Scene scene;
         seal::RuneAtlas borderRunes { seal::pink, true }, sealRunes { seal::pinkLight, true };
         bool simple = true;

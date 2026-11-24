@@ -885,9 +885,10 @@ namespace ember
                                    "Set: from {0} kHz, S sharpness (above {2} kHz) −{1} dB, vowels stay untouched."),
                                { khz, number (lastAuto.expectedReductionDb, 1), number (autoSBandHz / 1000.0, 0) })
                        + (autoRaisedAmount ? tr (" Amount stand zu tief und ist jetzt 50 %.", " Amount was too low and is now 50 %.") : juce::String())
-                       + (autoBeforeSlot == 0   ? tr (" Vorher liegt auf A.", " Before is on A.")
-                          : autoBeforeSlot == 1 ? tr (" Vorher liegt auf B.", " Before is on B.")
-                                                : format (tr (" Vorher: Strg+Z. Deine Einstellung auf {0} bleibt.", " Before: Ctrl+Z. Your setting on {0} stays."),
+                       + (autoBeforeSlot == 0   ? tr (" Deine vorherige Einstellung liegt auf A.", " Your previous setting is on A.")
+                          : autoBeforeSlot == 1 ? tr (" Deine vorherige Einstellung liegt auf B.", " Your previous setting is on B.")
+                                                : format (tr (" Deine vorherige Einstellung holt Strg+Z zurück; deine Einstellung auf {0} bleibt.",
+                                                              " Ctrl+Z brings back your previous setting; your setting on {0} stays."),
                                                           { activeSlot == 0 ? "B" : "A" }));
             }
             case AutoPhase::failed:

@@ -320,7 +320,7 @@ namespace ember
         {
             const float x0 = rig.smileX0, x1 = rig.smileX0 + (float) rig.smile.size() * rig.smileStep;
             const auto mm = std::minmax_element (rig.smile.begin(), rig.smile.end());
-            add ({ x0, *mm.first, x1 - x0, *mm.second - *mm.first + 30.0f * 1.25f * 1.6f });   // open mouth + tongue
+            add ({ x0, *mm.first, x1 - x0, *mm.second - *mm.first + 36.0f * 1.3f * 1.6f });   // open mouth + tongue
         }
         return box.expanded (40.0f);
     }
@@ -672,7 +672,7 @@ namespace ember
             return;
         const int i0 = juce::roundToInt ((float) n * 0.06f), i1 = juce::roundToInt ((float) n * 0.8f);
         const float wf = juce::jlimit (0.55f, 1.0f, pose.mouthW), mid = (float) (i0 + i1) * 0.5f, half = (float) (i1 - i0) * 0.5f;
-        const float H = 30.0f * std::min (1.25f, m);
+        const float H = 36.0f * std::min (1.3f, m);   // 2026-11-24: 30 -> 36, talking must read at 75 % window size
         auto X = [&] (int i) { return rig.smileX0 + (mid + ((float) i - mid) * wf) * rig.smileStep; };
         auto u = [&] (int i) { const float d = ((float) i - mid) / half; return std::max (0.0f, 1.0f - d * d); };
         auto top = [&] (int i) { const int k = juce::jlimit (0, n - 1, juce::roundToInt (mid + ((float) i - mid) * wf)); return rig.smile[(size_t) k] + (1.0f - wf) * 3.0f * u (i); };

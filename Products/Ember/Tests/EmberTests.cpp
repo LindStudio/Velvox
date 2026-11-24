@@ -2681,6 +2681,65 @@ namespace
             check (v.plateAlphaForTest() <= 0.0f, "and stays gone without text");
         }
         {
+            Test t ("Ember talks visibly: the mouth flaps while a line types (also listening), the drawn face changes");
+            for (bool listening : { true, false })
+            {
+                LiveBrain b;
+                b.seedForTest (7);
+                MascotInput in;
+                in.autoListening = listening;
+                for (int i = 0; i < 20; ++i) b.update (in, 0.02f, { 517.0f, 466.0f });
+                b.say (juce::String::fromUTF8 (listening ? "Ich hör zu …" : "Klick mich für AUTO!"));
+                float typedFor = 0.0f, peak = 0.0f;
+                int opens = 0;
+                bool open = false;
+                for (int i = 0; i < 300 && b.shownText() != b.fullText(); ++i)
+                {
+                    b.update (in, 0.02f, { 517.0f, 466.0f });
+                    typedFor += 0.02f;
+                    const float m = b.pose().mouth;
+                    peak = std::max (peak, m);
+                    if (! open && m > 0.6f) { open = true; ++opens; }
+                    if (open && m < 0.3f) open = false;
+                }
+                const juce::String where = listening ? "listening" : "idle";
+                check (typedFor >= 1.2f, where + ": the line takes " + juce::String (typedFor, 2) + " s to type (>= 1.2 s)");
+                check (peak >= 0.85f, where + ": the mouth opens wide (" + juce::String (peak, 2) + ")");
+                check (opens >= 3, where + ": the mouth opens and closes " + juce::String (opens) + " times");
+            }
+            RigRenderer r;
+            r.fitHeight = 0.74f;
+            r.fitFeet = 0.86f;
+            juce::Image closed, talking;
+            RigPose a, bPose;
+            bPose.mouth = 1.0f;
+            const juce::Rectangle<float> area (0.0f, 0.0f, 302.0f, 302.0f);   // the stage at 75 % window size
+            r.renderInto (closed, area, a, 1.0f);
+            r.renderInto (talking, area, bPose, 1.0f);
+            int differ = 0;
+            if (closed.isValid() && talking.isValid() && closed.getBounds() == talking.getBounds())
+                for (int y = 0; y < closed.getHeight(); ++y)
+                    for (int x = 0; x < closed.getWidth(); ++x)
+                    {
+                        const auto c0 = closed.getPixelAt (x, y), c1 = talking.getPixelAt (x, y);
+                        differ += std::abs ((int) c0.getRed() - (int) c1.getRed()) + std::abs ((int) c0.getGreen() - (int) c1.getGreen()) > 60 ? 1 : 0;
+                    }
+            check (differ >= 40, "the drawn face differs between closed and talking: " + juce::String (differ) + " px at 75 %");
+        }
+        {
+            Test t ("the plate: the same AUTO text again is not typed anew");
+            LiveMascotView v;
+            v.setSize (520, 402);
+            const auto listen = juce::String::fromUTF8 ("Ich hör zu …"), deaf = juce::String::fromUTF8 ("Ich hör nichts – drück Play in deiner DAW!");
+            v.setBubble (listen);
+            for (int i = 0; i < 100; ++i) v.stepForTest (0.05f);
+            v.setBubble (deaf);
+            for (int i = 0; i < 100; ++i) v.stepForTest (0.05f);
+            v.setBubble (listen);
+            v.stepForTest (0.05f);
+            check (! v.getBrain().isTalking() && v.plateTextForTest() == listen, "back to the earlier text: shown complete, not retyped");
+        }
+        {
             Test t ("segment groups: every option has its own text, German and English");
             const std::pair<const char*, int> groups[] { { pid::mode, 2 }, { pid::detection, 4 }, { pid::listen, 3 }, { pid::stereo, 4 } };
             for (auto [id, n] : groups)
@@ -3535,6 +3594,21 @@ static void guiRealPath (const juce::File& dir, EmberAudioProcessor& p, const ju
         ed->removeFromDesktop();
         us->file().setValue ("autoUsed", false);
     }
+    // ADVANCED on the real path (2026-11-24: a circle showed between the spectrum and the S level meter)
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+        if (auto* e = dynamic_cast<EmberEditor*> (ed.get()))
+            e->setAdvanced (true);
+        ed->setSize (look::baseW, look::baseH);
+        ed->setTopLeftPosition (60, 60);
+        ed->addToDesktop (juce::ComponentPeer::windowHasTitleBar);
+        ed->setVisible (true);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (2500);
+        writePng (ed->createComponentSnapshot (ed->getLocalBounds()), dir.getChildFile ("real_advanced_" + sfx + ".png"));
+        if (auto* e = dynamic_cast<EmberEditor*> (ed.get()))
+            e->setAdvanced (false);
+        ed->removeFromDesktop();
+    }
     // BYPASS on, then AUTO (Jakob's case: the plate stayed an empty frame), then AUTO cancelled: the plate must go
     {
         juce::SharedResourcePointer<UserSettings> us;
@@ -3560,6 +3634,85 @@ static void guiRealPath (const juce::File& dir, EmberAudioProcessor& p, const ju
         bp->setValueNotifyingHost (0.0f);
         us->file().setValue ("autoUsed", false);
     }
+}
+
+// EmberTests --talk-shots <dir>: Ember speaking on the real on-screen path (editor on the desktop, timers and the
+// drawing thread running): a crop of his face every 70 ms while he says AUTO's "Ich hör zu …" (listen mode) and the
+// idle tip "Klick mich für AUTO!"; plus how much the face changes from frame to frame (talking = it moves)
+static int talkShots (const juce::File& dir, float scale)
+{
+    dir.createDirectory();
+    const auto settingsFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("ember_talkshots.settings");
+    settingsFile.deleteFile();
+    UserSettings::useFileForTests (settingsFile);
+    vocalypse::i18n::overrideSystemLanguage (vocalypse::i18n::Language::german);
+    EmberAudioProcessor p;
+    p.prepareToPlay (48000.0, 512);
+    LiveMascotView::alwaysInFront = true;
+    for (int scene = 0; scene < 2; ++scene)
+    {
+        juce::SharedResourcePointer<UserSettings> us;
+        us->file().setValue ("autoUsed", scene == 0);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+        if (auto* e = dynamic_cast<EmberEditor*> (ed.get()))
+            e->setAdvanced (false);
+        ed->setSize (juce::roundToInt (look::baseW * scale), juce::roundToInt (look::baseH * scale));
+        ed->setTopLeftPosition (60, 60);
+        ed->addToDesktop (juce::ComponentPeer::windowHasTitleBar);
+        ed->setVisible (true);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (scene == 0 ? 1500 : 200);
+        if (scene == 0)
+            p.startAuto();
+        // the face: around his mouth (window coordinates at 100 %, scaled)
+        const auto face = juce::Rectangle<int> (200, 200, 180, 140).toFloat().transformedBy (juce::AffineTransform::scale (scale)).toNearestInt();
+        std::vector<double> steps;
+        SealOverlay::stepLogForTest = &steps;
+        juce::Image last;
+        double moved = 0.0;
+        for (int i = 0; i < 40; ++i)
+        {
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (70);
+            const auto img = ed->createComponentSnapshot (face, true, 1.0f);
+            writePng (img, dir.getChildFile ((scene == 0 ? "talk_listen_" : "talk_idle_") + juce::String (scale, 2) + "_" + juce::String (i).paddedLeft ('0', 2) + ".png"));
+            if (last.isValid() && last.getBounds() == img.getBounds())
+            {
+                double d = 0.0;
+                for (int y = 0; y < img.getHeight(); y += 2)
+                    for (int x = 0; x < img.getWidth(); x += 2)
+                    {
+                        const auto a = img.getPixelAt (x, y), b = last.getPixelAt (x, y);
+                        d += std::abs ((int) a.getRed() - (int) b.getRed()) + std::abs ((int) a.getGreen() - (int) b.getGreen());
+                    }
+                moved = d / (img.getWidth() * img.getHeight() / 4.0);
+            }
+            std::printf ("  %s %4d ms: talking %d shown \"%s\" mouth %.2f, change %.2f\n", scene == 0 ? "listen" : "idle  ", (i + 1) * 70,
+                         (int) dynamic_cast<EmberEditor*> (ed.get())->getPanel().getMascot().getBrain().isTalking(),
+                         dynamic_cast<EmberEditor*> (ed.get())->getPanel().getMascot().getBrain().shownText().toRawUTF8(),
+                         dynamic_cast<EmberEditor*> (ed.get())->getPanel().getMascot().getBrain().pose().mouth, moved);
+            last = img;
+        }
+        SealOverlay::stepLogForTest = nullptr;
+        if (steps.size() > 3)
+        {
+            // how evenly the running runes move: the time step between two border frames
+            double mn = 1e9, mx = 0.0, sum = 0.0;
+            for (size_t k = 1; k < steps.size(); ++k)
+            {
+                const double d = steps[k] - steps[k - 1];
+                mn = std::min (mn, d); mx = std::max (mx, d); sum += d;
+            }
+            const double mean = sum / (double) (steps.size() - 1);
+            std::printf ("  border: %d steps, mean %.1f ms (%.1f fps), min %.1f, max %.1f ms, = %.2f / %.2f px at 22 px/s\n", (int) steps.size() - 1,
+                         mean * 1000.0, 1.0 / mean, mn * 1000.0, mx * 1000.0, mn * 22.0, mx * 22.0);
+        }
+        if (scene == 0)
+            p.cancelAuto();
+        ed->removeFromDesktop();
+    }
+    LiveMascotView::alwaysInFront = false;
+    vocalypse::i18n::overrideSystemLanguage (std::nullopt);
+    settingsFile.deleteFile();
+    return 0;
 }
 
 static int guiShots (const juce::File& dir)
@@ -3906,6 +4059,8 @@ int main (int argc, char** argv)
         return rigPictures (juce::File (args[1]), args.size() >= 3 && args[2] == "transparent");
     if (args.size() >= 1 && args[0] == "--bench")
         return bench (args.size() >= 2 ? juce::jmax (2, args[1].getIntValue()) : 8, args);
+    if (args.size() >= 2 && args[0] == "--talk-shots")
+        return talkShots (juce::File (args[1]), args.size() >= 3 ? args[2].getFloatValue() : 1.0f);
     if (args.size() >= 2 && args[0] == "--gui-shots")
         return guiShots (juce::File (args[1]));
     if (args.size() >= 2 && args[0] == "--frames")

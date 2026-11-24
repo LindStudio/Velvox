@@ -410,7 +410,9 @@ namespace ember
         // calm (animation reduced / off): the border and the knob's seal stand still, only their light follows the work
         const float lit = s.on ? juce::jmin (1.0f, s.heat) : -1.0f;
         const bool due = s.calm ? (viewChanged || std::abs (lit - paintedLit) > 0.02f) : true;
-        if ((++ticks % 2 == 0 || viewChanged) && due)   // the border moves slowly: 15 frames a second are enough
+        lastUpdate = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        // moving border: repainted from the screen's frame clock (onFrame); calm: only when its light changes
+        if ((s.calm || viewChanged) && due)
         {
             paintedLit = lit;
             repaintEdges (getLocalBounds().toFloat().reduced (6.0f), 7.0f);
@@ -419,7 +421,8 @@ namespace ember
         // (the knob repaints itself while it turns; this catches a change of the light alone)
         const float knobLit = s.on ? juce::jmin (1.0f, s.heat) : -1.0f;
         const float angle = knobAngle ? knobAngle() : 0.0f;
-        if (simple && ! knob.isEmpty() && (viewChanged || std::abs (knobLit - paintedKnobLit) > 0.03f || std::abs (angle - paintedAngle) > 0.002f))
+        // (on a change of view also in ADVANCED: the seal drawn there in SIMPLE must go)
+        if (! knob.isEmpty() && (viewChanged || (simple && (std::abs (knobLit - paintedKnobLit) > 0.03f || std::abs (angle - paintedAngle) > 0.002f))))
         {
             paintedKnobLit = knobLit;
             paintedAngle = angle;
@@ -430,12 +433,36 @@ namespace ember
                 repaintEdges (r, 8.0f);
     }
 
+    void SealOverlay::onFrame (double frameTime)
+    {
+        // The running runes (2026-11-24, Jakob: "ruckeln"): moved by the screen's own frame clock, about 30 times a
+        // second at even steps, by the real time since the last step (the panel's 30 Hz timer came at uneven times
+        // and only every other one moved the border: 15 uneven steps a second)
+        const double wall = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        const bool live = ! scene.calm && isShowing() && wall - lastUpdate < 0.5;   // the panel updates us (not covered)
+        if (! live)
+        {
+            lastFrame = 0.0;
+            return;
+        }
+        // the time the frame will be shown at (the screen's clock: even steps), at most ~40 steps a second
+        if (lastFrame > 0.0 && frameTime - lastFrame < 1.0 / 40.0)
+            return;   // a faster screen (60 / 120 / 144 Hz): every second / third ... frame
+        borderTime += lastFrame > 0.0 ? juce::jlimit (0.0, 0.1, frameTime - lastFrame) : 0.0;
+        lastFrame = frameTime;
+        if (stepLogForTest != nullptr)
+            stepLogForTest->push_back (borderTime);
+        repaintEdges (getLocalBounds().toFloat().reduced (6.0f), 7.0f);
+    }
+
     void SealOverlay::paint (juce::Graphics& g)
     {
         const float scale = juce::jlimit (1.0f, 3.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
         borderRunes.setScale (scale);
         sealRunes.setScale (scale);
-        seal::drawRuneBorder (g, borderRunes, getLocalBounds().toFloat(), scene);
+        auto border = scene;
+        border.t = borderTime;   // the border's own clock (onFrame); every strip of one frame shows the same moment
+        seal::drawRuneBorder (g, borderRunes, getLocalBounds().toFloat(), border);
         if (simple && ! knob.isEmpty() && g.clipRegionIntersects (knob.expanded (4.0f).getSmallestIntegerContainer()))
             seal::drawMiniSeal (g, sealRunes, knob.getCentre(), knob.getWidth() * 0.5f, knobAngle ? knobAngle() : 0.0f, scene);
         // the wave of light through the panels, one after the other
@@ -1611,8 +1638,12 @@ namespace ember
                                        (juce::Component*) &linkS, (juce::Component*) &stereoSeg, (juce::Component*) &stereoLbl })
             comp->setVisible (a);
         infoPopup.hide();
+        // the window's seal knows the view at once: a repaint before its next update would otherwise draw the Amount
+        // knob's small seal into ADVANCED, where it stayed as a circle next to the meters (Jakob 2026-11-24)
+        sealOverlay.setSimpleView (! a);
         layout();
         refreshButtons();
+        repaint();   // the glass plates differ between the views (only the controls' areas were redrawn: old plate edges stayed)
     }
 
     void EmberPanel::layout()

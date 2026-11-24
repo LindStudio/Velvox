@@ -191,7 +191,8 @@ namespace ember::seal
     void drawFloatingRunes (juce::Graphics& g, RuneAtlas& atlas, juce::Point<float> c, float rx, float ry, const Scene& s, bool front)
     {
         struct Ring { int n; float r, h, size, dir; int off; };
-        const Ring rings[] { { 24, .93f, 40.0f, 21.0f, 1.0f, 0 }, { 14, .7f, 22.0f, 14.0f, -1.7f, 9 } };
+        // one ring of letters (2026-11-24, Jakob: the inner ring turning the other way is gone)
+        const Ring rings[] { { 24, .93f, 40.0f, 21.0f, 1.0f, 0 } };
         const float lit = s.lit(), rot = s.rotation(), jump = s.on ? s.jump() : 0.0f;
         for (const auto& ring : rings)
             for (int i = 0; i < ring.n; ++i)
@@ -212,22 +213,30 @@ namespace ember::seal
     void drawRuneBorder (juce::Graphics& g, RuneAtlas& atlas, juce::Rectangle<float> w, const Scene& s)
     {
         const float lit = s.on ? 0.7f + 0.3f * juce::jmin (1.0f, s.heat) : 0.15f;
-        const float per = 2.0f * (w.getWidth() + w.getHeight()) - 40.0f, step = 15.0f;
+        const float W = w.getWidth() - 20.0f, H = w.getHeight() - 20.0f;
+        const float per = 2.0f * (W + H), step = 15.0f;
         const double t = s.calm ? 0.0 : s.t;   // calm: the border stands still
-        const float off = (float) std::fmod (t * 22.0, (double) step);
+        // every rune keeps its letter and its twinkle while it travels (2026-11-24, Jakob: "ruckeln"): before, the
+        // letters were counted from the start of the path, so each time the path moved on by one step every letter
+        // jumped to its neighbour's; the travel is by the clock (sub-pixel), not by frames
+        const double travel = t * 22.0;
+        const double laps = std::floor (travel / step);
+        const float off = (float) (travel - laps * step);
         // only the runes in the part being repainted: the border is repainted in strips, and every other repaint of
         // the window (Ember 60 times a second, the meters) passes through this overlay too
         int i = 0;
         for (float d = off; d < per; d += step, ++i)
         {
-            const float W = w.getWidth() - 20.0f, H = w.getHeight() - 20.0f;
             juce::Point<float> p;
             if (d < W)                p = { w.getX() + 10.0f + d, w.getY() + 6.0f };
             else if (d < W + H)       p = { w.getRight() - 6.0f, w.getY() + 10.0f + d - W };
             else if (d < 2 * W + H)   p = { w.getRight() - 10.0f - (d - W - H), w.getBottom() - 6.0f };
             else                      p = { w.getX() + 6.0f, w.getBottom() - 10.0f - (d - 2 * W - H) };
-            if (g.clipRegionIntersects (atlas.bounds (p, 8.0f).getSmallestIntegerContainer()))
-                atlas.draw (g, i * 5, p, 8.0f, lit * (0.35f + 0.3f * std::sin ((float) t * 2.0f + (float) i * 0.7f)));
+            if (! g.clipRegionIntersects (atlas.bounds (p, 8.0f).getSmallestIntegerContainer()))
+                continue;
+            const int id = i - (int) std::fmod (laps, 24.0 * 5.0);    // the rune's own number (follows it round)
+            const float seam = juce::jlimit (0.0f, 1.0f, std::min (d, per - d) / step);   // fades in / out where the path closes
+            atlas.draw (g, id * 5, p, 8.0f, seam * lit * (0.35f + 0.3f * std::sin ((float) t * 2.0f + (float) id * (tau * 7.0f / 24.0f))));
         }
     }
 
@@ -273,7 +282,7 @@ namespace ember::seal
             g.drawLine (cx + (float) i * 30.0f, floorY, cx + (float) i * 95.0f, w.getBottom(), 1.0f);
         for (float y = floorY + 8.0f, st = 9.0f; y < w.getBottom(); y += st, st *= 1.28f)
             g.drawLine (w.getX(), y, w.getRight(), y, 1.0f);
-        // pillars at the stage's sides (no fire bowls on them since 2026-11-24), chains between
+        // pillars at the stage's sides (no fire bowls and no chains since 2026-11-24: the text plate floats on its own)
         for (float px : { stage.getX() + 24.0f, stage.getRight() - 28.0f })
         {
             juce::ColourGradient gg (juce::Colour (0xff07030a), px - 28.0f, 0, juce::Colour (0xff07030a), px + 28.0f, 0, false);
@@ -283,10 +292,6 @@ namespace ember::seal
             g.setColour (juce::Colour (0xff140810));
             g.fillRect (px - 31.0f, stage.getY() + 90.0f, 62.0f, 14.0f);
         }
-        g.setColour (juce::Colour (0xff1e1a1e));
-        for (float chx : { stage.getX() + stage.getWidth() * 0.24f, stage.getX() + stage.getWidth() * 0.78f })
-            for (float y = stage.getY() - 50.0f, k = 0; y < stage.getY() + 130.0f; y += 18.0f, ++k)
-                g.drawEllipse (chx - ((int) k % 2 ? 2.5f : 6.0f), y - 9.0f, (int) k % 2 ? 5.0f : 12.0f, 18.0f, 2.5f);
         // vignette
         g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, stage.getCentreX(), stage.getCentreY() + 40.0f,
                                                  juce::Colours::black.withAlpha (0.78f), stage.getCentreX() + w.getWidth() * 0.62f, stage.getCentreY(), true));

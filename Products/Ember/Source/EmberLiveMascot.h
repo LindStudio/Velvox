@@ -32,6 +32,7 @@ namespace ember
         void setHover (bool h) noexcept { hover = h; }
         void say (const juce::String& text);                                 // types onto the text plate, mouth talks
         void wake() noexcept;
+        void stopTalking() noexcept { talkText.clear(); }
         void setFewerParticles (bool f) noexcept { fewer = f; }              // animation "reduced": fewer crumbs
 
         RigPose pose() const;
@@ -64,7 +65,7 @@ namespace ember
         // idle action
         int action = -1; float actionT = 0, actionLen = 1; bool actionDone = false;
         // talking
-        juce::String talkText; float talkShown = 0, talkT = 0, talkEnd = -1, syl = 0, sylOpen = 0, sylWide = 1; int gesture = 0; float gestureAt = 0;
+        juce::String talkText; float talkRate = 15.0f, talkShown = 0, talkT = 0, talkEnd = -1, syl = 0, sylOpen = 0, sylWide = 1; int gesture = 0; float gestureAt = 0;
         std::vector<Eat> eating;
         std::vector<Fx> fx;
         int eaten = 0;
@@ -179,6 +180,7 @@ namespace ember
         // the text it shows (kept while it fades out) and how much it shows (0..1)
         struct PlateLayout { juce::String text; juce::Rectangle<float> area; juce::GlyphArrangement glyphs; } plateLayout;
         juce::String plateText;
+        std::map<juce::String, double> recentlySaid;   // what he said and when (clock): the same text again is not retyped
         float plateAlpha = 0.0f;
         bool covered = false;
         AnimationLevel shownLevel = AnimationLevel::full;
