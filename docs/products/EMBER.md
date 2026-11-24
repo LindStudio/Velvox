@@ -1,5 +1,16 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
+## STAND 2026-11-24 GUI-Runde (Branch r3/ember-gui) – Jakobs Oberflächen-Rückmeldung
+- Funke im Stern weg; Siegel auf dem Amount-Knopf dreht nur mit dem Knopf; Feuerschalen weg.
+- Tafel zwischen den Ketten statt Sprechblase (tippt ein, blendet leer aus; Ember etwas kleiner).
+- ADVANCED: Frequenz und Breite im Spektrum (Linie, Kanten, Mausrad), 7 Knöpfe, Lookahead und Stereo-Link als kleine
+  Regler über STEREO.
+- Menüs, Dialoge, Infokarte, Tooltips, Textfelder, Spektrumkurve im EMBER-Stil (kein Blau mehr).
+- Texte DE/EN geprüft, Handbücher angepasst.
+- Tests 1900/0 (ohne EMBER_VOCALS), pluginval 10 SUCCESS, GUI-CPU nicht schlechter.
+- Details, Bilder vorher/nachher, offene Punkte: `docs/products/ember-r2/GUI_RUNDE.md`
+  (Bilder `C:\Users\Shadow\dev\velvox-bench\2026-11-24\gui_round`).
+
 ## STAND 2026-11-24 – S-Tracking gemergt, Presets nachgemessen (Branch feature/ember-fixes) – HIER WEITERMACHEN
 - r2/ember-research gemergt: **S-Tracking** (das Split-Band folgt jedem S, `Settings::trackS`, Standard an) und exakte
   Split-Tiefe an der Bandmitte. Details: `docs/products/ember-r2/DSP_FORSCHUNG.md`.

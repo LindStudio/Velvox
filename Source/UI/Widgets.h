@@ -173,7 +173,6 @@ namespace vocalypse::ui
     public:
         HSlider (APVTS& state, const char* paramId, const juce::String& label, juce::Colour accent);
         ~HSlider() override;
-        void setDescription (const juce::String& text) { description = text; }   // the info card's text
         void resized() override;
         void paint (juce::Graphics&) override;
         void parentHierarchyChanged() override { slider.sendLookAndFeelChange(); }
