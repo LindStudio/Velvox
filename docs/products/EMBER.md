@@ -1,6 +1,19 @@
 # EMBER De-Esser (Lind Audio, VOCALYPSE-Familie)
 
-## STAND 2026-11-23 (abends) – alle Audit-Fixes + Pro-DS-Niveau (Branch feature/ember-fixes) – HIER WEITERMACHEN
+## STAND 2026-11-24 – S-Tracking gemergt, Presets nachgemessen (Branch feature/ember-fixes) – HIER WEITERMACHEN
+- r2/ember-research gemergt: **S-Tracking** (das Split-Band folgt jedem S, `Settings::trackS`, Standard an) und exakte
+  Split-Tiefe an der Bandmitte. Details: `docs/products/ember-r2/DSP_FORSCHUNG.md`.
+- CPU der Engine jetzt ≈ **0,37 % eines Kerns** (vorher 0,28 %).
+- Alle 29 Werks-Presets mit der gleichen Methode neu gemessen; **7 nachgestellt** (Harsh S, Extreme, Sharp T, Rescue,
+  Bright Female, Powerful Female, Airy), Default 6 kHz / −34 dB unverändert. Gründe und alt → neu:
+  `docs/products/ember-r2/PRESETS.md` Abschnitt 8.
+- Handbücher DE/EN und Shop-Text: S-Tracking beim Split-Modus erwähnt.
+- Tests: 2005 bestanden, 0 fehlgeschlagen (mit `EMBER_VOCALS`, 15 Takes; QA 381), pluginval 10 SUCCESS.
+- Hör-Set: `C:\Users\Shadow\dev\velvox-bench\2026-11-24\presets_v2` (alt: `…\presets`).
+- Offen: Hörurteil S-Tracking und Presets; HOCH-Knopf auf hohen Stimmen nur noch gleich stark wie MITTEL (dunkler);
+  Transienten-Schutz (Hörtest, DSP_FORSCHUNG.md).
+
+## STAND 2026-11-23 (abends) – alle Audit-Fixes + Pro-DS-Niveau (Branch feature/ember-fixes)
 Jakob: „mach alle fixes, das rechtliche notieren aber nicht machen + verbessere den algorithmus um auf das selbe level
 wie der fabfilter ds zu kommen“. Audit mit 4 Prüfern, danach 4 Agenten parallel (Branches fix/ember-dsp, -auto, -ux, -gui),
 zusammengeführt in `feature/ember-fixes` (Basis = Klang-Stand vom 23.11., Commit aeb1e54; feature/ember-sound unverändert).

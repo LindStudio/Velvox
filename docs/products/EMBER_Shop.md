@@ -15,7 +15,7 @@
 - **AUTO in Sekunden:** Spiel deinen Gesang ab, klick auf Ember – er hört zu und stellt Frequenz, Threshold und Range passend ein. Bewusst dezent, Vokale bleiben unberührt.
 - **Smart-Erkennung:** Reagiert nur auf echte Zischlaute. Helle Vokale, Luft und Atmer bleiben, wie sie sind.
 - **SIMPLE oder ADVANCED:** Ein Amount-Regler und drei Stimmlagen für den schnellen Weg – oder volle Kontrolle mit Spektrum, ziehbarem S-Bereich und Threshold-Linie.
-- **Split oder Wideband:** Nur das S absenken (breites dynamisches Glockenfilter, die Luft bleibt) oder die ganze Stimme kurz zurücknehmen – ideal für Sprache und Podcasts.
+- **Split oder Wideband:** Nur das S absenken (breites dynamisches Glockenfilter, die Luft bleibt; mit S-Tracking folgt das Band jedem einzelnen S) oder die ganze Stimme kurz zurücknehmen – ideal für Sprache und Podcasts.
 - **DELTA-Abhören:** Hör nur, was entfernt wird, und triff sichere Entscheidungen.
 - **29 Werks-Presets in 5 Kategorien und A/B-Vergleich:** Gesang-Grundlagen, Männer- und Frauenstimmen, Genres (Hypertechno, EDM, Trap, Hip-Hop, Akustik …) und Spezialfälle (Harsh S, Sharp T, Recording Rescue, Mix / Bus) – jedes an echten Stimmen gemessen, plus eigene Presets.
 - **Feste 10 ms Latenz:** Wird an den Host gemeldet, bleibt auch im Bypass gleich.
@@ -42,7 +42,7 @@ Ember ist ein kleiner roter Teufel und sitzt mitten im Plugin. Läuft die Stimme
 - **AUTO in seconds:** Play your vocal, click Ember – he listens and sets frequency, threshold and range to match. Subtle by design, vowels stay untouched.
 - **Smart detection:** Reacts only to real sibilants. Bright vowels, air and breaths stay as they are.
 - **SIMPLE or ADVANCED:** One Amount knob and three voice types for the fast route – or full control with a spectrum, a draggable S range and threshold line.
-- **Split or Wideband:** Turn down only the S (wide dynamic bell, the air stays) or dip the whole voice briefly – ideal for speech and podcasts.
+- **Split or Wideband:** Turn down only the S (wide dynamic bell, the air stays; with S tracking the band follows each individual S) or dip the whole voice briefly – ideal for speech and podcasts.
 - **DELTA listening:** Hear only what is removed and make confident decisions.
 - **29 factory presets in 5 categories and A/B compare:** Vocal basics, male and female vocals, genres (hypertechno, EDM, trap, hip-hop, acoustic …) and special purpose (harsh S, sharp T, recording rescue, mix / bus) – each measured on real vocals, plus your own presets.
 - **Fixed 10 ms latency:** Reported to the host, unchanged in bypass.
